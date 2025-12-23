@@ -20,6 +20,7 @@ interface DirectorySearchStore extends DirectorySearchState {
   setIsActive: (isActive: DirectorySearchState["isActive"]) => void;
   reset: () => void;
   init: () => void;
+  countActiveFilters: () => number;
 }
 
 const initialState: DirectorySearchState = {
@@ -32,7 +33,7 @@ const initialState: DirectorySearchState = {
   isActive: "all",
 };
 
-const directorySearchStore = create<DirectorySearchStore>((set) => ({
+const directorySearchStore = create<DirectorySearchStore>((set, get) => ({
   ...initialState,
   setName: (name) => set({ name }),
   setPersonalCode: (personalCode) => set({ personalCode }),
@@ -54,6 +55,20 @@ const directorySearchStore = create<DirectorySearchStore>((set) => ({
         }
       }
     }
+  },
+  countActiveFilters: () => {
+    const state = get();
+    let count = 0;
+    
+    if (state.name.trim()) count++;
+    if (state.personalCode.trim()) count++;
+    if (state.phone.trim()) count++;
+    if (state.email.trim()) count++;
+    if (state.role !== "all") count++;
+    if (state.type !== "all") count++;
+    if (state.isActive !== "all") count++;
+    
+    return count;
   },
 }));
 
