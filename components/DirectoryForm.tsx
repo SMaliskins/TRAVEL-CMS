@@ -8,6 +8,7 @@ import {
   SupplierDetails,
   SubagentDetails,
   SubagentCommissionType,
+  BusinessCategory,
 } from "@/lib/types/directory";
 
 interface DirectoryFormProps {
@@ -37,33 +38,33 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [highlightedSection, setHighlightedSection] = useState<"supplier" | "subagent" | null>(null);
     // Determine base type from record or default to person
     const getBaseType = (): DirectoryType => {
-      if (record?.type) return record.type;
+      if (record?.party_type) return record.party_type;
       // If client role is selected and has clientType preference, use it
       return "person";
     };
 
     const [baseType, setBaseType] = useState<DirectoryType>(getBaseType());
     const [roles, setRoles] = useState<DirectoryRole[]>(record?.roles || []);
-    const [isActive, setIsActive] = useState(record?.isActive ?? true);
+    const [isActive, setIsActive] = useState(record?.status === 'active');
 
     // Client type selection (for Client role only)
     const [clientType, setClientType] = useState<DirectoryType>(
       record?.roles.includes("client")
-        ? record.type
+        ? record.party_type
         : "person"
     );
 
     // Person fields
-    const [firstName, setFirstName] = useState(record?.firstName || "");
-    const [lastName, setLastName] = useState(record?.lastName || "");
-    const [personalCode, setPersonalCode] = useState(record?.personalCode || "");
+    const [firstName, setFirstName] = useState(record?.first_name || "");
+    const [lastName, setLastName] = useState(record?.last_name || "");
+    const [personalCode, setPersonalCode] = useState(record?.personal_code || "");
     const [dob, setDob] = useState(record?.dob || "");
 
     // Company fields
-    const [companyName, setCompanyName] = useState(record?.companyName || "");
-    const [regNo, setRegNo] = useState(record?.regNo || "");
+    const [companyName, setCompanyName] = useState(record?.company_name || "");
+    const [regNo, setRegNo] = useState(record?.reg_number || "");
     const [address, setAddress] = useState(record?.address || "");
-    const [contactPerson, setContactPerson] = useState(record?.contactPerson || "");
+    const [contactPerson, setContactPerson] = useState("");
 
     // Common fields
     const [phone, setPhone] = useState(record?.phone || "");
@@ -71,45 +72,45 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
     // Supplier fields
     const [supplierActivityArea, setSupplierActivityArea] = useState(
-      record?.supplierDetails?.activityArea || ""
+      record?.supplier_details?.business_category || ""
     );
     const [supplierCommissionType, setSupplierCommissionType] = useState<"percent" | "fixed">(
-      record?.supplierDetails?.commissionType || "percent"
+      record?.supplier_details?.commission_type || "percent"
     );
     const [supplierCommissionValue, setSupplierCommissionValue] = useState<number | undefined>(
-      record?.supplierDetails?.commissionValue
+      record?.supplier_details?.commission_value
     );
     const [supplierCommissionCurrency, setSupplierCommissionCurrency] = useState(
-      record?.supplierDetails?.commissionCurrency || "EUR"
+      record?.supplier_details?.commission_currency || "EUR"
     );
     const [supplierCommissionValidFrom, setSupplierCommissionValidFrom] = useState(
-      record?.supplierDetails?.commissionValidFrom || ""
+      record?.supplier_details?.commission_valid_from || ""
     );
     const [supplierCommissionValidTo, setSupplierCommissionValidTo] = useState(
-      record?.supplierDetails?.commissionValidTo || ""
+      record?.supplier_details?.commission_valid_to || ""
     );
 
     // Subagent fields
     const [subagentCommissionType, setSubagentCommissionType] = useState<SubagentCommissionType>(
-      record?.subagentDetails?.commissionType || "revenue"
+      record?.subagent_details?.commission_scheme || "revenue"
     );
     const [subagentCommissionValue, setSubagentCommissionValue] = useState<number | undefined>(
-      record?.subagentDetails?.commissionValue
+      undefined
     );
     const [subagentCommissionCurrency, setSubagentCommissionCurrency] = useState(
-      record?.subagentDetails?.commissionCurrency || "EUR"
+      "EUR"
     );
     const [subagentPeriodType, setSubagentPeriodType] = useState<"year" | "custom">(
-      record?.subagentDetails?.periodType || "year"
+      "year"
     );
     const [subagentPeriodFrom, setSubagentPeriodFrom] = useState(
-      record?.subagentDetails?.periodFrom || ""
+      ""
     );
     const [subagentPeriodTo, setSubagentPeriodTo] = useState(
-      record?.subagentDetails?.periodTo || ""
+      ""
     );
     const [subagentPaymentDetails, setSubagentPaymentDetails] = useState(
-      record?.subagentDetails?.paymentDetails || ""
+      record?.subagent_details?.payout_details || ""
     );
 
     // Update baseType when roles change (for Client role)
@@ -126,21 +127,20 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const getInitialValues = (): Partial<DirectoryRecord> => {
       if (!record) return {};
       return {
-        type: record.type,
+        party_type: record.party_type,
         roles: record.roles,
-        isActive: record.isActive,
-        firstName: record.firstName,
-        lastName: record.lastName,
-        companyName: record.companyName,
-        personalCode: record.personalCode,
+        status: record.status,
+        first_name: record.first_name,
+        last_name: record.last_name,
+        company_name: record.company_name,
+        personal_code: record.personal_code,
         dob: record.dob,
         phone: record.phone,
         email: record.email,
-        regNo: record.regNo,
+        reg_number: record.reg_number,
         address: record.address,
-        contactPerson: record.contactPerson,
-        supplierDetails: record.supplierDetails,
-        subagentDetails: record.subagentDetails,
+        supplier_details: record.supplier_details,
+        subagent_details: record.subagent_details,
       };
     };
 
@@ -168,34 +168,33 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       // Check basic fields
       const currentType = roles.includes("client") ? clientType : baseType;
       if (
-        currentType !== initialValues.type ||
+        currentType !== initialValues.party_type ||
         currentRolesStr !== initialRolesStr ||
-        isActive !== initialValues.isActive ||
-        firstName.trim() !== (initialValues.firstName || "").trim() ||
-        lastName.trim() !== (initialValues.lastName || "").trim() ||
-        companyName.trim() !== (initialValues.companyName || "").trim() ||
-        personalCode.trim() !== (initialValues.personalCode || "").trim() ||
+        (isActive ? 'active' : 'inactive') !== initialValues.status ||
+        firstName.trim() !== (initialValues.first_name || "").trim() ||
+        lastName.trim() !== (initialValues.last_name || "").trim() ||
+        companyName.trim() !== (initialValues.company_name || "").trim() ||
+        personalCode.trim() !== (initialValues.personal_code || "").trim() ||
         dob !== (initialValues.dob || "") ||
         phone.trim() !== (initialValues.phone || "").trim() ||
         email.trim() !== (initialValues.email || "").trim() ||
-        regNo.trim() !== (initialValues.regNo || "").trim() ||
-        address.trim() !== (initialValues.address || "").trim() ||
-        contactPerson.trim() !== (initialValues.contactPerson || "").trim()
+        regNo.trim() !== (initialValues.reg_number || "").trim() ||
+        address.trim() !== (initialValues.address || "").trim()
       ) {
         return true;
       }
 
       // Check supplier details
-      const initialSupplier = initialValues.supplierDetails;
+      const initialSupplier = initialValues.supplier_details;
       if (roles.includes("supplier")) {
         if (
           !initialSupplier ||
-          supplierActivityArea.trim() !== (initialSupplier.activityArea || "").trim() ||
-          supplierCommissionType !== initialSupplier.commissionType ||
-          supplierCommissionValue !== initialSupplier.commissionValue ||
-          supplierCommissionCurrency !== initialSupplier.commissionCurrency ||
-          supplierCommissionValidFrom !== (initialSupplier.commissionValidFrom || "") ||
-          supplierCommissionValidTo !== (initialSupplier.commissionValidTo || "")
+          supplierActivityArea.trim() !== (initialSupplier.business_category || "").trim() ||
+          supplierCommissionType !== initialSupplier.commission_type ||
+          supplierCommissionValue !== initialSupplier.commission_value ||
+          supplierCommissionCurrency !== initialSupplier.commission_currency ||
+          supplierCommissionValidFrom !== (initialSupplier.commission_valid_from || "") ||
+          supplierCommissionValidTo !== (initialSupplier.commission_valid_to || "")
         ) {
           return true;
         }
@@ -204,17 +203,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       }
 
       // Check subagent details
-      const initialSubagent = initialValues.subagentDetails;
+      const initialSubagent = initialValues.subagent_details;
       if (roles.includes("subagent")) {
         if (
           !initialSubagent ||
-          subagentCommissionType !== initialSubagent.commissionType ||
-          subagentCommissionValue !== initialSubagent.commissionValue ||
-          subagentCommissionCurrency !== initialSubagent.commissionCurrency ||
-          subagentPeriodType !== initialSubagent.periodType ||
-          subagentPeriodFrom !== (initialSubagent.periodFrom || "") ||
-          subagentPeriodTo !== (initialSubagent.periodTo || "") ||
-          subagentPaymentDetails.trim() !== (initialSubagent.paymentDetails || "").trim()
+          subagentCommissionType !== initialSubagent.commission_scheme ||
+          subagentPaymentDetails.trim() !== (initialSubagent.payout_details || "").trim()
         ) {
           return true;
         }
@@ -353,51 +347,42 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       }
 
       const formData: Partial<DirectoryRecord> = {
-        type: actualType,
+        party_type: actualType,
         roles,
-        isActive,
+        status: isActive ? 'active' : 'inactive',
         phone: phone || undefined,
         email: email || undefined,
       };
 
       // Set person or company fields based on actual type
       if (actualType === "person") {
-        formData.firstName = firstName;
-        formData.lastName = lastName;
-        formData.personalCode = personalCode || undefined;
+        formData.first_name = firstName;
+        formData.last_name = lastName;
+        formData.personal_code = personalCode || undefined;
         formData.dob = dob || undefined;
       } else {
-        formData.companyName = companyName;
-        formData.regNo = regNo || undefined;
+        formData.company_name = companyName;
+        formData.reg_number = regNo || undefined;
         formData.address = address || undefined;
-        formData.contactPerson = contactPerson || undefined;
-        if (!record || !record.personalCode) {
-          formData.personalCode = regNo || undefined;
-        }
       }
 
       // Supplier details
       if (roles.includes("supplier")) {
-        formData.supplierDetails = {
-          activityArea: supplierActivityArea || undefined,
-          commissionType: supplierCommissionType,
-          commissionValue: supplierCommissionValue,
-          commissionCurrency: supplierCommissionCurrency,
-          commissionValidFrom: supplierCommissionValidFrom || undefined,
-          commissionValidTo: supplierCommissionValidTo || undefined,
+        formData.supplier_details = {
+          business_category: (supplierActivityArea as BusinessCategory) || undefined,
+          commission_type: supplierCommissionType,
+          commission_value: supplierCommissionValue,
+          commission_currency: supplierCommissionCurrency,
+          commission_valid_from: supplierCommissionValidFrom || undefined,
+          commission_valid_to: supplierCommissionValidTo || undefined,
         };
       }
 
       // Subagent details
       if (roles.includes("subagent")) {
-        formData.subagentDetails = {
-          commissionType: subagentCommissionType,
-          commissionValue: subagentCommissionValue,
-          commissionCurrency: subagentCommissionCurrency,
-          periodType: subagentPeriodType,
-          periodFrom: subagentPeriodFrom || undefined,
-          periodTo: subagentPeriodTo || undefined,
-          paymentDetails: subagentPaymentDetails || undefined,
+        formData.subagent_details = {
+          commission_scheme: subagentCommissionType,
+          payout_details: subagentPaymentDetails || undefined,
         };
       }
 
@@ -881,16 +866,16 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-500">Created at</label>
                 <div className="text-sm text-gray-700">
-                  {new Date(record.createdAt).toLocaleString()}
+                  {new Date(record.created_at).toLocaleString()}
                 </div>
               </div>
-              {record.updatedAt && (
+              {record.updated_at && (
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-500">
                     Last updated
                   </label>
                   <div className="text-sm text-gray-700">
-                    {new Date(record.updatedAt).toLocaleString()}
+                    {new Date(record.updated_at).toLocaleString()}
                   </div>
                 </div>
               )}
