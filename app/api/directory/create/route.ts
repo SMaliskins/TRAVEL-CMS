@@ -76,9 +76,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get company_id from user context (for tenant isolation)
-    // TODO: Get from user's company association
-    const companyId = data.company_id || user.id; // Fallback to user.id for now
+    // Get company_id from profiles table (for tenant isolation)
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profileError || !profile?.company_id) {
+      return NextResponse.json(
+        { error: "User profile not found or company_id missing. Please contact administrator." },
+        { status: 403 }
+      );
+    }
+
+    const companyId = data.company_id || profile.company_id;
 
     // Create party record
     const partyData: any = {
@@ -88,8 +100,8 @@ export async function POST(request: NextRequest) {
       rating: data.rating || null,
       notes: data.notes || null,
       company_id: companyId,
-      email: data.email || null,
-      phone: data.phone || null,
+      email: (data.email && data.email.trim()) ? data.email.trim() : null,
+      phone: (data.phone && data.phone.trim()) ? data.phone.trim() : null,
       email_marketing_consent: data.email_marketing_consent || false,
       phone_marketing_consent: data.phone_marketing_consent || false,
       created_by: user.id,
@@ -103,8 +115,13 @@ export async function POST(request: NextRequest) {
 
     if (partyError || !party) {
       console.error("Error creating party:", partyError);
+      const errorMessage = partyError?.message || partyError?.code || "Unknown database error";
+      const errorDetails = partyError?.details || "";
       return NextResponse.json(
-        { error: "Failed to create party" },
+        { 
+          error: `Failed to create party: ${errorMessage}${errorDetails ? ` (${errorDetails})` : ""}`,
+          details: partyError
+        },
         { status: 500 }
       );
     }
@@ -121,7 +138,7 @@ export async function POST(request: NextRequest) {
         dob: data.dob || null,
         personal_code: data.personal_code || null,
         citizenship: data.citizenship || null,
-        address: data.address || null,
+        address: data.address || null, // Address for Person
       };
 
       const { error: personError } = await supabaseAdmin
@@ -164,11 +181,26 @@ export async function POST(request: NextRequest) {
 
     // Create role records
     if (data.roles.includes("client")) {
-      await supabaseAdmin.from("client_party").insert({ party_id: partyId });
+      // Determine client_type from party_type
+      const partyType = party?.party_type || data.party_type || "person";
+      const clientType = partyType === "company" ? "company" : "person";
+      const { error: clientError } = await supabaseAdmin.from("client_party").insert({ 
+        party_id: partyId,
+        client_type: clientType 
+      });
+      if (clientError) {
+        console.error("Error creating client_party:", clientError);
+        // Clean up party
+        await supabaseAdmin.from("party").delete().eq("id", partyId);
+        return NextResponse.json(
+          { error: "Failed to create client record", details: clientError.message },
+          { status: 500 }
+        );
+      }
     }
 
     if (data.roles.includes("supplier")) {
-      const supplierData: any = { party_id: partyId };
+      const supplierData: any = { party_id: partyId, partner_role: 'supplier' };
       if (data.supplier_details) {
         if (data.supplier_details.business_category) supplierData.business_category = data.supplier_details.business_category;
         if (data.supplier_details.commission_type) supplierData.commission_type = data.supplier_details.commission_type;
@@ -178,7 +210,17 @@ export async function POST(request: NextRequest) {
         if (data.supplier_details.commission_valid_to) supplierData.commission_valid_to = data.supplier_details.commission_valid_to;
         if (data.supplier_details.commission_notes) supplierData.commission_notes = data.supplier_details.commission_notes;
       }
-      await supabaseAdmin.from("partner_party").insert(supplierData);
+      const { error: supplierError } = await supabaseAdmin.from("partner_party").insert(supplierData);
+      if (supplierError) {
+        console.error("Error inserting partner_party:", supplierError);
+        console.error("Attempted insert:", JSON.stringify(supplierData, null, 2));
+        // Clean up party if supplier insert fails
+        await supabaseAdmin.from("party").delete().eq("id", partyId);
+        return NextResponse.json(
+          { error: "Failed to create supplier record", details: supplierError.message },
+          { status: 500 }
+        );
+      }
     }
 
     if (data.roles.includes("subagent")) {
@@ -188,7 +230,17 @@ export async function POST(request: NextRequest) {
         if (data.subagent_details.commission_tiers) subagentData.commission_tiers = data.subagent_details.commission_tiers;
         if (data.subagent_details.payout_details) subagentData.payout_details = data.subagent_details.payout_details;
       }
-      await supabaseAdmin.from("subagents").insert(subagentData);
+      const { error: subagentError } = await supabaseAdmin.from("subagents").insert(subagentData);
+      if (subagentError) {
+        console.error("Error inserting subagents:", subagentError);
+        console.error("Attempted insert:", JSON.stringify(subagentData, null, 2));
+        // Clean up party if subagent insert fails
+        await supabaseAdmin.from("party").delete().eq("id", partyId);
+        return NextResponse.json(
+          { error: "Failed to create subagent record", details: subagentError.message },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({

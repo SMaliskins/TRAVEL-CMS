@@ -124,6 +124,13 @@ export async function GET(
         .maybeSingle(),
     ]);
 
+    // Log any errors but continue (maybeSingle allows null)
+    if (personData.error) console.warn("Error fetching person data:", personData.error);
+    if (companyData.error) console.warn("Error fetching company data:", companyData.error);
+    if (clientData.error) console.warn("Error fetching client data:", clientData.error);
+    if (supplierData.error) console.warn("Error fetching supplier data:", supplierData.error);
+    if (subagentData.error) console.warn("Error fetching subagent data:", subagentData.error);
+
     const record = buildDirectoryRecord({
       ...party,
       ...personData.data,
@@ -135,7 +142,7 @@ export async function GET(
       ...subagentData.data,
     });
 
-    return NextResponse.json(record);
+    return NextResponse.json({ record });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Directory detail error:", errorMsg);
@@ -161,8 +168,13 @@ export async function PUT(
     if (updates.status !== undefined) partyUpdates.status = updates.status;
     if (updates.rating !== undefined) partyUpdates.rating = updates.rating;
     if (updates.notes !== undefined) partyUpdates.notes = updates.notes;
-    if (updates.email !== undefined) partyUpdates.email = updates.email;
-    if (updates.phone !== undefined) partyUpdates.phone = updates.phone;
+    // Always update phone and email (convert empty string to null)
+    if (updates.email !== undefined) {
+      partyUpdates.email = (typeof updates.email === 'string' && updates.email.trim()) ? updates.email.trim() : null;
+    }
+    if (updates.phone !== undefined) {
+      partyUpdates.phone = (typeof updates.phone === 'string' && updates.phone.trim()) ? updates.phone.trim() : null;
+    }
     if (updates.email_marketing_consent !== undefined) partyUpdates.email_marketing_consent = updates.email_marketing_consent;
     if (updates.phone_marketing_consent !== undefined) partyUpdates.phone_marketing_consent = updates.phone_marketing_consent;
     partyUpdates.updated_at = new Date().toISOString();
@@ -174,8 +186,9 @@ export async function PUT(
 
     if (partyError) {
       console.error("Error updating party:", partyError);
+      console.error("Party updates attempted:", JSON.stringify(partyUpdates, null, 2));
       return NextResponse.json(
-        { error: "Failed to update party" },
+        { error: "Failed to update party", details: partyError.message },
         { status: 500 }
       );
     }
@@ -223,8 +236,18 @@ export async function PUT(
       }
     }
 
-    // Update roles
-    if (updates.roles) {
+    // Update roles (always update if roles is provided, even if empty array)
+    if (updates.roles !== undefined) {
+      // Get party_type to determine client_type for client_party insert
+      const { data: partyData } = await supabaseAdmin
+        .from("party")
+        .select("party_type")
+        .eq("id", id)
+        .single();
+      
+      const partyType = partyData?.party_type || updates.party_type || "person";
+      const clientType = partyType === "company" ? "company" : "person";
+
       // Remove all existing roles
       await Promise.all([
         supabaseAdmin.from("client_party").delete().eq("party_id", id),
@@ -234,10 +257,17 @@ export async function PUT(
 
       // Add new roles
       if (updates.roles.includes("client")) {
-        await supabaseAdmin.from("client_party").insert({ party_id: id });
+        const { error: clientError } = await supabaseAdmin.from("client_party").insert({ 
+          party_id: id,
+          client_type: clientType 
+        });
+        if (clientError) {
+          console.error("Error inserting client_party:", clientError);
+          console.error("Attempted insert:", { party_id: id, client_type: clientType });
+        }
       }
       if (updates.roles.includes("supplier")) {
-        const supplierData: any = { party_id: id };
+        const supplierData: any = { party_id: id, partner_role: 'supplier' };
         if (updates.supplier_details) {
           if (updates.supplier_details.business_category) supplierData.business_category = updates.supplier_details.business_category;
           if (updates.supplier_details.commission_type) supplierData.commission_type = updates.supplier_details.commission_type;
@@ -247,7 +277,15 @@ export async function PUT(
           if (updates.supplier_details.commission_valid_to) supplierData.commission_valid_to = updates.supplier_details.commission_valid_to;
           if (updates.supplier_details.commission_notes) supplierData.commission_notes = updates.supplier_details.commission_notes;
         }
-        await supabaseAdmin.from("partner_party").insert(supplierData);
+        const { error: supplierError } = await supabaseAdmin.from("partner_party").insert(supplierData);
+        if (supplierError) {
+          console.error("Error inserting partner_party:", supplierError);
+          console.error("Attempted insert:", JSON.stringify(supplierData, null, 2));
+          return NextResponse.json(
+            { error: "Failed to update supplier record", details: supplierError.message },
+            { status: 500 }
+          );
+        }
       }
       if (updates.roles.includes("subagent")) {
         const subagentData: any = { party_id: id };
@@ -256,7 +294,11 @@ export async function PUT(
           if (updates.subagent_details.commission_tiers) subagentData.commission_tiers = updates.subagent_details.commission_tiers;
           if (updates.subagent_details.payout_details) subagentData.payout_details = updates.subagent_details.payout_details;
         }
-        await supabaseAdmin.from("subagents").insert(subagentData);
+        const { error: subagentError } = await supabaseAdmin.from("subagents").insert(subagentData);
+        if (subagentError) {
+          console.error("Error inserting subagents:", subagentError);
+          console.error("Attempted insert:", JSON.stringify(subagentData, null, 2));
+        }
       }
     }
 
@@ -283,6 +325,13 @@ export async function PUT(
       supabaseAdmin.from("subagents").select("*").eq("party_id", id).maybeSingle(),
     ]);
 
+    // Log any errors but continue (maybeSingle allows null)
+    if (personData.error) console.warn("Error fetching person data:", personData.error);
+    if (companyData.error) console.warn("Error fetching company data:", companyData.error);
+    if (clientData.error) console.warn("Error fetching client data:", clientData.error);
+    if (supplierData.error) console.warn("Error fetching supplier data:", supplierData.error);
+    if (subagentData.error) console.warn("Error fetching subagent data:", subagentData.error);
+
     const record = buildDirectoryRecord({
       ...updatedParty,
       ...personData.data,
@@ -294,7 +343,7 @@ export async function PUT(
       ...subagentData.data,
     });
 
-    return NextResponse.json(record);
+    return NextResponse.json({ record });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Directory update error:", errorMsg);
