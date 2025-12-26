@@ -167,26 +167,33 @@ export function resolveOrderInsertPayload(
     // If no column found (or we don't know columns), just skip (optional field)
   }
 
-  // E) Cities (OPTIONAL - only include if we know column exists)
-  if (input.cities && input.cities.length > 0) {
-    const citiesCol = hasColumn(['cities', 'city', 'destination_city'], false);
-    if (citiesCol) {
-      // Join as string (safer than array for unknown column types)
-      payload[citiesCol] = input.cities.join(", ");
+  // E) Cities and Countries (OPTIONAL - handle as combined field or separate)
+  // Priority: countries_cities (combined) > separate cities/countries
+  const countriesCitiesCol = hasColumn(['countries_cities', 'countries_and_cities'], false);
+  if (countriesCitiesCol && ((input.cities && input.cities.length > 0) || (input.countries && input.countries.length > 0))) {
+    // Combine cities and countries into single text field
+    const parts: string[] = [];
+    if (input.countries && input.countries.length > 0) {
+      parts.push(...input.countries);
     }
-    // If no column found (or we don't know columns), just skip (optional field)
-    // DO NOT include cities in payload if column doesn't exist
-  }
-
-  // F) Countries (OPTIONAL - only include if we know column exists)
-  if (input.countries && input.countries.length > 0) {
-    const countriesCol = hasColumn(['countries', 'country', 'destination_country'], false);
-    if (countriesCol) {
-      // Join as string (safer than array for unknown column types)
-      payload[countriesCol] = input.countries.join(", ");
+    if (input.cities && input.cities.length > 0) {
+      parts.push(...input.cities);
     }
-    // If no column found (or we don't know columns), just skip (optional field)
-    // DO NOT include countries in payload if column doesn't exist
+    payload[countriesCitiesCol] = parts.join(", ");
+  } else {
+    // Fallback: try separate columns if combined doesn't exist
+    if (input.cities && input.cities.length > 0) {
+      const citiesCol = hasColumn(['cities', 'city', 'destination_city'], false);
+      if (citiesCol) {
+        payload[citiesCol] = input.cities.join(", ");
+      }
+    }
+    if (input.countries && input.countries.length > 0) {
+      const countriesCol = hasColumn(['countries', 'country', 'destination_country'], false);
+      if (countriesCol) {
+        payload[countriesCol] = input.countries.join(", ");
+      }
+    }
   }
 
   // G) Status (OPTIONAL - only include if we know column exists)
@@ -196,17 +203,61 @@ export function resolveOrderInsertPayload(
   }
   // If status column doesn't exist, skip it (optional field)
 
-  // H) Timestamps (OPTIONAL - let DB defaults handle if columns exist)
-  const createdAtCol = hasColumn(['created_at', 'created']);
+  // H) Owner name/initials (OPTIONAL)
+  if (input.owner_name) {
+    const ownerNameCol = hasColumn(['owner_name', 'client_display_name', 'client_name'], false);
+    if (ownerNameCol) {
+      payload[ownerNameCol] = input.owner_name;
+    }
+  }
+
+  // I) Timestamps (OPTIONAL - let DB defaults handle if columns exist)
+  const createdAtCol = hasColumn(['created_at', 'created'], false);
   if (createdAtCol) {
     payload[createdAtCol] = new Date().toISOString();
   }
 
-  const updatedAtCol = hasColumn(['updated_at', 'updated']);
+  const updatedAtCol = hasColumn(['updated_at', 'updated'], false);
   if (updatedAtCol) {
     payload[updatedAtCol] = new Date().toISOString();
   }
 
   return { payload, errors };
+}
+
+/**
+ * Map order code field name - returns the correct column name
+ * Priority: order_code (actual DB column) > order_number (code expectation)
+ */
+export function getOrderCodeColumn(columnsSet: Set<string>): string {
+  if (columnsSet.size === 0) {
+    // Unknown columns - try order_code first (actual DB column)
+    return 'order_code';
+  }
+  if (columnsSet.has('order_code')) {
+    return 'order_code';
+  }
+  if (columnsSet.has('order_number')) {
+    return 'order_number';
+  }
+  return 'order_code'; // Default to actual DB column
+}
+
+/**
+ * Map owner/manager user ID field name - returns the correct column name
+ * Priority: owner_user_id (actual DB column) > manager_user_id (code expectation)
+ */
+export function getOwnerUserIdColumn(columnsSet: Set<string>): string {
+  if (columnsSet.size === 0) {
+    // Unknown columns - try owner_user_id first (actual DB column)
+    return 'owner_user_id';
+  }
+  if (columnsSet.has('owner_user_id')) {
+    return 'owner_user_id';
+  }
+  if (columnsSet.has('manager_user_id')) {
+    return 'manager_user_id';
+  }
+  return 'owner_user_id'; // Default to actual DB column
 }
 

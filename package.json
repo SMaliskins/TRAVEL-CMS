@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "watch:comms": "node scripts/watch-comms-todo.js",
+    "watch:comms:cw": "node scripts/watch-comms-code-writer.js",
+    "watch:comms:runner": "node scripts/watch-comms-runner.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",

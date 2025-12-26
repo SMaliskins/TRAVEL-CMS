@@ -69,7 +69,12 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
   useEffect(() => {
     setMounted(true);
     if (typeof window !== "undefined") {
-      directorySearchStore.init();
+      // Initialize store (load from localStorage)
+      // Access init method through getState() - Zustand stores methods in state
+      const store = directorySearchStore.getState() as any;
+      if (store.init) {
+        store.init();
+      }
       const currentState = directorySearchStore.getState();
       setFilters(currentState);
       setNameValue(currentState.name);
@@ -87,19 +92,19 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
 
   // Apply debounced text values to store
   useEffect(() => {
-    directorySearchStore.setField("name", debouncedName);
+    directorySearchStore.getState().setName(debouncedName);
   }, [debouncedName]);
 
   useEffect(() => {
-    directorySearchStore.setField("personalCode", debouncedPersonalCode);
+    directorySearchStore.getState().setPersonalCode(debouncedPersonalCode);
   }, [debouncedPersonalCode]);
 
   useEffect(() => {
-    directorySearchStore.setField("phone", debouncedPhone);
+    directorySearchStore.getState().setPhone(debouncedPhone);
   }, [debouncedPhone]);
 
   useEffect(() => {
-    directorySearchStore.setField("email", debouncedEmail);
+    directorySearchStore.getState().setEmail(debouncedEmail);
   }, [debouncedEmail]);
 
   // Cmd+K / Ctrl+K to focus search and open popover
@@ -179,6 +184,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     key: K,
     value: DirectorySearchState[K]
   ) => {
+    const store = directorySearchStore.getState();
     if (key === "name") {
       setNameValue(value as string);
     } else if (key === "personalCode") {
@@ -187,17 +193,18 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
       setPhoneValue(value as string);
     } else if (key === "email") {
       setEmailValue(value as string);
-    } else {
-      directorySearchStore.setField(key, value);
+    } else if (key === "role") {
+      store.setRole(value as DirectorySearchState["role"]);
+    } else if (key === "type") {
+      store.setType(value as DirectorySearchState["type"]);
+    } else if (key === "isActive") {
+      store.setIsActive(value as DirectorySearchState["isActive"]);
     }
   };
 
-  const handleRoleChange = (role: "client" | "supplier" | "subagent", checked: boolean) => {
-    directorySearchStore.setRole(role, checked);
-  };
 
   const handleClear = () => {
-    directorySearchStore.reset();
+    directorySearchStore.getState().reset();
     setNameValue("");
     setPersonalCodeValue("");
     setPhoneValue("");
@@ -208,7 +215,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     setIsOpen(false);
   };
 
-  const activeFiltersCount = directorySearchStore.countActiveFilters();
+  const activeFiltersCount = directorySearchStore.getState().countActiveFilters();
   const finalPosition = isOpen && calculatedPosition ? calculatedPosition : null;
 
   if (!mounted) return null;
@@ -375,18 +382,8 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                         />
                       </div>
 
-                      {/* Date of birth */}
-                      <div>
-                        <label className="mb-1 block text-xs text-gray-600">
-                          Date of birth
-                        </label>
-                        <input
-                          type="date"
-                          value={filters.dob}
-                          onChange={(e) => handleFieldChange("dob", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
-                        />
-                      </div>
+                      {/* Date of birth - removed as not in DirectorySearchState */}
+                      {/* TODO: Add dob to DirectorySearchState if needed */}
 
                       {/* Phone */}
                       <div>
@@ -435,37 +432,18 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                       {/* Roles */}
                       <div>
                         <label className="mb-1 block text-xs text-gray-600">
-                          Roles
+                          Role
                         </label>
-                        <div className="space-y-2 rounded-lg border border-gray-300 px-3 py-2">
-                          <label className="flex cursor-pointer items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={filters.roles.client}
-                              onChange={(e) => handleRoleChange("client", e.target.checked)}
-                              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-                            />
-                            <span className="text-xs font-medium text-gray-700">Client</span>
-                          </label>
-                          <label className="flex cursor-pointer items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={filters.roles.supplier}
-                              onChange={(e) => handleRoleChange("supplier", e.target.checked)}
-                              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-                            />
-                            <span className="text-xs font-medium text-gray-700">Supplier</span>
-                          </label>
-                          <label className="flex cursor-pointer items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={filters.roles.subagent}
-                              onChange={(e) => handleRoleChange("subagent", e.target.checked)}
-                              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-                            />
-                            <span className="text-xs font-medium text-gray-700">Subagent</span>
-                          </label>
-                        </div>
+                        <select
+                          value={filters.role}
+                          onChange={(e) => handleFieldChange("role", e.target.value as DirectorySearchState["role"])}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
+                        >
+                          <option value="all">All</option>
+                          <option value="client">Client</option>
+                          <option value="supplier">Supplier</option>
+                          <option value="subagent">Subagent</option>
+                        </select>
                       </div>
                     </div>
                   </div>
