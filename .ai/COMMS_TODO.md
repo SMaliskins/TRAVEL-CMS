@@ -73,5 +73,22 @@ Acceptance:
 Expected files:
 - components/Sidebar.tsx
 Commit: style(ui): revert Orders and Directory text to black
+
+### T0005 — Make time text bold in TopBar
+Status: READY
+Owner: Code Writer
+Scope:
+- Add font-bold class to the time/date text in TopBar component
+- Time is displayed in the right side of TopBar (Date + City section)
+- Apply bold styling to the date text (weekday, day, month format)
+- Ensure bold styling works in all states (when time is loaded and when loading)
+Acceptance:
+- Time/date text in TopBar is displayed in bold (font-bold class applied)
+- Bold styling is visible and consistent
+- No other TopBar elements are affected
+- Visual change is clear - time text appears bold
+Expected files:
+- components/TopBar.tsx
+Commit: style(ui): make time text bold in TopBar
 ---
 
