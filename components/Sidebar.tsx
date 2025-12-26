@@ -150,7 +150,6 @@ export default function Sidebar() {
       const isActive = hasChildren
         ? isDirectoryActive(item)
         : pathname === item.href || pathname?.startsWith(item.href + "/");
-      const isOrders = item.name === "Orders";
 
       // Render item with children (Directory)
       if (hasChildren && item.children) {
@@ -280,13 +279,9 @@ export default function Sidebar() {
                   ? "h-10 w-10 items-center justify-center"
                   : "items-center gap-3 px-3 py-2"
               } ${
-                isOrders
-                  ? isActive
-                    ? "bg-green-500/10 text-green-600"
-                    : "text-green-600 hover:bg-green-500/5"
-                  : isActive
-                    ? "bg-gray-900/10 text-gray-900"
-                    : "text-gray-700 hover:bg-gray-900/5"
+                isActive
+                  ? "bg-gray-900/10 text-gray-900"
+                  : "text-gray-700 hover:bg-gray-900/5"
               }`}
               onMouseEnter={() => showTooltip && setHoveredItem(item.href)}
               onMouseLeave={() => setHoveredItem(null)}

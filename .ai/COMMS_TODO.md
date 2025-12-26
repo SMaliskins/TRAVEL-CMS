@@ -54,5 +54,24 @@ Expected files:
 - components/Sidebar.tsx
 Commit: style(ui): make Directory button blue
 Blocked: Sidebar edits require explicit user authorization.
+
+### T0004 — Revert Orders and Directory text to black
+Status: DONE
+Owner: Code Writer
+Scope:
+- Remove green color styling from Orders button (revert to default black/gray)
+- Ensure Directory button text is black/gray (default color)
+- Remove any special color logic for Orders (isOrders conditional)
+- Apply default text colors: text-gray-900 for active, text-gray-700 for inactive
+- Ensure changes work in all sidebar modes (expanded, collapsed, hover, mobile)
+Acceptance:
+- Orders button text is black/gray (not green) in all sidebar modes
+- Directory button text is black/gray (not blue) in all sidebar modes
+- Both buttons use standard colors: text-gray-900 (active), text-gray-700 (inactive)
+- No special color conditionals remain for Orders or Directory
+- Visual change is clear - both buttons return to default black text
+Expected files:
+- components/Sidebar.tsx
+Commit: style(ui): revert Orders and Directory text to black
 ---
 
