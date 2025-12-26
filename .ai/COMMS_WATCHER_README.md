@@ -1,39 +1,55 @@
-# COMMS_TODO Watcher
+# COMMS Watchers
 
-Автоматический мониторинг задач в `COMMS_TODO.md`.
+Two separate watchers monitor `.ai/COMMS_TODO.md` for READY tasks assigned to different roles.
 
-## Запуск
+## Watchers
 
+### Code Writer Watcher
+- **Script**: `scripts/watch-comms-code-writer.js`
+- **Filters**: Tasks with `Status=READY` AND `Owner` contains "Code Writer"
+- **Run**: `npm run watch:comms:cw`
+
+### Runner Watcher
+- **Script**: `scripts/watch-comms-runner.js`
+- **Filters**: Tasks with `Status=READY` AND `Owner` matches:
+  - "Runner"
+  - "Architect"
+  - "Architect/Orchestrator"
+- **Run**: `npm run watch:comms:runner`
+
+## How to Run
+
+Run both watchers in separate terminals:
+
+**Terminal 1 (Code Writer):**
 ```bash
-npm run watch:comms
+npm run watch:comms:cw
 ```
 
-или напрямую:
-
+**Terminal 2 (Runner):**
 ```bash
-node scripts/watch-comms-todo.js
+npm run watch:comms:runner
 ```
 
-## Как работает
+## Behavior
 
-- Проверяет `.ai/COMMS_TODO.md` каждые **20 секунд**
-- Ищет задачи со статусом `Status: READY`
-- Выводит уведомления в консоль при обнаружении новых задач
-- Работает в фоновом режиме до остановки (Ctrl+C)
+- **Polling interval**: 20 seconds
+- **De-duplication**: Only prints when the set of READY task IDs changes
+- **Silent mode**: No output when no matching tasks found
+- **Output format**: Shows task ID, title, owner, and scope items
 
-## Пример вывода
+## Quick Test
 
-```
-🔔 [2024-01-15 14:30:00] Found 1 READY task(s):
+1. Open `.ai/COMMS_TODO.md`
+2. Find or create a task card with:
+   - `Status: READY`
+   - `Owner: Code Writer` (or `Owner: Runner`)
+3. Save the file
+4. Within 20 seconds, the corresponding watcher should print the task details once
+5. If you don't change the task status, the watcher will not print again (de-duplication)
 
-  📋 T0002 — Example task
-     Owner: Code Writer
-     Scope:
-       - Do something
-       - Do something else
-```
+## Notes
 
-## Остановка
-
-Нажмите `Ctrl+C` в терминале, где запущен скрипт.
-
+- Watchers are **notification-only**; they do not modify any files
+- Watchers read `.ai/COMMS_TODO.md` from the repository root
+- Press `Ctrl+C` to stop a watcher
