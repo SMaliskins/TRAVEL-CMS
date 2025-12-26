@@ -75,7 +75,7 @@ Expected files:
 Commit: style(ui): revert Orders and Directory text to black
 
 ### T0005 — Make time text bold in TopBar
-Status: READY
+Status: BLOCKED
 Owner: Code Writer
 Scope:
 - Add font-bold class to the time/date text in TopBar component
@@ -90,5 +90,6 @@ Acceptance:
 Expected files:
 - components/TopBar.tsx
 Commit: style(ui): make time text bold in TopBar
+Blocked: Task requires reading components/TopBar.tsx, but Code Writer is restricted to reading only COMMS files.
 ---
 
