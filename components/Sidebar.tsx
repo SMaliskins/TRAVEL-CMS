@@ -20,6 +20,7 @@ const navConfig: NavElement[] = [
   { name: "Orders", href: "/orders", icon: "📋" },
   { name: "Analytics", href: "/analytics/orders", icon: "📈" },
   { name: "Directory", href: "/directory", icon: "📁" },
+  { name: "Code Writer", href: "/code-writer", icon: "✍️" },
   { name: "Settings", href: "/settings", icon: "⚙️" },
 ];
 

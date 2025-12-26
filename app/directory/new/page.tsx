@@ -33,7 +33,7 @@ export default function NewDirectoryPage() {
       // Simulate API call delay
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const newRecord = createRecord({
+      const newRecord = await createRecord({
         ...data,
         roles: data.roles || [],
         isActive: data.isActive ?? true,
