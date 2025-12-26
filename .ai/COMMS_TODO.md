@@ -35,5 +35,24 @@ Acceptance:
 Expected files:
 - components/Sidebar.tsx
 Commit: style(ui): make Orders button green
+
+### T0003 — Make Directory button blue
+Status: BLOCKED
+Owner: Code Writer
+Scope:
+- Change Directory button color to blue in Sidebar component
+- Apply blue color in all sidebar modes (expanded, collapsed, hover, mobile)
+- Ensure blue color works for both active and inactive states
+- Directory has children items - ensure parent and children use blue color consistently
+Acceptance:
+- Directory button displays blue color in all sidebar modes
+- Blue color is visible and consistent (use Tailwind blue classes, e.g., bg-blue-500, text-blue-600, etc.)
+- Directory children items (if any) also use blue color
+- No other navigation items are affected (Orders stays green)
+- Visual change is clear and obvious
+Expected files:
+- components/Sidebar.tsx
+Commit: style(ui): make Directory button blue
+Blocked: Sidebar edits require explicit user authorization.
 ---
 

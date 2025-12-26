@@ -6,7 +6,7 @@
  * Checks every 20 seconds and logs found tasks
  */
 
-const { readFileSync, watchFile } = require('fs');
+const { readFileSync } = require('fs');
 const { join } = require('path');
 
 const TODO_FILE = join(process.cwd(), '.ai', 'COMMS_TODO.md');
@@ -94,14 +94,7 @@ function main() {
   // Initial check
   checkTasks();
   
-  // Watch file for changes
-  watchFile(TODO_FILE, { interval: CHECK_INTERVAL }, (curr, prev) => {
-    if (curr.mtime !== prev.mtime) {
-      checkTasks();
-    }
-  });
-  
-  // Also check periodically (in case file watcher misses changes)
+  // Check periodically
   setInterval(checkTasks, CHECK_INTERVAL);
 }
 

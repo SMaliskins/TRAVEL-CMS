@@ -11,5 +11,7 @@ YYYY-MM-DD HH:MM — <ROLE> — <WHAT CHANGED> — <LINK/REF>
 2025-12-26 17:57 — RUNNER — T0002 READY — Code Writer: Please read COMMS_TODO.md directly (not just watch script output) — Task T0002 is ready for pickup — Status: READY — File: .ai/COMMS_TODO.md line 22
 2025-12-26 17:57 — RUNNER — Updated COMMS_TODO.md instructions — Added explicit note for Code Writer to read file directly — Watch script confirmed T0002 is found and parsed correctly
 2025-12-26 20:01 — CODE WRITER — T0002 DONE — Made Orders button green in Sidebar component — Applied green color (bg-green-500/10, text-green-600) for active state and (text-green-600, hover:bg-green-500/5) for inactive state — Works in all sidebar modes (expanded, collapsed, hover, mobile) — Commit: 47a2f9d — Files: components/Sidebar.tsx
+2025-12-26 20:01 — RUNNER — Created T0003: Make Directory button blue — Assigned to Code Writer — Expected: components/Sidebar.tsx — Note: Directory has children items, ensure consistent blue color
+2025-12-26 20:10 — CODE WRITER — Marked T0003 BLOCKED (Sidebar not authorized) — T0003 requires Sidebar edits but Sidebar changes require explicit user authorization — Status set to BLOCKED, active_task_id set to null
 ---
 
