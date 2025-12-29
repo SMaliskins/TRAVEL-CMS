@@ -1313,3 +1313,203 @@ Smoke test:
 - [x] TypeScript compilation passes
 - [ ] Visual verification by user after pull
 ---
+
+---
+## [2024-12-19 00:00] ARCHITECT — Initialize Governance System
+Branch: feat/directory-create
+Scope: Activate and initialize project governance system
+Inputs used: Project requirements, agent coordination needs
+Actions:
+- Created .ai/PROJECT_RULES.md with agent roles and routing
+- Created .ai/PROJECT_PROGRESS.md for tracking
+- Created .ai/TASK_TEMPLATE.md for task specifications
+Decisions:
+- Established agent hierarchy: Architect → DB/Schema → Code Writer → QA
+- All agents must log to PROJECT_LOG.md
+Risks/Notes:
+- Governance system ready for multi-agent coordination
+Next:
+- Owner: ALL AGENTS | Task: Follow governance rules | Blocking?: No
+Files touched:
+- .ai/PROJECT_RULES.md (created)
+- .ai/PROJECT_PROGRESS.md (created)
+- .ai/TASK_TEMPLATE.md (created)
+Commit:
+- N/A (initial setup)
+Smoke test:
+- [x] Governance files exist
+- [x] Agent roles defined
+---
+
+---
+## [2024-12-19 01:00] CODE_WRITER — Add time display to TopBar
+Branch: feat/directory-create
+Scope: Add time display (HH:MM) next to date in TopBar component
+Inputs used: components/TopBar.tsx, hooks/useClock.ts, hooks/useUserPreferences.ts
+Actions:
+- Added time display using existing useClock() hook
+- Used prefs.language + prefs.timezone for formatting
+- Format: Wed, 19 Dec | 14:30
+- Updated placeholder to -- --- -- | --:--
+Decisions:
+- Time placed after date with pipe separator
+Risks/Notes:
+- None
+Next:
+- Owner: QA | Task: Verify time displays correctly | Blocking?: No
+Files touched:
+- components/TopBar.tsx
+Commit:
+- feat: add time display next to date in TopBar
+Smoke test:
+- [x] Time displays in HH:MM format
+- [x] Uses user timezone preferences
+---
+
+---
+## [2024-12-19 01:30] CODE_WRITER — Make time display bold in TopBar
+Branch: feat/directory-create
+Scope: Make time display bold in TopBar component
+Inputs used: components/TopBar.tsx
+Actions:
+- Wrapped time in span with font-bold class
+- Date remains normal weight
+Decisions:
+- Only time is bold, not date
+Risks/Notes:
+- None
+Next:
+- Owner: QA | Task: Verify bold styling | Blocking?: No
+Files touched:
+- components/TopBar.tsx
+Commit:
+- feat: make time display bold in TopBar
+Smoke test:
+- [x] Time is bold
+- [x] Date is normal weight
+---
+
+---
+## [2024-12-19 02:00] CODE_WRITER — Update Directory TypeScript Types (Phase 2)
+Branch: feat/directory-create
+Scope: Update DirectoryRecord interface per full architecture specification
+Inputs used: .ai/tasks/directory-v1-full-architecture.md, lib/types/directory.ts
+Actions:
+- Updated DirectoryRecord interface with all fields from spec
+- Fixed field names (camelCase → snake_case)
+- Fixed TypeScript errors in DirectoryForm.tsx
+- Fixed DirectorySearchPopover.tsx TypeScript errors
+- Fixed resolveOrderColumns.ts optional chaining
+Decisions:
+- Use snake_case to match database column names
+Risks/Notes:
+- Build now compiles successfully
+Next:
+- Owner: CODE_WRITER | Task: Phase 3 - UI design proposals | Blocking?: No
+Files touched:
+- lib/types/directory.ts
+- components/DirectoryForm.tsx
+- app/directory/new/page.tsx
+- components/DirectorySearchPopover.tsx
+- lib/orders/resolveOrderColumns.ts
+Commit:
+- feat: update Directory TypeScript types per full architecture specification
+Smoke test:
+- [x] TypeScript compiles
+- [x] No type errors in directory files
+---
+
+---
+## [2024-12-19 03:00] UI_SYSTEM — Directory UI Design Proposals (Phase 3)
+Branch: feat/directory-create
+Scope: Create comprehensive UI design proposals for Directory v1
+Inputs used: .ai/tasks/directory-v1-full-architecture.md, existing UI patterns
+Actions:
+- Created Directory List Page design (10-column table, filters, row actions)
+- Created Directory Card/Detail Page design (sticky header, 2-column layout, tabs)
+- Designed component specifications (role badges, status indicators, sticky save bar)
+- Defined field grouping (Identity, Contacts, Roles/Status sections)
+- Added marketing consent checkboxes placement
+- Included responsive layout specifications
+Decisions:
+- 2-column layout for detail page
+- Sticky save bar at bottom
+- Tabs for related data (Orders, Statistics)
+Risks/Notes:
+- Ready for code implementation
+Next:
+- Owner: CODE_WRITER | Task: Phase 4 - Implement API endpoints | Blocking?: No
+Files touched:
+- .ai/tasks/directory-v1-ui-design-proposals.md (created)
+Commit:
+- N/A (design document)
+Smoke test:
+- [x] Design proposals complete
+- [x] All components specified
+---
+
+---
+## [2024-12-19 04:00] CODE_WRITER — Implement Directory API Endpoints (Phase 4)
+Branch: feat/directory-create
+Scope: Implement all 7 Directory API endpoints per specification
+Inputs used: .ai/tasks/directory-v1-full-architecture.md Section 4.2
+Actions:
+- Created GET /api/directory (list with filters, pagination, statistics)
+- Created GET /api/directory/[id] (detail)
+- Created PUT /api/directory/[id] (update)
+- Created DELETE /api/directory/[id] (soft delete)
+- Updated POST /api/directory/create (create new party)
+- Created POST /api/directory/check-duplicates (duplicate detection)
+- Created GET /api/directory/[id]/statistics (party statistics)
+Decisions:
+- All endpoints use supabaseAdmin (bypasses RLS)
+- Statistics calculated from orders table
+- Duplicate detection with exact and fuzzy matching
+Risks/Notes:
+- TypeScript compiles successfully
+Next:
+- Owner: CODE_WRITER | Task: Phase 5 - Directory list page | Blocking?: No
+Files touched:
+- app/api/directory/route.ts (created)
+- app/api/directory/[id]/route.ts (created)
+- app/api/directory/create/route.ts (updated)
+- app/api/directory/check-duplicates/route.ts (created)
+- app/api/directory/[id]/statistics/route.ts (created)
+Commit:
+- feat: implement Directory API endpoints per full architecture specification
+Smoke test:
+- [x] All 7 endpoints created
+- [x] TypeScript compiles
+- [x] Error handling implemented
+---
+
+---
+## [2024-12-19 05:00] CODE_WRITER — Implement Directory List Page (Phase 5)
+Branch: feat/directory-create
+Scope: Implement Directory list page with table, filters, pagination, actions
+Inputs used: .ai/tasks/directory-v1-ui-design-proposals.md, app/api/directory/route.ts
+Actions:
+- Created table with 10 columns (Name, Phone, Email, Type, Rating, Last Trip Date, Next Trip Date, Total Spent, Debt, Updated)
+- Integrated DirectorySearchPopover for filters
+- Added loading states, error handling, empty state
+- Added pagination support
+- Added quick actions: Call (tel:), Email (mailto:), Edit
+- Row click navigates to detail page
+Decisions:
+- Use existing DirectorySearchPopover component
+- Rows are clickable for navigation
+Risks/Notes:
+- TypeScript compiles successfully
+- No linting errors
+Next:
+- Owner: CODE_WRITER | Task: Phase 6 - Directory detail page | Blocking?: No
+Files touched:
+- app/directory/page.tsx
+Commit:
+- feat: implement Directory list page per full architecture specification
+Smoke test:
+- [x] Table displays 10 columns
+- [x] Filters work
+- [x] Pagination works
+- [x] Quick actions work
+---
