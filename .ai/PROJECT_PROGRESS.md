@@ -1,6 +1,6 @@
 # Travel CMS - Project Progress
 
-**Last Updated:** 2024-12-19 (Code Writer Agent)
+**Last Updated:** 2025-12-29 (Code Writer Agent)
 
 ---
 
@@ -80,6 +80,42 @@ The following changes exist in the working directory and need review/commit deci
 ---
 
 ## Completed Tasks
+
+### 2025-12-29 - Make TopBar time bold + italic (T0006)
+- **Branch:** `cursor/TRA-5-topbar-time-style-7d25`
+- **Completed By:** CODE WRITER
+- **Files Changed:**
+  - `components/TopBar.tsx` - Added font-bold italic to time, added HH:MM display
+- **Commit:** `a8dbcb8`
+- **Description:** Added bold + italic styling to time display in TopBar. Also added time (HH:MM) which was previously missing - only date was shown. Date and city now displayed together on second line.
+
+### 2025-12-26 - Revert Orders and Directory text to black (T0004)
+- **Branch:** `feat/directory-create`
+- **Completed By:** CODE WRITER
+- **Files Changed:**
+  - `components/Sidebar.tsx` - Removed green/blue colors from Orders/Directory buttons
+- **Commit:** `319abe9`
+- **Description:** Reverted Orders and Directory button text to default black/gray colors. Removed special color conditionals.
+
+### 2025-12-26 - Make Orders button green (T0002)
+- **Branch:** `feat/directory-create`
+- **Completed By:** CODE WRITER
+- **Files Changed:**
+  - `components/Sidebar.tsx` - Applied green color to Orders button
+- **Commit:** `47a2f9d`
+- **Description:** Made Orders button green in Sidebar (later reverted in T0004).
+
+### 2025-12-25 - Directory Roles Fixes (API + DB)
+- **Branch:** `feat/directory-create`
+- **Completed By:** CODE WRITER + DB/SUPABASE SPECIALIST
+- **Files Changed:**
+  - `app/api/directory/[id]/route.ts` - Fixed client_type, partner_role, error handling
+  - `app/api/directory/create/route.ts` - Fixed client_type bug, added partner_role
+  - `migrations/add_subagents_columns.sql` - Added optional columns to subagents table
+- **Description:** Fixed critical bugs preventing Directory roles (client, supplier, subagent) from saving:
+  - client_party: Added required client_type field
+  - partner_party: Added required partner_role field ('supplier')
+  - subagents: Added missing columns (commission_scheme, commission_tiers, payout_details)
 
 ### 2024-12-19 - Implement Directory List Page (Phase 5)
 - **Branch:** `feat/directory-create`

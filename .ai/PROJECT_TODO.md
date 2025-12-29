@@ -28,5 +28,35 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | ID | Area | Task | Owner | Status | Branch | PR | Notes |
 |----|------|------|-------|--------|--------|----|-------|
 | 1 | Orders | DB-backed list + create flow | - | TODO | - | - | Replace mockOrders with real DB queries |
-| 2 | Directory | Create + list + compact UI | - | TODO | - | - | Implement Directory CRUD with compact layouts |
+| 2 | Directory | Phase 6: Detail/Card page | - | TODO | feat/directory-create | - | See .ai/tasks/directory-v1-implementation-steps.md Step 6 |
 | 3 | Supabase | Schema mapping + RLS sanity | - | TODO | - | - | Verify column mappings and RLS policies |
+
+---
+
+## Directory v1 Implementation Progress
+
+| Phase | Description | Status | Notes |
+|-------|-------------|--------|-------|
+| 1 | DB Schema migrations | DONE | migrations/directory_schema_migration.sql |
+| 2 | TypeScript types | DONE | lib/types/directory.ts |
+| 3 | UI design proposals | DONE | .ai/tasks/directory-v1-ui-design-proposals.md |
+| 4 | API endpoints (7 total) | DONE | app/api/directory/* |
+| 5 | Directory list page | DONE | app/directory/page.tsx |
+| 6 | Directory detail/card page | TODO | Next step |
+| 7 | Duplicate detection UI | TODO | - |
+| 8 | Statistics dashboard | TODO | - |
+| 9 | Security review | TODO | - |
+| 10 | QA testing | TODO | - |
+
+---
+
+## Task Files Reference
+
+| File | Description |
+|------|-------------|
+| .ai/tasks/directory-v1-full-architecture.md | Complete specification |
+| .ai/tasks/directory-v1-implementation-steps.md | Step-by-step commands |
+| .ai/tasks/directory-v1-ui-design-proposals.md | UI design proposals |
+| .ai/tasks/directory-fix-save-issues.md | API save issues (DONE) |
+| .ai/tasks/directory-fix-partner-role.md | partner_role fix (DONE) |
+| .ai/tasks/directory-add-subagents-columns.md | subagents columns (DONE) |
