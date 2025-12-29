@@ -18,6 +18,12 @@ interface DirectoryFormProps {
   onCancel: () => void;
   onValidationChange?: (isValid: boolean) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  // Optional controlled roles (for external control from parent page)
+  externalRoles?: DirectoryRole[];
+  onRolesChange?: (roles: DirectoryRole[]) => void;
+  // Optional controlled active status
+  externalIsActive?: boolean;
+  onIsActiveChange?: (isActive: boolean) => void;
 }
 
 export interface DirectoryFormHandle {
@@ -26,7 +32,7 @@ export interface DirectoryFormHandle {
 
 const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
   function DirectoryForm(
-    { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange },
+    { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange, externalRoles, onRolesChange, externalIsActive, onIsActiveChange },
     ref
   ) {
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -44,8 +50,26 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     };
 
     const [baseType, setBaseType] = useState<DirectoryType>(getBaseType());
-    const [roles, setRoles] = useState<DirectoryRole[]>(record?.roles || []);
-    const [isActive, setIsActive] = useState(record?.status === 'active');
+    // Use external roles if provided, otherwise manage internally
+    const [internalRoles, setInternalRoles] = useState<DirectoryRole[]>(record?.roles || []);
+    const roles = externalRoles !== undefined ? externalRoles : internalRoles;
+    const setRoles = (newRoles: DirectoryRole[]) => {
+      if (onRolesChange) {
+        onRolesChange(newRoles);
+      } else {
+        setInternalRoles(newRoles);
+      }
+    };
+    // Use external isActive if provided, otherwise manage internally
+    const [internalIsActive, setInternalIsActive] = useState(record?.status === 'active');
+    const isActive = externalIsActive !== undefined ? externalIsActive : internalIsActive;
+    const setIsActive = (value: boolean) => {
+      if (onIsActiveChange) {
+        onIsActiveChange(value);
+      } else {
+        setInternalIsActive(value);
+      }
+    };
 
     // Client type selection (for Client role only)
     const [clientType, setClientType] = useState<DirectoryType>(

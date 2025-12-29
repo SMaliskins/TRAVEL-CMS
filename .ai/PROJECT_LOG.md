@@ -1513,3 +1513,37 @@ Smoke test:
 - [x] Pagination works
 - [x] Quick actions work
 ---
+
+---
+## [2025-12-29 22:00] CODE_WRITER — Fix Directory create: roles not synced between page and form
+Branch: cursor/TRA-5-topbar-time-style-7d25
+Scope: Fix bug where new Directory records fail to create because roles are not passed from page header to DirectoryForm
+Inputs used: app/directory/new/page.tsx, components/DirectoryForm.tsx, app/api/directory/create/route.ts
+Actions:
+- Identified root cause: new/page.tsx has separate roles state in header (lines 21, 196-207)
+- DirectoryForm has its own internal roles state initialized to empty array
+- When form submits, it uses its own empty roles → API returns "At least one role is required"
+- Added new props to DirectoryForm: externalRoles, onRolesChange, externalIsActive, onIsActiveChange
+- Updated DirectoryForm to use external state when provided, otherwise use internal state
+- Updated new/page.tsx to pass roles and isActive to DirectoryForm via new props
+Decisions:
+- Used controlled component pattern for optional external state management
+- Backward compatible: form works with or without external props
+Risks/Notes:
+- Fix allows parent page to control roles/active state
+- DirectoryForm still has its own UI for roles selection (may cause UI duplication)
+- Consider removing duplicate roles UI from either page header or form in future
+Next:
+- Owner: USER | Task: Test creating new Directory record with roles selected | Blocking?: No
+- Owner: QA | Task: Verify roles are correctly saved to database | Blocking?: No
+Files touched:
+- components/DirectoryForm.tsx (added externalRoles, onRolesChange, externalIsActive, onIsActiveChange props)
+- app/directory/new/page.tsx (passed new props to DirectoryForm)
+Commit:
+- Pending
+Smoke test:
+- [x] TypeScript compiles
+- [ ] Create new Directory record with Client role
+- [ ] Create new Directory record with Supplier role
+- [ ] Verify record appears in Directory list
+---
