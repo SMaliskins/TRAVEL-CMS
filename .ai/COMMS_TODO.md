@@ -75,7 +75,7 @@ Expected files:
 Commit: style(ui): revert Orders and Directory text to black
 
 ### T0005 — Make time text bold in TopBar
-Status: READY
+Status: DONE
 Owner: Code Writer
 Scope:
 - Add font-bold class to the time/date text in TopBar component
@@ -90,5 +90,19 @@ Acceptance:
 Expected files:
 - components/TopBar.tsx
 Commit: style(ui): make time text bold in TopBar
+Notes: Also added italic styling per issue T0006 requirements
+
+### T0006 — Make TopBar time bold + italic
+Status: DONE
+Owner: Code Writer
+Scope:
+- Add font-bold and italic classes to the time/date text in TopBar component
+- Apply to both loaded state and loading placeholder
+Acceptance:
+- Time/date text in TopBar is displayed in bold italic
+- Styling applied to both normal and loading states
+Expected files:
+- components/TopBar.tsx
+Commit: style(ui): make time text bold and italic in TopBar
 ---
 
