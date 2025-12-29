@@ -17,5 +17,6 @@ YYYY-MM-DD HH:MM — <ROLE> — <WHAT CHANGED> — <LINK/REF>
 2025-12-26 22:34 — CODE WRITER — T0004 DONE — Reverted Orders and Directory text to black — Removed isOrders conditional and green color styling from Orders button — Both buttons now use default colors: text-gray-900 (active), text-gray-700 (inactive) — Works in all sidebar modes — Commit: 319abe9 — Files: components/Sidebar.tsx
 2025-12-26 22:34 — RUNNER — Created T0005: Make time text bold in TopBar — User explicitly requested this change — Assigned to Code Writer — Expected: components/TopBar.tsx — Note: Add font-bold to date/time text in Date + City section
 2025-12-29 20:02 — CODE WRITER — T0005 DONE — Made TopBar date/time text bold (added font-bold to date line in both loaded and loading states) — Checks: `npm run lint` fails with pre-existing repo-wide lint errors (not introduced by this change); `npm run build` fails due to missing env (`supabaseUrl is required`) — Files: components/TopBar.tsx — Commit msg per card: style(ui): make time text bold in TopBar
+2025-12-29 20:21 — CODE WRITER — STOP — No READY tasks assigned to Code Writer and active_task_id is null; per rules cannot proceed with any further work/commit.
 ---
 
