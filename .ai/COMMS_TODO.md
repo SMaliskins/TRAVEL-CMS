@@ -75,7 +75,7 @@ Expected files:
 Commit: style(ui): revert Orders and Directory text to black
 
 ### T0005 — Make time text bold in TopBar
-Status: READY
+Status: DONE
 Owner: Code Writer
 Scope:
 - Add font-bold class to the time/date text in TopBar component
