@@ -27,9 +27,49 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 | ID | Area | Task | Owner | Status | Branch | PR | Notes |
 |----|------|------|-------|--------|--------|----|-------|
+| T0007 | Directory | Diagnose Directory create not working | DB_AGENT | READY | cursor/TRA-5-topbar-time-style-7d25 | - | See task details below |
 | 1 | Orders | DB-backed list + create flow | - | TODO | - | - | Replace mockOrders with real DB queries |
 | 2 | Directory | Phase 6: Detail/Card page | - | TODO | feat/directory-create | - | See .ai/tasks/directory-v1-implementation-steps.md Step 6 |
 | 3 | Supabase | Schema mapping + RLS sanity | - | TODO | - | - | Verify column mappings and RLS policies |
+
+---
+
+## T0007 — Diagnose Directory create not working
+
+**Status:** READY  
+**Owner:** DB_AGENT (DB / Supabase Specialist)  
+**Branch:** cursor/TRA-5-topbar-time-style-7d25
+
+### Task
+Diagnose why new Directory records are not being created
+
+### Inputs
+- `app/api/directory/create/route.ts` — API endpoint
+- `app/directory/new/page.tsx` — create page
+- Supabase tables: `party`, `party_person`, `party_company`, `client_party`, `partner_party`, `subagents`
+
+### Constraints
+- Do NOT write business logic
+- Diagnosis and field mapping only
+- Check RLS policies
+
+### Expected Output in PROJECT_LOG.md
+1. What data is received by API (request body structure)
+2. What data reaches DB (or errors)
+3. RLS policy status for each table
+4. Field mapping: code → DB columns
+5. Root cause hypothesis
+
+### Next Step
+- Set Status to IN_PROGRESS when starting
+- Write report in `.ai/PROJECT_LOG.md`
+- Set Status to DONE
+- ARCHITECT will review and create task for CODE_WRITER
+
+### Execution Chain
+```
+DB_AGENT → CODE_WRITER → QA_AGENT
+```
 
 ---
 
