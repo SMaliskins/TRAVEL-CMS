@@ -116,7 +116,7 @@ export default function TopBar() {
           {/* Date + City */}
           {prefsMounted && now.getTime() !== 0 ? (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-sm text-gray-600">
+              <span className="text-sm font-bold text-gray-600">
                 {new Intl.DateTimeFormat(prefs.language, {
                   weekday: "short",
                   day: "2-digit",
@@ -128,7 +128,7 @@ export default function TopBar() {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-sm text-gray-600">-- --- --</span>
+              <span className="text-sm font-bold text-gray-600">-- --- --</span>
               <span className="text-xs text-gray-500">--</span>
             </div>
           )}

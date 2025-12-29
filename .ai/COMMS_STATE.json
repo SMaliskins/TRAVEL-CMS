@@ -1,6 +1,6 @@
 {
-  "active_task_id": "T0005",
-  "last_updated": "2025-12-26T22:34:00Z",
-  "notes": "T0005 created: Make time text bold in TopBar. User explicitly requested this change."
+  "active_task_id": null,
+  "last_updated": "2025-12-29T20:02:00Z",
+  "notes": "T0005 completed: TopBar date/time text bold (loaded + loading). Local checks: npm run lint has pre-existing repo-wide errors; npm run build fails without env (supabaseUrl is required)."
 }
 
