@@ -16,5 +16,6 @@ YYYY-MM-DD HH:MM — <ROLE> — <WHAT CHANGED> — <LINK/REF>
 2025-12-26 20:10 — RUNNER — Created T0004: Revert Orders and Directory text to black — User explicitly requested this change — Assigned to Code Writer — Expected: components/Sidebar.tsx — Note: Remove green color from Orders, ensure Directory is black (default)
 2025-12-26 22:34 — CODE WRITER — T0004 DONE — Reverted Orders and Directory text to black — Removed isOrders conditional and green color styling from Orders button — Both buttons now use default colors: text-gray-900 (active), text-gray-700 (inactive) — Works in all sidebar modes — Commit: 319abe9 — Files: components/Sidebar.tsx
 2025-12-26 22:34 — RUNNER — Created T0005: Make time text bold in TopBar — User explicitly requested this change — Assigned to Code Writer — Expected: components/TopBar.tsx — Note: Add font-bold to date/time text in Date + City section
+2025-12-29 19:35 — RUNNER — Activated T0005 for Code Writer — State: active_task_id=T0005
 ---
 
