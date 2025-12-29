@@ -92,3 +92,18 @@ Expected files:
 Commit: style(ui): make time text bold in TopBar
 ---
 
+### T0006 — Post Slack status after each Runner state change
+Status: BLOCKED
+Owner: Security/CI
+Scope:
+	•	Provide approved Slack posting mechanism for `#all-travel-cms` (incoming webhook URL OR Slack bot token)
+	•	Specify where secret will live (env var name + where it will be injected in this environment)
+	•	Confirm required message format (single-line is fine) and whether threaded updates are desired
+Acceptance:
+	•	Runner/automation can post a short status message to `#all-travel-cms` after each state change without hardcoding secrets
+	•	No secrets committed to repo
+Verify:
+	•	Manual: trigger one Runner state change and confirm a message appears in `#all-travel-cms`
+Notes:
+	•	Follow-up implementation will likely touch `scripts/watch-comms-runner.js` to post after COMMS_STATE updates.
+Commit: chore(ai): add Slack notification prerequisites (no code)

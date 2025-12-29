@@ -1,6 +1,6 @@
 {
   "active_task_id": "T0005",
-  "last_updated": "2025-12-29T19:35:49Z",
-  "notes": "T0005 active: Make time text bold in TopBar (assigned to Code Writer)."
+  "last_updated": "2025-12-29T20:19:31Z",
+  "notes": "T0005 active. T0006 created (BLOCKED): Slack status after Runner state changes; needs approved Slack auth + secret injection plan."
 }
 
