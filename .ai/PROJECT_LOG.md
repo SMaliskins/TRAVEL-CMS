@@ -1547,3 +1547,50 @@ Smoke test:
 - [ ] Create new Directory record with Supplier role
 - [ ] Verify record appears in Directory list
 ---
+
+---
+## [2025-12-29 22:30] ARCHITECT — Task: Directory create not working - Agent chain initiated
+Branch: cursor/TRA-5-topbar-time-style-7d25
+Scope: Analyze and fix issue where new Directory records are not being created
+
+**Task:** Новая запись не добавляется в Directory
+
+**Agent Checklist:**
+| Agent | Status | Reason |
+|-------|--------|--------|
+| DB / Supabase Specialist | INVOLVED | Check schema, RLS, data flow to DB |
+| Code Writer | INVOLVED | Fix code after DB analysis |
+| UI System / Consistency | NOT REQUIRED | Functional issue, not UI |
+| QA / Regression | INVOLVED | Verify fix |
+| Security / CI | NOT REQUIRED | Not security related |
+
+**Execution Order:** DB → Code Writer → QA
+
+**Phase 1 Task for DB / Supabase Specialist:**
+
+ROLE: DB / Supabase Specialist
+
+TASK: Diagnose why new Directory records are not being created
+
+INPUTS:
+- app/api/directory/create/route.ts — API endpoint
+- app/directory/new/page.tsx — create page
+- Supabase tables: party, party_person, party_company, client_party, partner_party, subagents
+
+CONSTRAINTS:
+- Do NOT write business logic
+- Diagnosis and field mapping only
+- Check RLS policies
+
+EXPECTED OUTPUT in PROJECT_LOG.md:
+1. What data is received by API (request body structure)
+2. What data reaches DB (or errors)
+3. RLS policy status for each table
+4. Field mapping: code → DB columns
+5. Root cause hypothesis
+
+NEXT STEP:
+- ARCHITECT will review report and create task for Code Writer
+
+**Status:** WAITING for DB / Supabase Specialist report
+---
