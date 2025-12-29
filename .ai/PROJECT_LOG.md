@@ -1278,3 +1278,38 @@ Smoke test:
 - [ ] Test updating roles on existing party
 - [ ] Verify all INSERT operations succeed without errors
 ---
+
+## [2025-12-29 21:10] CODE_WRITER — Make TopBar time bold + italic (T0006)
+Branch: cursor/TRA-5-topbar-time-style-7d25
+Scope: Add bold and italic styling to time display in TopBar component
+Inputs used: .ai/COMMS_TODO.md (T0005), Linear issue TRA-5, components/TopBar.tsx
+Actions:
+- Added font-bold and italic classes to time display (HH:MM) in TopBar
+- Added time (hours:minutes) display above date (was missing - only date was shown)
+- Date and city now shown together on second line (format: "Mon 29 Dec · Moscow")
+- Applied styling to both loaded state and loading placeholder
+- Updated .ai/COMMS_TODO.md: marked T0005 as DONE, added T0006 as DONE
+- Updated .ai/COMMS_LOG.md with completion entry
+Decisions:
+- Time displayed prominently in bold italic on first line
+- Date + city combined on second line for compact layout
+- Consistent styling for both loaded and loading states
+Risks/Notes:
+- Changes pushed to branch cursor/TRA-5-topbar-time-style-7d25
+- User needs to pull from remote to see changes locally
+Next:
+- Owner: USER | Task: Pull changes from cursor/TRA-5-topbar-time-style-7d25 branch | Blocking?: No
+- Owner: QA | Task: Verify time displays correctly in bold italic | Blocking?: No
+Files touched:
+- components/TopBar.tsx
+- .ai/COMMS_TODO.md
+- .ai/COMMS_LOG.md
+Commit:
+- eda00a0 style(ui): make time text bold and italic in TopBar
+Smoke test:
+- [x] Time (HH:MM) displayed in bold italic
+- [x] Date and city shown on second line
+- [x] Loading placeholder styled consistently
+- [x] TypeScript compilation passes
+- [ ] Visual verification by user after pull
+---

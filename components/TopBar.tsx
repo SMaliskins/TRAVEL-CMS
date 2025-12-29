@@ -113,23 +113,31 @@ export default function TopBar() {
             </svg>
           </button>
 
-          {/* Date + City */}
+          {/* Time + Date + City */}
           {prefsMounted && now.getTime() !== 0 ? (
             <div className="flex flex-col items-center gap-0.5">
               <span className="text-sm font-bold italic text-gray-600">
+                {new Intl.DateTimeFormat(prefs.language, {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: prefs.timezone,
+                }).format(now)}
+              </span>
+              <span className="text-xs text-gray-500">
                 {new Intl.DateTimeFormat(prefs.language, {
                   weekday: "short",
                   day: "2-digit",
                   month: "short",
                   timeZone: prefs.timezone,
                 }).format(now)}
+                {" · "}
+                {prefs.cityLabel}
               </span>
-              <span className="text-xs text-gray-500">{prefs.cityLabel}</span>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-sm font-bold italic text-gray-600">-- --- --</span>
-              <span className="text-xs text-gray-500">--</span>
+              <span className="text-sm font-bold italic text-gray-600">--:--</span>
+              <span className="text-xs text-gray-500">-- --- -- · --</span>
             </div>
           )}
 
