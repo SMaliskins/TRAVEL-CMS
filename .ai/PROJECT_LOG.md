@@ -956,3 +956,11 @@ Branch: feature/x
 Вывод / Решение: Реализована фильтрация по company_name из party_company. Добавлена фильтрация после загрузки данных (строки 211-223 app/api/directory/route.ts). Поиск теперь включает: display_name, email, phone, company_name (из companyMap). Поиск работает case-insensitive через toLowerCase(). Поиск в основном запросе оставлен для оптимизации (строки 128-136), дополнительная фильтрация по company_name применяется в памяти после загрузки данных из party_company. Это позволяет находить записи по названию компании (например, "tez" находит "TEZ TOUR").
 
 ---
+
+## [2026-01-05 01:26] CODE_WRITER — RESULT (Updated): Fix Directory Search - Include company_name
+Branch: feature/x
+Задача: Fix Directory search - include company_name from party_company (Task #13)
+Результат: RESULT
+Вывод / Решение: Реализована фильтрация по company_name из party_company. Убран поиск из основного запроса (строки 128-129 app/api/directory/route.ts). Добавлена фильтрация после загрузки данных (строки 202-215 app/api/directory/route.ts). Поиск теперь включает: display_name, email, phone, company_name (из companyMap). Поиск работает case-insensitive через toLowerCase(). Фильтрация применяется в памяти после загрузки данных из party_company. Это позволяет находить записи по названию компании (например, "tez" находит "TEZ TOUR"). Commit: 58baab5
+
+---
