@@ -134,7 +134,8 @@ export async function PATCH(
     // Build update payload - only allow certain fields
     const allowedFields = [
       "status", 
-      "client_display_name", 
+      "client_display_name",
+      "client_party_id",
       "countries_cities", 
       "date_from", 
       "date_to",

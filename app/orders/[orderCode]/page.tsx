@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock from "./_components/OrderServicesBlock";
+import OrderClientSection from "./_components/OrderClientSection";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -14,6 +14,7 @@ interface OrderData {
   id: string;
   order_code: string;
   client_display_name: string | null;
+  client_party_id?: string | null;
   countries_cities: string | null;
   date_from: string | null;
   date_to: string | null;
@@ -23,6 +24,8 @@ interface OrderData {
   amount_paid: number;
   amount_debt: number;
   profit_estimated: number;
+  client_phone?: string | null;
+  client_email?: string | null;
 }
 
 export default function OrderPage({
@@ -209,36 +212,24 @@ export default function OrderPage({
 
         {/* Tab Content */}
         <div className="mb-6">
-          {activeTab === "client" && (
-            <div className="rounded-lg bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
-                Client
-              </h2>
-              {order?.client_display_name ? (
-                <div className="space-y-3">
-                  <div>
-                    <span className="text-sm text-gray-500">Name:</span>
-                    <p className="text-gray-900 font-medium">{order.client_display_name}</p>
-                  </div>
-                  {order.countries_cities && (
-                    <div>
-                      <span className="text-sm text-gray-500">Destination:</span>
-                      <p className="text-gray-900">{order.countries_cities}</p>
-                    </div>
-                  )}
-                  {(order.date_from || order.date_to) && (
-                    <div>
-                      <span className="text-sm text-gray-500">Dates:</span>
-                      <p className="text-gray-900">
-                        {formatDateDDMMYYYY(order.date_from)} — {formatDateDDMMYYYY(order.date_to)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500">No client information</p>
-              )}
-            </div>
+          {activeTab === "client" && order && (
+            <OrderClientSection
+              orderId={order.id}
+              orderCode={orderCode}
+              clientDisplayName={order.client_display_name}
+              clientPartyId={order.client_party_id}
+              countriesCities={order.countries_cities}
+              dateFrom={order.date_from}
+              dateTo={order.date_to}
+              clientPhone={order.client_phone}
+              clientEmail={order.client_email}
+              onUpdate={(updates) => {
+                setOrder({
+                  ...order,
+                  ...updates,
+                } as OrderData);
+              }}
+            />
           )}
 
           {activeTab === "finance" && (
