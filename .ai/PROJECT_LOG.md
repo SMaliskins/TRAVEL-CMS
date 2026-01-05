@@ -1036,3 +1036,23 @@ Branch: feature/x
 **Следующий шаг:** Проверить Vercel build logs — увидим SET или NOT SET для переменных.
 
 ---
+
+## [2026-01-05 18:45] CODE WRITER — START: Fix client crash when env vars missing
+Branch: feature/x
+Задача: Remove throw error, show graceful error message instead
+Результат: START
+
+---
+
+## [2026-01-05 18:48] CODE WRITER — DONE: Fix client crash when env vars missing
+Branch: feature/x
+Commit: 8b13d60
+Задача: Remove throw error, show graceful error message instead
+Результат: DONE
+Вывод / Решение:
+- Убран `throw new Error` из lib/supabaseClient.ts
+- Добавлен экспорт `isSupabaseConfigured` флага
+- Login page теперь показывает красивую ошибку конфигурации вместо crash
+- App больше не падает, показывает понятное сообщение с инструкцией
+
+---
