@@ -125,14 +125,19 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", status);
     }
 
-    // Search filter removed from query - will be applied after loading data (to include company_name)
+    // Apply search filter in SQL (ilike on display_name)
+    // This ensures search works BEFORE pagination
+    if (search) {
+      query = query.ilike("display_name", `%${search}%`);
+    }
+
     // Pagination
     query = query.range(offset, offset + limit - 1);
 
     // Order by updated_at desc
     query = query.order("updated_at", { ascending: false });
 
-    const { data: parties, error, count } = await query;
+    let { data: parties, error, count } = await query;
 
     if (error) {
       console.error("Error fetching directory:", error);
@@ -140,6 +145,34 @@ export async function GET(request: NextRequest) {
         { error: "Failed to fetch directory records" },
         { status: 500 }
       );
+    }
+
+    // If search provided and no results from display_name, try searching in party_person
+    if (search && (!parties || parties.length === 0)) {
+      // Search in party_person by first_name or last_name
+      const { data: personMatches } = await supabaseAdmin
+        .from("party_person")
+        .select("party_id")
+        .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`)
+        .limit(limit);
+
+      if (personMatches && personMatches.length > 0) {
+        const matchedIds = personMatches.map((p: { party_id: string }) => p.party_id);
+        
+        // Fetch parties by these IDs
+        let personQuery = supabaseAdmin
+          .from("party")
+          .select("*", { count: "exact" })
+          .in("id", matchedIds);
+        
+        if (userCompanyId) {
+          personQuery = personQuery.eq("company_id", userCompanyId);
+        }
+        
+        const { data: personParties, count: personCount } = await personQuery;
+        parties = personParties || [];
+        count = personCount || 0;
+      }
     }
 
     if (!parties || parties.length === 0) {

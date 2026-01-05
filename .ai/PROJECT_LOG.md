@@ -1191,3 +1191,15 @@ Result: PASS — SCORE 8/10
 Details: Both fixes implemented correctly
 
 ---
+
+## 2026-01-05
+**QA / REGRESSION**
+Task: Investigate why search still doesn't work
+Result: FAIL — found root cause
+Details: 
+- API applies pagination BEFORE search
+- Only first N records are loaded, then filtered in memory
+- If client not in first N — never found
+- Need to move search to SQL query
+
+---
