@@ -161,6 +161,7 @@ function NewOrderForm() {
         credentials: "include", // Include cookies
         body: JSON.stringify({
           clientPartyId,
+          clientDisplayName: clientDisplayName || undefined,
           orderType,
           ownerAgent,
           ownerName: ownerFullName,
