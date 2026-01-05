@@ -972,3 +972,19 @@ Branch: feature/x
 Вывод / Решение: Добавлю временное логирование в login page для диагностики проблемы авторизации на Production.
 
 ---
+
+## [2026-01-05 18:05] CODE WRITER — RESULT: Add diagnostic logging for Supabase auth
+Branch: feature/x
+Задача: Add console.log to login page to diagnose which Supabase URL/key is used on Production
+Результат: RESULT
+Вывод / Решение: 
+- Добавил console.log в handleLogin функцию в app/login/page.tsx
+- Логирует NEXT_PUBLIC_SUPABASE_URL и наличие NEXT_PUBLIC_SUPABASE_ANON_KEY
+- Commit: 2bf6bcc
+
+**Файлы изменены:**
+- app/login/page.tsx
+
+**Следующий шаг:** SM проверит Console на Production после деплоя и увидит какие значения env vars используются.
+
+---
