@@ -13,6 +13,12 @@ export default function LoginPage() {
   const handleLogin = async () => {
     setError("");
 
+    // DIAGNOSTIC: Log Supabase config (remove after debugging)
+    console.log("=== SUPABASE DIAGNOSTIC ===");
+    console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log("NEXT_PUBLIC_SUPABASE_ANON_KEY:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "SET (hidden)" : "NOT SET");
+    console.log("===========================");
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,

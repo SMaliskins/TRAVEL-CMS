@@ -964,3 +964,11 @@ Branch: feature/x
 Вывод / Решение: Реализована фильтрация по company_name из party_company. Убран поиск из основного запроса (строки 128-129 app/api/directory/route.ts). Добавлена фильтрация после загрузки данных (строки 202-215 app/api/directory/route.ts). Поиск теперь включает: display_name, email, phone, company_name (из companyMap). Поиск работает case-insensitive через toLowerCase(). Фильтрация применяется в памяти после загрузки данных из party_company. Это позволяет находить записи по названию компании (например, "tez" находит "TEZ TOUR"). Commit: 58baab5
 
 ---
+
+## [2026-01-05 18:00] CODE WRITER — START: Add diagnostic logging for Supabase auth
+Branch: feature/x
+Задача: Add console.log to login page to diagnose which Supabase URL/key is used on Production
+Результат: START
+Вывод / Решение: Добавлю временное логирование в login page для диагностики проблемы авторизации на Production.
+
+---
