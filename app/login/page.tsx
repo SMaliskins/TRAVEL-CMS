@@ -51,8 +51,6 @@ export default function LoginPage() {
     router.push("/dashboard");
   };
 
-  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
-
   return (
     <div className="flex min-h-screen items-center justify-center relative">
       <div className="w-full max-w-sm space-y-4">
@@ -83,9 +81,9 @@ export default function LoginPage() {
         {error && <p className="text-red-600">{error}</p>}
       </div>
 
-      {/* Version display */}
-      <div className="absolute bottom-4 right-4 text-xs text-gray-400">
-        v{appVersion}
+      {/* Version display (login page has no sidebar) */}
+      <div className="absolute bottom-4 left-4 text-xs text-gray-400">
+        v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
       </div>
     </div>
   );
