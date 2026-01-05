@@ -1,26 +1,16 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-let supabaseInstance: SupabaseClient | null = null;
+// For build time, use placeholder. At runtime, env vars should be available.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
 
-function getSupabaseClient(): SupabaseClient {
-  if (!supabaseInstance) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error("Supabase URL:", supabaseUrl ? "SET" : "MISSING");
-      console.error("Supabase Anon Key:", supabaseAnonKey ? "SET" : "MISSING");
-      throw new Error("Missing Supabase environment variables. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY");
-    }
-    
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
-  }
-  return supabaseInstance;
+// Debug logging (only in browser)
+if (typeof window !== "undefined") {
+  console.log("=== SUPABASE CLIENT INIT ===");
+  console.log("URL:", supabaseUrl);
+  console.log("URL is placeholder:", supabaseUrl.includes("placeholder"));
+  console.log("Key is set:", !!supabaseAnonKey && !supabaseAnonKey.includes("placeholder"));
+  console.log("============================");
 }
 
-// Export as getter to ensure lazy initialization
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    return getSupabaseClient()[prop as keyof SupabaseClient];
-  }
-});
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);

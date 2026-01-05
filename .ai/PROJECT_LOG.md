@@ -988,3 +988,11 @@ Branch: feature/x
 **Следующий шаг:** SM проверит Console на Production после деплоя и увидит какие значения env vars используются.
 
 ---
+
+## [2026-01-05 18:15] CODE WRITER — START: Fix Supabase client using placeholder URL
+Branch: feature/x
+Задача: Remove placeholder URLs, ensure real env vars are used at runtime
+Результат: START
+Вывод / Решение: Диагностика показала что Production использует placeholder.supabase.co. Нужно исправить lib/supabaseClient.ts чтобы использовались реальные env vars.
+
+---
