@@ -69,7 +69,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
   useEffect(() => {
     setMounted(true);
     if (typeof window !== "undefined") {
-      directorySearchStore.init();
+      directorySearchStore.getState().init();
       const currentState = directorySearchStore.getState();
       setFilters(currentState);
       setNameValue(currentState.name);
@@ -87,19 +87,19 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
 
   // Apply debounced text values to store
   useEffect(() => {
-    directorySearchStore.setField("name", debouncedName);
+    directorySearchStore.getState().setField("name", debouncedName);
   }, [debouncedName]);
 
   useEffect(() => {
-    directorySearchStore.setField("personalCode", debouncedPersonalCode);
+    directorySearchStore.getState().setField("personalCode", debouncedPersonalCode);
   }, [debouncedPersonalCode]);
 
   useEffect(() => {
-    directorySearchStore.setField("phone", debouncedPhone);
+    directorySearchStore.getState().setField("phone", debouncedPhone);
   }, [debouncedPhone]);
 
   useEffect(() => {
-    directorySearchStore.setField("email", debouncedEmail);
+    directorySearchStore.getState().setField("email", debouncedEmail);
   }, [debouncedEmail]);
 
   // Cmd+K / Ctrl+K to focus search and open popover
@@ -188,16 +188,17 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     } else if (key === "email") {
       setEmailValue(value as string);
     } else {
-      directorySearchStore.setField(key, value);
+      directorySearchStore.getState().setField(key, value);
     }
   };
 
   const handleRoleChange = (role: "client" | "supplier" | "subagent", checked: boolean) => {
-    directorySearchStore.setRole(role, checked);
+    // If checked, set the role; if unchecked, reset to "all"
+    directorySearchStore.getState().setRole(checked ? role : "all");
   };
 
   const handleClear = () => {
-    directorySearchStore.reset();
+    directorySearchStore.getState().reset();
     setNameValue("");
     setPersonalCodeValue("");
     setPhoneValue("");
@@ -208,7 +209,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     setIsOpen(false);
   };
 
-  const activeFiltersCount = directorySearchStore.countActiveFilters();
+  const activeFiltersCount = directorySearchStore.getState().countActiveFilters();
   const finalPosition = isOpen && calculatedPosition ? calculatedPosition : null;
 
   if (!mounted) return null;
@@ -441,7 +442,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                           <label className="flex cursor-pointer items-center space-x-2">
                             <input
                               type="checkbox"
-                              checked={filters.roles.client}
+                              checked={filters.role === "client"}
                               onChange={(e) => handleRoleChange("client", e.target.checked)}
                               className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
                             />
@@ -450,7 +451,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                           <label className="flex cursor-pointer items-center space-x-2">
                             <input
                               type="checkbox"
-                              checked={filters.roles.supplier}
+                              checked={filters.role === "supplier"}
                               onChange={(e) => handleRoleChange("supplier", e.target.checked)}
                               className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
                             />
@@ -459,7 +460,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                           <label className="flex cursor-pointer items-center space-x-2">
                             <input
                               type="checkbox"
-                              checked={filters.roles.subagent}
+                              checked={filters.role === "subagent"}
                               onChange={(e) => handleRoleChange("subagent", e.target.checked)}
                               className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
                             />

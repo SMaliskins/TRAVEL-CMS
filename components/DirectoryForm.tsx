@@ -8,6 +8,7 @@ import {
   SupplierDetails,
   SubagentDetails,
   SubagentCommissionType,
+  SubagentPeriodType,
 } from "@/lib/types/directory";
 
 interface DirectoryFormProps {
@@ -99,7 +100,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [subagentCommissionCurrency, setSubagentCommissionCurrency] = useState(
       record?.subagentDetails?.commissionCurrency || "EUR"
     );
-    const [subagentPeriodType, setSubagentPeriodType] = useState<"year" | "custom">(
+    const [subagentPeriodType, setSubagentPeriodType] = useState<SubagentPeriodType>(
       record?.subagentDetails?.periodType || "year"
     );
     const [subagentPeriodFrom, setSubagentPeriodFrom] = useState(

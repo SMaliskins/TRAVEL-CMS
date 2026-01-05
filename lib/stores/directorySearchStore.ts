@@ -5,6 +5,7 @@ export interface DirectorySearchState {
   personalCode: string;
   phone: string;
   email: string;
+  dob: string;
   role: "all" | "client" | "supplier" | "subagent";
   type: "all" | "person" | "company";
   isActive: "all" | "active" | "inactive";
@@ -18,6 +19,7 @@ interface DirectorySearchStore extends DirectorySearchState {
   setRole: (role: DirectorySearchState["role"]) => void;
   setType: (type: DirectorySearchState["type"]) => void;
   setIsActive: (isActive: DirectorySearchState["isActive"]) => void;
+  setField: <K extends keyof DirectorySearchState>(key: K, value: DirectorySearchState[K]) => void;
   reset: () => void;
   init: () => void;
   countActiveFilters: () => number;
@@ -28,6 +30,7 @@ const initialState: DirectorySearchState = {
   personalCode: "",
   phone: "",
   email: "",
+  dob: "",
   role: "all",
   type: "all",
   isActive: "all",
@@ -42,6 +45,7 @@ const directorySearchStore = create<DirectorySearchStore>((set, get) => ({
   setRole: (role) => set({ role }),
   setType: (type) => set({ type }),
   setIsActive: (isActive) => set({ isActive }),
+  setField: (key, value) => set({ [key]: value }),
   reset: () => set(initialState),
   init: () => {
     if (typeof window !== "undefined") {

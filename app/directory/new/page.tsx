@@ -302,8 +302,6 @@ export default function NewDirectoryPage() {
           onCancel={handleCancel}
           onValidationChange={setIsFormValid}
           onDirtyChange={setIsDirty}
-          onRolesChange={setRoles}
-          onActiveChange={setIsActive}
         />
 
         {/* Cancel confirmation modal */}
