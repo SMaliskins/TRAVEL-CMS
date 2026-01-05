@@ -285,7 +285,7 @@ export default function OrderPage({
         </div>
 
         {/* C) Services Block - Always visible */}
-        <OrderServicesBlock />
+        <OrderServicesBlock orderCode={orderCode} />
       </div>
     </div>
   );

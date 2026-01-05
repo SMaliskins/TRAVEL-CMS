@@ -1406,3 +1406,64 @@ ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ticket_nr text;
 
 **[Следующий: CODE WRITER]** — Задача O9: Add services to order (requires services table UI)
 
+
+---
+
+## [2026-01-05] RUNNER — Task O9 Assignment: Add Services to Order
+
+**Task:** O9 - Add services to order (per user screenshot)
+
+**Agent Assignment:**
+| Agent | Status | Role |
+|-------|--------|------|
+| DB/SCHEMA | INVOLVED | Confirm order_services schema, provide mapping |
+| CODE WRITER | INVOLVED | Implement UI/API after DB confirmation |
+| QA/REGRESSION | INVOLVED | Test functionality |
+| SPEC WRITER | NOT REQUIRED | Requirements clear from screenshot |
+| UI SYSTEM | NOT REQUIRED | Basic UI |
+| SECURITY | NOT REQUIRED | No new roles |
+
+**Execution Order:** DB/SCHEMA → CODE WRITER → QA
+
+**Required fields from screenshot:**
+- CATEGORY, NAME, SUPPLIER, CLIENT, PAYER
+- SERVICE PRICE, CLIENT PRICE, RES STATUS
+- REF NR, TICKET NR, TRAVELLERS
+
+**[Следующий: DB/SCHEMA]** — Проверить схему order_services, предоставить маппинг
+
+
+---
+
+## [2026-01-05] DB/SCHEMA — Task O9: order_services Schema Verification
+
+**Task:** Verify and confirm order_services schema for Add Services feature
+
+**Current Schema Analysis:**
+- Table `order_services` exists but missing required columns
+- `suppliers` table exists separately from `party` table
+
+**Missing Columns Identified:**
+- category (text) - service type
+- supplier_party_id (uuid FK → party)
+- client_party_id (uuid FK → party)
+- payer_party_id (uuid FK → party)
+- supplier_name, client_name, payer_name (text - denormalized)
+- service_price, client_price (numeric)
+- res_status (text enum)
+- ref_nr, ticket_nr (text)
+
+**New Table Required:**
+- order_service_travellers (junction for many-to-many with client_travellers)
+
+**Migration Script Created:**
+- `migrations/add_order_services_columns.sql`
+
+**Confirmed Mapping:** See table above in log
+
+**Risks:**
+- User must run migration manually in Supabase
+- Existing data won't have new columns populated
+
+**[Следующий: CODE WRITER]** — Implement services UI/API using confirmed mapping
+
