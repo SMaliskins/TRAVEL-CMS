@@ -1014,3 +1014,10 @@ Branch: feature/x
 **Commit:** 6bc7f70
 
 ---
+
+## [2026-01-05 18:30] CODE WRITER — START: Fix env vars not reaching Production build
+Branch: feature/x
+Задача: Ensure NEXT_PUBLIC_* variables are correctly bundled for Production
+Результат: START
+
+---
