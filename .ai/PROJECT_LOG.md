@@ -1173,3 +1173,21 @@ Defects:
 2. [MEDIUM] Search not finding existing clients (role filter issue?)
 
 ---
+
+## 2026-01-05
+**CODE WRITER**
+Task: Fix PartySelect per QA Defect List
+Result: Fixed both issues
+Changes:
+- handleCreateNew: sends firstName, lastName, type, roles (not display_name)
+- Search: removed role filter to find all parties
+
+---
+
+## 2026-01-05
+**QA / REGRESSION**
+Task: Re-check PartySelect fixes
+Result: PASS — SCORE 8/10
+Details: Both fixes implemented correctly
+
+---
