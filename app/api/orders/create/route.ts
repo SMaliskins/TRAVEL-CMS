@@ -72,7 +72,7 @@ async function generateOrderNumber(
 // Get client display name from party
 async function getClientDisplayName(partyId: string): Promise<string | null> {
   const { data } = await supabaseAdmin
-    .from("parties")
+    .from("party")
     .select("display_name, name, first_name, last_name")
     .eq("id", partyId)
     .single();
