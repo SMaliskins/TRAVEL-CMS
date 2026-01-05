@@ -60,14 +60,30 @@ export default function PartySelect({
 
       if (response.ok) {
         const data = await response.json();
-        const results = data.records || data.parties || [];
-        setParties(results);
+        // API returns { data: [...] } format
+        const results = data.data || data.records || data.parties || [];
+        
+        // Transform to Party format if needed
+        const transformedResults: Party[] = results.map((r: Record<string, unknown>) => ({
+          id: r.id as string,
+          display_name: (r.displayName as string) || (r.display_name as string) || 
+                       [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
+                       (r.companyName as string) || (r.company_name as string) || 
+                       (r.name as string) || "",
+          first_name: (r.firstName as string) || (r.first_name as string),
+          last_name: (r.lastName as string) || (r.last_name as string),
+          party_type: (r.type as string) || (r.party_type as string),
+        }));
+        
+        setParties(transformedResults);
+        
         // Show create option if no exact match
-        const exactMatch = results.some((p: Party) => 
-          (p.display_name || p.name || "").toLowerCase() === query.toLowerCase()
+        const exactMatch = transformedResults.some((p: Party) => 
+          (p.display_name || "").toLowerCase() === query.toLowerCase()
         );
         setShowCreateOption(!exactMatch && query.length >= 2);
       } else {
+        console.error("Search failed:", await response.text());
         setParties([]);
         setShowCreateOption(query.length >= 2);
       }

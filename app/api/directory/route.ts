@@ -199,7 +199,7 @@ export async function GET(request: NextRequest) {
       filteredParties = parties.filter((p: any) => subagentMap.has(p.id));
     }
 
-    // Apply search filter (including company_name) after loading all data
+    // Apply search filter (including first_name, last_name, company_name) after loading all data
     if (search) {
       const searchLower = search.toLowerCase();
       filteredParties = filteredParties.filter((p: any) => {
@@ -207,11 +207,17 @@ export async function GET(request: NextRequest) {
         const matchesEmail = p.email?.toLowerCase().includes(searchLower);
         const matchesPhone = p.phone?.toLowerCase().includes(searchLower);
         
+        // Check person data (first_name, last_name)
+        const person = personMap.get(p.id);
+        const matchesFirstName = person?.first_name?.toLowerCase().includes(searchLower);
+        const matchesLastName = person?.last_name?.toLowerCase().includes(searchLower);
+        
         // Check company_name from party_company
         const company = companyMap.get(p.id);
         const matchesCompanyName = company?.company_name?.toLowerCase().includes(searchLower);
         
-        return matchesDisplayName || matchesEmail || matchesPhone || matchesCompanyName;
+        return matchesDisplayName || matchesEmail || matchesPhone || 
+               matchesFirstName || matchesLastName || matchesCompanyName;
       });
     }
 
