@@ -1161,3 +1161,15 @@ Details:
 - PartySelect transforms API response correctly
 
 ---
+
+## 2026-01-05
+**QA / REGRESSION**
+Task: Review PartySelect after CODE WRITER changes
+Result: FAIL — SCORE 4/10
+Details: see .ai/logs/QA_REPORT.md
+
+Defects:
+1. [HIGH] Create sends wrong fields (display_name vs firstName/lastName)
+2. [MEDIUM] Search not finding existing clients (role filter issue?)
+
+---

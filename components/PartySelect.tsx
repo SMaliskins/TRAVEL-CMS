@@ -50,8 +50,8 @@ export default function PartySelect({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      // Search via API or directly
-      const response = await fetch(`/api/directory?search=${encodeURIComponent(query)}&role=${roleFilter}&limit=10`, {
+      // Search via API - don't filter by role to find all matching parties
+      const response = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
         headers: {
           ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
         },
@@ -131,6 +131,11 @@ export default function PartySelect({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
+      // Parse name into firstName and lastName
+      const nameParts = inputValue.trim().split(/\s+/);
+      const firstName = nameParts[0] || inputValue.trim();
+      const lastName = nameParts.slice(1).join(" ") || firstName; // If only one word, use it as both
+      
       const response = await fetch("/api/directory/create", {
         method: "POST",
         headers: {
@@ -139,11 +144,11 @@ export default function PartySelect({
         },
         credentials: "include",
         body: JSON.stringify({
-          display_name: inputValue.trim(),
-          name: inputValue.trim(),
-          party_type: "person", // Default to person
+          type: "person",
+          firstName,
+          lastName,
           roles: [roleFilter],
-          is_active: true,
+          isActive: true,
         }),
       });
 
