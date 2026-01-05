@@ -7,7 +7,8 @@ import { createClient } from "@supabase/supabase-js";
  * WARNING: Only use on the server side (API routes, server actions)
  * Never expose the service role key to the client
  */
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+// Use placeholder URL for build time (will be replaced at runtime)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "dummy-key-for-build";
 
 // Create client with dummy key if not set (for build time)

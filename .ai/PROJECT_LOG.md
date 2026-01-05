@@ -1040,3 +1040,44 @@ Branch: cursor/cursor-agent-initiation-fe61
 Next Step: CODE WRITER to implement fix
 
 ---
+
+## [2026-01-05 16:10] CODE WRITER — START: Fix Vercel Build Supabase Initialization
+Branch: cursor/cursor-agent-initiation-fe61
+Задача: Task #16 - Fix Vercel build "supabaseUrl is required" error
+Результат: START
+Вывод / Решение: Прочитал задачу .ai/tasks/code-writer-fix-vercel-build-supabase-init.md. План:
+1. Удалить inline создание supabaseAdmin в /app/api/orders/create/route.ts
+2. Удалить неиспользуемые переменные supabaseUrl и supabaseAnonKey
+3. Добавить импорт supabaseAdmin из @/lib/supabaseAdmin
+
+---
+
+## [2026-01-05 16:15] CODE WRITER — RESULT: Fix Vercel Build Supabase Initialization
+Branch: cursor/cursor-agent-initiation-fe61
+Задача: Task #16 - Fix Vercel build "supabaseUrl is required" error
+Результат: RESULT
+Вывод / Решение:
+**Проблема:** Supabase createClient() требует непустой URL, но при build-time env переменные недоступны, и пустая строка `""` вызывает ошибку.
+
+**Исправления:**
+1. `lib/supabaseAdmin.ts` (строка 10): изменил fallback с `""` на `"https://placeholder.supabase.co"`
+2. `lib/supabaseClient.ts` (строки 3-4): добавил placeholder fallbacks для URL и anon key
+3. `app/api/orders/create/route.ts`: 
+   - Удалил inline создание supabaseAdmin
+   - Добавил импорт из `@/lib/supabaseAdmin`
+   - Добавил placeholder fallbacks для auth client
+
+**Результат:** `npm run build` проходит успешно ✓
+
+**Файлы изменены:**
+- lib/supabaseAdmin.ts
+- lib/supabaseClient.ts
+- app/api/orders/create/route.ts
+
+**Smoke test:**
+- [x] `npm run build` completes successfully
+- [x] No "supabaseUrl is required" error
+- [ ] Vercel deployment succeeds (требует деплоя)
+- [ ] `/api/orders/create` endpoint works in production
+
+---
