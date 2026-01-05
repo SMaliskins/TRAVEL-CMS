@@ -1021,3 +1021,18 @@ Branch: feature/x
 Результат: START
 
 ---
+
+## [2026-01-05 18:35] CODE WRITER — RESULT: Fix env vars not reaching Production build
+Branch: feature/x
+Задача: Ensure NEXT_PUBLIC_* variables are correctly bundled for Production
+Результат: RESULT
+Вывод / Решение:
+- Добавил build-time logging в next.config.ts — покажет в Vercel логах SET/NOT SET
+- Добавил runtime validation в supabaseClient.ts с понятным сообщением об ошибке
+- Если переменные не заданы — выводится инструкция как исправить в Vercel
+
+**Commit:** 5e4384b
+
+**Следующий шаг:** Проверить Vercel build logs — увидим SET или NOT SET для переменных.
+
+---
