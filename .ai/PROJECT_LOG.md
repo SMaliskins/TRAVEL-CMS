@@ -1117,3 +1117,14 @@ Files changed:
 - app/orders/page.tsx (real data instead of mock)
 
 ---
+
+## 2026-01-05
+**QA / REGRESSION**
+Task: Review Orders API + Frontend changes
+Result: PASS — SCORE 8/10
+Details: see .ai/logs/QA_REPORT.md
+
+All required field mappings implemented correctly.
+Minor TODOs (owner, access fields) don't block functionality.
+
+---
