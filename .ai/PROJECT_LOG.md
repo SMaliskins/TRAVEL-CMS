@@ -1098,3 +1098,42 @@ Branch: cursor/cursor-agent-initiation-fe61
 Next Step: CODE WRITER to revert hooks
 
 ---
+
+## [2026-01-05 16:35] CODE WRITER — START: Fix React Hydration Error #185
+Branch: cursor/cursor-agent-initiation-fe61
+Задача: Revert hooks to original version to fix hydration error
+Результат: START
+Вывод / Решение: Прочитал задачу. План:
+1. Откатить useClock.ts к оригиналу из main
+2. Откатить useSidebar.ts к оригиналу из main
+3. Откатить useUserPreferences.ts к оригиналу из main
+4. Оставить useFontScale.ts как есть (исправление валидно)
+5. Проверить build
+
+---
+
+## [2026-01-05 16:40] CODE WRITER — RESULT: Fix React Hydration Error #185
+Branch: cursor/cursor-agent-initiation-fe61
+Задача: Revert hooks to original version to fix hydration error
+Результат: RESULT
+Вывод / Решение:
+**Выполнено:**
+1. Откатил useClock.ts к версии из main
+2. Откатил useSidebar.ts к версии из main
+3. Откатил useUserPreferences.ts к версии из main
+4. useFontScale.ts оставлен как есть (исправление валидно)
+
+**Build:** ✅ Успешен
+**Commit:** 7ec5624
+**Push:** ✅ Успешен
+
+**Файлы изменены:**
+- hooks/useClock.ts (reverted)
+- hooks/useSidebar.ts (reverted)
+- hooks/useUserPreferences.ts (reverted)
+
+**Smoke test:**
+- [x] npm run build completes successfully
+- [ ] No React Error #185 in production (requires deploy verification)
+
+---
