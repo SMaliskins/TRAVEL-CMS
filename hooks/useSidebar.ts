@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore, useCallback } from "react";
 
 export type SidebarMode = "expanded" | "collapsed" | "hover";
 
@@ -9,24 +9,31 @@ const STORAGE_KEY_MODE = "travelcms.sidebar.mode";
 const RAIL_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
 
-export function useSidebar() {
-  const [mode, setModeState] = useState<SidebarMode>("hover");
-  const [isHovered, setIsHoveredState] = useState(false);
-  const [isClient, setIsClient] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Load mode from localStorage on mount
-  useEffect(() => {
-    setIsClient(true);
-    try {
-      const storedMode = localStorage.getItem(STORAGE_KEY_MODE);
-      if (storedMode === "expanded" || storedMode === "collapsed" || storedMode === "hover") {
-        setModeState(storedMode);
-      }
-    } catch (e) {
-      console.warn("Failed to load sidebar mode:", e);
+// Helper to safely get sidebar mode from localStorage
+const getSidebarModeFromStorage = (): SidebarMode => {
+  if (typeof window === "undefined") return "hover";
+  try {
+    const storedMode = localStorage.getItem(STORAGE_KEY_MODE);
+    if (storedMode === "expanded" || storedMode === "collapsed" || storedMode === "hover") {
+      return storedMode;
     }
-  }, []);
+  } catch {
+    // Ignore localStorage errors
+  }
+  return "hover";
+};
+
+export function useSidebar() {
+  const [mode, setModeState] = useState<SidebarMode>(getSidebarModeFromStorage);
+  const [isHovered, setIsHoveredState] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Use useSyncExternalStore for isClient to avoid hydration issues
+  const isClient = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const setMode = (newMode: SidebarMode) => {
     setModeState(newMode);

@@ -13,6 +13,14 @@ const SCALE_STEPS = {
   increase: 1.1,
 } as const;
 
+// Helper function to apply scale to document
+const applyScale = (newScale: number) => {
+  if (typeof document !== "undefined") {
+    // Set CSS variable on html element (document.documentElement)
+    document.documentElement.style.setProperty("--font-scale", String(newScale));
+  }
+};
+
 export function useFontScale() {
   const [scale, setScaleState] = useState<number>(DEFAULT_SCALE);
   const [isClient, setIsClient] = useState(false);
@@ -33,13 +41,6 @@ export function useFontScale() {
       applyScale(DEFAULT_SCALE);
     }
   }, []);
-
-  const applyScale = (newScale: number) => {
-    if (typeof document !== "undefined") {
-      // Set CSS variable on html element (document.documentElement)
-      document.documentElement.style.setProperty("--font-scale", String(newScale));
-    }
-  };
 
   const setScale = (newScale: number) => {
     // Clamp scale between MIN and MAX

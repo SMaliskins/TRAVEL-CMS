@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDirectoryStore } from "@/lib/directory/directoryStore";
 import DirectoryForm, { DirectoryFormHandle } from "@/components/DirectoryForm";
 import ConfirmModal from "@/components/ConfirmModal";
-import { DirectoryRole } from "@/lib/types/directory";
+import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 
 export default function NewDirectoryPage() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function NewDirectoryPage() {
   const [rolesError, setRolesError] = useState<string | null>(null);
   const formRef = useRef<DirectoryFormHandle>(null);
 
-  const handleSubmit = async (data: Partial<any>, closeAfterSave: boolean) => {
+  const handleSubmit = async (data: Partial<DirectoryRecord>, closeAfterSave: boolean) => {
     setIsSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -33,11 +33,11 @@ export default function NewDirectoryPage() {
       // Simulate API call delay
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const newRecord = createRecord({
+      const newRecord = await createRecord({
         ...data,
         roles: data.roles || [],
         isActive: data.isActive ?? true,
-      } as any);
+      } as Omit<DirectoryRecord, "id" | "createdAt">);
 
       setIsSaving(false);
       setSaveSuccess(true);

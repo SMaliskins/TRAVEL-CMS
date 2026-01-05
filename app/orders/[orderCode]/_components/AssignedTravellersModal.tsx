@@ -752,7 +752,7 @@ export default function AssignedTravellersModal({
             >
               {assignedTravellers.length === 0 ? (
                 <p className="py-8 text-center text-xs text-gray-500">
-                  Drag travellers from left list or click "Assign"
+                  Drag travellers from left list or click &quot;Assign&quot;
                 </p>
               ) : (
                 <div className="overflow-x-auto">
