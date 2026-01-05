@@ -1076,3 +1076,18 @@ Commit: 740ac67
 - Версия видна и в обычном состоянии и в error state
 
 ---
+
+---
+
+## 2026-01-05
+**SPEC WRITER**
+Task: Orders List & Create — specification
+Result: Created spec for /orders and /orders/new MVP
+Details: see .ai/logs/SPEC_WRITER_REPORT.md
+
+Key findings:
+- /orders uses mock data, needs real API
+- API create has field name mismatches (order_number vs order_code, manager_user_id vs owner_user_id)
+- Missing company_id, order_no, order_year in create flow
+
+---
