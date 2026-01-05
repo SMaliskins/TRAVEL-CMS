@@ -47,6 +47,8 @@ export default function PartySelect({
   const [createRegNumber, setCreateRegNumber] = useState("");
   const [createError, setCreateError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  // Supplier-specific: service areas
+  const [createServiceAreas, setCreateServiceAreas] = useState<string[]>([]);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
