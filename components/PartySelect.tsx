@@ -195,8 +195,17 @@ export default function PartySelect({
           ? `${createFirstName.trim()} ${createLastName.trim()}`
           : createCompanyName.trim();
         
+        // API returns { ok: true, record: { id, display_name } }
+        const partyId = data.record?.id || data.id || data.party?.id;
+        
+        if (!partyId) {
+          console.error("API response missing party id:", data);
+          setCreateError("Client created but ID not returned");
+          return;
+        }
+        
         const newParty: Party = {
-          id: data.id || data.party?.id,
+          id: partyId,
           display_name: displayName,
           party_type: createType,
         };
