@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,14 +10,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  // Show config error if Supabase not configured
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="w-full max-w-md space-y-4 p-6 bg-red-50 border border-red-200 rounded-lg">
+          <h1 className="text-2xl font-bold text-red-800">Configuration Error</h1>
+          <p className="text-red-700">
+            Supabase is not configured. Environment variables were not available during build.
+          </p>
+          <div className="bg-red-100 p-3 rounded text-sm font-mono text-red-800">
+            <p>NEXT_PUBLIC_SUPABASE_URL: {process.env.NEXT_PUBLIC_SUPABASE_URL || "NOT SET"}</p>
+            <p>NEXT_PUBLIC_SUPABASE_ANON_KEY: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "SET" : "NOT SET"}</p>
+          </div>
+          <p className="text-red-600 text-sm">
+            Fix: In Vercel Dashboard → Settings → Environment Variables, ensure variables are set for Production, then redeploy.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const handleLogin = async () => {
     setError("");
-
-    // DIAGNOSTIC: Log Supabase config (remove after debugging)
-    console.log("=== SUPABASE DIAGNOSTIC ===");
-    console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log("NEXT_PUBLIC_SUPABASE_ANON_KEY:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "SET (hidden)" : "NOT SET");
-    console.log("===========================");
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
