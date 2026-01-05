@@ -223,6 +223,8 @@ export default function OrderPage({
               dateTo={order.date_to}
               clientPhone={order.client_phone}
               clientEmail={order.client_email}
+              amountTotal={order.amount_total}
+              amountPaid={order.amount_paid}
               onUpdate={(updates) => {
                 setOrder({
                   ...order,

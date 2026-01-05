@@ -1,6 +1,6 @@
 {
   "name": "travel-cms",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,13 +10,16 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
+    "leaflet": "^1.9.4",
     "next": "16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1",
+    "react-leaflet": "^5.0.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

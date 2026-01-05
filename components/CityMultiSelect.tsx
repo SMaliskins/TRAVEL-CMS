@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { City, searchCities, getCityByName } from "@/lib/data/cities";
+import { City, searchCities, countryCodeToFlag } from "@/lib/data/cities";
 
 export interface CityWithCountry {
   city: string;
   country: string;
   countryCode?: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface CityMultiSelectProps {
@@ -80,7 +82,9 @@ export default function CityMultiSelect({
     const cityWithCountry: CityWithCountry = {
       city: city.name,
       country: city.country,
-      countryCode: city.code,
+      countryCode: city.countryCode,
+      lat: city.lat,
+      lng: city.lng,
     };
     const alreadySelected = selectedCities.some((c) => c.city === city.name);
     if (!alreadySelected) {
@@ -96,7 +100,7 @@ export default function CityMultiSelect({
 
   return (
     <div ref={containerRef} className="space-y-2">
-      {/* Selected cities as chips */}
+      {/* Selected cities as chips with flags */}
       {selectedCities.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedCities.map((item) => (
@@ -104,6 +108,9 @@ export default function CityMultiSelect({
               key={item.city}
               className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
             >
+              {item.countryCode && (
+                <span className="mr-0.5">{countryCodeToFlag(item.countryCode)}</span>
+              )}
               {item.city}
               <button
                 type="button"
@@ -147,7 +154,10 @@ export default function CityMultiSelect({
                 className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">{city.name}</span>
+                  <span className="font-medium text-gray-900">
+                    <span className="mr-1.5">{countryCodeToFlag(city.countryCode)}</span>
+                    {city.name}
+                  </span>
                   <span className="text-xs text-gray-500">{city.country}</span>
                 </div>
               </button>
