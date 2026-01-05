@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import ordersSearchStore from "@/lib/stores/ordersSearchStore";
 import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -454,18 +455,8 @@ export default function OrdersPage() {
     return `€${amount.toLocaleString()}`;
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString + "T00:00:00");
-      if (isNaN(date.getTime())) return "-";
-      const day = String(date.getDate()).padStart(2, "0");
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
-    } catch {
-      return "-";
-    }
-  };
+  // Use centralized date formatting
+  const formatDate = formatDateDDMMYYYY;
 
   const toggleYear = (year: string) => {
     const key = getGroupKey("year", year);

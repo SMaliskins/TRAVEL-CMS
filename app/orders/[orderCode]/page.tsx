@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import OrderServicesBlock from "./_components/OrderServicesBlock";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
@@ -178,7 +179,7 @@ export default function OrderPage({
                     <div>
                       <span className="text-sm text-gray-500">Dates:</span>
                       <p className="text-gray-900">
-                        {order.date_from || "—"} — {order.date_to || "—"}
+                        {formatDateDDMMYYYY(order.date_from)} — {formatDateDDMMYYYY(order.date_to)}
                       </p>
                     </div>
                   )}

@@ -1214,3 +1214,51 @@ Changes:
 - Then fetches matching parties
 
 ---
+
+---
+
+## [2026-01-05 - Phase 1] RUNNER / ARCHITECT — Orders MVP Task Planning
+
+**Branch:** cursor/cursor-agent-initiation-fe61
+**Scope:** Planning 13 new tasks for Orders module enhancement
+
+### Task Analysis Complete
+
+Received 13 tasks from user for Orders module. Classified and prioritized into 5 phases:
+
+**Phase 1 (MVP - Orders basics):**
+- O1: Date format dd.mm.yyyy
+- O2: Cities/Countries DB with flags  
+- O3: Order Client Edit
+- O4: Order Status (Active/Cancelled/Finished)
+
+**Phase 2 (Services):**
+- O5: Add services to order
+- O6: Auto-expand order dates
+
+**Phase 3 (Finance):**
+- O7: Payment form
+- O8: Invoice creation
+
+**Phase 4 (UI):**
+- O9: Clickable contacts
+- O10: Trip map section
+- O11: Client Score
+- O12: Weather forecast
+
+**Phase 5 (Roles):**
+- O13: Accountant role
+
+### Execution Order for Phase 1
+
+1. **O1** (Date format) — CODE WRITER only, no DB
+2. **O2** (Cities/Countries) — DB/SCHEMA first to confirm schema
+3. **O3** (Order Edit) — DB/SCHEMA → CODE WRITER → QA
+4. **O4** (Order Status) — DB/SCHEMA → CODE WRITER → QA
+
+### Decision
+
+Starting with O1 (simplest), then DB/SCHEMA for O2-O4 schema confirmation.
+
+**[Следующий: CODE WRITER]** — Задача O1: Изменить формат дат на dd.mm.yyyy во всём приложении
+
