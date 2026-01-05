@@ -1,29 +1,414 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 export interface FlightSegment {
   id: string;
   flightNumber: string;
-  departure: string; // City/Airport
-  arrival: string; // City/Airport
+  airline?: string;
+  departure: string; // Airport code (GVA)
+  departureCity?: string; // City name (Geneva)
+  departureCountry?: string; // Country code (CH)
+  arrival: string; // Airport code (LHR)
+  arrivalCity?: string; // City name (London)
+  arrivalCountry?: string; // Country code (GB)
   departureDate: string; // YYYY-MM-DD
   departureTime: string; // HH:mm
   arrivalDate: string; // YYYY-MM-DD
   arrivalTime: string; // HH:mm
+  departureTerminal?: string;
+  arrivalTerminal?: string;
+  departureGate?: string;
+  arrivalGate?: string;
   aircraft?: string;
-  status?: "scheduled" | "delayed" | "cancelled" | "landed";
+  status: "on_time" | "delayed" | "cancelled" | "landed" | "scheduled";
   statusNote?: string;
 }
 
 interface FlightItineraryInputProps {
   segments: FlightSegment[];
   onSegmentsChange: (segments: FlightSegment[]) => void;
+  readonly?: boolean;
+}
+
+// Format date for display (Tue 6 Jan)
+function formatFlightDate(dateStr: string): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr + "T00:00:00");
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`;
+}
+
+// Calculate time until departure
+function getTimeUntilDeparture(dateStr: string, timeStr: string): string {
+  if (!dateStr || !timeStr) return "";
+  
+  const departure = new Date(`${dateStr}T${timeStr}:00`);
+  const now = new Date();
+  const diffMs = departure.getTime() - now.getTime();
+  
+  if (diffMs < 0) return "Departed";
+  
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  
+  if (diffHours >= 24) {
+    const days = Math.floor(diffHours / 24);
+    return `Departs in ${days}d ${diffHours % 24}h`;
+  }
+  
+  return `Departs in ${diffHours}h ${diffMins}m`;
+}
+
+// Status badge component
+function StatusBadge({ status }: { status: FlightSegment["status"] }) {
+  const config = {
+    on_time: { label: "ON TIME", bg: "bg-green-600", text: "text-white" },
+    scheduled: { label: "SCHEDULED", bg: "bg-gray-500", text: "text-white" },
+    delayed: { label: "DELAYED", bg: "bg-yellow-500", text: "text-white" },
+    cancelled: { label: "CANCELLED", bg: "bg-red-600", text: "text-white" },
+    landed: { label: "LANDED", bg: "bg-blue-600", text: "text-white" },
+  };
+  
+  const { label, bg, text } = config[status] || config.scheduled;
+  
+  return (
+    <span className={`px-2 py-0.5 text-xs font-bold rounded ${bg} ${text}`}>
+      {label}
+    </span>
+  );
+}
+
+// Flight Card Component (FlightStats style)
+function FlightCard({ 
+  segment, 
+  onEdit, 
+  onRemove,
+  readonly = false,
+}: { 
+  segment: FlightSegment; 
+  onEdit: () => void;
+  onRemove: () => void;
+  readonly?: boolean;
+}) {
+  const timeUntil = getTimeUntilDeparture(segment.departureDate, segment.departureTime);
+  
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-semibold text-gray-900">
+            {segment.departure}
+          </span>
+          <span className="text-gray-400">→</span>
+          <span className="text-xl font-semibold text-gray-900">
+            {segment.arrival}
+          </span>
+        </div>
+        <div className="text-right">
+          <div className="font-semibold text-gray-900">
+            {segment.airline ? `${segment.airline} ${segment.flightNumber}` : segment.flightNumber}
+          </div>
+          <div className="text-sm text-gray-500">
+            {formatFlightDate(segment.departureDate)}
+          </div>
+        </div>
+      </div>
+      
+      {/* Status bar */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-b border-gray-100 flex items-center gap-3">
+        <StatusBadge status={segment.status} />
+        {timeUntil && (
+          <span className="text-sm text-gray-600">{timeUntil}</span>
+        )}
+      </div>
+      
+      {/* Departure info */}
+      <div className="px-4 py-3 grid grid-cols-4 gap-4 border-b border-gray-100">
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Departure</div>
+          <div className="font-medium text-gray-900">
+            {segment.departureCity || segment.departure}
+            {segment.departureCountry && `, ${segment.departureCountry}`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Scheduled</div>
+          <div className="font-medium text-gray-900">{segment.departureTime || "—"}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Gate</div>
+          <div className="font-medium text-gray-900">{segment.departureGate || "N/A"}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Terminal</div>
+          <div className="font-medium text-gray-900">{segment.departureTerminal || "—"}</div>
+        </div>
+      </div>
+      
+      {/* Arrival info */}
+      <div className="px-4 py-3 grid grid-cols-4 gap-4">
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Arrival</div>
+          <div className="font-medium text-gray-900">
+            {segment.arrivalCity || segment.arrival}
+            {segment.arrivalCountry && `, ${segment.arrivalCountry}`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Scheduled</div>
+          <div className="font-medium text-gray-900">{segment.arrivalTime || "—"}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Gate</div>
+          <div className="font-medium text-gray-900">{segment.arrivalGate || "N/A"}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">Terminal</div>
+          <div className="font-medium text-gray-900">{segment.arrivalTerminal || "—"}</div>
+        </div>
+      </div>
+      
+      {/* Footer with source */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+        <span className="text-xs text-gray-500">
+          Showing local time at airports
+        </span>
+        {!readonly && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-xs text-red-600 hover:text-red-800"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Edit form for a segment
+function SegmentEditForm({
+  segment,
+  onSave,
+  onCancel,
+}: {
+  segment: FlightSegment;
+  onSave: (updated: FlightSegment) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<FlightSegment>(segment);
+  
+  const updateField = (field: keyof FlightSegment, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+  
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-gray-900">Edit Flight Segment</h4>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(form)}
+            className="px-3 py-1 text-sm bg-black text-white rounded hover:bg-gray-800"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+      
+      {/* Flight info */}
+      <div className="grid grid-cols-4 gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Airline</label>
+          <input
+            type="text"
+            value={form.airline || ""}
+            onChange={(e) => updateField("airline", e.target.value)}
+            placeholder="Swiss"
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Flight #</label>
+          <input
+            type="text"
+            value={form.flightNumber}
+            onChange={(e) => updateField("flightNumber", e.target.value)}
+            placeholder="LX348"
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Date</label>
+          <input
+            type="date"
+            value={form.departureDate}
+            onChange={(e) => {
+              updateField("departureDate", e.target.value);
+              if (!form.arrivalDate) updateField("arrivalDate", e.target.value);
+            }}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Status</label>
+          <select
+            value={form.status}
+            onChange={(e) => updateField("status", e.target.value)}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="scheduled">Scheduled</option>
+            <option value="on_time">On Time</option>
+            <option value="delayed">Delayed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="landed">Landed</option>
+          </select>
+        </div>
+      </div>
+      
+      {/* Departure */}
+      <div>
+        <div className="text-xs font-medium text-gray-700 mb-2">DEPARTURE</div>
+        <div className="grid grid-cols-5 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Airport</label>
+            <input
+              type="text"
+              value={form.departure}
+              onChange={(e) => updateField("departure", e.target.value.toUpperCase())}
+              placeholder="GVA"
+              maxLength={3}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">City</label>
+            <input
+              type="text"
+              value={form.departureCity || ""}
+              onChange={(e) => updateField("departureCity", e.target.value)}
+              placeholder="Geneva"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Time</label>
+            <input
+              type="time"
+              value={form.departureTime}
+              onChange={(e) => updateField("departureTime", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Terminal</label>
+            <input
+              type="text"
+              value={form.departureTerminal || ""}
+              onChange={(e) => updateField("departureTerminal", e.target.value)}
+              placeholder="1"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Gate</label>
+            <input
+              type="text"
+              value={form.departureGate || ""}
+              onChange={(e) => updateField("departureGate", e.target.value)}
+              placeholder="A12"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+      
+      {/* Arrival */}
+      <div>
+        <div className="text-xs font-medium text-gray-700 mb-2">ARRIVAL</div>
+        <div className="grid grid-cols-5 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Airport</label>
+            <input
+              type="text"
+              value={form.arrival}
+              onChange={(e) => updateField("arrival", e.target.value.toUpperCase())}
+              placeholder="LHR"
+              maxLength={3}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">City</label>
+            <input
+              type="text"
+              value={form.arrivalCity || ""}
+              onChange={(e) => updateField("arrivalCity", e.target.value)}
+              placeholder="London"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Time</label>
+            <input
+              type="time"
+              value={form.arrivalTime}
+              onChange={(e) => updateField("arrivalTime", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Terminal</label>
+            <input
+              type="text"
+              value={form.arrivalTerminal || ""}
+              onChange={(e) => updateField("arrivalTerminal", e.target.value)}
+              placeholder="2"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Gate</label>
+            <input
+              type="text"
+              value={form.arrivalGate || ""}
+              onChange={(e) => updateField("arrivalGate", e.target.value)}
+              placeholder="B5"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function FlightItineraryInput({
   segments,
   onSegmentsChange,
+  readonly = false,
 }: FlightItineraryInputProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
@@ -31,6 +416,7 @@ export default function FlightItineraryInput({
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle file upload
@@ -38,7 +424,6 @@ export default function FlightItineraryInput({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       setParseError("Please upload an image file");
       return;
@@ -48,14 +433,12 @@ export default function FlightItineraryInput({
     setParseError(null);
 
     try {
-      // Convert to base64 for preview
       const reader = new FileReader();
       reader.onload = (event) => {
         setUploadedImage(event.target?.result as string);
       };
       reader.readAsDataURL(file);
 
-      // Parse with AI (placeholder - would call actual API)
       await parseImageWithAI(file);
     } catch (err) {
       console.error("Upload error:", err);
@@ -65,23 +448,21 @@ export default function FlightItineraryInput({
     }
   };
 
-  // Parse image with AI (OpenAI Vision API)
+  // Parse image with AI
   const parseImageWithAI = async (file: File) => {
     setIsParsing(true);
     setParseError(null);
 
     try {
-      // Convert file to base64
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result as string;
-          resolve(result.split(",")[1]); // Remove data:image/... prefix
+          resolve(result.split(",")[1]);
         };
         reader.readAsDataURL(file);
       });
 
-      // Call API to parse with AI
       const response = await fetch("/api/ai/parse-flight-itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -94,25 +475,25 @@ export default function FlightItineraryInput({
       if (response.ok) {
         const data = await response.json();
         if (data.segments && data.segments.length > 0) {
-          onSegmentsChange(data.segments);
+          onSegmentsChange([...segments, ...data.segments]);
         } else {
-          setParseError("Could not extract flight information from image");
+          setParseError("Could not extract flight information. Try manual entry.");
+          addEmptySegment();
         }
       } else {
-        // AI parsing not available, show manual entry
-        setParseError("AI parsing not available. Please enter flight details manually.");
-        setShowTextInput(true);
+        setParseError("AI parsing unavailable. Please enter manually.");
+        addEmptySegment();
       }
     } catch (err) {
       console.error("AI parse error:", err);
-      setParseError("AI parsing not available. Please enter flight details manually.");
-      setShowTextInput(true);
+      setParseError("AI parsing unavailable. Please enter manually.");
+      addEmptySegment();
     } finally {
       setIsParsing(false);
     }
   };
 
-  // Parse text input manually
+  // Parse text input
   const parseTextInput = () => {
     if (!textInput.trim()) return;
 
@@ -120,19 +501,14 @@ export default function FlightItineraryInput({
     setParseError(null);
 
     try {
-      // Simple regex parsing for common flight formats
-      // Example: "BT401 RIX-FCO 15.01 08:30-11:45"
       const lines = textInput.split("\n").filter((l) => l.trim());
       const parsedSegments: FlightSegment[] = [];
 
       for (const line of lines) {
-        // Try to parse flight number
-        const flightMatch = line.match(/([A-Z]{2}\d{3,4})/);
-        // Try to parse route
-        const routeMatch = line.match(/([A-Z]{3})\s*[-–]\s*([A-Z]{3})/);
-        // Try to parse date
+        // Try to parse: "LX348 GVA-LHR 06.01 15:55-16:40"
+        const flightMatch = line.match(/([A-Z]{2}\d{2,4})/);
+        const routeMatch = line.match(/([A-Z]{3})\s*[-–→]\s*([A-Z]{3})/);
         const dateMatch = line.match(/(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?/);
-        // Try to parse times
         const timeMatch = line.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
 
         if (flightMatch || routeMatch) {
@@ -155,7 +531,7 @@ export default function FlightItineraryInput({
             arrival: routeMatch?.[2] || "",
             departureDate: dateStr,
             departureTime: timeMatch?.[1] || "",
-            arrivalDate: dateStr, // Same day by default
+            arrivalDate: dateStr,
             arrivalTime: timeMatch?.[2] || "",
             status: "scheduled",
           });
@@ -167,7 +543,7 @@ export default function FlightItineraryInput({
         setTextInput("");
         setShowTextInput(false);
       } else {
-        setParseError("Could not parse flight information. Please check the format.");
+        setParseError("Could not parse. Try format: LX348 GVA-LHR 06.01 15:55-16:40");
       }
     } catch (err) {
       console.error("Parse error:", err);
@@ -177,7 +553,7 @@ export default function FlightItineraryInput({
     }
   };
 
-  // Add segment manually
+  // Add empty segment
   const addEmptySegment = () => {
     const newSegment: FlightSegment = {
       id: `seg-${Date.now()}`,
@@ -191,15 +567,13 @@ export default function FlightItineraryInput({
       status: "scheduled",
     };
     onSegmentsChange([...segments, newSegment]);
+    setEditingId(newSegment.id);
   };
 
   // Update segment
-  const updateSegment = (id: string, field: keyof FlightSegment, value: string) => {
-    onSegmentsChange(
-      segments.map((seg) =>
-        seg.id === id ? { ...seg, [field]: value } : seg
-      )
-    );
+  const updateSegment = (updated: FlightSegment) => {
+    onSegmentsChange(segments.map((seg) => seg.id === updated.id ? updated : seg));
+    setEditingId(null);
   };
 
   // Remove segment
@@ -209,62 +583,64 @@ export default function FlightItineraryInput({
 
   return (
     <div className="space-y-4">
-      {/* Upload / Text Input Toggle */}
-      <div className="flex items-center gap-4">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading || isParsing}
-          className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {isUploading ? "Uploading..." : "Upload Screenshot"}
-        </button>
+      {/* Action buttons */}
+      {!readonly && (
+        <div className="flex items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading || isParsing}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {isUploading ? "Uploading..." : "Upload Screenshot"}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setShowTextInput(!showTextInput)}
-          className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Paste Text
-        </button>
+          <button
+            type="button"
+            onClick={() => setShowTextInput(!showTextInput)}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Paste Text
+          </button>
 
-        <button
-          type="button"
-          onClick={addEmptySegment}
-          className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Manually
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={addEmptySegment}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Flight
+          </button>
+        </div>
+      )}
 
       {/* Uploaded Image Preview */}
       {uploadedImage && (
-        <div className="relative">
+        <div className="relative inline-block">
           <img
             src={uploadedImage}
             alt="Uploaded itinerary"
-            className="max-h-40 rounded border border-gray-200"
+            className="max-h-32 rounded-lg border border-gray-200"
           />
           <button
             type="button"
             onClick={() => setUploadedImage(null)}
-            className="absolute top-1 right-1 p-1 bg-white rounded-full shadow hover:bg-gray-100"
+            className="absolute -top-2 -right-2 p-1 bg-white rounded-full shadow-md hover:bg-gray-100"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -275,20 +651,20 @@ export default function FlightItineraryInput({
 
       {/* Text Input */}
       {showTextInput && (
-        <div className="space-y-2">
+        <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
           <textarea
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Paste flight itinerary text here...&#10;Example: BT401 RIX-FCO 15.01 08:30-11:45"
-            rows={4}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+            placeholder="Paste flight details here...&#10;Format: LX348 GVA-LHR 06.01 15:55-16:40"
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
           />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={parseTextInput}
               disabled={isParsing || !textInput.trim()}
-              className="px-3 py-1.5 text-sm bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50"
+              className="px-3 py-1.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
             >
               {isParsing ? "Parsing..." : "Parse"}
             </button>
@@ -319,107 +695,43 @@ export default function FlightItineraryInput({
 
       {/* Error message */}
       {parseError && (
-        <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
           {parseError}
         </div>
       )}
 
-      {/* Flight Segments */}
+      {/* Flight Segments - FlightStats style cards */}
       {segments.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700">Flight Segments</h4>
-          {segments.map((segment, index) => (
-            <div
-              key={segment.id}
-              className="p-3 bg-gray-50 rounded-lg border border-gray-200"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <span className="text-xs font-medium text-gray-500">
-                  Segment {index + 1}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeSegment(segment.id)}
-                  className="text-gray-400 hover:text-red-500"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2 mb-2">
-                <input
-                  type="text"
-                  value={segment.flightNumber}
-                  onChange={(e) => updateSegment(segment.id, "flightNumber", e.target.value)}
-                  placeholder="Flight #"
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={segment.departure}
-                  onChange={(e) => updateSegment(segment.id, "departure", e.target.value)}
-                  placeholder="From (RIX)"
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={segment.arrival}
-                  onChange={(e) => updateSegment(segment.id, "arrival", e.target.value)}
-                  placeholder="To (FCO)"
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={segment.aircraft || ""}
-                  onChange={(e) => updateSegment(segment.id, "aircraft", e.target.value)}
-                  placeholder="Aircraft"
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-4 gap-2">
-                <input
-                  type="date"
-                  value={segment.departureDate}
-                  onChange={(e) => updateSegment(segment.id, "departureDate", e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-                <input
-                  type="time"
-                  value={segment.departureTime}
-                  onChange={(e) => updateSegment(segment.id, "departureTime", e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-                <input
-                  type="date"
-                  value={segment.arrivalDate}
-                  onChange={(e) => updateSegment(segment.id, "arrivalDate", e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-                <input
-                  type="time"
-                  value={segment.arrivalTime}
-                  onChange={(e) => updateSegment(segment.id, "arrivalTime", e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-black focus:outline-none"
-                />
-              </div>
-
-              {/* Status indicator */}
-              {segment.status && segment.status !== "scheduled" && (
-                <div className={`mt-2 text-xs px-2 py-1 rounded inline-block ${
-                  segment.status === "delayed" ? "bg-yellow-100 text-yellow-800" :
-                  segment.status === "cancelled" ? "bg-red-100 text-red-800" :
-                  segment.status === "landed" ? "bg-green-100 text-green-800" :
-                  "bg-gray-100 text-gray-800"
-                }`}>
-                  {segment.status.charAt(0).toUpperCase() + segment.status.slice(1)}
-                  {segment.statusNote && `: ${segment.statusNote}`}
-                </div>
-              )}
-            </div>
+        <div className="space-y-4">
+          {segments.map((segment) => (
+            editingId === segment.id ? (
+              <SegmentEditForm
+                key={segment.id}
+                segment={segment}
+                onSave={updateSegment}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <FlightCard
+                key={segment.id}
+                segment={segment}
+                onEdit={() => setEditingId(segment.id)}
+                onRemove={() => removeSegment(segment.id)}
+                readonly={readonly}
+              />
+            )
           ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {segments.length === 0 && !showTextInput && !readonly && (
+        <div className="text-center py-8 text-gray-500">
+          <svg className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+          <p className="text-sm">No flight segments added</p>
+          <p className="text-xs mt-1">Upload a screenshot, paste text, or add manually</p>
         </div>
       )}
     </div>
