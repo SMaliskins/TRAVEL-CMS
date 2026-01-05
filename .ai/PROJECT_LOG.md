@@ -1081,3 +1081,20 @@ Branch: cursor/cursor-agent-initiation-fe61
 - [ ] `/api/orders/create` endpoint works in production
 
 ---
+
+## [2026-01-05 16:30] RUNNER (ARCHITECT) — Task Created: Fix React Hydration Error #185
+Branch: cursor/cursor-agent-initiation-fe61
+Задача: Diagnose and create fix for React Hydration Error in production
+Результат: RESULT
+Вывод / Решение:
+- SM reported: Production site shows "React error #185" (Hydration Error)
+- Root cause: Incorrect changes to hooks in commit 0a8c06a
+  - useSidebar.ts: useState with localStorage call on server
+  - useSidebar.ts: wrong useSyncExternalStore usage
+  - useUserPreferences.ts: same issues
+  - useClock.ts: useSyncExternalStore may cause issues
+- Solution: Revert hooks to original version from main, keep only useFontScale fix
+- Task created: `.ai/tasks/code-writer-fix-hydration-error-hooks.md`
+Next Step: CODE WRITER to revert hooks
+
+---
