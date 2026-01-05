@@ -1374,3 +1374,35 @@ ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ticket_nr text;
 
 **[Следующий: CODE WRITER]** — Реализовать O3 (Order Status) first (no DB changes needed), then O1 (Order Edit)
 
+
+---
+
+## [2026-01-05] CODE WRITER — Tasks O1, O3, O6 Complete
+
+### O1: Order Client Edit
+**Result:** DONE
+- Created `OrderClientSection` component with view/edit modes
+- Client selection via PartySelect
+- Destinations via CityMultiSelect
+- Dates via DateRangePicker
+- PATCH API updated to accept all editable fields
+
+### O3: Order Status (Traffic Light)
+**Result:** DONE  
+- Created `OrderStatusBadge` component with traffic light dots
+- Dropdown for status change (Active → On hold/Cancelled)
+- Auto-finish logic when date_to < today
+- PATCH API for status updates
+
+### O6: Clickable Phone/Email
+**Result:** DONE
+- Added tel: and mailto: links in OrderClientSection
+
+### O7: Date Format dd.mm.yyyy
+**Result:** DONE (earlier)
+- Centralized `formatDateDDMMYYYY` utility
+
+**Commits:** v0.3.0, v0.3.1, v0.3.2
+
+**[Следующий: CODE WRITER]** — Задача O9: Add services to order (requires services table UI)
+
