@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
+import FlightItineraryInput, { FlightSegment } from "@/components/FlightItineraryInput";
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -41,6 +42,10 @@ export interface ServiceData {
   pickupLocation?: string;
   dropoffLocation?: string;
   pickupTime?: string;
+  estimatedDuration?: string;
+  linkedFlightId?: string;
+  // Flight-specific
+  flightSegments?: FlightSegment[];
 }
 
 const SERVICE_CATEGORIES = [
@@ -100,6 +105,11 @@ export default function AddServiceModal({
   const [pickupLocation, setPickupLocation] = useState("");
   const [dropoffLocation, setDropoffLocation] = useState("");
   const [pickupTime, setPickupTime] = useState("");
+  const [estimatedDuration, setEstimatedDuration] = useState("");
+  const [linkedFlightId, setLinkedFlightId] = useState<string | null>(null);
+  
+  // Flight-specific fields
+  const [flightSegments, setFlightSegments] = useState<FlightSegment[]>([]);
 
   // Auto-fill client/payer when defaultClient changes
   useEffect(() => {
@@ -115,6 +125,31 @@ export default function AddServiceModal({
   const showTicketNr = category === "Flight";
   const showHotelFields = category === "Hotel";
   const showTransferFields = category === "Transfer";
+  const showFlightItinerary = category === "Flight";
+  
+  // Auto-generate service name from flight segments
+  useEffect(() => {
+    if (category === "Flight" && flightSegments.length > 0 && !serviceName) {
+      const route = flightSegments
+        .map((s) => s.departure)
+        .concat(flightSegments[flightSegments.length - 1]?.arrival || "")
+        .filter(Boolean)
+        .join(" - ");
+      if (route) {
+        setServiceName(route);
+      }
+      
+      // Auto-set dates from segments
+      const firstDep = flightSegments[0]?.departureDate;
+      const lastArr = flightSegments[flightSegments.length - 1]?.arrivalDate || firstDep;
+      if (firstDep && !dateFrom) {
+        setDateFrom(firstDep);
+      }
+      if (lastArr && !dateTo) {
+        setDateTo(lastArr);
+      }
+    }
+  }, [flightSegments, category, serviceName, dateFrom, dateTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,6 +197,13 @@ export default function AddServiceModal({
         payload.pickupLocation = pickupLocation;
         payload.dropoffLocation = dropoffLocation;
         payload.pickupTime = pickupTime;
+        payload.estimatedDuration = estimatedDuration;
+        payload.linkedFlightId = linkedFlightId;
+      }
+      
+      // Add flight-specific fields
+      if (showFlightItinerary && flightSegments.length > 0) {
+        payload.flightSegments = flightSegments;
       }
 
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, {
@@ -414,10 +456,21 @@ export default function AddServiceModal({
             </div>
           )}
 
+          {/* Flight-specific fields - Itinerary */}
+          {showFlightItinerary && (
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Flight Itinerary</h3>
+              <FlightItineraryInput
+                segments={flightSegments}
+                onSegmentsChange={setFlightSegments}
+              />
+            </div>
+          )}
+
           {/* Transfer-specific fields */}
           {showTransferFields && (
             <div className="border-t border-gray-200 pt-4 mt-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">Transfer Details</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Transfer Itinerary</h3>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -426,7 +479,7 @@ export default function AddServiceModal({
                       type="text"
                       value={pickupLocation}
                       onChange={(e) => setPickupLocation(e.target.value)}
-                      placeholder="e.g., FCO Airport"
+                      placeholder="e.g., FCO Airport Terminal 3"
                       className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
                     />
                   </div>
@@ -441,7 +494,7 @@ export default function AddServiceModal({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Time</label>
                     <input
@@ -451,11 +504,34 @@ export default function AddServiceModal({
                       className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
                     />
                   </div>
-                  <div className="flex items-end">
-                    <p className="text-xs text-gray-500 pb-2">
-                      💡 Tip: For airport transfers, add +15 min after landing or -2h10m before departure
-                    </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Est. Duration</label>
+                    <input
+                      type="text"
+                      value={estimatedDuration}
+                      onChange={(e) => setEstimatedDuration(e.target.value)}
+                      placeholder="e.g., 45 min"
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Link to Flight</label>
+                    <select
+                      value={linkedFlightId || ""}
+                      onChange={(e) => setLinkedFlightId(e.target.value || null)}
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    >
+                      <option value="">No linked flight</option>
+                      {/* TODO: Populate with flights from this order */}
+                    </select>
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-800">
+                    💡 <strong>Airport Transfer Tips:</strong><br />
+                    • Arrival: Schedule pickup +15 min after landing time<br />
+                    • Departure: Schedule to arrive at airport 2h 10min before flight
+                  </p>
                 </div>
               </div>
             </div>

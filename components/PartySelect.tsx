@@ -190,6 +190,11 @@ export default function PartySelect({
         if (createRegNumber.trim()) payload.regNumber = createRegNumber.trim();
       }
       
+      // Add service areas for suppliers
+      if (roleFilter === "supplier" && createServiceAreas.length > 0) {
+        payload.serviceAreas = createServiceAreas;
+      }
+      
       const response = await fetch("/api/directory/create", {
         method: "POST",
         headers: {
@@ -245,7 +250,29 @@ export default function PartySelect({
     setCreateCompanyName("");
     setCreateAddress("");
     setCreateRegNumber("");
+    setCreateServiceAreas([]);
     setCreateError("");
+  };
+  
+  // Service area options for suppliers
+  const SERVICE_AREA_OPTIONS = [
+    "Flight",
+    "Hotel", 
+    "Transfer",
+    "Tour",
+    "Insurance",
+    "Visa",
+    "Rent a Car",
+    "Cruise",
+    "Other",
+  ];
+  
+  const toggleServiceArea = (area: string) => {
+    setCreateServiceAreas(prev => 
+      prev.includes(area) 
+        ? prev.filter(a => a !== area)
+        : [...prev, area]
+    );
   };
 
   const handleCancelCreate = () => {
@@ -376,8 +403,10 @@ export default function PartySelect({
 
       {/* Create Form Modal */}
       {showCreateForm && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg p-4">
-          <h4 className="font-medium text-sm mb-3">Create New Client</h4>
+        <div className="absolute z-50 mt-1 w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-lg p-4 max-h-[80vh] overflow-y-auto">
+          <h4 className="font-medium text-sm mb-3">
+            {roleFilter === "supplier" ? "Create New Supplier" : "Create New Client"}
+          </h4>
           
           {/* Type selector */}
           <div className="flex gap-4 mb-3">
@@ -468,6 +497,29 @@ export default function PartySelect({
                 onChange={(e) => setCreateRegNumber(e.target.value)}
                 className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
               />
+            </div>
+          )}
+          
+          {/* Service Areas for Suppliers */}
+          {roleFilter === "supplier" && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <label className="block text-xs font-medium text-gray-700 mb-2">Service Areas</label>
+              <div className="flex flex-wrap gap-1.5">
+                {SERVICE_AREA_OPTIONS.map((area) => (
+                  <button
+                    key={area}
+                    type="button"
+                    onClick={() => toggleServiceArea(area)}
+                    className={`px-2 py-1 text-xs rounded-full border transition-colors ${
+                      createServiceAreas.includes(area)
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    {area}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
