@@ -103,8 +103,9 @@ ON public.order_services(service_date_from) WHERE service_date_from IS NOT NULL;
 -- Enable RLS
 ALTER TABLE public.order_service_travellers ENABLE ROW LEVEL SECURITY;
 
--- Policy for authenticated users
-CREATE POLICY IF NOT EXISTS "Allow all for authenticated" 
+-- Policy for authenticated users (drop first to avoid duplicate)
+DROP POLICY IF EXISTS "Allow all for authenticated" ON public.order_service_travellers;
+CREATE POLICY "Allow all for authenticated" 
 ON public.order_service_travellers
 FOR ALL
 TO authenticated
