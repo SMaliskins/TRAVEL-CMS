@@ -337,7 +337,7 @@ export default function DirectoryDetailPage() {
         {/* Cancel Confirmation Modal */}
         <ConfirmModal
           isOpen={showCancelConfirm}
-          onClose={() => setShowCancelConfirm(false)}
+          onCancel={() => setShowCancelConfirm(false)}
           onConfirm={handleConfirmCancel}
           title="Discard changes?"
           message="You have unsaved changes. Are you sure you want to leave this page?"
