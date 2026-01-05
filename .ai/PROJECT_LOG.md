@@ -1151,3 +1151,13 @@ Changes:
 - Created migration: migrations/add_orders_client_columns.sql
 
 ---
+
+## 2026-01-05
+**CODE WRITER**
+Task: Fix PartySelect search not finding existing clients
+Result: Fixed — search now includes first_name and last_name
+Details: 
+- /api/directory search now matches first_name, last_name (not just display_name)
+- PartySelect transforms API response correctly
+
+---
