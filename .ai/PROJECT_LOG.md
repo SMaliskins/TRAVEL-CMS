@@ -1262,3 +1262,115 @@ Starting with O1 (simplest), then DB/SCHEMA for O2-O4 schema confirmation.
 
 **[Следующий: CODE WRITER]** — Задача O1: Изменить формат дат на dd.mm.yyyy во всём приложении
 
+
+---
+
+## [2026-01-05] CODE WRITER — Task O1: Date format dd.mm.yyyy
+
+**Task:** O1 - Date format dd.mm.yyyy globally
+**Result:** DONE
+**Files changed:**
+- utils/dateFormat.ts (updated formatDateRange to dd.mm format)
+- app/orders/page.tsx (use centralized formatDateDDMMYYYY)
+- app/orders/[orderCode]/page.tsx (added date formatting)
+- app/orders/[orderCode]/_components/AssignedTravellersModal.tsx (use centralized)
+- app/orders/[orderCode]/_components/OrderServicesTab.tsx (use centralized)
+**Commit:** v0.3.0
+**Details:** see .ai/logs/CODE_WRITER_REPORT.md
+
+**[Следующий: DB/SCHEMA]** — Задача O2, O3, O4: Подтвердить схему для destinations table, order edit fields, order status
+
+
+---
+
+## [2026-01-05] DB/SCHEMA — Analysis for Tasks O2, O3, O4, O5
+
+### Task O2: Cities/Countries with Flags
+
+**Current state:** Cities stored as simple text in `lib/data/cities.ts` (47 cities hardcoded)
+
+**Proposed schema for destinations table:**
+```sql
+CREATE TABLE IF NOT EXISTS public.destinations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id uuid REFERENCES public.companies(id), -- NULL = global
+    country_code text NOT NULL,  -- ISO 3166-1 alpha-2 (e.g., 'IT', 'FR')
+    country_name text NOT NULL,
+    city_name text NOT NULL,
+    iata_code text,              -- Airport code if applicable
+    latitude numeric(10,6),
+    longitude numeric(10,6),
+    is_active boolean DEFAULT true,
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(country_code, city_name)
+);
+```
+**Note:** Flag emojis derive from country_code using standard Unicode regional indicator symbols.
+
+### Task O3: Order Status
+
+**Current schema already supports this:**
+- `orders.status` CHECK constraint: `('Draft', 'Active', 'Cancelled', 'Completed', 'On hold')`
+- Default: `'Active'`
+- **Recommendation:** Add 'Finished' to CHECK constraint or use 'Completed' as equivalent
+- Auto-finish logic: Compare `date_to` with `CURRENT_DATE` (can be done in app layer)
+
+### Task O4: Order Edit Fields
+
+**Current schema supports all required edits:**
+- `client_display_name` - text, nullable
+- `client_party_id` - **MISSING** - need FK to party table
+- `countries_cities` - text, nullable
+- `date_from` - date, nullable
+- `date_to` - date, nullable
+
+**Recommended additions to orders table:**
+```sql
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS client_party_id uuid REFERENCES public.party(id);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS client_phone text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS client_email text;
+```
+
+### Task O5: Services
+
+**Existing `order_services` table needs enhancement:**
+
+Current columns missing from screenshot requirements:
+- `client_name` (who receives service - may differ from order client)
+- `payer_name` (who pays - may differ from client)
+- `client_party_id` - FK to party
+- `payer_party_id` - FK to party  
+- `service_price` - cost price from supplier
+- `client_price` - sell price to client
+- `res_status` - reservation status
+- `ref_nr` - supplier reference
+- `ticket_nr` - ticket number
+
+**Recommended schema update:**
+```sql
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS client_party_id uuid REFERENCES public.party(id);
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS payer_party_id uuid REFERENCES public.party(id);
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS client_name text;
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS payer_name text;
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS service_price numeric(12,2) DEFAULT 0;
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS client_price numeric(12,2) DEFAULT 0;
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS res_status text DEFAULT 'booked' 
+    CHECK (res_status IN ('booked', 'confirmed', 'changed', 'rejected', 'cancelled'));
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ref_nr text;
+ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ticket_nr text;
+```
+
+### Summary Mapping
+
+| UI Field | DB Column | Table | Type |
+|----------|-----------|-------|------|
+| Client (select) | client_party_id | orders | uuid FK |
+| Dates | date_from, date_to | orders | date |
+| Destination | countries_cities | orders | text |
+| Status | status | orders | text (enum) |
+| Service Supplier | supplier_id | order_services | uuid FK |
+| Service Client | client_party_id | order_services | uuid FK |
+| Service Payer | payer_party_id | order_services | uuid FK |
+
+**[Следующий: CODE WRITER]** — Реализовать O3 (Order Status) first (no DB changes needed), then O1 (Order Edit)
+

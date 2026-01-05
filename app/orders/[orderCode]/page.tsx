@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock from "./_components/OrderServicesBlock";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
+type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 
 interface OrderData {
   id: string;
@@ -16,7 +18,7 @@ interface OrderData {
   date_from: string | null;
   date_to: string | null;
   order_type: string;
-  status: string;
+  status: OrderStatus;
   amount_total: number;
   amount_paid: number;
   amount_debt: number;
@@ -33,6 +35,7 @@ export default function OrderPage({
   const [order, setOrder] = useState<OrderData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch order data
   useEffect(() => {
@@ -74,6 +77,40 @@ export default function OrderPage({
     });
   }, [params]);
 
+  // Update order status
+  const handleStatusChange = async (newStatus: OrderStatus) => {
+    if (!order || isSaving) return;
+    
+    setIsSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setOrder({ ...order, status: newStatus });
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        console.error("Failed to update status:", errData.error);
+      }
+    } catch (err) {
+      console.error("Update status error:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Calculate effective status (auto-finish if past date_to)
+  const effectiveStatus = order ? getEffectiveStatus(order.status, order.date_to) : "Active";
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -94,10 +131,24 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
         {/* A) Order Header */}
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Order {orderCode}
-          </h1>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">
+              Order {orderCode}
+            </h1>
+            <OrderStatusBadge 
+              status={effectiveStatus}
+              onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
+              readonly={effectiveStatus === "Completed" || isSaving}
+            />
+          </div>
+          <div className="text-sm text-gray-500">
+            {order?.order_type && (
+              <span className="px-2 py-1 bg-gray-100 rounded text-gray-700">
+                {order.order_type}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* B) Tabs */}

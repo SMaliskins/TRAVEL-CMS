@@ -282,20 +282,20 @@ function formatCountriesWithFlags(countriesCities: string): string {
     .join(", ");
 }
 
-const getStatusBadgeColor = (status: OrderStatus): string => {
+const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; dot: string } => {
   switch (status) {
     case "Draft":
-      return "bg-gray-100 text-gray-800";
+      return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
     case "Active":
-      return "bg-green-100 text-green-800";
+      return { bg: "bg-green-100", text: "text-green-800", dot: "bg-green-500" };
     case "Cancelled":
-      return "bg-red-100 text-red-800";
+      return { bg: "bg-red-100", text: "text-red-800", dot: "bg-red-500" };
     case "Completed":
-      return "bg-blue-100 text-blue-800";
+      return { bg: "bg-blue-100", text: "text-blue-800", dot: "bg-blue-500" };
     case "On hold":
-      return "bg-yellow-100 text-yellow-800";
+      return { bg: "bg-yellow-100", text: "text-yellow-800", dot: "bg-yellow-500" };
     default:
-      return "bg-gray-100 text-gray-800";
+      return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
   }
 };
 
@@ -820,13 +820,17 @@ export default function OrdersPage() {
                                         {formatCurrency(order.profit)}
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight">
-                                        <span
-                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium leading-tight ${getStatusBadgeColor(
-                                            order.status
-                                          )}`}
-                                        >
-                                          {order.status}
-                                        </span>
+                                        {(() => {
+                                          const colors = getStatusBadgeColor(order.status);
+                                          return (
+                                            <span
+                                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium leading-tight ${colors.bg} ${colors.text}`}
+                                            >
+                                              <span className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} />
+                                              {order.status}
+                                            </span>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {order.type}

@@ -83,3 +83,104 @@ export async function GET(
     return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string }> }
+) {
+  try {
+    const { orderCode } = await params;
+    const body = await request.json();
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    }
+
+    // Get authenticated user
+    let user = null;
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const authClient = createClient(supabaseUrl, supabaseAnonKey);
+      const { data, error } = await authClient.auth.getUser(token);
+      if (!error && data?.user) {
+        user = data.user;
+      }
+    }
+
+    if (!user) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      if (cookieHeader) {
+        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false },
+          global: { headers: { Cookie: cookieHeader } },
+        });
+        const { data, error } = await authClient.auth.getUser();
+        if (!error && data?.user) {
+          user = data.user;
+        }
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const companyId = await getCompanyId(user.id);
+    if (!companyId) {
+      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
+    }
+
+    // Build update payload - only allow certain fields
+    const allowedFields = [
+      "status", 
+      "client_display_name", 
+      "countries_cities", 
+      "date_from", 
+      "date_to",
+      "order_type"
+    ];
+    
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
+      }
+    }
+
+    // Validate status if provided
+    if (updateData.status) {
+      const validStatuses = ["Draft", "Active", "Cancelled", "Completed", "On hold"];
+      if (!validStatuses.includes(updateData.status as string)) {
+        return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+      }
+    }
+
+    // Update order
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .update(updateData)
+      .eq("company_id", companyId)
+      .eq("order_code", orderCode)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Order update error:", error);
+      return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
+    }
+
+    if (!order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ order });
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Order PATCH error:", errorMsg);
+    return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
+  }
+}
