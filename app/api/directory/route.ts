@@ -125,6 +125,17 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", status);
     }
 
+    // Apply role filter - filter by is_client, is_supplier, is_subagent flags
+    if (role) {
+      if (role === "client") {
+        query = query.eq("is_client", true);
+      } else if (role === "supplier") {
+        query = query.eq("is_supplier", true);
+      } else if (role === "subagent") {
+        query = query.eq("is_subagent", true);
+      }
+    }
+
     // Apply search filter in SQL (ilike on display_name)
     // This ensures search works BEFORE pagination
     if (search) {

@@ -34,10 +34,16 @@ interface Service {
 
 interface OrderServicesBlockProps {
   orderCode: string;
+  // Default client from order for auto-fill in AddServiceModal
+  defaultClientId?: string | null;
+  defaultClientName?: string;
 }
 
-export default function OrderServicesBlock({ orderCode }: OrderServicesBlockProps) {
-  const [mainClientId] = useState<string>("t1");
+export default function OrderServicesBlock({ 
+  orderCode,
+  defaultClientId,
+  defaultClientName,
+}: OrderServicesBlockProps) {
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [modalServiceId, setModalServiceId] = useState<string | null>(null);
@@ -416,7 +422,7 @@ export default function OrderServicesBlock({ orderCode }: OrderServicesBlockProp
           setOrderTravellers={setOrderTravellers}
           services={services}
           setServices={setServices}
-          mainClientId={mainClientId}
+          mainClientId={defaultClientId || ""}
           onClose={handleCloseModal}
         />
       )}
@@ -424,6 +430,8 @@ export default function OrderServicesBlock({ orderCode }: OrderServicesBlockProp
       {showAddModal && (
         <AddServiceModal
           orderCode={orderCode}
+          defaultClientId={defaultClientId}
+          defaultClientName={defaultClientName}
           onClose={() => setShowAddModal(false)}
           onServiceAdded={handleServiceAdded}
         />

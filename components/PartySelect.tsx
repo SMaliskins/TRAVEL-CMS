@@ -64,7 +64,16 @@ export default function PartySelect({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
+      // Build query params with role filter
+      const params = new URLSearchParams({
+        search: query,
+        limit: "10",
+      });
+      if (roleFilter) {
+        params.set("role", roleFilter);
+      }
+      
+      const response = await fetch(`/api/directory?${params.toString()}`, {
         headers: {
           ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
         },
