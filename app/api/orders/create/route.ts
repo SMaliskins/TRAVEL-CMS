@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     // Start with required fields only
     const payload: Record<string, unknown> = {
       company_id: companyId,
-      owner_user_id: user.id,
+      manager_user_id: user.id,
       order_no: orderNo,
       order_year: orderYear,
       order_code: orderCode,
