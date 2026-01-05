@@ -996,3 +996,21 @@ Branch: feature/x
 Вывод / Решение: Диагностика показала что Production использует placeholder.supabase.co. Нужно исправить lib/supabaseClient.ts чтобы использовались реальные env vars.
 
 ---
+
+## [2026-01-05 18:20] CODE WRITER — RESULT: Add diagnostic logging for Supabase client
+Branch: feature/x
+Задача: Fix Supabase client using placeholder URL
+Результат: RESULT
+Вывод / Решение:
+- Добавил детальное логирование в lib/supabaseClient.ts
+- Добавил env config в next.config.ts
+- Build проходит локально
+
+**Важно:** NEXT_PUBLIC_* переменные инлайнятся в бандл во время BUILD.
+Если Vercel не имеет доступа к ним на этапе build — в бандл попадает placeholder.
+
+**Вероятная причина:** Environment Variables в Vercel должны быть доступны для Build, не только Runtime.
+
+**Commit:** 6bc7f70
+
+---
