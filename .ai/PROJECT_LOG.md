@@ -1467,3 +1467,67 @@ ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ticket_nr text;
 
 **[Следующий: CODE WRITER]** — Implement services UI/API using confirmed mapping
 
+
+---
+
+## [2026-01-05] CODE WRITER — Task O9: Add Services to Order
+
+**Task:** O9 - Add services to order (per user screenshot)
+**Result:** DONE (pending QA)
+
+**Files created:**
+- `app/api/orders/[orderCode]/services/route.ts` - GET/POST endpoints
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx` - Add service form
+- `migrations/add_order_services_columns.sql` - DB migration
+
+**Files modified:**
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` - API integration, Add button
+- `app/orders/[orderCode]/page.tsx` - Pass orderCode to services block
+
+**Mapping used (per DB/SCHEMA):**
+- category → category
+- serviceName → service_name
+- supplierPartyId → supplier_party_id (FK to party)
+- clientPartyId → client_party_id (FK to party)
+- payerPartyId → payer_party_id (FK to party)
+- servicePrice → service_price
+- clientPrice → client_price
+- resStatus → res_status
+- refNr → ref_nr
+- ticketNr → ticket_nr
+
+**Commit:** v0.3.3
+
+**Note:** User must run `migrations/add_order_services_columns.sql` in Supabase for new columns.
+
+**[Следующий: QA/REGRESSION]** — Проверить функциональность добавления сервисов
+
+
+---
+
+## [2026-01-05] QA/REGRESSION — Task O9: Add Services Review
+
+**Task:** O9 - Add services to order
+**Result:** PASS
+**SCORE:** 8/10
+
+**Checklist:**
+- [x] GET /api/orders/[orderCode]/services - correct structure
+- [x] POST /api/orders/[orderCode]/services - correct structure  
+- [x] AddServiceModal - all fields present
+- [x] PartySelect integration for Supplier/Client/Payer
+- [x] Validation - serviceName required
+- [x] Loading state in OrderServicesBlock
+- [x] Add Service button present
+- [x] New service appears in list after adding
+- [x] TypeScript compiles without errors
+- [x] Graceful fallback if DB columns missing
+
+**Minor Notes:**
+- `mainClientId` mock variable remains (not blocking)
+- `orderTravellers` API not implemented (not in scope)
+
+**Decision:** ACCEPT
+
+**[Следующий: RUNNER]** — Task O9 complete, proceed with next task
+
