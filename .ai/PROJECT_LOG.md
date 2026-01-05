@@ -1091,3 +1091,29 @@ Key findings:
 - Missing company_id, order_no, order_year in create flow
 
 ---
+
+## 2026-01-05
+**DB / SCHEMA SPECIALIST**
+Task: Orders schema verification and field mapping
+Result: Confirmed mapping, answered OPEN QUESTIONS
+Details: see .ai/logs/DB_REPORT.md
+
+Key findings:
+- company_id берётся из profiles (SELECT company_id FROM profiles WHERE user_id = auth.uid())
+- order_no нужен counter per (company_id, year)
+- Маппинг: order_number→order_code, manager_user_id→owner_user_id, check_in_date→date_from, return_date→date_to
+
+---
+
+## 2026-01-05
+**CODE WRITER**
+Task: Orders API fix + GET endpoint + frontend integration
+Result: Completed — API fixed, GET created, /orders fetches real data
+Details: see .ai/logs/CODE_WRITER_REPORT.md
+
+Files changed:
+- app/api/orders/create/route.ts (rewritten)
+- app/api/orders/route.ts (new)
+- app/orders/page.tsx (real data instead of mock)
+
+---

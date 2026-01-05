@@ -24,15 +24,48 @@
 - `next.config.ts`
 - `components/Sidebar.tsx`
 
-### Гипотезы отброшены
-- Lazy initialization через Proxy — слишком сложно для данной проблемы
+---
 
-### Риски
-- Если env vars не настроены в Vercel, пользователь увидит ошибку конфигурации (это ожидаемо)
+## [2026-01-05] Orders API: Fix field mapping + Create GET endpoint
+
+### Контекст задачи
+Привести Orders в рабочее состояние. Спецификация от SPEC WRITER, маппинг от DB SPECIALIST.
+
+### Что делал
+
+**1. Переписал `app/api/orders/create/route.ts`:**
+- `order_number` → `order_code`
+- `manager_user_id` → `owner_user_id`
+- Добавил получение `company_id` из `profiles`
+- Добавил генерацию `order_no` и `order_year` (MAX+1 per company+year)
+- `check_in_date` → `date_from`
+- `return_date` → `date_to`
+- Добавил lookup `client_display_name` из `parties`
+
+**2. Создал `app/api/orders/route.ts` (GET):**
+- Получает заказы для company текущего пользователя
+- Фильтрация по `status`, `order_type`
+- Трансформирует в формат фронтенда
+
+**3. Обновил `app/orders/page.tsx`:**
+- Убрал mock data (230 строк)
+- Добавил fetch из `/api/orders`
+- Добавил loading state
+- Добавил error state с retry
+- Добавил empty state
+
+### Файлы изменены
+- `app/api/orders/create/route.ts` — переписан
+- `app/api/orders/route.ts` — создан
+- `app/orders/page.tsx` — обновлён
 
 ### Что НЕ делал
-- Не менял архитектуру
-- Не трогал другие компоненты
-- Не исправлял lint ошибки в других файлах (не в scope задачи)
+- Не менял схему БД
+- Не трогал `/orders/new` форму (она уже работает)
+- Не добавлял owner initials в список (TODO в коде)
+
+### Риски
+- Если у пользователя нет `company_id` в `profiles` — получит ошибку
+- RLS на `orders` должен быть настроен для `company_id`
 
 ---
