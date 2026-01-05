@@ -1138,3 +1138,16 @@ Details: see .ai/logs/DB_REPORT.md
 Need migration: ALTER TABLE orders ADD COLUMN client_display_name text;
 
 ---
+
+## 2026-01-05
+**CODE WRITER**
+Task: Fix orders API missing columns + PartySelect autocomplete
+Result: Completed
+Details: see .ai/logs/CODE_WRITER_REPORT.md
+
+Changes:
+- API now handles missing columns gracefully (retry logic)
+- PartySelect rewritten as autocomplete with search + create new
+- Created migration: migrations/add_orders_client_columns.sql
+
+---
