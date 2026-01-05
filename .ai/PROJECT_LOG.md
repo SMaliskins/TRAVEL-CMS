@@ -1056,3 +1056,23 @@ Commit: 8b13d60
 - App больше не падает, показывает понятное сообщение с инструкцией
 
 ---
+
+## [2026-01-05 18:52] CODE WRITER — START: Add version display
+Branch: feature/x
+Задача: Add app version from package.json, display on login page
+Результат: START
+
+---
+
+## [2026-01-05 18:55] CODE WRITER — DONE: Add version display
+Branch: feature/x
+Commit: 740ac67
+Задача: Add app version from package.json, display on login page
+Результат: DONE
+Вывод / Решение:
+- Версия обновлена до 0.2.0
+- Версия показывается на странице логина (внизу справа)
+- В Vercel Build Logs выводится версия и время билда
+- Версия видна и в обычном состоянии и в error state
+
+---
