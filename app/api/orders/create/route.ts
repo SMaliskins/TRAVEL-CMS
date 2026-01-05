@@ -160,7 +160,8 @@ export async function POST(request: NextRequest) {
     const countriesCities = [...new Set([...body.countries, ...body.cities])].join(", ");
 
     // Build insert payload with correct field names
-    const payload = {
+    // Start with required fields only
+    const payload: Record<string, unknown> = {
       company_id: companyId,
       owner_user_id: user.id,
       order_no: orderNo,
@@ -168,23 +169,67 @@ export async function POST(request: NextRequest) {
       order_code: orderCode,
       order_type: body.orderType,
       status: body.status || "Active",
-      client_display_name: clientDisplayName,
-      countries_cities: countriesCities || null,
-      date_from: body.checkIn || null,
-      date_to: body.return || null,
     };
 
-    // Insert order
-    const { data: insertedOrder, error: insertError } = await supabaseAdmin
-      .from("orders")
-      .insert(payload)
-      .select("id, order_code")
-      .single();
+    // Add optional fields if they have values
+    // These columns may not exist in all deployments
+    if (clientDisplayName) {
+      payload.client_display_name = clientDisplayName;
+    }
+    if (countriesCities) {
+      payload.countries_cities = countriesCities;
+    }
+    if (body.checkIn) {
+      payload.date_from = body.checkIn;
+    }
+    if (body.return) {
+      payload.date_to = body.return;
+    }
 
-    if (insertError) {
+    // Insert order with retry logic for missing columns
+    let insertedOrder = null;
+    let currentPayload = { ...payload };
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error: insertError } = await supabaseAdmin
+        .from("orders")
+        .insert(currentPayload)
+        .select("id, order_code")
+        .single();
+
+      if (!insertError) {
+        insertedOrder = data;
+        break;
+      }
+
+      // Check if error is about missing column
+      const isColumnError = insertError.message?.includes("column") || 
+                           insertError.code === "42703";
+      
+      if (isColumnError) {
+        // Extract column name and remove it from payload
+        const match = insertError.message?.match(/column[^"]*"([^"]+)"/i) ||
+                     insertError.message?.match(/Could not find[^']*'([^']+)'/i);
+        const columnName = match?.[1];
+        
+        if (columnName && columnName in currentPayload) {
+          console.log(`Removing missing column: ${columnName}`);
+          delete currentPayload[columnName];
+          continue;
+        }
+      }
+
+      // Non-recoverable error
       console.error("Order insert error:", insertError);
       return NextResponse.json(
         { error: `Failed to create order: ${insertError.message}` },
+        { status: 500 }
+      );
+    }
+
+    if (!insertedOrder) {
+      return NextResponse.json(
+        { error: "Failed to create order after retries" },
         { status: 500 }
       );
     }

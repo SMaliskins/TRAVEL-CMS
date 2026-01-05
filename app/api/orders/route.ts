@@ -78,27 +78,11 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const orderType = searchParams.get("order_type");
 
-    // Build query
+    // Build query - only select columns that definitely exist
+    // client_display_name and countries_cities may not exist in all deployments
     let query = supabaseAdmin
       .from("orders")
-      .select(`
-        id,
-        order_code,
-        order_no,
-        order_year,
-        order_type,
-        status,
-        client_display_name,
-        countries_cities,
-        date_from,
-        date_to,
-        amount_total,
-        amount_paid,
-        amount_debt,
-        profit_estimated,
-        updated_at,
-        created_at
-      `)
+      .select("*")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
@@ -121,22 +105,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform to frontend format
-    const transformedOrders = (orders || []).map((order) => ({
-      orderId: order.order_code,
-      client: order.client_display_name || "Unknown",
-      countriesCities: order.countries_cities || "",
-      datesFrom: order.date_from || "",
-      datesTo: order.date_to || "",
+    // Handle both old schema (without client_display_name) and new schema
+    const transformedOrders = (orders || []).map((order: Record<string, unknown>) => ({
+      orderId: order.order_code || order.order_number || `#${order.id}`,
+      client: (order.client_display_name as string) || "—",
+      countriesCities: (order.countries_cities as string) || "",
+      datesFrom: (order.date_from as string) || "",
+      datesTo: (order.date_to as string) || "",
       amount: Number(order.amount_total) || 0,
       paid: Number(order.amount_paid) || 0,
       debt: Number(order.amount_debt) || 0,
       profit: Number(order.profit_estimated) || 0,
-      status: order.status,
-      type: order.order_type,
-      owner: "", // TODO: get from owner_user_id -> profiles.initials
+      status: order.status || "Draft",
+      type: order.order_type || "TA",
+      owner: "",
       access: "Owner",
-      updated: order.updated_at?.split("T")[0] || "",
-      createdAt: order.created_at?.split("T")[0] || "",
+      updated: ((order.updated_at as string) || "").split("T")[0] || "",
+      createdAt: ((order.created_at as string) || "").split("T")[0] || "",
     }));
 
     return NextResponse.json({ orders: transformedOrders });

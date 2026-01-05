@@ -111,3 +111,27 @@ CREATE TABLE orders (
 Маппинг подтверждён. CODE WRITER может приступать к исправлению API.
 
 ---
+
+## [2026-01-05] ISSUE: client_display_name column missing
+
+### Проблема
+Ошибка: `column orders.client_display_name does not exist`
+
+### Анализ
+- `supabase_schema.sql` содержит `client_display_name text`
+- `supabase_migration.sql` **НЕ содержит** миграцию для этой колонки
+- Колонка **не существует** в реальной БД
+
+### Решение
+Нужна миграция для добавления колонки:
+```sql
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS client_display_name text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS countries_cities text;
+```
+
+### Альтернатива (без изменения схемы)
+Использовать существующую колонку или хранить client_id и делать JOIN.
+
+Проверить какие колонки реально есть в orders нужно в Supabase Dashboard.
+
+---

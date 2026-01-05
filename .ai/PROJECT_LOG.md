@@ -1128,3 +1128,13 @@ All required field mappings implemented correctly.
 Minor TODOs (owner, access fields) don't block functionality.
 
 ---
+
+## 2026-01-05
+**DB / SCHEMA SPECIALIST**
+Task: Investigate client_display_name error
+Result: Column missing — not in migrations, only in schema file
+Details: see .ai/logs/DB_REPORT.md
+
+Need migration: ALTER TABLE orders ADD COLUMN client_display_name text;
+
+---
