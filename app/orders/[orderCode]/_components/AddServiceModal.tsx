@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
-import SingleDatePicker from "@/components/SingleDatePicker";
+import DateRangePicker from "@/components/DateRangePicker";
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -247,21 +247,16 @@ export default function AddServiceModal({
             </div>
           </div>
 
-          {/* Row 2: Dates with proper calendar picker */}
-          <div className="grid grid-cols-2 gap-4">
-            <SingleDatePicker
-              label="Date From"
-              value={dateFrom}
-              onChange={setDateFrom}
-              placeholder="Select start date"
-            />
-            <SingleDatePicker
-              label="Date To"
-              value={dateTo}
-              onChange={setDateTo}
-              placeholder="Select end date"
-            />
-          </div>
+          {/* Row 2: Dates with range calendar picker (same as order) */}
+          <DateRangePicker
+            label="Service Dates"
+            from={dateFrom}
+            to={dateTo}
+            onChange={(from, to) => {
+              setDateFrom(from);
+              setDateTo(to);
+            }}
+          />
 
           {/* Row 3: Supplier (filtered by role=supplier) */}
           <div>
