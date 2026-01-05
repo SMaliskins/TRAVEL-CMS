@@ -1203,3 +1203,14 @@ Details:
 - Need to move search to SQL query
 
 ---
+
+## 2026-01-05
+**CODE WRITER**
+Task: Fix search to work with party_person table
+Result: Implemented fallback search
+Changes:
+- First searches display_name in party table (SQL ilike)
+- If no results, searches first_name/last_name in party_person
+- Then fetches matching parties
+
+---
