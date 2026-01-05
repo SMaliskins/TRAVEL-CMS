@@ -3,7 +3,7 @@ export type DirectoryRole = "client" | "supplier" | "subagent";
 export type SubagentCommissionType = "percentage" | "fixed";
 
 export interface SupplierDetails {
-  activityArea?: string;
+  // No additional fields needed for Supplier role
 }
 
 export interface SubagentDetails {

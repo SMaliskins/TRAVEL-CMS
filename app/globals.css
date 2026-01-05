@@ -24,3 +24,159 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Modern animations for form fields */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInZoom {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeInSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Green border animation for Main details container - instant highlight */
+@keyframes greenBorderDraw {
+  0% {
+    border-color: rgba(34, 197, 94, 0);
+  }
+  100% {
+    border-color: #22c55e;
+  }
+}
+
+@keyframes greenBorderComplete {
+  0% {
+    border-color: rgba(34, 197, 94, 0);
+  }
+  99% {
+    border-color: rgba(34, 197, 94, 0);
+  }
+  100% {
+    border-color: rgba(34, 197, 94, 0.8);
+  }
+}
+
+
+@keyframes checkmarkAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-180deg);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(0) rotate(-180deg);
+  }
+  85% {
+    opacity: 0.8;
+    transform: scale(1.2) rotate(10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* Main details container with green border animation */
+.main-details-saved {
+  position: relative;
+}
+
+.main-details-saved::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  border-radius: 1rem;
+  border: 3px solid;
+  border-color: transparent;
+  animation: greenBorderDraw 0.3s ease-out forwards;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Saved field - simple green border */
+.saved-field-input {
+  border-color: rgba(34, 197, 94, 0.7) !important;
+  background: linear-gradient(to bottom right, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.06)) !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2) !important;
+}
+
+/* Modern 2025 design tokens */
+:root {
+  --input-border: rgba(0, 0, 0, 0.08);
+  --input-border-hover: rgba(0, 0, 0, 0.12);
+  --input-border-focus: rgba(0, 0, 0, 0.2);
+  --input-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --input-shadow-focus: 0 0 0 3px rgba(0, 0, 0, 0.04);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Modern input styling */
+.modern-input {
+  border: 1px solid var(--input-border);
+  box-shadow: var(--input-shadow);
+  transition: all 0.2s var(--transition-smooth);
+}
+
+.modern-input:hover {
+  border-color: var(--input-border-hover);
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.04);
+}
+
+.modern-input:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+  outline: none;
+}
+
+/* Modern card styling */
+.modern-card {
+  box-shadow: var(--card-shadow);
+  transition: all 0.3s var(--transition-smooth);
+}
+
+.modern-card:hover {
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-1px);
+}
