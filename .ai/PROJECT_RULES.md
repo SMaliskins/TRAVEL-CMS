@@ -817,6 +817,11 @@ Details: see .ai/logs/DB_REPORT.md (section "Directory mapping")
 - Цикл продолжается пока задача не решена
 - Runner контролирует и может прервать/перенаправить цикл
 
+### Версионирование (обязательно)
+- При каждом релизе (push в feature/x или main) версия в `package.json` повышается на **0.0.1**
+- CODE WRITER обязан обновить версию перед коммитом
+- Формат версии: MAJOR.MINOR.PATCH (semver)
+
 ---
 
 This document overrides all previous execution rules.
