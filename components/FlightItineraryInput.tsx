@@ -14,15 +14,19 @@ export interface FlightSegment {
   arrivalCity?: string; // City name (London)
   arrivalCountry?: string; // Country code (GB)
   departureDate: string; // YYYY-MM-DD
-  departureTime: string; // HH:mm
+  departureTimeScheduled: string; // HH:mm - scheduled
+  departureTimeActual?: string; // HH:mm - actual/real time
   arrivalDate: string; // YYYY-MM-DD
-  arrivalTime: string; // HH:mm
+  arrivalTimeScheduled: string; // HH:mm - scheduled
+  arrivalTimeActual?: string; // HH:mm - actual/real time
   departureTerminal?: string;
   arrivalTerminal?: string;
   departureGate?: string;
   arrivalGate?: string;
   aircraft?: string;
-  status: "on_time" | "delayed" | "cancelled" | "landed" | "scheduled";
+  duration?: string; // e.g., "1h 45m"
+  departureStatus: "on_time" | "delayed" | "cancelled" | "landed" | "scheduled";
+  arrivalStatus: "on_time" | "delayed" | "cancelled" | "landed" | "scheduled";
   statusNote?: string;
 }
 
@@ -32,56 +36,53 @@ interface FlightItineraryInputProps {
   readonly?: boolean;
 }
 
-// Format date for display (Tue 6 Jan)
+// Format date for display (06.01.2026)
 function formatFlightDate(dateStr: string): string {
   if (!dateStr) return "";
   const date = new Date(dateStr + "T00:00:00");
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`;
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
-// Calculate time until departure
-function getTimeUntilDeparture(dateStr: string, timeStr: string): string {
-  if (!dateStr || !timeStr) return "";
+// Calculate flight duration from times
+function calculateDuration(depTime: string, arrTime: string): string {
+  if (!depTime || !arrTime) return "";
   
-  const departure = new Date(`${dateStr}T${timeStr}:00`);
-  const now = new Date();
-  const diffMs = departure.getTime() - now.getTime();
+  const [depH, depM] = depTime.split(":").map(Number);
+  const [arrH, arrM] = arrTime.split(":").map(Number);
   
-  if (diffMs < 0) return "Departed";
+  let totalMinutes = (arrH * 60 + arrM) - (depH * 60 + depM);
+  if (totalMinutes < 0) totalMinutes += 24 * 60; // Next day arrival
   
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   
-  if (diffHours >= 24) {
-    const days = Math.floor(diffHours / 24);
-    return `Departs in ${days}d ${diffHours % 24}h`;
-  }
-  
-  return `Departs in ${diffHours}h ${diffMins}m`;
+  return `${hours}h ${minutes}m`;
 }
 
-// Status badge component
-function StatusBadge({ status }: { status: FlightSegment["status"] }) {
+// Status text component
+function StatusText({ status, time }: { status: FlightSegment["departureStatus"]; time?: string }) {
   const config = {
-    on_time: { label: "ON TIME", bg: "bg-green-600", text: "text-white" },
-    scheduled: { label: "SCHEDULED", bg: "bg-gray-500", text: "text-white" },
-    delayed: { label: "DELAYED", bg: "bg-yellow-500", text: "text-white" },
-    cancelled: { label: "CANCELLED", bg: "bg-red-600", text: "text-white" },
-    landed: { label: "LANDED", bg: "bg-blue-600", text: "text-white" },
+    on_time: { label: "On time", color: "text-green-600" },
+    scheduled: { label: "Scheduled", color: "text-gray-500" },
+    delayed: { label: "Delayed", color: "text-red-600" },
+    cancelled: { label: "Cancelled", color: "text-red-600" },
+    landed: { label: "Landed", color: "text-green-600" },
   };
   
-  const { label, bg, text } = config[status] || config.scheduled;
+  const { label, color } = config[status] || config.scheduled;
   
   return (
-    <span className={`px-2 py-0.5 text-xs font-bold rounded ${bg} ${text}`}>
-      {label}
-    </span>
+    <div className="text-right">
+      <div className={`text-sm font-medium ${color}`}>{label}</div>
+      {time && <div className={`text-xl font-bold ${color}`}>{time}</div>}
+    </div>
   );
 }
 
-// Flight Card Component (FlightStats style)
+// Flight Card Component (Swiss/FlightStats style)
 function FlightCard({ 
   segment, 
   onEdit, 
@@ -93,109 +94,140 @@ function FlightCard({
   onRemove: () => void;
   readonly?: boolean;
 }) {
-  const timeUntil = getTimeUntilDeparture(segment.departureDate, segment.departureTime);
+  const duration = segment.duration || calculateDuration(
+    segment.departureTimeScheduled, 
+    segment.arrivalTimeScheduled
+  );
   
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-semibold text-gray-900">
-            {segment.departure}
-          </span>
-          <span className="text-gray-400">→</span>
-          <span className="text-xl font-semibold text-gray-900">
-            {segment.arrival}
-          </span>
+      {/* Header - Date and Flight Number */}
+      <div className="px-5 py-4 flex items-start justify-between">
+        <div className="text-gray-700 font-medium">
+          {formatFlightDate(segment.departureDate)}
         </div>
         <div className="text-right">
-          <div className="font-semibold text-gray-900">
-            {segment.airline ? `${segment.airline} ${segment.flightNumber}` : segment.flightNumber}
+          <div className="flex items-center gap-2 justify-end">
+            {/* Airline logo placeholder - red plane icon for Swiss style */}
+            <svg className="h-4 w-4 text-red-600" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+            </svg>
+            <span className="font-bold text-gray-900">{segment.flightNumber}</span>
           </div>
-          <div className="text-sm text-gray-500">
-            {formatFlightDate(segment.departureDate)}
+          {segment.airline && (
+            <div className="text-sm text-gray-500 mt-0.5">{segment.airline}</div>
+          )}
+        </div>
+      </div>
+      
+      {/* Divider */}
+      <div className="border-t border-gray-100" />
+      
+      {/* Route section - GVA → LHR with duration */}
+      <div className="px-5 py-6">
+        <div className="flex items-center justify-between">
+          {/* Departure */}
+          <div>
+            <div className="text-3xl font-bold text-gray-900">{segment.departure}</div>
+            <div className="text-sm text-gray-500 mt-1">
+              {segment.departureCity || segment.departure}
+            </div>
+          </div>
+          
+          {/* Center - Plane icon and duration */}
+          <div className="flex-1 flex flex-col items-center px-4">
+            <svg className="h-6 w-6 text-gray-400 mb-1" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+            </svg>
+            {duration && (
+              <div className="text-sm text-gray-500">Duration: {duration}</div>
+            )}
+          </div>
+          
+          {/* Arrival */}
+          <div className="text-right">
+            <div className="text-3xl font-bold text-gray-900">{segment.arrival}</div>
+            <div className="text-sm text-gray-500 mt-1">
+              {segment.arrivalCity || segment.arrival}
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Status bar */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-b border-gray-100 flex items-center gap-3">
-        <StatusBadge status={segment.status} />
-        {timeUntil && (
-          <span className="text-sm text-gray-600">{timeUntil}</span>
-        )}
-      </div>
-      
-      {/* Departure info */}
-      <div className="px-4 py-3 grid grid-cols-4 gap-4 border-b border-gray-100">
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Departure</div>
-          <div className="font-medium text-gray-900">
-            {segment.departureCity || segment.departure}
-            {segment.departureCountry && `, ${segment.departureCountry}`}
+      {/* Time details - Scheduled vs Actual */}
+      <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
+        <div className="flex justify-between">
+          {/* Departure times */}
+          <div>
+            <StatusText 
+              status={segment.departureStatus} 
+              time={segment.departureTimeActual || segment.departureTimeScheduled}
+            />
+            <div className="mt-2">
+              <div className="text-xs text-gray-500">Scheduled</div>
+              <div className="text-lg font-semibold text-gray-900">
+                {segment.departureTimeScheduled || "—"}
+              </div>
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Scheduled</div>
-          <div className="font-medium text-gray-900">{segment.departureTime || "—"}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Gate</div>
-          <div className="font-medium text-gray-900">{segment.departureGate || "N/A"}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Terminal</div>
-          <div className="font-medium text-gray-900">{segment.departureTerminal || "—"}</div>
-        </div>
-      </div>
-      
-      {/* Arrival info */}
-      <div className="px-4 py-3 grid grid-cols-4 gap-4">
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Arrival</div>
-          <div className="font-medium text-gray-900">
-            {segment.arrivalCity || segment.arrival}
-            {segment.arrivalCountry && `, ${segment.arrivalCountry}`}
+          
+          {/* Arrival times */}
+          <div className="text-right">
+            <StatusText 
+              status={segment.arrivalStatus} 
+              time={segment.arrivalTimeActual || segment.arrivalTimeScheduled}
+            />
+            <div className="mt-2">
+              <div className="text-xs text-gray-500">Scheduled</div>
+              <div className="text-lg font-semibold text-gray-900">
+                {segment.arrivalTimeScheduled || "—"}
+              </div>
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Scheduled</div>
-          <div className="font-medium text-gray-900">{segment.arrivalTime || "—"}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Gate</div>
-          <div className="font-medium text-gray-900">{segment.arrivalGate || "N/A"}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide">Terminal</div>
-          <div className="font-medium text-gray-900">{segment.arrivalTerminal || "—"}</div>
         </div>
       </div>
       
-      {/* Footer with source */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-        <span className="text-xs text-gray-500">
-          Showing local time at airports
-        </span>
-        {!readonly && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-xs text-blue-600 hover:text-blue-800"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="text-xs text-red-600 hover:text-red-800"
-            >
-              Remove
-            </button>
+      {/* Terminal info (if available) */}
+      {(segment.departureTerminal || segment.arrivalTerminal) && (
+        <div className="px-5 py-3 border-t border-gray-100 flex justify-between text-sm">
+          <div>
+            {segment.departureTerminal && (
+              <span className="text-gray-600">
+                Terminal {segment.departureTerminal}
+                {segment.departureGate && ` • Gate ${segment.departureGate}`}
+              </span>
+            )}
           </div>
-        )}
-      </div>
+          <div>
+            {segment.arrivalTerminal && (
+              <span className="text-gray-600">
+                Terminal {segment.arrivalTerminal}
+                {segment.arrivalGate && ` • Gate ${segment.arrivalGate}`}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Actions */}
+      {!readonly && (
+        <div className="px-5 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-sm text-red-600 hover:text-red-800 font-medium"
+          >
+            Remove
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -246,7 +278,7 @@ function SegmentEditForm({
             type="text"
             value={form.airline || ""}
             onChange={(e) => updateField("airline", e.target.value)}
-            placeholder="Swiss"
+            placeholder="SWISS"
             className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
           />
         </div>
@@ -273,25 +305,21 @@ function SegmentEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Status</label>
-          <select
-            value={form.status}
-            onChange={(e) => updateField("status", e.target.value)}
+          <label className="block text-xs text-gray-500 mb-1">Duration</label>
+          <input
+            type="text"
+            value={form.duration || ""}
+            onChange={(e) => updateField("duration", e.target.value)}
+            placeholder="1h 45m"
             className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-          >
-            <option value="scheduled">Scheduled</option>
-            <option value="on_time">On Time</option>
-            <option value="delayed">Delayed</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="landed">Landed</option>
-          </select>
+          />
         </div>
       </div>
       
       {/* Departure */}
       <div>
         <div className="text-xs font-medium text-gray-700 mb-2">DEPARTURE</div>
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-6 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Airport</label>
             <input
@@ -314,13 +342,35 @@ function SegmentEditForm({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Time</label>
+            <label className="block text-xs text-gray-500 mb-1">Scheduled</label>
             <input
               type="time"
-              value={form.departureTime}
-              onChange={(e) => updateField("departureTime", e.target.value)}
+              value={form.departureTimeScheduled}
+              onChange={(e) => updateField("departureTimeScheduled", e.target.value)}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Actual</label>
+            <input
+              type="time"
+              value={form.departureTimeActual || ""}
+              onChange={(e) => updateField("departureTimeActual", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Status</label>
+            <select
+              value={form.departureStatus}
+              onChange={(e) => updateField("departureStatus", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="scheduled">Scheduled</option>
+              <option value="on_time">On Time</option>
+              <option value="delayed">Delayed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Terminal</label>
@@ -332,23 +382,13 @@ function SegmentEditForm({
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Gate</label>
-            <input
-              type="text"
-              value={form.departureGate || ""}
-              onChange={(e) => updateField("departureGate", e.target.value)}
-              placeholder="A12"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
         </div>
       </div>
       
       {/* Arrival */}
       <div>
         <div className="text-xs font-medium text-gray-700 mb-2">ARRIVAL</div>
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-6 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Airport</label>
             <input
@@ -366,18 +406,41 @@ function SegmentEditForm({
               type="text"
               value={form.arrivalCity || ""}
               onChange={(e) => updateField("arrivalCity", e.target.value)}
-              placeholder="London"
+              placeholder="London Heathrow"
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Time</label>
+            <label className="block text-xs text-gray-500 mb-1">Scheduled</label>
             <input
               type="time"
-              value={form.arrivalTime}
-              onChange={(e) => updateField("arrivalTime", e.target.value)}
+              value={form.arrivalTimeScheduled}
+              onChange={(e) => updateField("arrivalTimeScheduled", e.target.value)}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Actual</label>
+            <input
+              type="time"
+              value={form.arrivalTimeActual || ""}
+              onChange={(e) => updateField("arrivalTimeActual", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Status</label>
+            <select
+              value={form.arrivalStatus}
+              onChange={(e) => updateField("arrivalStatus", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="scheduled">Scheduled</option>
+              <option value="on_time">On Time</option>
+              <option value="delayed">Delayed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="landed">Landed</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Terminal</label>
@@ -386,16 +449,6 @@ function SegmentEditForm({
               value={form.arrivalTerminal || ""}
               onChange={(e) => updateField("arrivalTerminal", e.target.value)}
               placeholder="2"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Gate</label>
-            <input
-              type="text"
-              value={form.arrivalGate || ""}
-              onChange={(e) => updateField("arrivalGate", e.target.value)}
-              placeholder="B5"
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
           </div>
@@ -530,10 +583,11 @@ export default function FlightItineraryInput({
             departure: routeMatch?.[1] || "",
             arrival: routeMatch?.[2] || "",
             departureDate: dateStr,
-            departureTime: timeMatch?.[1] || "",
+            departureTimeScheduled: timeMatch?.[1] || "",
             arrivalDate: dateStr,
-            arrivalTime: timeMatch?.[2] || "",
-            status: "scheduled",
+            arrivalTimeScheduled: timeMatch?.[2] || "",
+            departureStatus: "scheduled",
+            arrivalStatus: "scheduled",
           });
         }
       }
@@ -561,10 +615,11 @@ export default function FlightItineraryInput({
       departure: "",
       arrival: "",
       departureDate: "",
-      departureTime: "",
+      departureTimeScheduled: "",
       arrivalDate: "",
-      arrivalTime: "",
-      status: "scheduled",
+      arrivalTimeScheduled: "",
+      departureStatus: "scheduled",
+      arrivalStatus: "scheduled",
     };
     onSegmentsChange([...segments, newSegment]);
     setEditingId(newSegment.id);

@@ -21,14 +21,22 @@ import { NextRequest, NextResponse } from "next/server";
 interface FlightSegment {
   id: string;
   flightNumber: string;
+  airline?: string;
   departure: string;
+  departureCity?: string;
   arrival: string;
+  arrivalCity?: string;
   departureDate: string;
-  departureTime: string;
+  departureTimeScheduled: string;
+  departureTimeActual?: string;
   arrivalDate: string;
-  arrivalTime: string;
-  aircraft?: string;
-  status?: "scheduled" | "delayed" | "cancelled" | "landed";
+  arrivalTimeScheduled: string;
+  arrivalTimeActual?: string;
+  duration?: string;
+  departureTerminal?: string;
+  arrivalTerminal?: string;
+  departureStatus: "scheduled" | "on_time" | "delayed" | "cancelled" | "landed";
+  arrivalStatus: "scheduled" | "on_time" | "delayed" | "cancelled" | "landed";
 }
 
 export async function POST(request: NextRequest) {
@@ -74,19 +82,25 @@ Return a JSON array of flight segments with this structure:
 {
   "segments": [
     {
-      "flightNumber": "BT401",
-      "departure": "RIX",
-      "arrival": "FCO",
-      "departureDate": "2026-01-15",
-      "departureTime": "08:30",
-      "arrivalDate": "2026-01-15",
-      "arrivalTime": "11:45",
-      "aircraft": "Airbus A220"
+      "flightNumber": "LX348",
+      "airline": "SWISS",
+      "departure": "GVA",
+      "departureCity": "Geneva",
+      "arrival": "LHR",
+      "arrivalCity": "London Heathrow",
+      "departureDate": "2026-01-06",
+      "departureTimeScheduled": "15:55",
+      "arrivalDate": "2026-01-06",
+      "arrivalTimeScheduled": "16:40",
+      "duration": "1h 45m",
+      "departureTerminal": "1",
+      "arrivalTerminal": "2"
     }
   ]
 }
 
 Use IATA airport codes (3 letters). Dates in YYYY-MM-DD format. Times in HH:mm format.
+Calculate duration if possible. Extract terminal info if visible.
 If you cannot determine a value, leave it empty string.
 Only return valid JSON, no other text.`
             },
@@ -129,17 +143,24 @@ Only return valid JSON, no other text.`
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           const segments: FlightSegment[] = (parsed.segments || []).map(
-            (seg: Partial<FlightSegment>, index: number) => ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (seg: any, index: number) => ({
               id: `seg-${Date.now()}-${index}`,
               flightNumber: seg.flightNumber || "",
+              airline: seg.airline || "",
               departure: seg.departure || "",
+              departureCity: seg.departureCity || "",
               arrival: seg.arrival || "",
+              arrivalCity: seg.arrivalCity || "",
               departureDate: seg.departureDate || "",
-              departureTime: seg.departureTime || "",
+              departureTimeScheduled: seg.departureTimeScheduled || seg.departureTime || "",
               arrivalDate: seg.arrivalDate || seg.departureDate || "",
-              arrivalTime: seg.arrivalTime || "",
-              aircraft: seg.aircraft || "",
-              status: "scheduled",
+              arrivalTimeScheduled: seg.arrivalTimeScheduled || seg.arrivalTime || "",
+              duration: seg.duration || "",
+              departureTerminal: seg.departureTerminal || "",
+              arrivalTerminal: seg.arrivalTerminal || "",
+              departureStatus: "scheduled",
+              arrivalStatus: "scheduled",
             })
           );
 
