@@ -27,5 +27,6 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | 13 | Directory | Fix Directory search - include company_name from party_company | CODE WRITER | DONE | - | - | FIXED per PROJECT_LOG.md [2026-01-05 01:26]. Поиск теперь включает company_name. |
 | 14 | System | Fix ESLint errors (set-state-in-effect) | CODE WRITER | TODO | - | - | ~20 ESLint errors remain in: directory/page.tsx, directory/[id]/page.tsx, OrderServicesBlock.tsx. Pattern: setState inside useEffect |
 | 15 | System | Fix TypeScript types consistency (DirectoryRecord vs Form) | CODE WRITER | TODO | - | - | DirectoryForm uses regNo/address/contactPerson but DirectoryRecord uses regNumber/legalAddress. Need to unify field names. |
+| 16 | Deploy | CRITICAL: Fix Vercel build - Supabase init error | CODE WRITER | TODO | - | - | Build fails: "supabaseUrl is required" in /api/orders/create. Task: .ai/tasks/code-writer-fix-vercel-build-supabase-init.md |
 | 4 | Directory | Verify directory pages functionality | - | TODO | - | - | Test /directory, /directory/new, /directory/[id] pages after fixes |
 | 5 | System | Establish logging structure | ARCHITECT | DONE | - | - | Logging files restored |

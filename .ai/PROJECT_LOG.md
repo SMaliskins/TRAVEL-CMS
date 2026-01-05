@@ -1026,3 +1026,17 @@ Branch: cursor/cursor-agent-initiation-fe61
 - Задачи #12 (clientType initialization) и #13 (search company_name) отмечены как DONE в логе
 
 ---
+
+## [2026-01-05 16:00] RUNNER (ARCHITECT) — Task Created: Fix Vercel Build Supabase Initialization
+Branch: cursor/cursor-agent-initiation-fe61
+Задача: Create task for CODE WRITER to fix Vercel deployment error
+Результат: RESULT
+Вывод / Решение:
+- SM reported: Vercel build fails with "supabaseUrl is required" error
+- Root cause: `/app/api/orders/create/route.ts` creates Supabase client in module scope with `!` assertion
+- Environment variables not available at Vercel build time
+- Solution: Import `supabaseAdmin` from `lib/supabaseAdmin.ts` (has fallback for build)
+- Task created: `.ai/tasks/code-writer-fix-vercel-build-supabase-init.md`
+Next Step: CODE WRITER to implement fix
+
+---
