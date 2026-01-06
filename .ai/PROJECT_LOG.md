@@ -3485,3 +3485,51 @@ Branch: feature/x
 - `components/DirectoryForm.tsx` - добавлен useEffect для синхронизации passport fields
 
 ---
+
+## [2026-01-07 01:50] CODE_WRITER — START: Fix passport fields not saving in PUT endpoint
+Branch: feature/x
+Задача: Fix passport fields not saving in PUT endpoint
+Результат: START
+Вывод / Решение: 
+
+**Проблема:**
+Паспорт все равно не сохраняется после исправления синхронизации.
+
+**Анализ:**
+В `app/api/directory/[id]/route.ts` условие `if (partyType === "person" || updates.firstName || updates.lastName)` может не сработать, если:
+1. Пользователь редактирует только passport fields (не меняя firstName/lastName)
+2. `partyType` не "person" (например, если это компания с ролью client)
+
+**Решение:**
+Добавить проверку на наличие passport fields в updates, чтобы они всегда сохранялись, если они есть в запросе.
+
+**Файл:**
+`app/api/directory/[id]/route.ts`
+
+---
+
+## [2026-01-07 01:50] CODE_WRITER — RESULT: Fix passport fields not saving in PUT endpoint
+Branch: feature/x
+Задача: Fix passport fields not saving in PUT endpoint
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Исправлена логика в PUT endpoint для сохранения passport fields даже когда редактируются только passport fields (без изменения firstName/lastName).
+
+**Изменения:**
+`app/api/directory/[id]/route.ts`:
+- Добавлена проверка `hasPassportFields` для определения наличия passport fields в updates
+- Условие обновлено: `if (partyType === "person" || hasPersonFields || hasPassportFields)`
+- Добавлена проверка `if (Object.keys(personUpdates).length > 0)` перед upsert
+- Улучшена обработка ошибок: возврат ошибки пользователю вместо только логирования
+
+**Результат:**
+✅ Passport fields теперь сохраняются даже если редактируются только passport fields
+✅ Улучшена обработка ошибок при сохранении person record
+✅ Добавлено логирование для отладки
+
+**Файлы:**
+- `app/api/directory/[id]/route.ts` - исправлена логика сохранения passport fields
+
+---
