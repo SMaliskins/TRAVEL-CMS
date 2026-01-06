@@ -3187,3 +3187,23 @@ Branch: feature/x
 - `app/api/directory/route.ts` - обновлен
 
 ---
+
+## [2026-01-07 01:50] CODE_WRITER — RESULT: Fix readonly prop error in DirectoryForm
+Branch: feature/x
+Задача: Fix "readonly is not defined" error in DirectoryForm.tsx
+Результат: RESULT
+Вывод / Решение: 
+
+**Проблема:**
+Ошибка Runtime ReferenceError: "readonly is not defined" в `components/DirectoryForm.tsx` на строке 702.
+
+**Причина:**
+В компоненте `PassportDetailsInput` использовался prop `readonly={readonly}`, но переменная `readonly` не определена в `DirectoryForm`.
+
+**Решение:**
+Заменил `readonly={readonly}` на `readonly={false}`, так как `DirectoryForm` всегда позволяет редактирование (нет режима readonly).
+
+**Файл:**
+`components/DirectoryForm.tsx` (строка 702)
+
+---

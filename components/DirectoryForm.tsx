@@ -699,7 +699,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         }
                         markFieldDirty("passport");
                       }}
-                      readonly={readonly}
+                      readonly={false}
                     />
                   </div>
                 </>
