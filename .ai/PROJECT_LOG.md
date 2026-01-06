@@ -3533,3 +3533,23 @@ Branch: feature/x
 - `app/api/directory/[id]/route.ts` - исправлена логика сохранения passport fields
 
 ---
+
+## [2026-01-07 01:53] CODE_WRITER — START: Fix nationality column not being added in migration
+Branch: feature/x
+Задача: Fix nationality column not being added in migration
+Результат: START
+Вывод / Решение: 
+
+**Проблема:**
+Ошибка: "Could not find the 'nationality' column of 'party_person' in the schema cache"
+
+**Причина:**
+Миграция добавляет `nationality` только если `citizenship` не существует. Но если `citizenship` уже существует, то `nationality` не добавляется, а код пытается сохранить в несуществующую колонку.
+
+**Решение:**
+Исправить миграцию, чтобы `nationality` всегда добавлялась, независимо от наличия `citizenship`. `nationality` и `citizenship` - это разные поля (citizenship = страна гражданства, nationality = страна национальности).
+
+**Файл:**
+`migrations/add_passport_fields_to_party_person.sql`
+
+---

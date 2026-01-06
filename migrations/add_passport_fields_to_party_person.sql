@@ -69,26 +69,18 @@ BEGIN
         COMMENT ON COLUMN public.party_person.passport_full_name IS 'Full name exactly as shown in passport document';
     END IF;
 
-    -- Add nationality if not exists (check if citizenship exists first)
-    -- If citizenship exists, we'll use it; otherwise add nationality
+    -- Add nationality if not exists
+    -- Note: nationality is separate from citizenship (citizenship = country of citizenship, nationality = country of nationality)
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' 
         AND table_name = 'party_person' 
         AND column_name = 'nationality'
     ) THEN
-        -- Only add nationality if citizenship doesn't exist
-        IF NOT EXISTS (
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_schema = 'public' 
-            AND table_name = 'party_person' 
-            AND column_name = 'citizenship'
-        ) THEN
-            ALTER TABLE public.party_person 
-            ADD COLUMN nationality text;
-            
-            COMMENT ON COLUMN public.party_person.nationality IS 'Nationality of the person';
-        END IF;
+        ALTER TABLE public.party_person 
+        ADD COLUMN nationality text;
+        
+        COMMENT ON COLUMN public.party_person.nationality IS 'Nationality of the person (may differ from citizenship)';
     END IF;
 END $$;
 
