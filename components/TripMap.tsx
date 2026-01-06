@@ -199,52 +199,99 @@ export default function TripMap({
   const debt = amountToPay - amountPaid;
   const paymentPercentage = amountToPay > 0 ? (amountPaid / amountToPay) * 100 : 0;
 
+  // Compact mode when height is small (embedded in Client section)
+  const isCompact = className?.includes("h-32") || className?.includes("h-24");
+
   if (!isClient) {
     return (
-      <div className={`bg-gray-100 rounded-lg animate-pulse ${className}`} style={{ height: 300 }}>
-        <div className="flex items-center justify-center h-full text-gray-400">
-          Loading map...
+      <div className={`bg-gray-100 rounded-lg animate-pulse ${className}`} style={{ height: isCompact ? "100%" : 200 }}>
+        <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+          Loading...
         </div>
       </div>
     );
   }
 
+  // Compact version - just the map, no headers
+  if (isCompact) {
+    return (
+      <div className={`${className}`} style={{ height: "100%" }}>
+        <link
+          rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossOrigin=""
+        />
+        {destinationCoords.length > 0 ? (
+          <MapContainer
+            center={mapCenter}
+            zoom={destinationCoords.length === 1 ? 5 : 3}
+            style={{ height: "100%", width: "100%" }}
+            scrollWheelZoom={false}
+            zoomControl={false}
+            attributionControl={false}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {paths.map((path, idx) => (
+              <Polyline
+                key={idx}
+                positions={path}
+                pathOptions={{ color: "#3b82f6", weight: 2, dashArray: "6, 6", opacity: 0.7 }}
+              />
+            ))}
+            {destinationCoords.map((dest) => (
+              <Marker key={dest.name} position={[dest.lat, dest.lng]}>
+                <Popup>
+                  <div className="text-center">
+                    <div>{countryCodeToFlag(dest.countryCode || "")}</div>
+                    <div className="font-medium text-sm">{dest.name}</div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+            No destinations
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Trip info header */}
+    <div className={`space-y-3 ${className}`}>
+      {/* Trip info header - compact */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-            The Trip
-          </h3>
-          {destinations.length > 0 && (
-            <div className="flex items-center gap-2 mt-1">
-              {destinations.map((dest, idx) => (
-                <span key={dest.city} className="flex items-center text-sm">
-                  {dest.countryCode && (
-                    <span className="mr-1">{countryCodeToFlag(dest.countryCode)}</span>
-                  )}
-                  <span className="font-medium">{dest.city}</span>
-                  {idx < destinations.length - 1 && (
-                    <span className="ml-2 text-gray-400">→</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {destinations.map((dest, idx) => (
+              <span key={dest.city} className="flex items-center text-sm">
+                {dest.countryCode && (
+                  <span className="mr-1">{countryCodeToFlag(dest.countryCode)}</span>
+                )}
+                <span className="font-medium">{dest.city}</span>
+                {idx < destinations.length - 1 && (
+                  <span className="ml-2 text-gray-400">→</span>
+                )}
+              </span>
+            ))}
+          </div>
         </div>
         <div className={`text-right ${tripInfo.color}`}>
-          <div className="text-2xl font-bold">{tripInfo.days > 0 ? tripInfo.days : "—"}</div>
+          <div className="text-lg font-bold">{tripInfo.days > 0 ? tripInfo.days : "—"}</div>
           <div className="text-xs">{tripInfo.label}</div>
         </div>
       </div>
 
-      {/* Map */}
+      {/* Map - smaller */}
       {destinationCoords.length > 0 && (
         <div
           ref={mapRef}
           className="rounded-lg overflow-hidden border border-gray-200"
-          style={{ height: 250 }}
+          style={{ height: 150 }}
         >
           <link
             rel="stylesheet"

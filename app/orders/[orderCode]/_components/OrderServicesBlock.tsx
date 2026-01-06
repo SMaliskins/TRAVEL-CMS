@@ -50,6 +50,7 @@ export default function OrderServicesBlock({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editServiceId, setEditServiceId] = useState<string | null>(null);
 
   // Fetch services from API
   const fetchServices = useCallback(async () => {
@@ -330,7 +331,9 @@ export default function OrderServicesBlock({
                         return (
                           <tr
                             key={service.id}
-                            className="transition-colors hover:bg-gray-50"
+                            className="transition-colors hover:bg-gray-50 cursor-pointer"
+                            onDoubleClick={() => setEditServiceId(service.id)}
+                            title="Double-click to edit"
                           >
                             <td className="px-3 py-2 text-xs text-gray-700">
                               {service.category}
@@ -436,6 +439,212 @@ export default function OrderServicesBlock({
           onServiceAdded={handleServiceAdded}
         />
       )}
+
+      {/* Edit Service Modal - simple inline editor */}
+      {editServiceId && (
+        <EditServiceModal
+          service={services.find(s => s.id === editServiceId)!}
+          orderCode={orderCode}
+          onClose={() => setEditServiceId(null)}
+          onServiceUpdated={(updated) => {
+            setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
+            setEditServiceId(null);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// Simple Edit Service Modal
+function EditServiceModal({
+  service,
+  orderCode,
+  onClose,
+  onServiceUpdated,
+}: {
+  service: Service;
+  orderCode: string;
+  onClose: () => void;
+  onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [name, setName] = useState(service.name);
+  const [category, setCategory] = useState(service.category);
+  const [servicePrice, setServicePrice] = useState(service.servicePrice.toString());
+  const [clientPrice, setClientPrice] = useState(service.clientPrice.toString());
+  const [resStatus, setResStatus] = useState(service.resStatus);
+  const [refNr, setRefNr] = useState(service.refNr || "");
+  const [ticketNr, setTicketNr] = useState(service.ticketNr || "");
+
+  const handleSave = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          service_name: name,
+          category,
+          service_price: parseFloat(servicePrice) || 0,
+          client_price: parseFloat(clientPrice) || 0,
+          res_status: resStatus,
+          ref_nr: refNr,
+          ticket_nr: ticketNr,
+        }),
+      });
+
+      if (response.ok) {
+        onServiceUpdated({
+          id: service.id,
+          name,
+          category,
+          servicePrice: parseFloat(servicePrice) || 0,
+          clientPrice: parseFloat(clientPrice) || 0,
+          resStatus,
+          refNr,
+          ticketNr,
+        });
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setError(errData.error || "Failed to update service");
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      setError("Network error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">Edit Service</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              >
+                {["Flight", "Hotel", "Transfer", "Tour", "Insurance", "Visa", "Rent a Car", "Cruise", "Other"].map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={resStatus}
+                onChange={(e) => setResStatus(e.target.value as Service["resStatus"])}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="booked">Booked</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="changed">Changed</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Service Price (€)</label>
+              <input
+                type="number"
+                value={servicePrice}
+                onChange={(e) => setServicePrice(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Price (€)</label>
+              <input
+                type="number"
+                value={clientPrice}
+                onChange={(e) => setClientPrice(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ref Nr</label>
+              <input
+                type="text"
+                value={refNr}
+                onChange={(e) => setRefNr(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ticket Nr</label>
+              <input
+                type="text"
+                value={ticketNr}
+                onChange={(e) => setTicketNr(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            {isSubmitting ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -225,6 +225,7 @@ export default function OrderPage({
               clientEmail={order.client_email}
               amountTotal={order.amount_total}
               amountPaid={order.amount_paid}
+              orderType={order.order_type}
               onUpdate={(updates) => {
                 setOrder({
                   ...order,

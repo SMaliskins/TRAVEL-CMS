@@ -16,6 +16,7 @@ interface CityMultiSelectProps {
   onChange: (cities: CityWithCountry[]) => void;
   onCountryChange?: (countries: string[]) => void; // Array of unique countries
   error?: string;
+  placeholder?: string;
 }
 
 export default function CityMultiSelect({
@@ -23,6 +24,7 @@ export default function CityMultiSelect({
   onChange,
   onCountryChange,
   error,
+  placeholder = "Search cities...",
 }: CityMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,7 +139,7 @@ export default function CityMultiSelect({
           onFocus={() => {
             if (searchQuery.length >= 2) setIsOpen(true);
           }}
-          placeholder="Search cities..."
+          placeholder={placeholder}
           className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
             error
               ? "border-red-300 focus:border-red-500 focus:ring-red-500"
