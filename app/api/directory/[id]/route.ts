@@ -506,7 +506,13 @@ export async function PUT(
       if (updates.passportExpiryDate !== undefined) personUpdates.passport_expiry_date = updates.passportExpiryDate || null;
       if (updates.passportIssuingCountry !== undefined) personUpdates.passport_issuing_country = updates.passportIssuingCountry || null;
       if (updates.passportFullName !== undefined) personUpdates.passport_full_name = updates.passportFullName || null;
-      if (updates.nationality !== undefined) personUpdates.nationality = updates.nationality || null;
+      
+      // Nationality - only include if migration has been run (column exists)
+      // If column doesn't exist, we'll retry without it
+      const nationalityValue = updates.nationality !== undefined ? updates.nationality || null : undefined;
+      if (nationalityValue !== undefined) {
+        personUpdates.nationality = nationalityValue;
+      }
 
       // Only update if there are fields to update
       if (Object.keys(personUpdates).length > 0) {
@@ -517,7 +523,28 @@ export async function PUT(
             ...personUpdates,
           });
 
-        if (personError) {
+        // If error is about missing nationality column, retry without it
+        if (personError && personError.message?.includes("nationality") && nationalityValue !== undefined) {
+          console.warn("Nationality column not found, retrying without it. Please run migration to add nationality column.");
+          delete personUpdates.nationality;
+          
+          // Retry without nationality
+          const { error: retryError } = await supabaseAdmin
+            .from("party_person")
+            .upsert({
+              party_id: id,
+              ...personUpdates,
+            });
+
+          if (retryError) {
+            console.error("Error updating person (retry without nationality):", retryError);
+            console.error("Person updates attempted:", JSON.stringify(personUpdates, null, 2));
+            return NextResponse.json(
+              { error: `Failed to update person record: ${retryError.message}`, details: retryError.details },
+              { status: 500 }
+            );
+          }
+        } else if (personError) {
           console.error("Error updating person:", personError);
           console.error("Person updates attempted:", JSON.stringify(personUpdates, null, 2));
           return NextResponse.json(

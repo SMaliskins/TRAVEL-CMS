@@ -3581,3 +3581,20 @@ Branch: feature/x
 - `migrations/add_passport_fields_to_party_person.sql` - исправлена логика добавления nationality
 
 ---
+
+## [2026-01-07 01:55] CODE_WRITER — START: Add fallback for missing nationality column
+Branch: feature/x
+Задача: Add fallback for missing nationality column
+Результат: START
+Вывод / Решение: 
+
+**Проблема:**
+Ошибка: "Could not find the 'nationality' column of 'party_person' in the schema cache" - миграция еще не выполнена в БД.
+
+**Решение:**
+Добавить обработку ошибки: если ошибка связана с отсутствующей колонкой `nationality`, повторить запрос без этого поля. Это позволит сохранить остальные passport fields, даже если миграция еще не выполнена.
+
+**Файл:**
+`app/api/directory/[id]/route.ts`
+
+---
