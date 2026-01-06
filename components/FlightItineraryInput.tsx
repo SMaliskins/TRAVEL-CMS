@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+// Date formatting utilities available if needed
+// import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 export interface FlightSegment {
   id: string;
@@ -16,7 +17,7 @@ export interface FlightSegment {
   departureDate: string; // YYYY-MM-DD
   departureTimeScheduled: string; // HH:mm - scheduled
   departureTimeActual?: string; // HH:mm - actual/real time
-  arrivalDate: string; // YYYY-MM-DD
+  arrivalDate: string; // YYYY-MM-DD (can be +1 day from departure)
   arrivalTimeScheduled: string; // HH:mm - scheduled
   arrivalTimeActual?: string; // HH:mm - actual/real time
   departureTerminal?: string;
@@ -28,6 +29,15 @@ export interface FlightSegment {
   departureStatus: "on_time" | "delayed" | "cancelled" | "landed" | "scheduled";
   arrivalStatus: "on_time" | "delayed" | "cancelled" | "landed" | "scheduled";
   statusNote?: string;
+  // New fields
+  bookingClass?: string; // e.g., "Z", "Y", "C", "F"
+  cabinClass?: "economy" | "premium_economy" | "business" | "first";
+  bookingRef?: string; // PNR/Booking reference
+  ticketNumber?: string;
+  baggage?: string; // e.g., "2PC"
+  seat?: string; // e.g., "07A"
+  meal?: string;
+  passengerName?: string;
 }
 
 interface FlightItineraryInputProps {
@@ -186,6 +196,29 @@ function FlightCard({
           </div>
         </div>
       </div>
+      
+      {/* Booking info (if available) */}
+      {(segment.cabinClass || segment.seat || segment.baggage || segment.passengerName) && (
+        <div className="px-5 py-3 border-t border-gray-100">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {segment.cabinClass && (
+              <span className="text-gray-700 font-medium capitalize">
+                {segment.cabinClass.replace("_", " ")}
+                {segment.bookingClass && ` (${segment.bookingClass})`}
+              </span>
+            )}
+            {segment.seat && (
+              <span className="text-gray-600">Seat: {segment.seat}</span>
+            )}
+            {segment.baggage && (
+              <span className="text-gray-600">Baggage: {segment.baggage}</span>
+            )}
+            {segment.passengerName && (
+              <span className="text-gray-600">{segment.passengerName}</span>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Terminal info (if available) */}
       {(segment.departureTerminal || segment.arrivalTerminal) && (
@@ -454,6 +487,78 @@ function SegmentEditForm({
           </div>
         </div>
       </div>
+      
+      {/* Booking Details */}
+      <div>
+        <div className="text-xs font-medium text-gray-700 mb-2">BOOKING DETAILS</div>
+        <div className="grid grid-cols-6 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Cabin Class</label>
+            <select
+              value={form.cabinClass || ""}
+              onChange={(e) => updateField("cabinClass", e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">-</option>
+              <option value="economy">Economy</option>
+              <option value="premium_economy">Premium Economy</option>
+              <option value="business">Business</option>
+              <option value="first">First</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fare Class</label>
+            <input
+              type="text"
+              value={form.bookingClass || ""}
+              onChange={(e) => updateField("bookingClass", e.target.value.toUpperCase())}
+              placeholder="Z"
+              maxLength={2}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Booking Ref</label>
+            <input
+              type="text"
+              value={form.bookingRef || ""}
+              onChange={(e) => updateField("bookingRef", e.target.value.toUpperCase())}
+              placeholder="ZBBVXE"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Seat</label>
+            <input
+              type="text"
+              value={form.seat || ""}
+              onChange={(e) => updateField("seat", e.target.value.toUpperCase())}
+              placeholder="07A"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Baggage</label>
+            <input
+              type="text"
+              value={form.baggage || ""}
+              onChange={(e) => updateField("baggage", e.target.value)}
+              placeholder="2PC"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Passenger</label>
+            <input
+              type="text"
+              value={form.passengerName || ""}
+              onChange={(e) => updateField("passengerName", e.target.value)}
+              placeholder="SMITH/JOHN MR"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -472,13 +577,16 @@ export default function FlightItineraryInput({
   const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle file upload
+  // Handle file upload (images and PDFs)
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setParseError("Please upload an image file");
+    const isImage = file.type.startsWith("image/");
+    const isPDF = file.type === "application/pdf";
+    
+    if (!isImage && !isPDF) {
+      setParseError("Please upload an image or PDF file");
       return;
     }
 
@@ -486,18 +594,88 @@ export default function FlightItineraryInput({
     setParseError(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setUploadedImage(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-
-      await parseImageWithAI(file);
+      if (isPDF) {
+        // For PDF, we send it to AI for parsing
+        await parsePDFWithAI(file);
+      } else {
+        // For images, show preview and parse
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setUploadedImage(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+        await parseImageWithAI(file);
+      }
     } catch (err) {
       console.error("Upload error:", err);
-      setParseError("Failed to process image");
+      setParseError("Failed to process file");
     } finally {
       setIsUploading(false);
+    }
+  };
+  
+  // Parse PDF with AI
+  const parsePDFWithAI = async (file: File) => {
+    setIsParsing(true);
+    setParseError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "pdf");
+      
+      const response = await fetch("/api/ai/parse-flight-itinerary", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to parse PDF");
+      }
+      
+      const data = await response.json();
+      
+      if (data.segments && data.segments.length > 0) {
+        // Map API response to FlightSegment format
+        const newSegments: FlightSegment[] = data.segments.map((seg: Record<string, unknown>, idx: number) => ({
+          id: `seg-${Date.now()}-${idx}`,
+          flightNumber: seg.flightNumber || "",
+          airline: seg.airline,
+          departure: seg.departure || seg.departureAirport || "",
+          departureCity: seg.departureCity,
+          departureCountry: seg.departureCountry,
+          arrival: seg.arrival || seg.arrivalAirport || "",
+          arrivalCity: seg.arrivalCity,
+          arrivalCountry: seg.arrivalCountry,
+          departureDate: seg.departureDate || "",
+          departureTimeScheduled: seg.departureTime || seg.departureTimeScheduled || "",
+          arrivalDate: seg.arrivalDate || seg.departureDate || "",
+          arrivalTimeScheduled: seg.arrivalTime || seg.arrivalTimeScheduled || "",
+          departureTerminal: seg.departureTerminal,
+          arrivalTerminal: seg.arrivalTerminal,
+          aircraft: seg.aircraft,
+          duration: seg.duration,
+          cabinClass: seg.cabinClass,
+          bookingClass: seg.bookingClass,
+          bookingRef: seg.bookingRef,
+          ticketNumber: seg.ticketNumber,
+          baggage: seg.baggage,
+          seat: seg.seat,
+          passengerName: seg.passengerName,
+          departureStatus: "scheduled",
+          arrivalStatus: "scheduled",
+        }));
+        
+        onSegmentsChange([...segments, ...newSegments]);
+      } else {
+        setParseError("Could not extract flight information from PDF");
+      }
+    } catch (err) {
+      console.error("PDF parse error:", err);
+      setParseError(err instanceof Error ? err.message : "Failed to parse PDF");
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -546,7 +724,7 @@ export default function FlightItineraryInput({
     }
   };
 
-  // Parse text input
+  // Parse text input - supports multiple formats including Amadeus/Galileo
   const parseTextInput = () => {
     if (!textInput.trim()) return;
 
@@ -554,41 +732,149 @@ export default function FlightItineraryInput({
     setParseError(null);
 
     try {
-      const lines = textInput.split("\n").filter((l) => l.trim());
+      const text = textInput.trim();
       const parsedSegments: FlightSegment[] = [];
+      
+      // Try to parse Amadeus/Galileo format first
+      // Example: "FLIGHT     LX 348 - SWISS INTERNATIONAL AIR LINES         TUE 06 JANUARY 2026"
+      const amadeusFlightMatch = text.match(/FLIGHT\s+([A-Z]{2})\s*(\d{2,4})\s*-\s*([^\n]+?)(?:\s{2,}|\n)/i);
+      const departureLine = text.match(/DEPARTURE:\s*([^,]+),\s*([A-Z]{2})\s*\(([^)]+)\)(?:,\s*TERMINAL\s*(\d+))?\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{1,2}:\d{2})/i);
+      const arrivalLine = text.match(/ARRIVAL:\s*([^,]+),\s*([A-Z]{2})\s*\(([^)]+)\)(?:,\s*TERMINAL\s*(\d+))?\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{1,2}:\d{2})/i);
+      const durationMatch = text.match(/DURATION:\s*(\d{2}):(\d{2})/i);
+      const classMatch = text.match(/RESERVATION\s+CONFIRMED,\s*(\w+)\s*\(([A-Z])\)/i);
+      const bookingRefMatch = text.match(/BOOKING\s*REF:\s*([A-Z0-9]+)/i) || text.match(/FLIGHT\s+BOOKING\s+REF:\s*[A-Z]{2}\/([A-Z0-9]+)/i);
+      const baggageMatch = text.match(/BAGGAGE\s+ALLOWANCE:\s*(\d+PC)/i);
+      const seatMatch = text.match(/SEAT:\s*(\d+[A-Z])/i);
+      const ticketMatch = text.match(/TICKET:\s*[A-Z]{2}\/ETKT\s+(\d+\s*\d+)/i);
+      const passengerMatch = text.match(/FOR\s+([A-Z]+\/[A-Z]+\s+(?:MR|MRS|MS|MISS|MSTR))/i) || text.match(/^\s*([A-Z]+\/[A-Z]+\s+(?:MR|MRS|MS))\s*$/im);
+      const aircraftMatch = text.match(/EQUIPMENT:\s*(.+?)(?:\n|$)/i);
 
-      for (const line of lines) {
-        // Try to parse: "LX348 GVA-LHR 06.01 15:55-16:40"
-        const flightMatch = line.match(/([A-Z]{2}\d{2,4})/);
-        const routeMatch = line.match(/([A-Z]{3})\s*[-–→]\s*([A-Z]{3})/);
-        const dateMatch = line.match(/(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?/);
-        const timeMatch = line.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+      if (amadeusFlightMatch && departureLine && arrivalLine) {
+        // Parse Amadeus format
+        const airlineCode = amadeusFlightMatch[1];
+        const flightNum = amadeusFlightMatch[2];
+        const airlineName = amadeusFlightMatch[3].trim();
+        
+        // Parse dates - format: "06 JAN" 
+        const months: Record<string, string> = {
+          JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+          JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12"
+        };
+        
+        // Get year from header if present
+        const yearMatch = text.match(/(?:JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+(\d{4})/i);
+        const year = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
+        
+        const depDay = departureLine[5].padStart(2, "0");
+        const depMonth = months[departureLine[6].toUpperCase()] || "01";
+        const depDate = `${year}-${depMonth}-${depDay}`;
+        
+        const arrDay = arrivalLine[5].padStart(2, "0");
+        const arrMonth = months[arrivalLine[6].toUpperCase()] || "01";
+        // Handle arrival on next day
+        let arrDate = `${year}-${arrMonth}-${arrDay}`;
+        if (parseInt(arrDay) < parseInt(depDay) && arrMonth === depMonth) {
+          // Arrival is next month or year - for now assume same month next day logic
+          const nextDate = new Date(`${year}-${depMonth}-${depDay}`);
+          nextDate.setDate(nextDate.getDate() + 1);
+          arrDate = nextDate.toISOString().split("T")[0];
+        }
+        
+        // Extract IATA code from airport name like "HEATHROW" -> need to map or extract
+        // For now use the parenthesis content as hint
+        const depAirportName = departureLine[3]; // e.g., "GENEVA INTERNATIONAL"
+        const arrAirportName = arrivalLine[3]; // e.g., "HEATHROW"
+        
+        // Try to extract IATA from known airports or use city code
+        const getIATA = (name: string, city: string): string => {
+          const known: Record<string, string> = {
+            "HEATHROW": "LHR", "GATWICK": "LGW", "STANSTED": "STN",
+            "GENEVA INTERNATIONAL": "GVA", "CHARLES DE GAULLE": "CDG",
+            "FIUMICINO": "FCO", "SCHIPHOL": "AMS", "FRANKFURT": "FRA",
+          };
+          return known[name.toUpperCase()] || city.substring(0, 3).toUpperCase();
+        };
+        
+        const segment: FlightSegment = {
+          id: `seg-${Date.now()}-0`,
+          flightNumber: `${airlineCode}${flightNum}`,
+          airline: airlineName,
+          departure: getIATA(depAirportName, departureLine[1]),
+          departureCity: departureLine[1],
+          departureCountry: departureLine[2],
+          arrival: getIATA(arrAirportName, arrivalLine[1]),
+          arrivalCity: arrivalLine[1],
+          arrivalCountry: arrivalLine[2],
+          departureDate: depDate,
+          departureTimeScheduled: departureLine[7],
+          arrivalDate: arrDate,
+          arrivalTimeScheduled: arrivalLine[7],
+          departureTerminal: departureLine[4] || undefined,
+          arrivalTerminal: arrivalLine[4] || undefined,
+          duration: durationMatch ? `${parseInt(durationMatch[1])}h ${parseInt(durationMatch[2])}m` : undefined,
+          cabinClass: classMatch ? (classMatch[1].toLowerCase() as "economy" | "business" | "first") : undefined,
+          bookingClass: classMatch ? classMatch[2] : undefined,
+          bookingRef: bookingRefMatch ? bookingRefMatch[1] : undefined,
+          baggage: baggageMatch ? baggageMatch[1] : undefined,
+          seat: seatMatch ? seatMatch[1] : undefined,
+          ticketNumber: ticketMatch ? ticketMatch[1].replace(/\s/g, "") : undefined,
+          passengerName: passengerMatch ? passengerMatch[1] : undefined,
+          aircraft: aircraftMatch ? aircraftMatch[1].trim() : undefined,
+          departureStatus: "scheduled",
+          arrivalStatus: "scheduled",
+        };
+        
+        parsedSegments.push(segment);
+      } else {
+        // Fallback to simple format: "LX348 GVA-LHR 06.01 15:55-16:40"
+        const lines = text.split("\n").filter((l) => l.trim());
+        
+        for (const line of lines) {
+          const flightMatch = line.match(/([A-Z]{2})\s*(\d{2,4})/);
+          const routeMatch = line.match(/([A-Z]{3})\s*[-–→]\s*([A-Z]{3})/);
+          const dateMatch = line.match(/(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?/);
+          const timeMatch = line.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
 
-        if (flightMatch || routeMatch) {
-          const currentYear = new Date().getFullYear();
-          let dateStr = "";
-          
-          if (dateMatch) {
-            const day = dateMatch[1].padStart(2, "0");
-            const month = dateMatch[2].padStart(2, "0");
-            const year = dateMatch[3] 
-              ? (dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3])
-              : currentYear.toString();
-            dateStr = `${year}-${month}-${day}`;
+          if (flightMatch || routeMatch) {
+            const currentYear = new Date().getFullYear();
+            let depDateStr = "";
+            let arrDateStr = "";
+            
+            if (dateMatch) {
+              const day = dateMatch[1].padStart(2, "0");
+              const month = dateMatch[2].padStart(2, "0");
+              const year = dateMatch[3] 
+                ? (dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3])
+                : currentYear.toString();
+              depDateStr = `${year}-${month}-${day}`;
+              arrDateStr = depDateStr; // Same day by default
+              
+              // Check if arrival time < departure time (next day arrival)
+              if (timeMatch) {
+                const depTime = timeMatch[1];
+                const arrTime = timeMatch[2];
+                if (arrTime < depTime) {
+                  // Arrival is next day
+                  const nextDay = new Date(depDateStr);
+                  nextDay.setDate(nextDay.getDate() + 1);
+                  arrDateStr = nextDay.toISOString().split("T")[0];
+                }
+              }
+            }
+
+            parsedSegments.push({
+              id: `seg-${Date.now()}-${parsedSegments.length}`,
+              flightNumber: flightMatch ? `${flightMatch[1]}${flightMatch[2]}` : "",
+              departure: routeMatch?.[1] || "",
+              arrival: routeMatch?.[2] || "",
+              departureDate: depDateStr,
+              departureTimeScheduled: timeMatch?.[1] || "",
+              arrivalDate: arrDateStr,
+              arrivalTimeScheduled: timeMatch?.[2] || "",
+              departureStatus: "scheduled",
+              arrivalStatus: "scheduled",
+            });
           }
-
-          parsedSegments.push({
-            id: `seg-${Date.now()}-${parsedSegments.length}`,
-            flightNumber: flightMatch?.[1] || "",
-            departure: routeMatch?.[1] || "",
-            arrival: routeMatch?.[2] || "",
-            departureDate: dateStr,
-            departureTimeScheduled: timeMatch?.[1] || "",
-            arrivalDate: dateStr,
-            arrivalTimeScheduled: timeMatch?.[2] || "",
-            departureStatus: "scheduled",
-            arrivalStatus: "scheduled",
-          });
         }
       }
 
@@ -597,7 +883,7 @@ export default function FlightItineraryInput({
         setTextInput("");
         setShowTextInput(false);
       } else {
-        setParseError("Could not parse. Try format: LX348 GVA-LHR 06.01 15:55-16:40");
+        setParseError("Could not parse. Supported formats:\n• LX348 GVA-LHR 06.01 15:55-16:40\n• Amadeus/Galileo booking confirmation");
       }
     } catch (err) {
       console.error("Parse error:", err);
@@ -644,7 +930,7 @@ export default function FlightItineraryInput({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -657,7 +943,7 @@ export default function FlightItineraryInput({
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            {isUploading ? "Uploading..." : "Upload Screenshot"}
+            {isUploading ? "Processing..." : "Upload (Image/PDF)"}
           </button>
 
           <button

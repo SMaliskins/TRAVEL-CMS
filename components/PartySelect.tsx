@@ -18,6 +18,8 @@ interface PartySelectProps {
   error?: string;
   required?: boolean;
   roleFilter?: string;
+  /** Initial display name to show without API fetch */
+  initialDisplayName?: string;
 }
 
 export default function PartySelect({ 
@@ -25,9 +27,11 @@ export default function PartySelect({
   onChange, 
   error, 
   required,
-  roleFilter = "client" 
+  roleFilter = "client",
+  initialDisplayName = "",
 }: PartySelectProps) {
-  const [inputValue, setInputValue] = useState("");
+  // Initialize inputValue with initialDisplayName if provided
+  const [inputValue, setInputValue] = useState(initialDisplayName);
   const [parties, setParties] = useState<Party[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -114,7 +118,7 @@ export default function PartySelect({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [roleFilter]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -281,9 +285,16 @@ export default function PartySelect({
     inputRef.current?.focus();
   };
 
-  // Load selected party on mount
+  // Sync inputValue when initialDisplayName changes
   useEffect(() => {
-    if (value && !selectedParty) {
+    if (initialDisplayName && !inputValue) {
+      setInputValue(initialDisplayName);
+    }
+  }, [initialDisplayName, inputValue]);
+
+  // Load selected party on mount (only if no initialDisplayName provided)
+  useEffect(() => {
+    if (value && !selectedParty && !initialDisplayName) {
       const fetchParty = async () => {
         try {
           const { data: { session } } = await supabase.auth.getSession();
@@ -307,7 +318,7 @@ export default function PartySelect({
       };
       fetchParty();
     }
-  }, [value, selectedParty]);
+  }, [value, selectedParty, initialDisplayName]);
 
   // Close dropdown on click outside
   useEffect(() => {

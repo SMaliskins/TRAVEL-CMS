@@ -25,6 +25,7 @@ export interface ServiceData {
   supplierName: string;
   clientPartyId: string | null;
   clientName: string;
+  clients?: { partyId: string; name: string }[]; // Multiple clients
   payerPartyId: string | null;
   payerName: string;
   servicePrice: number;
@@ -85,8 +86,18 @@ export default function AddServiceModal({
   const [dateTo, setDateTo] = useState<string | undefined>(undefined);
   const [supplierPartyId, setSupplierPartyId] = useState<string | null>(null);
   const [supplierName, setSupplierName] = useState("");
-  const [clientPartyId, setClientPartyId] = useState<string | null>(defaultClientId || null);
-  const [clientName, setClientName] = useState(defaultClientName || "");
+  
+  // Multiple clients support
+  interface ClientEntry {
+    id: string | null;
+    name: string;
+  }
+  const [clients, setClients] = useState<ClientEntry[]>(
+    defaultClientId && defaultClientName 
+      ? [{ id: defaultClientId, name: defaultClientName }]
+      : [{ id: null, name: "" }]
+  );
+  
   const [payerPartyId, setPayerPartyId] = useState<string | null>(defaultClientId || null);
   const [payerName, setPayerName] = useState(defaultClientName || "");
   const [servicePrice, setServicePrice] = useState("");
@@ -111,15 +122,36 @@ export default function AddServiceModal({
   // Flight-specific fields
   const [flightSegments, setFlightSegments] = useState<FlightSegment[]>([]);
 
-  // Auto-fill client/payer when defaultClient changes
+  // Auto-fill clients/payer when defaultClient changes
   useEffect(() => {
     if (defaultClientId && defaultClientName) {
-      setClientPartyId(defaultClientId);
-      setClientName(defaultClientName);
-      setPayerPartyId(defaultClientId);
-      setPayerName(defaultClientName);
+      // Only set default if no clients selected yet
+      if (clients.length === 1 && !clients[0].id) {
+        setClients([{ id: defaultClientId, name: defaultClientName }]);
+      }
+      if (!payerPartyId) {
+        setPayerPartyId(defaultClientId);
+        setPayerName(defaultClientName);
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultClientId, defaultClientName]);
+  
+  // Client management functions
+  const addClient = () => {
+    setClients([...clients, { id: null, name: "" }]);
+  };
+  
+  const updateClient = (index: number, id: string | null, name: string) => {
+    const updated = [...clients];
+    updated[index] = { id, name };
+    setClients(updated);
+  };
+  
+  const removeClient = (index: number) => {
+    if (clients.length <= 1) return; // Keep at least one client
+    setClients(clients.filter((_, i) => i !== index));
+  };
 
   // Determine which fields to show based on category
   const showTicketNr = category === "Flight";
@@ -165,6 +197,9 @@ export default function AddServiceModal({
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
+      // Get first client as primary (for backwards compatibility)
+      const primaryClient = clients.find(c => c.id) || clients[0];
+      
       const payload: Record<string, unknown> = {
         category,
         serviceName: serviceName.trim(),
@@ -172,8 +207,11 @@ export default function AddServiceModal({
         dateTo: dateTo || dateFrom || null,
         supplierPartyId,
         supplierName,
-        clientPartyId,
-        clientName,
+        // Primary client (backwards compatible)
+        clientPartyId: primaryClient?.id || null,
+        clientName: primaryClient?.name || "",
+        // All clients (new format)
+        clients: clients.filter(c => c.id).map(c => ({ partyId: c.id, name: c.name })),
         payerPartyId,
         payerName,
         servicePrice: parseFloat(servicePrice) || 0,
@@ -313,18 +351,50 @@ export default function AddServiceModal({
             />
           </div>
 
-          {/* Row 4: Client + Payer (auto-filled from order) */}
+          {/* Row 4: Clients (multiple) + Payer (auto-filled from order) */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-              <PartySelect
-                value={clientPartyId}
-                onChange={(id, name) => {
-                  setClientPartyId(id);
-                  setClientName(name);
-                }}
-                roleFilter="client"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Client{clients.length > 1 ? "s" : ""}
+                </label>
+                <button
+                  type="button"
+                  onClick={addClient}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add
+                </button>
+              </div>
+              <div className="space-y-2">
+                {clients.map((client, index) => (
+                  <div key={index} className="flex gap-2">
+                    <div className="flex-1">
+                      <PartySelect
+                        value={client.id}
+                        onChange={(id, name) => updateClient(index, id, name)}
+                        roleFilter="client"
+                        initialDisplayName={index === 0 ? defaultClientName : undefined}
+                      />
+                    </div>
+                    {clients.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeClient(index)}
+                        className="px-2 text-red-500 hover:text-red-700"
+                        title="Remove client"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
@@ -335,6 +405,7 @@ export default function AddServiceModal({
                   setPayerName(name);
                 }}
                 roleFilter="client"
+                initialDisplayName={defaultClientName}
               />
             </div>
           </div>
