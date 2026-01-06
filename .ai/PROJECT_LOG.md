@@ -3553,3 +3553,31 @@ Branch: feature/x
 `migrations/add_passport_fields_to_party_person.sql`
 
 ---
+
+## [2026-01-07 01:53] CODE_WRITER — RESULT: Fix nationality column not being added in migration
+Branch: feature/x
+Задача: Fix nationality column not being added in migration
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Исправлена миграция, чтобы `nationality` всегда добавлялась, независимо от наличия `citizenship`.
+
+**Изменения:**
+`migrations/add_passport_fields_to_party_person.sql`:
+- Удалена проверка на наличие `citizenship` перед добавлением `nationality`
+- `nationality` теперь всегда добавляется, если её нет
+- Обновлен комментарий: `nationality` и `citizenship` - это разные поля
+
+**Результат:**
+✅ Колонка `nationality` теперь всегда добавляется в миграции
+✅ Код может сохранять `nationality` без ошибок
+✅ `nationality` и `citizenship` могут существовать одновременно (это разные поля)
+
+**Важно:**
+Пользователю нужно запустить обновленную миграцию в Supabase SQL Editor, чтобы добавить колонку `nationality`.
+
+**Файлы:**
+- `migrations/add_passport_fields_to_party_person.sql` - исправлена логика добавления nationality
+
+---
