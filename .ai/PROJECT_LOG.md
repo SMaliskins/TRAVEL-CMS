@@ -2063,7 +2063,18 @@ Smoke test:
 Branch: feature/x
 Задача: Add Missing Columns Migration for Orders Table (code-writer-add-orders-missing-columns-migration.md)
 Результат: START
-Вывод / Решение: Начинаю работу над задачей. Проблема: колонки client_display_name и countries_cities отсутствуют в реальной БД, хотя они есть в схеме supabase_schema.sql. Ошибка: "column orders.client_display_name does not exist". Решение: создать миграцию для добавления недостающих колонок в таблицу orders. Файл: migrations/add_orders_client_columns.sql.
+Вывод / Решение: 
+
+**Проблема:**
+При создании заказа возникает ошибка "column orders.client_display_name does not exist". Это происходит потому, что в реальной базе данных отсутствуют две колонки, которые должны быть в таблице orders:
+- `client_display_name` - для хранения имени клиента
+- `countries_cities` - для хранения списка стран и городов
+
+**Что нужно сделать:**
+Создать SQL миграцию, которая добавит эти колонки в таблицу orders. Миграция должна проверять, существуют ли колонки, чтобы не добавлять их повторно.
+
+**Файл для создания:**
+`migrations/add_orders_client_columns.sql`
 
 ---
 
