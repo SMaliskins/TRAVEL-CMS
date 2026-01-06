@@ -9,6 +9,9 @@ import {
   SubagentDetails,
   SubagentCommissionType,
 } from "@/lib/types/directory";
+import { useRipple } from "@/hooks/useRipple";
+import { ValidationIcon } from "@/components/ValidationIcon";
+import PassportDetailsInput, { PassportData } from "@/components/PassportDetailsInput";
 
 interface DirectoryFormProps {
   record?: DirectoryRecord;
@@ -38,11 +41,18 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Active tab state for Statistics section
     const [activeTab, setActiveTab] = useState<"statistics" | "clientScore">("statistics");
     
+    // Ripple effects for tab buttons
+    const statisticsTabRipple = useRipple({ color: 'rgba(0, 0, 0, 0.1)' });
+    const clientScoreTabRipple = useRipple({ color: 'rgba(0, 0, 0, 0.1)' });
+    
     // Track dirty fields (fields that have been modified)
     const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
     
     // Track saved fields (for green border effect after save)
     const [savedFields, setSavedFields] = useState<Set<string>>(new Set());
+    
+    // Track touched fields (fields that user has interacted with)
+    const [touchedFields, setTouchedFields] = useState<Set<string>>(new Set());
     
     // Track field changes
     const markFieldDirty = (fieldName: string) => {
@@ -83,6 +93,17 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [lastName, setLastName] = useState(record?.lastName || "");
     const [personalCode, setPersonalCode] = useState(record?.personalCode || "");
     const [dob, setDob] = useState(record?.dob || "");
+
+    // Passport fields
+    const [passportData, setPassportData] = useState<PassportData>({
+      passportNumber: record?.passportNumber || undefined,
+      passportIssueDate: record?.passportIssueDate || undefined,
+      passportExpiryDate: record?.passportExpiryDate || undefined,
+      passportIssuingCountry: record?.passportIssuingCountry || undefined,
+      passportFullName: record?.passportFullName || undefined,
+      dob: record?.dob || undefined,
+      nationality: record?.nationality || undefined,
+    });
 
     // Company fields
     const [companyName, setCompanyName] = useState(record?.companyName || "");
@@ -149,6 +170,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         actualAddress: record.actualAddress,
         supplierExtras: record.supplierExtras,
         subagentExtras: record.subagentExtras,
+        passportNumber: record.passportNumber,
+        passportIssueDate: record.passportIssueDate,
+        passportExpiryDate: record.passportExpiryDate,
+        passportIssuingCountry: record.passportIssuingCountry,
+        passportFullName: record.passportFullName,
+        nationality: record.nationality,
       };
     };
 
@@ -319,6 +346,18 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.lastName = lastName;
         formData.personalCode = personalCode || undefined;
         formData.dob = dob || undefined;
+        
+        // Passport fields
+        formData.passportNumber = passportData.passportNumber || undefined;
+        formData.passportIssueDate = passportData.passportIssueDate || undefined;
+        formData.passportExpiryDate = passportData.passportExpiryDate || undefined;
+        formData.passportIssuingCountry = passportData.passportIssuingCountry || undefined;
+        formData.passportFullName = passportData.passportFullName || undefined;
+        formData.nationality = passportData.nationality || undefined;
+        // dob is already set above, but update from passport if provided
+        if (passportData.dob) {
+          formData.dob = passportData.dob;
+        }
       } else {
         formData.companyName = companyName;
         formData.regNumber = regNo || undefined;
@@ -382,19 +421,84 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const getLabelClasses = (): string => {
       return "mb-1.5 block min-h-[1.25rem] text-sm font-medium text-gray-700 transition-colors";
     };
+    
+    // Helper function to get validation status for a field
+    const getValidationStatus = (
+      fieldName: string,
+      isRequired: boolean,
+      value: string | number | undefined,
+      touched: boolean = false
+    ): 'valid' | 'invalid' | 'warning' | null => {
+      const isEmpty = !value || (typeof value === "string" && value.trim() === "");
+      
+      // Always show valid for saved fields
+      if (savedFields.has(fieldName)) {
+        return 'valid';
+      }
+      
+      // Only show validation icon if field is touched or has value
+      if (!touched && isEmpty && !touchedFields.has(fieldName)) {
+        return null;
+      }
+      
+      // Required fields
+      if (isRequired) {
+        return isEmpty ? 'invalid' : 'valid';
+      }
+      
+      // Optional fields
+      if (isEmpty) {
+        return touched || touchedFields.has(fieldName) ? 'warning' : null;
+      }
+      
+      // Email validation
+      if (fieldName === 'email' && value) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const emailValue = typeof value === 'string' ? value.trim() : String(value);
+        return emailRegex.test(emailValue) ? 'valid' : 'invalid';
+      }
+      
+      // Phone validation (basic)
+      if (fieldName === 'phone' && value) {
+        const phoneValue = typeof value === 'string' ? value.trim() : String(value);
+        // At least 5 digits for valid phone
+        const phoneRegex = /^[\d\s\+\-\(\)]{5,}$/;
+        return phoneRegex.test(phoneValue) ? 'valid' : 'invalid';
+      }
+      
+      // Date validation (for dob)
+      if (fieldName === 'dob' && value) {
+        const dateValue = typeof value === 'string' ? value.trim() : String(value);
+        // Basic date validation (YYYY-MM-DD format)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (dateRegex.test(dateValue)) {
+          const date = new Date(dateValue);
+          return !isNaN(date.getTime()) ? 'valid' : 'invalid';
+        }
+        return 'invalid';
+      }
+      
+      // For other optional fields with value
+      return 'valid';
+    };
+    
+    // Helper to mark field as touched
+    const markFieldTouched = (fieldName: string) => {
+      setTouchedFields(prev => new Set(prev).add(fieldName));
+    };
 
     return (
       <form
         ref={formRef}
         onSubmit={handleSubmit}
-        className={`space-y-6 pb-24 transition-all duration-400 ${
+        className={`space-y-4 md:space-y-6 pb-24 transition-all duration-400 ${
           highlightedSection ? "" : ""
         }`}
       >
         {/* Main details and Statistics sections in 2 columns */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-12">
           {/* Left: Main Details (1/3 width) */}
-          <div className={`lg:col-span-4 group rounded-2xl bg-white/80 backdrop-blur-xl p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
+          <div className={`lg:col-span-4 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Main details</h2>
             <div className="space-y-4">
               {/* Type and Roles in one row - labels on top, options below */}
@@ -500,17 +604,16 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setFirstName(e.target.value);
                           markFieldDirty("firstName");
                         }}
-                        className={getInputClasses("firstName", true, firstName)}
+                        onBlur={() => markFieldTouched("firstName")}
+                        onFocus={() => markFieldTouched("firstName")}
+                        className={`${getInputClasses("firstName", true, firstName)} ${touchedFields.has("firstName") || firstName.trim() ? 'pr-10' : ''}`}
                         required
                         aria-label="First name"
                       />
-                      {firstName.trim() && (
-                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${savedFields.has("firstName") ? "opacity-100 animate-[checkmarkAppear_0.8s_ease-in-out]" : "opacity-0"}`}>
-                          <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
+                      <ValidationIcon
+                        status={getValidationStatus("firstName", true, firstName, touchedFields.has("firstName"))}
+                        show={touchedFields.has("firstName") || firstName.trim() !== ""}
+                      />
                     </div>
                   </div>
                   <div>
@@ -525,24 +628,23 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setLastName(e.target.value);
                           markFieldDirty("lastName");
                         }}
-                        className={getInputClasses("lastName", true, lastName)}
+                        onBlur={() => markFieldTouched("lastName")}
+                        onFocus={() => markFieldTouched("lastName")}
+                        className={`${getInputClasses("lastName", true, lastName)} ${touchedFields.has("lastName") || lastName.trim() ? 'pr-10' : ''}`}
                         required
                         aria-label="Last name"
                       />
-                      {lastName.trim() && (
-                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${savedFields.has("lastName") ? "opacity-100 animate-[checkmarkAppear_0.8s_ease-in-out]" : "opacity-0"}`}>
-                          <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
+                      <ValidationIcon
+                        status={getValidationStatus("lastName", true, lastName, touchedFields.has("lastName"))}
+                        show={touchedFields.has("lastName") || lastName.trim() !== ""}
+                      />
                     </div>
                   </div>
                   <div>
                     <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
                       Personal code
                     </label>
-                    <div className="min-h-[2.5rem]">
+                    <div className="relative min-h-[2.5rem]">
                       <input
                         type="text"
                         value={personalCode}
@@ -550,8 +652,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setPersonalCode(e.target.value);
                           markFieldDirty("personalCode");
                         }}
-                        className={getInputClasses("personalCode", false, personalCode)}
+                        onBlur={() => markFieldTouched("personalCode")}
+                        onFocus={() => markFieldTouched("personalCode")}
+                        className={`${getInputClasses("personalCode", false, personalCode)} ${touchedFields.has("personalCode") || personalCode.trim() ? 'pr-10' : ''}`}
                         aria-label="Personal code"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("personalCode", false, personalCode, touchedFields.has("personalCode"))}
+                        show={touchedFields.has("personalCode") || personalCode.trim() !== ""}
                       />
                     </div>
                   </div>
@@ -559,7 +667,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
                       Date of birth
                     </label>
-                    <div className="min-h-[2.5rem]">
+                    <div className="relative min-h-[2.5rem]">
                       <input
                         type="date"
                         value={dob}
@@ -567,10 +675,32 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setDob(e.target.value);
                           markFieldDirty("dob");
                         }}
-                        className={getInputClasses("dob", false, dob)}
+                        onBlur={() => markFieldTouched("dob")}
+                        onFocus={() => markFieldTouched("dob")}
+                        className={`${getInputClasses("dob", false, dob)} ${touchedFields.has("dob") || dob.trim() ? 'pr-10' : ''}`}
                         aria-label="Date of birth"
                       />
+                      <ValidationIcon
+                        status={getValidationStatus("dob", false, dob, touchedFields.has("dob"))}
+                        show={touchedFields.has("dob") || dob.trim() !== ""}
+                      />
                     </div>
+                  </div>
+
+                  {/* Passport Details */}
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <PassportDetailsInput
+                      data={passportData}
+                      onChange={(data) => {
+                        setPassportData(data);
+                        // Update dob if provided from passport
+                        if (data.dob && !dob) {
+                          setDob(data.dob);
+                        }
+                        markFieldDirty("passport");
+                      }}
+                      readonly={readonly}
+                    />
                   </div>
                 </>
               )}
@@ -590,24 +720,23 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setCompanyName(e.target.value);
                           markFieldDirty("companyName");
                         }}
-                        className={getInputClasses("companyName", true, companyName)}
+                        onBlur={() => markFieldTouched("companyName")}
+                        onFocus={() => markFieldTouched("companyName")}
+                        className={`${getInputClasses("companyName", true, companyName)} ${touchedFields.has("companyName") || companyName.trim() ? 'pr-10' : ''}`}
                         required
                         aria-label="Company name"
                       />
-                      {companyName.trim() && (
-                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${savedFields.has("companyName") ? "opacity-100 animate-[checkmarkAppear_0.8s_ease-in-out]" : "opacity-0"}`}>
-                          <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
+                      <ValidationIcon
+                        status={getValidationStatus("companyName", true, companyName, touchedFields.has("companyName"))}
+                        show={touchedFields.has("companyName") || companyName.trim() !== ""}
+                      />
                     </div>
                   </div>
                   <div>
                     <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
                       Reg Nr
                     </label>
-                    <div className="min-h-[2.5rem]">
+                    <div className="relative min-h-[2.5rem]">
                       <input
                         type="text"
                         value={regNo}
@@ -615,8 +744,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setRegNo(e.target.value);
                           markFieldDirty("regNo");
                         }}
-                        className={getInputClasses("regNo", false, regNo)}
+                        onBlur={() => markFieldTouched("regNo")}
+                        onFocus={() => markFieldTouched("regNo")}
+                        className={`${getInputClasses("regNo", false, regNo)} ${touchedFields.has("regNo") || regNo.trim() ? 'pr-10' : ''}`}
                         aria-label="Registration number"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("regNo", false, regNo, touchedFields.has("regNo"))}
+                        show={touchedFields.has("regNo") || regNo.trim() !== ""}
                       />
                     </div>
                   </div>
@@ -624,7 +759,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
                       Address
                     </label>
-                    <div className="min-h-[2.5rem]">
+                    <div className="relative min-h-[2.5rem]">
                       <input
                         type="text"
                         value={address}
@@ -632,8 +767,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setAddress(e.target.value);
                           markFieldDirty("address");
                         }}
-                        className={getInputClasses("address", false, address)}
+                        onBlur={() => markFieldTouched("address")}
+                        onFocus={() => markFieldTouched("address")}
+                        className={`${getInputClasses("address", false, address)} ${touchedFields.has("address") || address.trim() ? 'pr-10' : ''}`}
                         aria-label="Address"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("address", false, address, touchedFields.has("address"))}
+                        show={touchedFields.has("address") || address.trim() !== ""}
                       />
                     </div>
                   </div>
@@ -641,7 +782,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
                       Actual address
                     </label>
-                    <div className="min-h-[2.5rem]">
+                    <div className="relative min-h-[2.5rem]">
                       <input
                         type="text"
                         value={actualAddress}
@@ -649,8 +790,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setActualAddress(e.target.value);
                           markFieldDirty("actualAddress");
                         }}
-                        className={getInputClasses("actualAddress", false, actualAddress)}
+                        onBlur={() => markFieldTouched("actualAddress")}
+                        onFocus={() => markFieldTouched("actualAddress")}
+                        className={`${getInputClasses("actualAddress", false, actualAddress)} ${touchedFields.has("actualAddress") || actualAddress.trim() ? 'pr-10' : ''}`}
                         aria-label="Actual address"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("actualAddress", false, actualAddress, touchedFields.has("actualAddress"))}
+                        show={touchedFields.has("actualAddress") || actualAddress.trim() !== ""}
                       />
                     </div>
                   </div>
@@ -658,7 +805,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
                       Contact person
                     </label>
-                    <div className="min-h-[2.5rem]">
+                    <div className="relative min-h-[2.5rem]">
                       <input
                         type="text"
                         value={contactPerson}
@@ -666,8 +813,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setContactPerson(e.target.value);
                           markFieldDirty("contactPerson");
                         }}
-                        className={getInputClasses("contactPerson", false, contactPerson)}
+                        onBlur={() => markFieldTouched("contactPerson")}
+                        onFocus={() => markFieldTouched("contactPerson")}
+                        className={`${getInputClasses("contactPerson", false, contactPerson)} ${touchedFields.has("contactPerson") || contactPerson.trim() ? 'pr-10' : ''}`}
                         aria-label="Contact person"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("contactPerson", false, contactPerson, touchedFields.has("contactPerson"))}
+                        show={touchedFields.has("contactPerson") || contactPerson.trim() !== ""}
                       />
                     </div>
                   </div>
@@ -682,7 +835,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   </svg>
                   <span className="truncate">Phone</span>
                 </label>
-                <div className="min-h-[2.5rem]">
+                <div className="relative min-h-[2.5rem]">
                   <input
                     type="tel"
                     value={phone}
@@ -690,8 +843,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       setPhone(e.target.value);
                       markFieldDirty("phone");
                     }}
-                    className={getInputClasses("phone", false, phone)}
+                    onBlur={() => markFieldTouched("phone")}
+                    onFocus={() => markFieldTouched("phone")}
+                    className={`${getInputClasses("phone", false, phone)} ${touchedFields.has("phone") || phone.trim() ? 'pr-10' : ''}`}
                     aria-label="Phone"
+                  />
+                  <ValidationIcon
+                    status={getValidationStatus("phone", false, phone, touchedFields.has("phone"))}
+                    show={touchedFields.has("phone") || phone.trim() !== ""}
                   />
                 </div>
               </div>
@@ -710,32 +869,35 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       setEmail(e.target.value);
                       markFieldDirty("email");
                     }}
-                    className={getInputClasses("email", false, email)}
+                    onBlur={() => markFieldTouched("email")}
+                    onFocus={() => markFieldTouched("email")}
+                    className={`${getInputClasses("email", false, email)} ${touchedFields.has("email") || email.trim() ? 'pr-10' : ''}`}
                     aria-label="Email"
                   />
-                  {email && email.includes("@") && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 animate-[fadeInZoom_0.2s_ease-in-out_forwards]">
-                      <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                  )}
+                  <ValidationIcon
+                    status={getValidationStatus("email", false, email, touchedFields.has("email"))}
+                    show={touchedFields.has("email") || email.trim() !== ""}
+                  />
                 </div>
               </div>
             </div>
           </div>
 
           {/* Right: Statistics with Tabs (2/3 width) - Always visible */}
-          <div className="lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5">
-              <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
-              <div className="space-y-4">
+          <div className="lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5">
+              <h2 className="mb-4 md:mb-5 text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
+              <div className="space-y-3 md:space-y-4">
                 {/* Tabs - modern style with switching */}
                 <div className="border-b border-gray-200/60">
-                  <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                  <nav className="-mb-px flex space-x-4 md:space-x-6" aria-label="Tabs">
                     <button
+                      {...statisticsTabRipple.rippleProps}
                       type="button"
-                      onClick={() => setActiveTab("statistics")}
-                      className={`relative border-b-2 px-3 py-2.5 text-sm font-semibold tracking-tight transition-all duration-200 truncate ${
+                      onClick={(e) => {
+                        statisticsTabRipple.createRipple(e);
+                        setActiveTab("statistics");
+                      }}
+                      className={`relative border-b-2 px-4 py-3 md:px-3 md:py-2.5 text-sm font-semibold tracking-tight transition-all duration-200 truncate min-h-[44px] md:min-h-0 ${
                         activeTab === "statistics"
                           ? "border-gray-900 text-gray-900"
                           : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -747,9 +909,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       )}
                     </button>
                     <button
+                      {...clientScoreTabRipple.rippleProps}
                       type="button"
-                      onClick={() => setActiveTab("clientScore")}
-                      className={`relative border-b-2 px-3 py-2.5 text-sm font-semibold tracking-tight transition-all duration-200 truncate ${
+                      onClick={(e) => {
+                        clientScoreTabRipple.createRipple(e);
+                        setActiveTab("clientScore");
+                      }}
+                      className={`relative border-b-2 px-4 py-3 md:px-3 md:py-2.5 text-sm font-semibold tracking-tight transition-all duration-200 truncate min-h-[44px] md:min-h-0 ${
                         activeTab === "clientScore"
                           ? "border-gray-900 text-gray-900"
                           : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -816,12 +982,30 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         </div>
 
 
+        {/* Supplier Details Section */}
+        {isSupplier && (
+          <div
+            id="supplier-settings"
+            className={`group overflow-hidden will-change-transform opacity-0 animate-[fadeInExpand_0.5s_ease-out_forwards] rounded-lg bg-white p-4 md:p-6 shadow-sm transition-all duration-500 hover:shadow-md ${
+              highlightedSection === "supplier"
+                ? "ring-2 ring-blue-300 bg-gradient-to-br from-blue-50/50 to-white"
+                : ""
+            }`}
+          >
+            <h2 className="mb-3 md:mb-4 text-lg font-semibold text-gray-900">Supplier Details</h2>
+            <div className="text-sm text-gray-600">
+              <p className="mb-2">No additional fields required for Supplier role.</p>
+              <p className="text-xs text-gray-500">Supplier-specific fields can be added here in the future.</p>
+            </div>
+          </div>
+        )}
+
         {/* Subagent Details Section */}
         {isSubagent && (
           <div
             id="subagent-settings"
             ref={subagentSectionRef}
-            className={`group opacity-0 animate-[fadeInSlideUp_0.5s_ease-in-out_forwards] rounded-lg bg-white p-6 shadow-sm transition-all duration-500 hover:shadow-md ${
+            className={`group overflow-hidden will-change-transform opacity-0 animate-[fadeInExpand_0.5s_ease-out_forwards] rounded-lg bg-white p-4 md:p-6 shadow-sm transition-all duration-500 hover:shadow-md ${
               highlightedSection === "subagent"
                 ? "ring-2 ring-purple-300 bg-gradient-to-br from-purple-50/50 to-white"
                 : ""
@@ -853,19 +1037,27 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Commission value
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={subagentCommissionValue || ""}
-                    onChange={(e) => {
-                      setSubagentCommissionValue(
-                        e.target.value ? parseFloat(e.target.value) : undefined
-                      );
-                      markFieldDirty("subagentCommissionValue");
-                    }}
-                    className={getInputClasses("subagentCommissionValue", false, subagentCommissionValue)}
-                    aria-label="Subagent commission value"
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={subagentCommissionValue || ""}
+                      onChange={(e) => {
+                        setSubagentCommissionValue(
+                          e.target.value ? parseFloat(e.target.value) : undefined
+                        );
+                        markFieldDirty("subagentCommissionValue");
+                      }}
+                      onBlur={() => markFieldTouched("subagentCommissionValue")}
+                      onFocus={() => markFieldTouched("subagentCommissionValue")}
+                      className={`${getInputClasses("subagentCommissionValue", false, subagentCommissionValue)} ${touchedFields.has("subagentCommissionValue") || subagentCommissionValue ? 'pr-10' : ''}`}
+                      aria-label="Subagent commission value"
+                    />
+                    <ValidationIcon
+                      status={getValidationStatus("subagentCommissionValue", false, subagentCommissionValue, touchedFields.has("subagentCommissionValue"))}
+                      show={touchedFields.has("subagentCommissionValue") || subagentCommissionValue !== undefined}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Currency</label>
@@ -905,29 +1097,45 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                       Period from
                     </label>
-                    <input
-                      type="date"
-                      value={subagentPeriodFrom}
-                      onChange={(e) => {
-                        setSubagentPeriodFrom(e.target.value);
-                        markFieldDirty("subagentPeriodFrom");
-                      }}
-                      className={getInputClasses("subagentPeriodFrom", false, subagentPeriodFrom)}
-                      aria-label="Subagent period from"
-                    />
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={subagentPeriodFrom}
+                        onChange={(e) => {
+                          setSubagentPeriodFrom(e.target.value);
+                          markFieldDirty("subagentPeriodFrom");
+                        }}
+                        onBlur={() => markFieldTouched("subagentPeriodFrom")}
+                        onFocus={() => markFieldTouched("subagentPeriodFrom")}
+                        className={`${getInputClasses("subagentPeriodFrom", false, subagentPeriodFrom)} ${touchedFields.has("subagentPeriodFrom") || subagentPeriodFrom.trim() ? 'pr-10' : ''}`}
+                        aria-label="Subagent period from"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("subagentPeriodFrom", false, subagentPeriodFrom, touchedFields.has("subagentPeriodFrom"))}
+                        show={touchedFields.has("subagentPeriodFrom") || subagentPeriodFrom.trim() !== ""}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Period to</label>
-                    <input
-                      type="date"
-                      value={subagentPeriodTo}
-                      onChange={(e) => {
-                        setSubagentPeriodTo(e.target.value);
-                        markFieldDirty("subagentPeriodTo");
-                      }}
-                      className={getInputClasses("subagentPeriodTo", false, subagentPeriodTo)}
-                      aria-label="Subagent period to"
-                    />
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={subagentPeriodTo}
+                        onChange={(e) => {
+                          setSubagentPeriodTo(e.target.value);
+                          markFieldDirty("subagentPeriodTo");
+                        }}
+                        onBlur={() => markFieldTouched("subagentPeriodTo")}
+                        onFocus={() => markFieldTouched("subagentPeriodTo")}
+                        className={`${getInputClasses("subagentPeriodTo", false, subagentPeriodTo)} ${touchedFields.has("subagentPeriodTo") || subagentPeriodTo.trim() ? 'pr-10' : ''}`}
+                        aria-label="Subagent period to"
+                      />
+                      <ValidationIcon
+                        status={getValidationStatus("subagentPeriodTo", false, subagentPeriodTo, touchedFields.has("subagentPeriodTo"))}
+                        show={touchedFields.has("subagentPeriodTo") || subagentPeriodTo.trim() !== ""}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -935,17 +1143,25 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   Payment details (IBAN, bank, etc.)
                 </label>
-                <textarea
-                  value={subagentPaymentDetails}
-                  onChange={(e) => {
-                    setSubagentPaymentDetails(e.target.value);
-                    markFieldDirty("subagentPaymentDetails");
-                  }}
-                  rows={3}
-                  placeholder="IBAN, bank name, account holder..."
-                  className={getInputClasses("subagentPaymentDetails", false, subagentPaymentDetails)}
-                  aria-label="Payment details"
-                />
+                <div className="relative">
+                  <textarea
+                    value={subagentPaymentDetails}
+                    onChange={(e) => {
+                      setSubagentPaymentDetails(e.target.value);
+                      markFieldDirty("subagentPaymentDetails");
+                    }}
+                    onBlur={() => markFieldTouched("subagentPaymentDetails")}
+                    onFocus={() => markFieldTouched("subagentPaymentDetails")}
+                    rows={3}
+                    placeholder="IBAN, bank name, account holder..."
+                    className={`${getInputClasses("subagentPaymentDetails", false, subagentPaymentDetails)} ${touchedFields.has("subagentPaymentDetails") || subagentPaymentDetails.trim() ? 'pr-10' : ''}`}
+                    aria-label="Payment details"
+                  />
+                  <ValidationIcon
+                    status={getValidationStatus("subagentPaymentDetails", false, subagentPaymentDetails, touchedFields.has("subagentPaymentDetails"))}
+                    show={touchedFields.has("subagentPaymentDetails") || subagentPaymentDetails.trim() !== ""}
+                  />
+                </div>
               </div>
             </div>
           </div>

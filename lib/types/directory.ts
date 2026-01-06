@@ -28,6 +28,14 @@ export interface DirectoryRecord {
   personalCode?: string;
   citizenship?: string;
   
+  // Passport fields
+  passportNumber?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
+  passportIssuingCountry?: string;
+  passportFullName?: string;
+  nationality?: string;
+  
   // Company fields
   companyName?: string;
   regNumber?: string;
