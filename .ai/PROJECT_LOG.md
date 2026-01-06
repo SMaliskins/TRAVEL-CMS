@@ -1582,3 +1582,155 @@ ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ticket_nr text;
 - Версия обновлена до `0.4.1`
 
 **[Следующий: QA/REGRESSION]** — Проверить функциональность
+
+
+---
+
+## [2026-01-05 20:00] CODE WRITER — Flight Itinerary Enhancements v0.4.1
+
+**Branch:** feature/x
+**Версия:** `0.4.1`
+**Задачи:** 6 улучшений для авиабилетов и AddServiceModal
+**Результат:** DONE
+
+### Выполненные задачи:
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | PDF парсинг авиабилетов | ✅ DONE |
+| 2 | Улучшенный текстовый парсинг (Amadeus/Galileo) | ✅ DONE |
+| 3 | Поле класса билета (Economy/Business/First) | ✅ DONE |
+| 4 | Дата прилёта +1 день от вылета | ✅ DONE |
+| 5 | Client/Payer не отображали клиента по умолчанию | ✅ FIXED |
+| 6 | Несколько клиентов в сервисе | ✅ DONE |
+
+### Файлы изменены:
+- `components/FlightItineraryInput.tsx` — PDF загрузка, Amadeus парсинг, новые поля
+- `app/api/ai/parse-flight-itinerary/route.ts` — FormData поддержка
+- `components/PartySelect.tsx` — initialDisplayName проп
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx` — мульти-клиенты
+
+---
+
+## [2026-01-05 20:30] CODE WRITER — Origin/Destination + UI Improvements v0.4.2
+
+**Branch:** feature/x
+**Версия:** `0.4.2`
+**Задачи:** UX улучшения для секции Client
+**Результат:** DONE
+
+### Выполненные задачи:
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Origin/Destination — два поля (From/To) с drag-drop | ✅ DONE |
+| 2 | История клиента — запоминает 2 последних города вылета | ✅ DONE |
+| 3 | Default city — Riga (или из Settings) для новых клиентов | ✅ DONE |
+| 4 | Double-click на сервис → Edit modal | ✅ DONE |
+| 5 | TripMap компактнее — в секции Client | ✅ DONE |
+| 6 | Order Type — редактируемый, рядом с Client | ✅ DONE |
+| 7 | Client section — имя больше, email/phone рядом | ✅ DONE |
+| 8 | Double-click на поле → Edit mode | ✅ DONE |
+
+### Файлы изменены:
+- `app/orders/[orderCode]/_components/OrderClientSection.tsx` — полная переработка
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` — double-click edit
+- `app/orders/[orderCode]/page.tsx` — orderType prop
+- `components/TripMap.tsx` — compact mode
+- `components/CityMultiSelect.tsx` — placeholder prop
+- `app/api/orders/[orderCode]/services/[serviceId]/route.ts` — PATCH/DELETE endpoints
+
+---
+
+## [2026-01-05 21:00] CODE WRITER — QA Fixes v0.4.3
+
+**Branch:** feature/x
+**Версия:** `0.4.3`
+**Задачи:** QA баги
+**Результат:** DONE
+
+### Исправленные баги:
+
+| # | Проблема | Решение |
+|---|----------|---------|
+| 1 | Клиент не находится в поиске | Убран некорректный SQL фильтр `is_client = true` — это вычисляемое поле из join таблицы `client_party`, не колонка в `party` |
+| 2 | AI parsing failed для PDF | Добавлена библиотека `pdf-parse` для извлечения текста из PDF перед отправкой в AI |
+| 3 | Парсинг FlyDubai формата | Добавлена поддержка формата: "Departure from Riga (Flight FZ 1442)..." с датами "20 December 2025", "+1 day" |
+
+### Файлы изменены:
+- `app/api/directory/route.ts` — убран is_client SQL фильтр
+- `app/api/ai/parse-flight-itinerary/route.ts` — pdf-parse интеграция
+- `components/FlightItineraryInput.tsx` — FlyDubai/Emirates парсер
+- `package.json` — добавлен pdf-parse
+
+### Поддерживаемые форматы авиабилетов:
+1. **Простой:** `LX348 GVA-LHR 06.01 15:55-16:40`
+2. **Amadeus/Galileo:** `FLIGHT LX 348 - SWISS...`
+3. **FlyDubai/Emirates:** `Departure from Riga (Flight FZ 1442)...`
+
+---
+
+## [2026-01-05 21:30] CODE WRITER — Return to Origin + Map Fixes v0.4.4
+
+**Branch:** feature/x
+**Версия:** `0.4.4`
+**Задачи:** Return city + карта z-index
+**Результат:** DONE
+
+### Выполненные задачи:
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Return to Origin — чекбокс "Return to origin city" | ✅ DONE |
+| 2 | Return city можно изменить на другой город | ✅ DONE |
+| 3 | Маршрут отображается полностью: Riga → Rome → Riga | ✅ DONE |
+| 4 | Карта z-index — модалы теперь поверх карты | ✅ FIXED |
+| 5 | Карта увеличена до h-48 | ✅ DONE |
+
+### Файлы изменены:
+- `app/orders/[orderCode]/_components/OrderClientSection.tsx` — Return field, route parsing
+- `app/globals.css` — Leaflet z-index fixes
+
+### Формат хранения маршрута:
+```
+origin:Riga, Latvia|Rome, Italy; Barcelona, Spain|return:Riga, Latvia
+```
+
+---
+
+## [2026-01-05] SUMMARY — Версии 0.4.1 → 0.4.4
+
+### Changelog:
+
+**v0.4.1:**
+- PDF парсинг авиабилетов
+- Amadeus/Galileo текстовый парсинг
+- Класс билета (Economy/Business/First)
+- Дата прилёта +1 день
+- Client/Payer auto-fill fix
+- Несколько клиентов в сервисе
+
+**v0.4.2:**
+- Origin/Destination поля с drag-drop
+- История городов клиента (2 города)
+- Default origin city
+- Double-click редактирование сервисов
+- Double-click редактирование полей
+- Order Type badge
+- Compact TripMap
+- PATCH/DELETE API для сервисов
+
+**v0.4.3:**
+- Fix: поиск клиентов работает
+- Fix: PDF парсинг работает (pdf-parse)
+- FlyDubai/Emirates формат парсинга
+
+**v0.4.4:**
+- Return to Origin опция
+- Полный маршрут: Origin → Destinations → Return
+- Карта z-index fix (модалы поверх карты)
+- Карта h-48 (больше)
+
+### Общее количество файлов изменено: 15+
+### Новые зависимости: pdf-parse
+
