@@ -400,330 +400,331 @@ export default function OrderClientSection({
     );
   };
 
+  // Calculate days until trip
+  const daysUntilTrip = useMemo(() => {
+    if (!dateFrom) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tripDate = new Date(dateFrom);
+    tripDate.setHours(0, 0, 0, 0);
+    const diffTime = tripDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  }, [dateFrom]);
+
+  // Filter unique destinations by city name
+  const uniqueDestinations = useMemo(() => {
+    const seen = new Set<string>();
+    return parsedRoute.destinations.filter(city => {
+      const key = city.city.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [parsedRoute.destinations]);
+
   return (
-    <div className="rounded-lg bg-white p-5 shadow-sm">
-      {/* Header: Order Type + Actions */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Client</h2>
-          {/* Order Type Badge - editable */}
-          {renderField(
-            "orderType",
-            "Order Type",
-            <span 
-              className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded cursor-pointer"
-              title="Double-click to edit"
-            >
-              {ORDER_TYPES.find(t => t.value === orderType)?.label || orderType}
-            </span>,
-            <select
-              value={editOrderType}
-              onChange={(e) => setEditOrderType(e.target.value)}
-              className="text-sm border border-gray-300 rounded px-2 py-1"
-            >
-              {ORDER_TYPES.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
+    <div className="rounded-2xl bg-white/80 backdrop-blur-xl p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50">
+      {/* Layout: Client info left, Map right */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 mb-4">
+        {/* Left: Client + Route */}
+        <div className="space-y-3">
+          {/* Compact Header Row: Client + Type */}
+          <div className="flex items-center justify-between pb-3 border-b border-gray-200/60">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Client Name - editable */}
+              {renderField(
+                "client",
+                "Client",
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="text-base font-semibold tracking-tight text-gray-900">
+                    {clientDisplayName || <span className="text-gray-400 italic font-normal">No client</span>}
+                  </h2>
+                  {clientPhone && (
+                    <a
+                      href={`tel:${clientPhone}`}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                      title={clientPhone}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      <span className="hidden sm:inline">{clientPhone}</span>
+                    </a>
+                  )}
+                  {clientEmail && (
+                    <a
+                      href={`mailto:${clientEmail}`}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                      title={clientEmail}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span className="hidden lg:inline truncate max-w-[150px]">{clientEmail}</span>
+                    </a>
+                  )}
+                </div>,
+                <PartySelect
+                  value={editClientId}
+                  onChange={(id, displayName) => {
+                    setEditClientId(id);
+                    setEditClientName(displayName);
+                  }}
+                  roleFilter="client"
+                  initialDisplayName={editClientName}
+                />
+              )}
+              {/* Order Type Badge - compact */}
+              {renderField(
+                "orderType",
+                "Order Type",
+                <span 
+                  className="px-2 py-0.5 text-[10px] font-semibold bg-blue-100/80 text-blue-800 rounded-md cursor-pointer uppercase tracking-wide"
+                  title="Double-click to edit"
+                >
+                  {ORDER_TYPES.find(t => t.value === orderType)?.label || orderType}
+                </span>,
+                <select
+                  value={editOrderType}
+                  onChange={(e) => setEditOrderType(e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-2 py-1"
+                >
+                  {ORDER_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Compact Route + Dates - ONE unified block, no duplicates */}
+          {(parsedRoute.origin || uniqueDestinations.length > 0 || dateFrom) && (
+            <div>
+              {renderField(
+                "route",
+                "Route & Dates",
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Route - compact inline, unique destinations only */}
+                  {(parsedRoute.origin || uniqueDestinations.length > 0) && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {parsedRoute.origin && (
+                        <>
+                          <span className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+                            {parsedRoute.origin.countryCode && (
+                              <span className="text-base">{countryCodeToFlag(parsedRoute.origin.countryCode)}</span>
+                            )}
+                            {parsedRoute.origin.city}
+                          </span>
+                          <span className="text-gray-400 text-xs">→</span>
+                        </>
+                      )}
+                      {uniqueDestinations.map((city, idx) => (
+                        <span key={`${city.city}-${idx}`} className="flex items-center">
+                          <span className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+                            {city.countryCode && (
+                              <span className="text-base">{countryCodeToFlag(city.countryCode)}</span>
+                            )}
+                            {city.city}
+                          </span>
+                          {(idx < uniqueDestinations.length - 1 || (parsedRoute.returnCity && parsedRoute.returnCity.city !== parsedRoute.origin?.city)) && (
+                            <span className="text-gray-400 text-xs mx-1">→</span>
+                          )}
+                        </span>
+                      ))}
+                      {parsedRoute.returnCity && parsedRoute.returnCity.city !== parsedRoute.origin?.city && (
+                        <>
+                          <span className="text-gray-400 text-xs">→</span>
+                          <span className="flex items-center gap-1 text-sm font-semibold text-gray-700">
+                            {parsedRoute.returnCity.countryCode && (
+                              <span className="text-base">{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
+                            )}
+                            {parsedRoute.returnCity.city}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Dates - inline */}
+                  {(dateFrom || dateTo) && (
+                    <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
+                      <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-[12px] font-medium text-gray-700">
+                        {formatDateDDMMYYYY(dateFrom)} — {formatDateDDMMYYYY(dateTo)}
+                      </span>
+                      {daysUntilTrip !== null && daysUntilTrip >= 0 && (
+                        <span className="text-[10px] font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-full">
+                          {daysUntilTrip} {daysUntilTrip === 1 ? 'day' : 'days'} before trip
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>,
+            <div className="space-y-3">
+              {/* Origin */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">From</label>
+                <div
+                  onDragOver={handleDragOver}
+                  onDrop={handleDropOnOrigin}
+                  className="min-h-[36px] border-2 border-dashed border-gray-300 rounded-lg p-2"
+                >
+                  {originSuggestions.length > 0 && !editOrigin && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {originSuggestions.map(city => (
+                        <button
+                          key={city.city}
+                          type="button"
+                          onClick={() => setEditOrigin(city)}
+                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1"
+                        >
+                          {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
+                          {city.city}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {editOrigin ? (
+                    <div
+                      draggable
+                      onDragStart={() => handleDragStart(editOrigin, "origin")}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded cursor-move text-xs"
+                    >
+                      {editOrigin.countryCode && <span>{countryCodeToFlag(editOrigin.countryCode)}</span>}
+                      {editOrigin.city}
+                      <button
+                        type="button"
+                        onClick={() => setEditOrigin(null)}
+                        className="ml-1 text-blue-600 hover:text-blue-800"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <CityMultiSelect
+                      selectedCities={editOrigin ? [editOrigin] : []}
+                      onChange={(cities) => setEditOrigin(cities[0] || null)}
+                      placeholder="Select origin..."
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Destinations - filter duplicates */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">To</label>
+                <div
+                  onDragOver={handleDragOver}
+                  onDrop={handleDropOnDestinations}
+                  className="min-h-[36px] border-2 border-dashed border-gray-300 rounded-lg p-2"
+                >
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {editDestinations.filter((city, idx, arr) => 
+                      arr.findIndex(c => c.city.toLowerCase() === city.city.toLowerCase()) === idx
+                    ).map((city, idx) => (
+                      <div
+                        key={`${city.city}-${idx}`}
+                        draggable
+                        onDragStart={() => handleDragStart(city, "destinations")}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded cursor-move text-xs"
+                      >
+                        {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
+                        {city.city}
+                        <button
+                          type="button"
+                          onClick={() => setEditDestinations(prev => prev.filter((c, i) => {
+                            const cityIndex = prev.findIndex(x => x.city.toLowerCase() === city.city.toLowerCase());
+                            return i !== cityIndex;
+                          }))}
+                          className="ml-1 text-green-600 hover:text-green-800"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <CityMultiSelect
+                    selectedCities={editDestinations.filter((city, idx, arr) => 
+                      arr.findIndex(c => c.city.toLowerCase() === city.city.toLowerCase()) === idx
+                    )}
+                    onChange={(newCities) => {
+                      // Filter duplicates when adding
+                      const unique = newCities.filter((city, idx, arr) => 
+                        arr.findIndex(c => c.city.toLowerCase() === city.city.toLowerCase()) === idx
+                      );
+                      setEditDestinations(unique);
+                    }}
+                    placeholder="Add destinations..."
+                  />
+                </div>
+              </div>
+
+              {/* Return */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer mb-1.5">
+                  <input
+                    type="checkbox"
+                    checked={returnToOrigin}
+                    onChange={(e) => {
+                      setReturnToOrigin(e.target.checked);
+                      if (e.target.checked && editOrigin) {
+                        setEditReturnCity(editOrigin);
+                      }
+                    }}
+                    className="rounded border-gray-300 text-xs"
+                  />
+                  <span className="text-xs text-gray-700">Return to origin</span>
+                </label>
+                {!returnToOrigin && (
+                  <CityMultiSelect
+                    selectedCities={editReturnCity ? [editReturnCity] : []}
+                    onChange={(cities) => setEditReturnCity(cities[0] || null)}
+                    placeholder="Select return city..."
+                  />
+                )}
+              </div>
+
+              {/* Dates */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Travel Dates</label>
+                <DateRangePicker
+                  label=""
+                  from={editDateFrom}
+                  to={editDateTo}
+                  onChange={(from, to) => {
+                    setEditDateFrom(from);
+                    setEditDateTo(to);
+                  }}
+                />
+              </div>
+            </div>
+          )}
+            </div>
           )}
         </div>
-      </div>
-
-      {/* Client Row - bigger, with contacts inline */}
-      <div className="mb-4">
-        {renderField(
-          "client",
-          "Client",
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="text-lg font-medium text-gray-900">
-              {clientDisplayName || <span className="text-gray-400 italic">No client</span>}
-            </span>
-            {clientPhone && (
-              <a
-                href={`tel:${clientPhone}`}
-                className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                {clientPhone}
-              </a>
-            )}
-            {clientEmail && (
-              <a
-                href={`mailto:${clientEmail}`}
-                className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                {clientEmail}
-              </a>
-            )}
-          </div>,
-          <PartySelect
-            value={editClientId}
-            onChange={(id, displayName) => {
-              setEditClientId(id);
-              setEditClientName(displayName);
-            }}
-            roleFilter="client"
-            initialDisplayName={editClientName}
-          />
-        )}
-      </div>
-
-      {/* Route: Origin → Destinations */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        {/* Origin (From) */}
-        {renderField(
-          "origin",
-          "From",
-          <div>
-            <span className="text-xs text-gray-500 block mb-1">From</span>
-            {parsedRoute.origin ? (
-              <div className="flex items-center gap-1">
-                {parsedRoute.origin.countryCode && (
-                  <span>{countryCodeToFlag(parsedRoute.origin.countryCode)}</span>
-                )}
-                <span className="text-gray-900">{parsedRoute.origin.city}</span>
-              </div>
-            ) : (
-              <span className="text-gray-400 italic text-sm">Not set</span>
-            )}
-          </div>,
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleDropOnOrigin}
-            className="min-h-[40px] border-2 border-dashed border-gray-300 rounded p-2"
-          >
-            {/* Origin suggestions */}
-            {originSuggestions.length > 0 && !editOrigin && (
-              <div className="flex flex-wrap gap-1 mb-2">
-                {originSuggestions.map(city => (
-                  <button
-                    key={city.city}
-                    type="button"
-                    onClick={() => setEditOrigin(city)}
-                    className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1"
-                  >
-                    {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
-                    {city.city}
-                  </button>
-                ))}
-              </div>
-            )}
-            {editOrigin ? (
-              <div
-                draggable
-                onDragStart={() => handleDragStart(editOrigin, "origin")}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded cursor-move"
-              >
-                {editOrigin.countryCode && <span>{countryCodeToFlag(editOrigin.countryCode)}</span>}
-                {editOrigin.city}
-                <button
-                  type="button"
-                  onClick={() => setEditOrigin(null)}
-                  className="ml-1 text-blue-600 hover:text-blue-800"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <CityMultiSelect
-                selectedCities={editOrigin ? [editOrigin] : []}
-                onChange={(cities) => setEditOrigin(cities[0] || null)}
-                placeholder="Select origin city..."
+        
+        {/* Right: Square Map */}
+        {allCitiesForMap.length > 0 && (
+          <div className="relative z-0">
+            <div className="w-full aspect-square max-w-[280px] rounded-xl overflow-hidden border border-gray-200/60 shadow-sm">
+              <TripMap
+                destinations={allCitiesForMap}
+                dateFrom={dateFrom || undefined}
+                dateTo={dateTo || undefined}
+                amountToPay={amountTotal}
+                amountPaid={amountPaid}
+                currency="€"
+                className="h-full w-full"
               />
-            )}
-          </div>
-        )}
-
-        {/* Destinations (To) */}
-        {renderField(
-          "destinations",
-          "To",
-          <div>
-            <span className="text-xs text-gray-500 block mb-1">To</span>
-            {parsedRoute.destinations.length > 0 ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                {parsedRoute.destinations.map((city, idx) => (
-                  <span key={city.city} className="flex items-center">
-                    {city.countryCode && (
-                      <span className="mr-1">{countryCodeToFlag(city.countryCode)}</span>
-                    )}
-                    <span className="text-gray-900">{city.city}</span>
-                    {idx < parsedRoute.destinations.length - 1 && (
-                      <span className="ml-2 text-gray-400">→</span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <span className="text-gray-400 italic text-sm">No destinations</span>
-            )}
-          </div>,
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleDropOnDestinations}
-            className="min-h-[40px] border-2 border-dashed border-gray-300 rounded p-2"
-          >
-            <div className="flex flex-wrap gap-1 mb-2">
-              {editDestinations.map(city => (
-                <div
-                  key={city.city}
-                  draggable
-                  onDragStart={() => handleDragStart(city, "destinations")}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded cursor-move"
-                >
-                  {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
-                  {city.city}
-                  <button
-                    type="button"
-                    onClick={() => setEditDestinations(prev => prev.filter(c => c.city !== city.city))}
-                    className="ml-1 text-green-600 hover:text-green-800"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
             </div>
-            <CityMultiSelect
-              selectedCities={editDestinations}
-              onChange={setEditDestinations}
-              placeholder="Add destinations..."
-            />
           </div>
         )}
       </div>
-
-      {/* Return to Origin */}
-      <div className="mb-4">
-        {renderField(
-          "return",
-          "Return",
-          <div>
-            <span className="text-xs text-gray-500 block mb-1">Return</span>
-            {parsedRoute.returnCity ? (
-              <div className="flex items-center gap-1">
-                {parsedRoute.returnCity.countryCode && (
-                  <span>{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
-                )}
-                <span className="text-gray-900">{parsedRoute.returnCity.city}</span>
-                {parsedRoute.origin && parsedRoute.returnCity.city === parsedRoute.origin.city && (
-                  <span className="text-xs text-gray-400 ml-1">(same as origin)</span>
-                )}
-              </div>
-            ) : (
-              <span className="text-gray-400 italic text-sm">Not set</span>
-            )}
-          </div>,
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={returnToOrigin}
-                onChange={(e) => {
-                  setReturnToOrigin(e.target.checked);
-                  if (e.target.checked && editOrigin) {
-                    setEditReturnCity(editOrigin);
-                  }
-                }}
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm text-gray-700">Return to origin city</span>
-            </label>
-            {!returnToOrigin && (
-              <CityMultiSelect
-                selectedCities={editReturnCity ? [editReturnCity] : []}
-                onChange={(cities) => setEditReturnCity(cities[0] || null)}
-                placeholder="Select return city..."
-              />
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Dates */}
-      <div className="mb-4">
-        {renderField(
-          "dates",
-          "Travel Dates",
-          <div>
-            <span className="text-xs text-gray-500 block mb-1">Travel Dates</span>
-            <span className="text-gray-900">
-              {dateFrom || dateTo ? (
-                `${formatDateDDMMYYYY(dateFrom)} — ${formatDateDDMMYYYY(dateTo)}`
-              ) : (
-                <span className="text-gray-400 italic">Not set</span>
-              )}
-            </span>
-          </div>,
-          <DateRangePicker
-            label=""
-            from={editDateFrom}
-            to={editDateTo}
-            onChange={(from, to) => {
-              setEditDateFrom(from);
-              setEditDateTo(to);
-            }}
-          />
-        )}
-      </div>
-
-      {/* Full Route Display */}
-      {(parsedRoute.origin || parsedRoute.destinations.length > 0) && (
-        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <div className="text-xs text-gray-500 mb-2">Route</div>
-          <div className="flex items-center gap-2 flex-wrap text-sm">
-            {parsedRoute.origin && (
-              <>
-                <span className="flex items-center gap-1 font-medium text-blue-700">
-                  {parsedRoute.origin.countryCode && countryCodeToFlag(parsedRoute.origin.countryCode)}
-                  {parsedRoute.origin.city}
-                </span>
-                <span className="text-gray-400">→</span>
-              </>
-            )}
-            {parsedRoute.destinations.map((city, idx) => (
-              <span key={city.city} className="flex items-center">
-                <span className="flex items-center gap-1 font-medium text-green-700">
-                  {city.countryCode && countryCodeToFlag(city.countryCode)}
-                  {city.city}
-                </span>
-                {(idx < parsedRoute.destinations.length - 1 || parsedRoute.returnCity) && (
-                  <span className="text-gray-400 ml-2">→</span>
-                )}
-              </span>
-            ))}
-            {parsedRoute.returnCity && (
-              <span className="flex items-center gap-1 font-medium text-blue-700">
-                {parsedRoute.returnCity.countryCode && countryCodeToFlag(parsedRoute.returnCity.countryCode)}
-                {parsedRoute.returnCity.city}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Trip Map - wider, proper z-index */}
-      {allCitiesForMap.length > 0 && (
-        <div className="relative z-0">
-          <div className="h-48 rounded-lg overflow-hidden border border-gray-200">
-            <TripMap
-              destinations={allCitiesForMap}
-              dateFrom={dateFrom || undefined}
-              dateTo={dateTo || undefined}
-              amountToPay={amountTotal}
-              amountPaid={amountPaid}
-              currency="€"
-              className="h-full"
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
