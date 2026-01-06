@@ -3598,3 +3598,31 @@ Branch: feature/x
 `app/api/directory/[id]/route.ts`
 
 ---
+
+## [2026-01-07 01:55] CODE_WRITER — RESULT: Add fallback for missing nationality column
+Branch: feature/x
+Задача: Add fallback for missing nationality column
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Добавлена обработка ошибки для отсутствующей колонки `nationality`: если ошибка связана с `nationality`, код повторяет запрос без этого поля.
+
+**Изменения:**
+`app/api/directory/[id]/route.ts`:
+- Добавлена проверка ошибки: если ошибка содержит "nationality" и `nationality` был в запросе, удаляем его и повторяем запрос
+- Добавлено предупреждение в лог о том, что нужно запустить миграцию
+- Остальные passport fields сохраняются даже если `nationality` колонка отсутствует
+
+**Результат:**
+✅ Passport fields (кроме nationality) сохраняются даже если миграция не выполнена
+✅ Код не падает с ошибкой, если колонка `nationality` отсутствует
+✅ После выполнения миграции `nationality` будет сохраняться автоматически
+
+**Важно:**
+Пользователю все еще нужно запустить миграцию в Supabase SQL Editor, чтобы добавить колонку `nationality` и сохранять это поле.
+
+**Файлы:**
+- `app/api/directory/[id]/route.ts` - добавлена обработка ошибки для отсутствующей колонки
+
+---
