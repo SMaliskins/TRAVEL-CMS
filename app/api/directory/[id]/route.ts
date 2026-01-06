@@ -484,7 +484,15 @@ export async function PUT(
     // Update person or company table
     const partyType = updates.type || (updates.firstName ? "person" : updates.companyName ? "company" : null);
     
-    if (partyType === "person" || updates.firstName || updates.lastName) {
+    // Check if we need to update person table (including passport fields)
+    const hasPersonFields = updates.firstName !== undefined || updates.lastName !== undefined || 
+                            updates.title !== undefined || updates.dob !== undefined || 
+                            updates.personalCode !== undefined || updates.citizenship !== undefined;
+    const hasPassportFields = updates.passportNumber !== undefined || updates.passportIssueDate !== undefined ||
+                              updates.passportExpiryDate !== undefined || updates.passportIssuingCountry !== undefined ||
+                              updates.passportFullName !== undefined || updates.nationality !== undefined;
+    
+    if (partyType === "person" || hasPersonFields || hasPassportFields) {
       const personUpdates: any = {};
       if (updates.title !== undefined) personUpdates.title = updates.title;
       if (updates.firstName !== undefined) personUpdates.first_name = updates.firstName;
@@ -492,7 +500,7 @@ export async function PUT(
       if (updates.dob !== undefined) personUpdates.dob = updates.dob;
       if (updates.personalCode !== undefined) personUpdates.personal_code = updates.personalCode;
       if (updates.citizenship !== undefined) personUpdates.citizenship = updates.citizenship;
-      // Passport fields
+      // Passport fields - always include if defined
       if (updates.passportNumber !== undefined) personUpdates.passport_number = updates.passportNumber || null;
       if (updates.passportIssueDate !== undefined) personUpdates.passport_issue_date = updates.passportIssueDate || null;
       if (updates.passportExpiryDate !== undefined) personUpdates.passport_expiry_date = updates.passportExpiryDate || null;
@@ -500,15 +508,23 @@ export async function PUT(
       if (updates.passportFullName !== undefined) personUpdates.passport_full_name = updates.passportFullName || null;
       if (updates.nationality !== undefined) personUpdates.nationality = updates.nationality || null;
 
-      const { error: personError } = await supabaseAdmin
-        .from("party_person")
-        .upsert({
-          party_id: id,
-          ...personUpdates,
-        });
+      // Only update if there are fields to update
+      if (Object.keys(personUpdates).length > 0) {
+        const { error: personError } = await supabaseAdmin
+          .from("party_person")
+          .upsert({
+            party_id: id,
+            ...personUpdates,
+          });
 
-      if (personError) {
-        console.error("Error updating person:", personError);
+        if (personError) {
+          console.error("Error updating person:", personError);
+          console.error("Person updates attempted:", JSON.stringify(personUpdates, null, 2));
+          return NextResponse.json(
+            { error: `Failed to update person record: ${personError.message}`, details: personError.details },
+            { status: 500 }
+          );
+        }
       }
     }
 
