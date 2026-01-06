@@ -1531,3 +1531,54 @@ ALTER TABLE public.order_services ADD COLUMN IF NOT EXISTS ticket_nr text;
 
 **[Следующий: RUNNER]** — Task O9 complete, proceed with next task
 
+
+
+---
+
+## [2026-01-05 19:30] CODE WRITER — Flight Itinerary Enhancements + AddService Fixes
+
+**Branch:** cursor/cursor-agent-initiation-fe61
+**Версия:** `0.4.1`
+**Задачи:** 6 улучшений для авиабилетов и AddServiceModal
+**Результат:** DONE
+
+### Выполненные задачи:
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | PDF парсинг авиабилетов | ✅ DONE |
+| 2 | Улучшенный текстовый парсинг (Amadeus/Galileo) | ✅ DONE |
+| 3 | Поле класса билета (Economy/Business/First) | ✅ DONE |
+| 4 | Дата прилёта +1 день от вылета | ✅ DONE |
+| 5 | Client/Payer не отображали клиента по умолчанию | ✅ FIXED |
+| 6 | Несколько клиентов в сервисе | ✅ DONE |
+
+### Изменения:
+
+**components/FlightItineraryInput.tsx:**
+- Добавлена поддержка PDF загрузки (FormData)
+- Улучшен парсинг текста для формата Amadeus/Galileo
+- Добавлены новые поля: cabinClass, bookingClass, bookingRef, ticketNumber, baggage, seat, passengerName
+- Добавлена секция "BOOKING DETAILS" в форму редактирования
+- FlightCard отображает класс билета и информацию о брони
+- Логика определения +1 день прилёта (если время прилёта < времени вылета)
+
+**app/api/ai/parse-flight-itinerary/route.ts:**
+- Полностью переписан для поддержки FormData с PDF
+- Обновлён SYSTEM_PROMPT для новой структуры данных
+- Поддержка текстового парсинга через JSON body
+
+**components/PartySelect.tsx:**
+- Добавлен проп `initialDisplayName` для отображения имени без API запроса
+- Исправлена проблема: Client/Payer теперь сразу показывают имя клиента заказа
+
+**app/orders/[orderCode]/_components/AddServiceModal.tsx:**
+- Изменён state: вместо одного клиента — массив `clients[]`
+- Добавлена кнопка "+" для добавления клиентов
+- Каждый клиент имеет свой PartySelect с возможностью удаления
+- Payload отправляет массив `clients` на сервер
+
+### Commit:
+- Версия обновлена до `0.4.1`
+
+**[Следующий: QA/REGRESSION]** — Проверить функциональность
