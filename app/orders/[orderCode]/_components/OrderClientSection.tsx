@@ -115,63 +115,67 @@ export default function OrderClientSection({
   // Which field is being edited (double-click to edit)
   const [editingField, setEditingField] = useState<string | null>(null);
 
-  // Parse origin and destinations from countriesCities
-  // Format: "origin:Riga, Latvia|Rome, Italy; Barcelona, Spain"
-  // If no origin prefix, first city is origin
+  // Parse origin, destinations, and return city from countriesCities
+  // Format: "origin:Riga, Latvia|Rome, Italy; Barcelona, Spain|return:Riga, Latvia"
+  // If no return specified, defaults to origin
   const parsedRoute = useMemo(() => {
-    if (!countriesCities) return { origin: null, destinations: [] };
+    if (!countriesCities) return { origin: null, destinations: [], returnCity: null };
     
     let originCity: CityWithCountry | null = null;
+    let returnCity: CityWithCountry | null = null;
     let destinations: CityWithCountry[] = [];
     
-    // Check for origin: prefix
-    if (countriesCities.includes("|")) {
-      const [originPart, destPart] = countriesCities.split("|");
-      if (originPart.startsWith("origin:")) {
-        const originStr = originPart.replace("origin:", "").trim();
-        const parts = originStr.split(",");
-        const cityName = parts[0]?.trim() || "";
+    // Check for parts: origin:|destinations|return:
+    const parts = countriesCities.split("|");
+    
+    for (const part of parts) {
+      if (part.startsWith("origin:")) {
+        const originStr = part.replace("origin:", "").trim();
+        const cityParts = originStr.split(",");
+        const cityName = cityParts[0]?.trim() || "";
         const cityData = getCityByName(cityName);
         originCity = {
           city: cityName,
-          country: parts[1]?.trim() || "",
+          country: cityParts[1]?.trim() || "",
           countryCode: cityData?.countryCode,
           lat: cityData?.lat,
           lng: cityData?.lng,
         };
-      }
-      // Parse destinations
-      if (destPart) {
-        destinations = destPart.split(";").map(item => {
-          const parts = item.trim().split(",");
-          const cityName = parts[0]?.trim() || "";
+      } else if (part.startsWith("return:")) {
+        const returnStr = part.replace("return:", "").trim();
+        const cityParts = returnStr.split(",");
+        const cityName = cityParts[0]?.trim() || "";
+        const cityData = getCityByName(cityName);
+        returnCity = {
+          city: cityName,
+          country: cityParts[1]?.trim() || "",
+          countryCode: cityData?.countryCode,
+          lat: cityData?.lat,
+          lng: cityData?.lng,
+        };
+      } else if (part.trim()) {
+        // Destinations
+        destinations = part.split(";").map(item => {
+          const cityParts = item.trim().split(",");
+          const cityName = cityParts[0]?.trim() || "";
           const cityData = getCityByName(cityName);
           return {
             city: cityName,
-            country: parts[1]?.trim() || "",
+            country: cityParts[1]?.trim() || "",
             countryCode: cityData?.countryCode,
             lat: cityData?.lat,
             lng: cityData?.lng,
           };
         }).filter(c => c.city);
       }
-    } else {
-      // Old format: just destinations
-      destinations = countriesCities.split(";").map(item => {
-        const parts = item.trim().split(",");
-        const cityName = parts[0]?.trim() || "";
-        const cityData = getCityByName(cityName);
-        return {
-          city: cityName,
-          country: parts[1]?.trim() || "",
-          countryCode: cityData?.countryCode,
-          lat: cityData?.lat,
-          lng: cityData?.lng,
-        };
-      }).filter(c => c.city);
     }
     
-    return { origin: originCity, destinations };
+    // If no return city specified, default to origin
+    if (!returnCity && originCity) {
+      returnCity = { ...originCity };
+    }
+    
+    return { origin: originCity, destinations, returnCity };
   }, [countriesCities]);
 
   // Edit states
@@ -179,6 +183,8 @@ export default function OrderClientSection({
   const [editClientName, setEditClientName] = useState(clientDisplayName || "");
   const [editOrigin, setEditOrigin] = useState<CityWithCountry | null>(parsedRoute.origin);
   const [editDestinations, setEditDestinations] = useState<CityWithCountry[]>(parsedRoute.destinations);
+  const [editReturnCity, setEditReturnCity] = useState<CityWithCountry | null>(parsedRoute.returnCity);
+  const [returnToOrigin, setReturnToOrigin] = useState(true); // Toggle for "same as origin"
   const [editDateFrom, setEditDateFrom] = useState<string | undefined>(dateFrom || undefined);
   const [editDateTo, setEditDateTo] = useState<string | undefined>(dateTo || undefined);
   const [editOrderType, setEditOrderType] = useState(orderType);
@@ -213,6 +219,11 @@ export default function OrderClientSection({
     setEditClientName(clientDisplayName || "");
     setEditOrigin(parsedRoute.origin);
     setEditDestinations(parsedRoute.destinations);
+    setEditReturnCity(parsedRoute.returnCity);
+    // Check if return is same as origin
+    setReturnToOrigin(
+      parsedRoute.returnCity?.city === parsedRoute.origin?.city
+    );
     setEditDateFrom(dateFrom || undefined);
     setEditDateTo(dateTo || undefined);
     setEditOrderType(orderType);
@@ -232,7 +243,7 @@ export default function OrderClientSection({
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Format route for storage
+      // Format route for storage: origin:City, Country|Dest1; Dest2|return:City, Country
       let formattedCities = "";
       if (editOrigin) {
         formattedCities = `origin:${editOrigin.city}, ${editOrigin.country}|`;
@@ -240,6 +251,12 @@ export default function OrderClientSection({
         saveClientOrigin(editClientId, editOrigin);
       }
       formattedCities += editDestinations.map(c => `${c.city}, ${c.country}`).join("; ");
+      
+      // Add return city
+      const returnCityToSave = returnToOrigin ? editOrigin : editReturnCity;
+      if (returnCityToSave) {
+        formattedCities += `|return:${returnCityToSave.city}, ${returnCityToSave.country}`;
+      }
 
       const updates: Record<string, unknown> = {
         client_display_name: editClientName || null,
@@ -323,11 +340,18 @@ export default function OrderClientSection({
     setDraggedCity(null);
   };
 
-  // All cities for map (origin + destinations)
+  // All cities for map (origin + destinations + return)
   const allCitiesForMap = useMemo(() => {
     const cities: CityWithCountry[] = [];
     if (parsedRoute.origin) cities.push(parsedRoute.origin);
     cities.push(...parsedRoute.destinations);
+    // Add return city if different from last destination
+    if (parsedRoute.returnCity) {
+      const lastCity = cities[cities.length - 1];
+      if (!lastCity || lastCity.city !== parsedRoute.returnCity.city) {
+        cities.push(parsedRoute.returnCity);
+      }
+    }
     return cities;
   }, [parsedRoute]);
 
@@ -575,6 +599,53 @@ export default function OrderClientSection({
         )}
       </div>
 
+      {/* Return to Origin */}
+      <div className="mb-4">
+        {renderField(
+          "return",
+          "Return",
+          <div>
+            <span className="text-xs text-gray-500 block mb-1">Return</span>
+            {parsedRoute.returnCity ? (
+              <div className="flex items-center gap-1">
+                {parsedRoute.returnCity.countryCode && (
+                  <span>{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
+                )}
+                <span className="text-gray-900">{parsedRoute.returnCity.city}</span>
+                {parsedRoute.origin && parsedRoute.returnCity.city === parsedRoute.origin.city && (
+                  <span className="text-xs text-gray-400 ml-1">(same as origin)</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-gray-400 italic text-sm">Not set</span>
+            )}
+          </div>,
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={returnToOrigin}
+                onChange={(e) => {
+                  setReturnToOrigin(e.target.checked);
+                  if (e.target.checked && editOrigin) {
+                    setEditReturnCity(editOrigin);
+                  }
+                }}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Return to origin city</span>
+            </label>
+            {!returnToOrigin && (
+              <CityMultiSelect
+                selectedCities={editReturnCity ? [editReturnCity] : []}
+                onChange={(cities) => setEditReturnCity(cities[0] || null)}
+                placeholder="Select return city..."
+              />
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Dates */}
       <div className="mb-4">
         {renderField(
@@ -602,10 +673,45 @@ export default function OrderClientSection({
         )}
       </div>
 
-      {/* Mini Trip Map - compact, inside Client section */}
+      {/* Full Route Display */}
+      {(parsedRoute.origin || parsedRoute.destinations.length > 0) && (
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <div className="text-xs text-gray-500 mb-2">Route</div>
+          <div className="flex items-center gap-2 flex-wrap text-sm">
+            {parsedRoute.origin && (
+              <>
+                <span className="flex items-center gap-1 font-medium text-blue-700">
+                  {parsedRoute.origin.countryCode && countryCodeToFlag(parsedRoute.origin.countryCode)}
+                  {parsedRoute.origin.city}
+                </span>
+                <span className="text-gray-400">→</span>
+              </>
+            )}
+            {parsedRoute.destinations.map((city, idx) => (
+              <span key={city.city} className="flex items-center">
+                <span className="flex items-center gap-1 font-medium text-green-700">
+                  {city.countryCode && countryCodeToFlag(city.countryCode)}
+                  {city.city}
+                </span>
+                {(idx < parsedRoute.destinations.length - 1 || parsedRoute.returnCity) && (
+                  <span className="text-gray-400 ml-2">→</span>
+                )}
+              </span>
+            ))}
+            {parsedRoute.returnCity && (
+              <span className="flex items-center gap-1 font-medium text-blue-700">
+                {parsedRoute.returnCity.countryCode && countryCodeToFlag(parsedRoute.returnCity.countryCode)}
+                {parsedRoute.returnCity.city}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Trip Map - wider, proper z-index */}
       {allCitiesForMap.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="h-32 rounded-lg overflow-hidden">
+        <div className="relative z-0">
+          <div className="h-48 rounded-lg overflow-hidden border border-gray-200">
             <TripMap
               destinations={allCitiesForMap}
               dateFrom={dateFrom || undefined}
