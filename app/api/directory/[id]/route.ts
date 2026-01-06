@@ -45,6 +45,13 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.dob = row.dob || undefined;
     record.personalCode = row.personal_code || undefined;
     record.citizenship = row.citizenship || undefined;
+    // Passport fields
+    record.passportNumber = row.passport_number || undefined;
+    record.passportIssueDate = row.passport_issue_date || undefined;
+    record.passportExpiryDate = row.passport_expiry_date || undefined;
+    record.passportIssuingCountry = row.passport_issuing_country || undefined;
+    record.passportFullName = row.passport_full_name || undefined;
+    record.nationality = row.nationality || undefined;
   }
 
   // Company fields
@@ -485,6 +492,13 @@ export async function PUT(
       if (updates.dob !== undefined) personUpdates.dob = updates.dob;
       if (updates.personalCode !== undefined) personUpdates.personal_code = updates.personalCode;
       if (updates.citizenship !== undefined) personUpdates.citizenship = updates.citizenship;
+      // Passport fields
+      if (updates.passportNumber !== undefined) personUpdates.passport_number = updates.passportNumber || null;
+      if (updates.passportIssueDate !== undefined) personUpdates.passport_issue_date = updates.passportIssueDate || null;
+      if (updates.passportExpiryDate !== undefined) personUpdates.passport_expiry_date = updates.passportExpiryDate || null;
+      if (updates.passportIssuingCountry !== undefined) personUpdates.passport_issuing_country = updates.passportIssuingCountry || null;
+      if (updates.passportFullName !== undefined) personUpdates.passport_full_name = updates.passportFullName || null;
+      if (updates.nationality !== undefined) personUpdates.nationality = updates.nationality || null;
 
       const { error: personError } = await supabaseAdmin
         .from("party_person")

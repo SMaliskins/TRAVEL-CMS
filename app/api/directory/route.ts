@@ -45,6 +45,13 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.dob = row.dob || undefined;
     record.personalCode = row.personal_code || undefined;
     record.citizenship = row.citizenship || undefined;
+    // Passport fields
+    record.passportNumber = row.passport_number || undefined;
+    record.passportIssueDate = row.passport_issue_date || undefined;
+    record.passportExpiryDate = row.passport_expiry_date || undefined;
+    record.passportIssuingCountry = row.passport_issuing_country || undefined;
+    record.passportFullName = row.passport_full_name || undefined;
+    record.nationality = row.nationality || undefined;
   }
 
   // Company fields

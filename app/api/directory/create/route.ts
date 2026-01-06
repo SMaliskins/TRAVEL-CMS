@@ -140,6 +140,13 @@ export async function POST(request: NextRequest) {
         personal_code: data.personalCode || null,
         citizenship: data.citizenship || null,
         address: null, // Address not in current DirectoryRecord type
+        // Passport fields
+        passport_number: data.passportNumber || null,
+        passport_issue_date: data.passportIssueDate || null,
+        passport_expiry_date: data.passportExpiryDate || null,
+        passport_issuing_country: data.passportIssuingCountry || null,
+        passport_full_name: data.passportFullName || null,
+        nationality: data.nationality || null,
       };
 
       const { error: personError } = await supabaseAdmin
