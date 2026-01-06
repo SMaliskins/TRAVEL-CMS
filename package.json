@@ -1,6 +1,6 @@
 {
   "name": "travel-cms",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.89.0",
     "leaflet": "^1.9.4",
     "next": "16.0.10",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-leaflet": "^5.0.0",

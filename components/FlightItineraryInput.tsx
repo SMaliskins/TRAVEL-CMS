@@ -826,10 +826,116 @@ export default function FlightItineraryInput({
         
         parsedSegments.push(segment);
       } else {
-        // Fallback to simple format: "LX348 GVA-LHR 06.01 15:55-16:40"
-        const lines = text.split("\n").filter((l) => l.trim());
+        // Try FlyDubai/Emirates format
+        // Example: "Departure from Riga (Flight FZ 1442)\nEconomy Lite\n20 December 2025..."
+        const flyDubaiPattern = /(?:Departure|Return)\s+from\s+([^\(]+)\s*\(Flight\s+([A-Z]{2})\s*(\d+)\)/gi;
+        const flyDubaiMatches = [...text.matchAll(flyDubaiPattern)];
         
-        for (const line of lines) {
+        if (flyDubaiMatches.length > 0) {
+          // Parse FlyDubai format
+          const months: Record<string, string> = {
+            january: "01", february: "02", march: "03", april: "04", may: "05", june: "06",
+            july: "07", august: "08", september: "09", october: "10", november: "11", december: "12"
+          };
+          
+          // Split by "Departure from" or "Return from" to get each segment
+          const segments = text.split(/(?=Departure from|Return from)/i).filter(s => s.trim());
+          
+          for (const segText of segments) {
+            // Extract flight info
+            const flightMatch = segText.match(/(?:Departure|Return)\s+from\s+([^\(]+)\s*\(Flight\s+([A-Z]{2})\s*(\d+)\)/i);
+            if (!flightMatch) continue;
+            
+            const departureCity = flightMatch[1].trim();
+            const airlineCode = flightMatch[2];
+            const flightNum = flightMatch[3];
+            
+            // Extract cabin class
+            const classMatch = segText.match(/Economy\s*(?:Lite|Flex|Value)?|Business|First/i);
+            const cabinClass = classMatch ? classMatch[0].toLowerCase().includes("economy") ? "economy" : 
+                               classMatch[0].toLowerCase().includes("business") ? "business" : "first" : undefined;
+            
+            // Extract dates: "20 December 2025, Saturday" and times
+            // Pattern: "20 December 2025, Saturday		21 December 2025, Sunday"
+            const dateTimePattern = /(\d{1,2})\s+(\w+)\s+(\d{4}),?\s*\w*\s*(?:\+1 day)?\s*(\d{1,2}:\d{2})?\s*\n?\s*([^\n]*?)\s*\(([A-Z]{3})\)\s*(\d{1,2}h\s*\d{1,2}min|\d+h\s*\d+m)?\s*(?:Non-stop)?\s*(\d{1,2}:\d{2})?\s*\n?\s*([^\n]*?)\s*\(([A-Z]{3})\)/gi;
+            
+            // Simpler extraction
+            const datesMatch = segText.match(/(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/gi);
+            const timesMatch = segText.match(/(\d{1,2}:\d{2})/g);
+            const airportsMatch = segText.match(/\(([A-Z]{3})\)/g);
+            const durationMatch = segText.match(/(\d{1,2})h\s*(\d{1,2})min/i);
+            const terminalMatch = segText.match(/Terminal\s*(\d+)/gi);
+            const nextDayMatch = segText.includes("+1 day");
+            
+            if (datesMatch && datesMatch.length >= 1 && timesMatch && timesMatch.length >= 2 && airportsMatch && airportsMatch.length >= 2) {
+              // Parse departure date
+              const depDateParts = datesMatch[0].match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i);
+              let depDate = "";
+              let arrDate = "";
+              
+              if (depDateParts) {
+                const day = depDateParts[1].padStart(2, "0");
+                const month = months[depDateParts[2].toLowerCase()] || "01";
+                const year = depDateParts[3];
+                depDate = `${year}-${month}-${day}`;
+                
+                // Parse arrival date
+                if (datesMatch.length >= 2) {
+                  const arrDateParts = datesMatch[1].match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i);
+                  if (arrDateParts) {
+                    const arrDay = arrDateParts[1].padStart(2, "0");
+                    const arrMonth = months[arrDateParts[2].toLowerCase()] || "01";
+                    const arrYear = arrDateParts[3];
+                    arrDate = `${arrYear}-${arrMonth}-${arrDay}`;
+                  }
+                } else if (nextDayMatch) {
+                  // +1 day
+                  const nextDay = new Date(depDate);
+                  nextDay.setDate(nextDay.getDate() + 1);
+                  arrDate = nextDay.toISOString().split("T")[0];
+                } else {
+                  arrDate = depDate;
+                }
+              }
+              
+              const depAirport = airportsMatch[0].replace(/[()]/g, "");
+              const arrAirport = airportsMatch[1].replace(/[()]/g, "");
+              
+              // Extract city names from text before airports
+              const depCityMatch = segText.match(new RegExp(`([A-Za-z\\s]+)\\s*\\(${depAirport}\\)`, "i"));
+              const arrCityMatch = segText.match(new RegExp(`([A-Za-z\\s]+)\\s*\\(${arrAirport}\\)`, "i"));
+              
+              const segment: FlightSegment = {
+                id: `seg-${Date.now()}-${parsedSegments.length}`,
+                flightNumber: `${airlineCode}${flightNum}`,
+                airline: airlineCode === "FZ" ? "flydubai" : airlineCode === "EK" ? "Emirates" : undefined,
+                departure: depAirport,
+                departureCity: depCityMatch ? depCityMatch[1].trim() : departureCity,
+                arrival: arrAirport,
+                arrivalCity: arrCityMatch ? arrCityMatch[1].trim() : undefined,
+                departureDate: depDate,
+                departureTimeScheduled: timesMatch[0],
+                arrivalDate: arrDate,
+                arrivalTimeScheduled: timesMatch[1],
+                departureTerminal: terminalMatch && terminalMatch[0] ? terminalMatch[0].replace(/Terminal\s*/i, "") : undefined,
+                arrivalTerminal: terminalMatch && terminalMatch[1] ? terminalMatch[1].replace(/Terminal\s*/i, "") : undefined,
+                duration: durationMatch ? `${durationMatch[1]}h ${durationMatch[2]}m` : undefined,
+                cabinClass,
+                departureStatus: "scheduled",
+                arrivalStatus: "scheduled",
+              };
+              
+              parsedSegments.push(segment);
+            }
+          }
+        }
+        
+        // If still no segments, try simple format
+        if (parsedSegments.length === 0) {
+          // Fallback to simple format: "LX348 GVA-LHR 06.01 15:55-16:40"
+          const lines = text.split("\n").filter((l) => l.trim());
+        
+          for (const line of lines) {
           const flightMatch = line.match(/([A-Z]{2})\s*(\d{2,4})/);
           const routeMatch = line.match(/([A-Z]{3})\s*[-–→]\s*([A-Z]{3})/);
           const dateMatch = line.match(/(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?/);
@@ -874,6 +980,7 @@ export default function FlightItineraryInput({
               departureStatus: "scheduled",
               arrivalStatus: "scheduled",
             });
+            }
           }
         }
       }
@@ -883,7 +990,7 @@ export default function FlightItineraryInput({
         setTextInput("");
         setShowTextInput(false);
       } else {
-        setParseError("Could not parse. Supported formats:\n• LX348 GVA-LHR 06.01 15:55-16:40\n• Amadeus/Galileo booking confirmation");
+        setParseError("Could not parse. Supported formats:\n• LX348 GVA-LHR 06.01 15:55-16:40\n• Amadeus/Galileo booking\n• FlyDubai/Emirates itinerary");
       }
     } catch (err) {
       console.error("Parse error:", err);

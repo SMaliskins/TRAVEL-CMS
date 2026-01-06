@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Dynamic import for pdf-parse to avoid ESM issues
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdf = require("pdf-parse");
+    const data = await pdf(buffer);
+    return data.text || "";
+  } catch (err) {
+    console.error("PDF extraction error:", err);
+    throw err;
+  }
+}
+
 /**
  * AI-powered flight itinerary parsing
  * 
@@ -120,11 +133,18 @@ export async function POST(request: NextRequest) {
       isPDF = file.type === "application/pdf";
       
       if (isPDF) {
-        // For PDF, we'll extract text using pdf-parse or send to AI directly
-        // Since we don't have pdf-parse installed, we'll send as base64 to AI
-        // Note: For production, consider using a PDF text extraction library
-        const buffer = await file.arrayBuffer();
-        imageBase64 = Buffer.from(buffer).toString("base64");
+        // Extract text from PDF using pdf-parse
+        try {
+          const buffer = await file.arrayBuffer();
+          textContent = await extractPdfText(Buffer.from(buffer));
+          console.log("Extracted PDF text:", textContent?.substring(0, 500));
+        } catch (pdfError) {
+          console.error("PDF parsing error:", pdfError);
+          return NextResponse.json(
+            { error: "Failed to extract text from PDF. Please try pasting the text directly.", segments: [] },
+            { status: 400 }
+          );
+        }
       } else if (file.type.startsWith("image/")) {
         const buffer = await file.arrayBuffer();
         imageBase64 = Buffer.from(buffer).toString("base64");
