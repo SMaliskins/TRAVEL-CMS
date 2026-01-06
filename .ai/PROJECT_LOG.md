@@ -3440,3 +3440,23 @@ Branch: feature/x
 - Протестировать AI парсинг (drag & drop, ctrl+V, text input)
 
 ---
+
+## [2026-01-07 01:45] CODE_WRITER — START: Fix passport data disappearing after save
+Branch: feature/x
+Задача: Fix passport data disappearing after save
+Результат: START
+Вывод / Решение: 
+
+**Проблема:**
+Паспорт грузится, но пропадает после сохранения.
+
+**Причина:**
+В `DirectoryForm.tsx` passport fields инициализируются из `record` только один раз при создании компонента. После сохранения `record` обновляется (через `setRecord(result.record || record)` в `app/directory/[id]/page.tsx`), но `passportData` state не синхронизируется с новым `record`.
+
+**Решение:**
+Добавить `useEffect` для синхронизации `passportData` state с `record` prop при изменении `record` (после сохранения).
+
+**Файл:**
+`components/DirectoryForm.tsx`
+
+---

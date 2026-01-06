@@ -152,6 +152,32 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       }
     }, [roles, baseType]);
 
+    // Sync passport fields from record when record changes (after save)
+    useEffect(() => {
+      if (record) {
+        setPassportData({
+          passportNumber: record.passportNumber || undefined,
+          passportIssueDate: record.passportIssueDate || undefined,
+          passportExpiryDate: record.passportExpiryDate || undefined,
+          passportIssuingCountry: record.passportIssuingCountry || undefined,
+          passportFullName: record.passportFullName || undefined,
+          dob: record.dob || undefined,
+          nationality: record.nationality || undefined,
+        });
+      } else if (mode === "create") {
+        // Reset passport fields in create mode
+        setPassportData({
+          passportNumber: undefined,
+          passportIssueDate: undefined,
+          passportExpiryDate: undefined,
+          passportIssuingCountry: undefined,
+          passportFullName: undefined,
+          dob: undefined,
+          nationality: undefined,
+        });
+      }
+    }, [record, mode]);
+
     // Track initial values for dirty state
     const getInitialValues = (): Partial<DirectoryRecord> => {
       if (!record) return {};
