@@ -3460,3 +3460,28 @@ Branch: feature/x
 `components/DirectoryForm.tsx`
 
 ---
+
+## [2026-01-07 01:45] CODE_WRITER — RESULT: Fix passport data disappearing after save
+Branch: feature/x
+Задача: Fix passport data disappearing after save
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Добавлен `useEffect` для синхронизации `passportData` state с `record` prop при изменении `record` (после сохранения).
+
+**Изменения:**
+`components/DirectoryForm.tsx`:
+- Добавлен `useEffect` (после строки 153), который:
+  - Синхронизирует `passportData` с `record.passportNumber`, `record.passportIssueDate`, и т.д. когда `record` изменяется
+  - Сбрасывает `passportData` в create mode, если `record` null
+
+**Результат:**
+✅ Passport fields теперь синхронизируются с `record` после сохранения
+✅ Passport data не пропадает после сохранения
+✅ Passport fields корректно сбрасываются в create mode
+
+**Файлы:**
+- `components/DirectoryForm.tsx` - добавлен useEffect для синхронизации passport fields
+
+---
