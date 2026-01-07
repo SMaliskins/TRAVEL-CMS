@@ -118,7 +118,14 @@ function generateCurvedPath(
       Math.pow(1 - t, 2) * start[1] +
       2 * (1 - t) * t * controlLng +
       Math.pow(t, 2) * end[1];
-    points.push([lat, lng]);
+    
+    // Validate generated point
+    if (isFinite(lat) && isFinite(lng)) {
+      points.push([lat, lng]);
+    } else {
+      // If point is invalid, return null to skip this path
+      return null;
+    }
   }
   
   return points;
