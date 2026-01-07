@@ -3626,3 +3626,24 @@ Branch: feature/x
 - `app/api/directory/[id]/route.ts` - добавлена обработка ошибки для отсутствующей колонки
 
 ---
+
+## [2026-01-07 12:52] CODE_WRITER — RESULT: Update D1 task status to DONE
+Branch: feature/x
+Задача: Update D1 task status in PROJECT_TODO.md
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Обновлен статус задачи D1 в PROJECT_TODO.md с TODO на DONE, так как вся работа по Passport Details завершена.
+
+**Завершенные части:**
+- ✅ Part 1: SQL миграция для добавления passport fields (a433eb8)
+- ✅ Part 2: Компонент PassportDetailsInput и API endpoint для AI парсинга (81c6ad9)
+- ✅ Part 3: Интеграция в API endpoints (CREATE/UPDATE/GET) (05ce937)
+- ✅ Исправления: readonly prop error (e768b6f), синхронизация после сохранения (cf3df0d), сохранение passport fields (db8168b), миграция nationality (ce7719f), fallback для отсутствующей колонки (6847594)
+- ✅ QA проверка: SCORE 9/10 - все критерии приемки выполнены
+
+**Файлы:**
+- `.ai/PROJECT_TODO.md` - обновлен статус задачи D1 на DONE
+
+---

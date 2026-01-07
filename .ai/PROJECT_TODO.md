@@ -25,6 +25,13 @@ Current tasks and their status. Agents update relevant rows when starting, block
 |----|------|------|-------|--------|--------|-------|
 | O5 | Orders | Add services to order (as per screenshot) | DB → CODE WRITER → QA | TODO | - | Supplier/Client/Payer from DB, rest manual input |
 | O6 | Orders | Auto-expand order dates from services | CODE WRITER → QA | TODO | - | Depends on O5 |
+| S1 | Orders | Fix PDF parsing in Flight Itinerary | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - CRITICAL issue #1 |
+| S2 | Orders | Implement Link to Flight dropdown | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - CRITICAL issue #2 |
+| S3 | Orders | Add missing fields to Edit Service Modal | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - CRITICAL issue #3 |
+| S4 | Orders | Add form validation (dates, prices, clients) | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - HIGH issues #4-7 |
+| S5 | Orders | Fix auto-generation and error messages | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - MEDIUM issues #8-10 |
+| S6 | Orders | Add tooltips and confirmations | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - LOW issues #11-12 |
+| S7 | Orders | Fix build error in OrderClientSection (JSX parse) | QA | DONE | - | ✅ Fixed by Code Writer, verified by QA (SCORE 9/10) |
 
 ## PHASE 3: Finance
 
@@ -41,14 +48,52 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | O10 | Orders | Client trip section (map, countdown, payment status) | UI → CODE WRITER → QA | TODO | - | Map with destinations, days countdown |
 | O11 | Orders | Client Score section (1-10 rating) | DB → CODE WRITER → QA | TODO | - | Add rating to party table |
 | O12 | Orders | Weather forecast for destination | CODE WRITER → QA | TODO | - | External API integration |
+| **O14** | **Orders** | **Trip Details section: Map + Itinerary** | **UI → CODE WRITER → QA** | **TODO** | **-** | **New section: wide/high map showing route + daily itinerary with services** |
 
-## PHASE 5: Roles
+## PHASE 5: UI/UX Improvements (Directory Form)
+
+### HIGH Priority (Quick Wins)
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| UI1 | Directory | Ripple Effect on buttons (Material Design) | QA | DONE | - | ✅ QA SCORE 9/10 - All criteria met |
+| UI2 | Directory | Inline Validation with icons | QA | DONE | - | ✅ QA SCORE 9/10 - All criteria met |
+| UI3 | Directory | Smooth Section Transitions (fade-in + expand) | QA | DONE | - | ✅ QA SCORE 9/10 - All criteria met |
+| UI4 | Directory | Mobile-first Layout improvements | QA | DONE | - | ✅ QA SCORE 9/10 - All criteria met |
+
+### MEDIUM Priority (UX Enhancements)
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| UI5 | Directory | Smooth field appearance on Type selection | UI → CODE WRITER → QA | TODO | - | UI Proposal #1 - fade-in + slide-up animation |
+| UI6 | Directory | Form completion progress bar | UI → CODE WRITER → QA | TODO | - | UI Proposal #10 - "60% заполнено" indicator |
+| UI7 | Directory | Accordion sections for Supplier/Subagent | UI → CODE WRITER → QA | TODO | - | UI Proposal #14 - collapsible sections |
+| UI8 | Directory | Enhanced Focus Indicators (WCAG 2.1 AA) | UI → CODE WRITER → QA | TODO | - | UI Proposal #22 - better keyboard navigation |
+
+### LOW Priority (Nice-to-Have)
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| UI9 | Directory | Floating Labels (Material Design 3) | UI → CODE WRITER → QA | TODO | - | UI Proposal #2 - labels move up on focus |
+| UI10 | Directory | Character Counter for limited fields | UI → CODE WRITER → QA | TODO | - | UI Proposal #3 - Phone/Email/Personal Code |
+| UI11 | Directory | Smart Placeholders with format hints | UI → CODE WRITER → QA | TODO | - | UI Proposal #4 - dynamic placeholders |
+| UI12 | Directory | Success Celebration animation | UI → CODE WRITER → QA | TODO | - | UI Proposal #19 - confetti or pulsing checkmark |
+| UI13 | Directory | Glassmorphism for Statistics Panel | UI → CODE WRITER → QA | TODO | - | UI Proposal #25 - backdrop-blur effect |
+| UI14 | Directory | Form State Persistence (localStorage draft) | UI → CODE WRITER → QA | TODO | - | UI Proposal #30 - save form state on close |
+
+## PHASE 6: Roles
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
 | O13 | System | Accountant role with financial reports | DB → SECURITY → CODE WRITER → QA | TODO | - | New role, report access |
 
 ---
+
+## PHASE 7: Directory Enhancements
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| D1 | Directory | Add Passport Details to Main Details (AI parsing) | CODE WRITER | DONE | feature/x | ✅ QA SCORE 9/10 - All parts completed: SQL migration, PassportDetailsInput component, AI parsing API, API endpoints integration. Commits: a433eb8, 81c6ad9, 05ce937, e768b6f, cf3df0d, db8168b, ce7719f, 6847594 |
 
 ## LEGACY TASKS (Directory)
 
