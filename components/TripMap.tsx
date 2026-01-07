@@ -98,6 +98,11 @@ function generateCurvedPath(
   const dy = end[0] - start[0];
   const len = Math.sqrt(dx * dx + dy * dy);
   
+  // If points are too close, return a straight line
+  if (len < 0.0001) {
+    return [start, end];
+  }
+  
   // Control point
   const controlLat = midLat + (dx / len) * offset;
   const controlLng = midLng - (dy / len) * offset;
