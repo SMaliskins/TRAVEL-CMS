@@ -707,6 +707,7 @@ export default function OrderClientSection({
               )}
             </div>
           )}
+        </div>
         
         {/* Right: Square Map */}
         {allCitiesForMap.length > 0 && (
