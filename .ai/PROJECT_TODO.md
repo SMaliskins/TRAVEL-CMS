@@ -14,7 +14,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
-| O1 | Orders | Date format dd.mm.yyyy globally | CODE WRITER | TODO | - | Simple, no DB changes |
+| O1 | Orders | Date format dd.mm.yyyy globally | QA | DONE | - | ✅ Implemented and verified (SCORE 9/10) |
 | O2 | Orders | Cities/Countries database with flags | DB/SCHEMA → CODE WRITER | TODO | - | Need DB schema for destinations table |
 | O3 | Orders | Order Client Edit (client, dates, destinations editable) | DB → CODE WRITER → QA | TODO | - | Edit mode for order detail page |
 | O4 | Orders | Order Status (Active default, Cancelled manual, Finished auto) | DB → CODE WRITER → QA | TODO | - | Traffic light style, auto-finish logic |
@@ -32,6 +32,9 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | S5 | Orders | Fix auto-generation and error messages | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - MEDIUM issues #8-10 |
 | S6 | Orders | Add tooltips and confirmations | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - LOW issues #11-12 |
 | S7 | Orders | Fix build error in OrderClientSection (JSX parse) | QA | DONE | - | ✅ Fixed by Code Writer, verified by QA (SCORE 9/10) |
+| S8 | Orders | Fix duplicate closing div tags in OrderClientSection | CODE WRITER | DONE | feature/x | ✅ Fixed duplicate closing div tags (lines 707-708 removed) |
+| S9 | Orders | Add accessible name to Order Type select | CODE WRITER | DONE | feature/x | ✅ Added aria-label="Order Type" for WCAG compliance |
+| S10 | Orders | Fix null/undefined handling in route display | CODE WRITER | DONE | feature/x | ✅ Added null checks for dateFrom/dateTo and parsedRoute.origin |
 
 ## PHASE 3: Finance
 
@@ -44,7 +47,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
-| O9 | Orders | Clickable phone/email next to client | CODE WRITER → QA | TODO | - | tel: and mailto: links |
+| O9 | Orders | Clickable phone/email next to client | QA | DONE | - | ✅ Implemented and verified (SCORE 9/10) |
 | O10 | Orders | Client trip section (map, countdown, payment status) | UI → CODE WRITER → QA | TODO | - | Map with destinations, days countdown |
 | O11 | Orders | Client Score section (1-10 rating) | DB → CODE WRITER → QA | TODO | - | Add rating to party table |
 | O12 | Orders | Weather forecast for destination | CODE WRITER → QA | TODO | - | External API integration |
