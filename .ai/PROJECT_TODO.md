@@ -32,7 +32,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | S5 | Orders | Fix auto-generation and error messages | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - MEDIUM issues #8-10 |
 | S6 | Orders | Add tooltips and confirmations | CODE WRITER → QA | TODO | - | QA SCORE 5/10 - LOW issues #11-12 |
 | S7 | Orders | Fix build error in OrderClientSection (JSX parse) | QA | DONE | - | ✅ Fixed by Code Writer, verified by QA (SCORE 9/10) |
-| S8 | Orders | Fix duplicate closing div tags in OrderClientSection | CODE WRITER | DONE | feature/x | ✅ Fixed duplicate closing div tags (lines 707-708 removed) |
+| S8 | Orders | Fix duplicate closing div tags in OrderClientSection | CODE WRITER | DONE | feature/x | ✅ Fixed missing closing bracket for condition (line 505) |
 | S9 | Orders | Add accessible name to Order Type select | CODE WRITER | DONE | feature/x | ✅ Added aria-label="Order Type" for WCAG compliance |
 | S10 | Orders | Fix null/undefined handling in route display | CODE WRITER | DONE | feature/x | ✅ Added null checks for dateFrom/dateTo and parsedRoute.origin |
 
