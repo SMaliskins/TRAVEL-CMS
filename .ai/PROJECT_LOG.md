@@ -4012,3 +4012,55 @@ Branch: feature/x
 - `app/orders/[orderCode]/_components/OrderClientSection.tsx` - исправлены все три проблемы
 
 ---
+
+## [2026-01-07 13:50] CODE_WRITER — START: Fix TripMap errors - duplicate keys and NaN coordinates
+Branch: feature/x
+Задача: Fix 3 errors in TripMap.tsx - duplicate keys (lines 271, 329) and NaN coordinates (line 315)
+Результат: START
+Вывод / Решение: 
+
+**Проблемы:**
+1. **Error 1 (line 271):** Duplicate keys - `key={dest.city}` causes "Encountered two children with the same key, 'Riga'"
+2. **Error 2 (line 329):** Duplicate keys - `key={dest.name}` causes same issue for Marker components
+3. **Error 3 (line 315):** Invalid LatLng object: (NaN, NaN) - Polyline positions contain NaN values
+
+**План:**
+1. Использовать уникальные ключи (idx или комбинация city-countryCode)
+2. Добавить валидацию координат перед использованием в Polyline
+3. Фильтровать destinations с невалидными координатами
+
+---
+
+## [2026-01-07 14:02] CODE_WRITER — RESULT: Fix TripMap errors - duplicate keys and NaN coordinates
+Branch: feature/x
+Задача: Fix 3 errors in TripMap.tsx - duplicate keys (lines 271, 329) and NaN coordinates (line 315)
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Исправлены все три ошибки в TripMap.tsx.
+
+**Error 1 (line 271) - Duplicate keys:**
+- Проблема: `key={dest.city}` вызывал ошибку "Encountered two children with the same key, 'Riga'"
+- Исправление: Изменено на `key={`${dest.city}-${dest.countryCode || ''}-${idx}`}` для уникальности
+
+**Error 2 (line 245, 329) - Duplicate keys for Markers:**
+- Проблема: `key={dest.name}` вызывал ту же ошибку для Marker компонентов
+- Исправление: Изменено на `key={`${dest.name}-${dest.countryCode || ''}-${idx}`}` для уникальности
+
+**Error 3 (line 315) - Invalid LatLng object (NaN, NaN):**
+- Проблема: Polyline получал NaN координаты, вызывая ошибку "Invalid LatLng object: (NaN, NaN)"
+- Исправление:
+  1. Добавлена валидация координат в `generateCurvedPath` - функция возвращает `null` если координаты невалидны
+  2. Добавлена проверка `isFinite()` перед созданием path в `paths` useMemo
+  3. Фильтрация невалидных путей - пропускаются paths с NaN координатами
+
+**Результат:**
+✅ Все ключи теперь уникальны (комбинация city-countryCode-idx)
+✅ Координаты валидируются перед использованием
+✅ NaN координаты фильтруются, предотвращая ошибки Polyline
+
+**Файлы:**
+- `components/TripMap.tsx` - исправлены все три проблемы
+
+---

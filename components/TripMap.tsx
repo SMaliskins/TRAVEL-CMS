@@ -73,7 +73,12 @@ function generateCurvedPath(
   start: [number, number],
   end: [number, number],
   segments: number = 50
-): [number, number][] {
+): [number, number][] | null {
+  // Validate coordinates
+  if (!isFinite(start[0]) || !isFinite(start[1]) || !isFinite(end[0]) || !isFinite(end[1])) {
+    return null;
+  }
+  
   const points: [number, number][] = [];
   
   // Calculate control point for curve (perpendicular offset)
@@ -179,15 +184,22 @@ export default function TripMap({
     if (destinationCoords.length < 2) return [];
     const result: [number, number][][] = [];
     for (let i = 0; i < destinationCoords.length - 1; i++) {
-      const start: [number, number] = [
-        destinationCoords[i].lat,
-        destinationCoords[i].lng,
-      ];
-      const end: [number, number] = [
-        destinationCoords[i + 1].lat,
-        destinationCoords[i + 1].lng,
-      ];
-      result.push(generateCurvedPath(start, end));
+      // Validate coordinates before creating path
+      const startLat = destinationCoords[i].lat;
+      const startLng = destinationCoords[i].lng;
+      const endLat = destinationCoords[i + 1].lat;
+      const endLng = destinationCoords[i + 1].lng;
+      
+      if (!isFinite(startLat) || !isFinite(startLng) || !isFinite(endLat) || !isFinite(endLng)) {
+        continue; // Skip invalid coordinates
+      }
+      
+      const start: [number, number] = [startLat, startLng];
+      const end: [number, number] = [endLat, endLng];
+      const path = generateCurvedPath(start, end);
+      if (path) {
+        result.push(path);
+      }
     }
     return result;
   }, [destinationCoords]);
@@ -241,8 +253,8 @@ export default function TripMap({
                 pathOptions={{ color: "#3b82f6", weight: 2, dashArray: "6, 6", opacity: 0.7 }}
               />
             ))}
-            {destinationCoords.map((dest) => (
-              <Marker key={dest.name} position={[dest.lat, dest.lng]}>
+            {destinationCoords.map((dest, idx) => (
+              <Marker key={`${dest.name}-${dest.countryCode || ''}-${idx}`} position={[dest.lat, dest.lng]}>
                 <Popup>
                   <div className="text-center">
                     <div>{countryCodeToFlag(dest.countryCode || "")}</div>
@@ -268,7 +280,7 @@ export default function TripMap({
         <div>
           <div className="flex items-center gap-2">
             {destinations.map((dest, idx) => (
-              <span key={dest.city} className="flex items-center text-sm">
+              <span key={`${dest.city}-${dest.countryCode || ''}-${idx}`} className="flex items-center text-sm">
                 {dest.countryCode && (
                   <span className="mr-1">{countryCodeToFlag(dest.countryCode)}</span>
                 )}
@@ -326,7 +338,7 @@ export default function TripMap({
             
             {/* Markers for each destination */}
             {destinationCoords.map((dest, idx) => (
-              <Marker key={dest.name} position={[dest.lat, dest.lng]}>
+              <Marker key={`${dest.name}-${dest.countryCode || ''}-${idx}`} position={[dest.lat, dest.lng]}>
                 <Popup>
                   <div className="text-center">
                     <div className="text-lg">{countryCodeToFlag(dest.countryCode || "")}</div>
