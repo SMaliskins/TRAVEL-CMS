@@ -535,7 +535,7 @@ export default function OrderClientSection({
                           )}
                         </span>
                       ))}
-                      {parsedRoute.returnCity && parsedRoute.returnCity.city !== parsedRoute.origin?.city && (
+                      {parsedRoute.returnCity && parsedRoute.origin && parsedRoute.returnCity.city !== parsedRoute.origin.city && (
                         <>
                           <span className="text-gray-400 text-xs">→</span>
                           <span className="flex items-center gap-1 text-sm font-semibold text-gray-700">
@@ -704,8 +704,9 @@ export default function OrderClientSection({
                 />
               </div>
             </div>
+              )}
+            </div>
           )}
-        </div>
         
         {/* Right: Square Map */}
         {allCitiesForMap.length > 0 && (

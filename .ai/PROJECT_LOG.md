@@ -3980,3 +3980,35 @@ Branch: feature/x
 - `app/orders/[orderCode]/_components/OrderClientSection.tsx` - исправлены все три проблемы
 
 ---
+
+## [2026-01-07 13:42] CODE_WRITER — RESULT: Fix S8-S10 issues in OrderClientSection
+Branch: feature/x
+Задача: S8-S10 - Fix duplicate closing div tags, add accessible name to Order Type select, fix null/undefined handling in route display
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Исправлены все три проблемы в OrderClientSection.tsx согласно требованиям QA.
+
+**S8 (CRITICAL) - Fix duplicate closing div tags:**
+- Проблема: На строках 706-709 были дублирующиеся закрывающие теги - отсутствовала закрывающая скобка для условия со строки 505
+- Исправление: Добавлена закрывающая скобка `)}` после `</div>` для правильного закрытия условия `{(parsedRoute.origin || uniqueDestinations.length > 0 || dateFrom) && (`
+
+**S9 (HIGH) - Add accessible name to Order Type select:**
+- Добавлен `aria-label="Order Type"` к select элементу на строке 490
+- Обеспечена WCAG compliance для screen readers
+
+**S10 (MEDIUM) - Fix null/undefined handling in route display:**
+- Строка 558: Добавлены проверки на null перед вызовом `formatDateDDMMYYYY` для `dateFrom` и `dateTo` - теперь показывается "—" если значение null
+- Строка 532: Добавлена проверка `parsedRoute.origin` перед обращением к `parsedRoute.origin.city`
+- Строка 538: Добавлена проверка `parsedRoute.origin` перед обращением к `parsedRoute.origin.city`
+
+**Результат:**
+✅ Дублирующиеся закрывающие теги исправлены - добавлена недостающая закрывающая скобка
+✅ Select Order Type теперь доступен для screen readers (WCAG compliance)
+✅ Обработка null/undefined для route display исправлена
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/OrderClientSection.tsx` - исправлены все три проблемы
+
+---
