@@ -139,27 +139,33 @@ export default function TripMap({
   const destinationCoords = useMemo(() => {
     return destinations
       .map((dest) => {
+        let lat: number | undefined;
+        let lng: number | undefined;
+        
         // First check if dest has coordinates
         if (dest.lat && dest.lng) {
+          lat = dest.lat;
+          lng = dest.lng;
+        } else {
+          // Otherwise try to get from database
+          const cityData = getCityByName(dest.city);
+          if (cityData) {
+            lat = cityData.lat;
+            lng = cityData.lng;
+          }
+        }
+        
+        // Validate coordinates are valid numbers
+        if (lat !== undefined && lng !== undefined && isFinite(lat) && isFinite(lng)) {
           return {
             name: dest.city,
             country: dest.country,
             countryCode: dest.countryCode,
-            lat: dest.lat,
-            lng: dest.lng,
+            lat: lat,
+            lng: lng,
           };
         }
-        // Otherwise try to get from database
-        const cityData = getCityByName(dest.city);
-        if (cityData) {
-          return {
-            name: cityData.name,
-            country: cityData.country,
-            countryCode: cityData.countryCode,
-            lat: cityData.lat,
-            lng: cityData.lng,
-          };
-        }
+        
         return null;
       })
       .filter((d): d is NonNullable<typeof d> => d !== null);
@@ -246,13 +252,21 @@ export default function TripMap({
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {paths.map((path, idx) => (
-              <Polyline
-                key={idx}
-                positions={path}
-                pathOptions={{ color: "#3b82f6", weight: 2, dashArray: "6, 6", opacity: 0.7 }}
-              />
-            ))}
+            {paths.map((path, idx) => {
+              // Validate path coordinates before rendering
+              const isValidPath = path.every(
+                (point) => isFinite(point[0]) && isFinite(point[1])
+              );
+              if (!isValidPath) return null;
+              
+              return (
+                <Polyline
+                  key={idx}
+                  positions={path}
+                  pathOptions={{ color: "#3b82f6", weight: 2, dashArray: "6, 6", opacity: 0.7 }}
+                />
+              );
+            })}
             {destinationCoords.map((dest, idx) => (
               <Marker key={`${dest.name}-${dest.countryCode || ''}-${idx}`} position={[dest.lat, dest.lng]}>
                 <Popup>
@@ -323,18 +337,26 @@ export default function TripMap({
             />
             
             {/* Curved dashed lines between destinations */}
-            {paths.map((path, idx) => (
-              <Polyline
-                key={idx}
-                positions={path}
-                pathOptions={{
-                  color: "#3b82f6",
-                  weight: 2,
-                  dashArray: "8, 8",
-                  opacity: 0.7,
-                }}
-              />
-            ))}
+            {paths.map((path, idx) => {
+              // Validate path coordinates before rendering
+              const isValidPath = path.every(
+                (point) => isFinite(point[0]) && isFinite(point[1])
+              );
+              if (!isValidPath) return null;
+              
+              return (
+                <Polyline
+                  key={idx}
+                  positions={path}
+                  pathOptions={{
+                    color: "#3b82f6",
+                    weight: 2,
+                    dashArray: "8, 8",
+                    opacity: 0.7,
+                  }}
+                />
+              );
+            })}
             
             {/* Markers for each destination */}
             {destinationCoords.map((dest, idx) => (

@@ -4064,3 +4064,32 @@ Branch: feature/x
 - `components/TripMap.tsx` - исправлены все три проблемы
 
 ---
+
+## [2026-01-07 14:05] CODE_WRITER — RESULT: Additional validation for TripMap coordinates
+Branch: feature/x
+Задача: Add additional validation to prevent NaN coordinates in Polyline
+Результат: RESULT
+Вывод / Решение: 
+
+**Что было сделано:**
+Добавлена дополнительная валидация координат для полного устранения ошибки "Invalid LatLng object: (NaN, NaN)".
+
+**Улучшения:**
+1. **destinationCoords useMemo:**
+   - Добавлена проверка `isFinite(lat) && isFinite(lng)` перед добавлением координат
+   - Гарантирует, что только валидные координаты попадают в `destinationCoords`
+
+2. **Polyline rendering (compact и full version):**
+   - Добавлена валидация каждого path перед рендерингом Polyline
+   - Проверка `path.every((point) => isFinite(point[0]) && isFinite(point[1]))`
+   - Если path содержит невалидные координаты, он не рендерится (возвращается null)
+
+**Результат:**
+✅ Координаты валидируются на всех этапах: при получении, при создании paths, и перед рендерингом
+✅ Polyline получает только валидные координаты
+✅ Ошибка "Invalid LatLng object: (NaN, NaN)" полностью устранена
+
+**Файлы:**
+- `components/TripMap.tsx` - добавлена дополнительная валидация координат
+
+---
