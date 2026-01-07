@@ -491,6 +491,7 @@ export default function OrderClientSection({
                   value={editOrderType}
                   onChange={(e) => setEditOrderType(e.target.value)}
                   className="text-xs border border-gray-300 rounded px-2 py-1"
+                  aria-label="Order Type"
                 >
                   {ORDER_TYPES.map(t => (
                     <option key={t.value} value={t.value}>{t.label}</option>
@@ -529,7 +530,7 @@ export default function OrderClientSection({
                             )}
                             {city.city}
                           </span>
-                          {(idx < uniqueDestinations.length - 1 || (parsedRoute.returnCity && parsedRoute.returnCity.city !== parsedRoute.origin?.city)) && (
+                          {(idx < uniqueDestinations.length - 1 || (parsedRoute.returnCity && parsedRoute.origin && parsedRoute.returnCity.city !== parsedRoute.origin.city)) && (
                             <span className="text-gray-400 text-xs mx-1">→</span>
                           )}
                         </span>
@@ -555,7 +556,7 @@ export default function OrderClientSection({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <span className="text-[12px] font-medium text-gray-700">
-                        {formatDateDDMMYYYY(dateFrom)} — {formatDateDDMMYYYY(dateTo)}
+                        {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}
                       </span>
                       {daysUntilTrip !== null && daysUntilTrip >= 0 && (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-full">
@@ -702,8 +703,6 @@ export default function OrderClientSection({
                   }}
                 />
               </div>
-            </div>
-          )}
             </div>
           )}
         </div>
