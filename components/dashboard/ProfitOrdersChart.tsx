@@ -135,6 +135,15 @@ export default function ProfitOrdersChart({
     return path;
   };
 
+  // Get current date index
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentDateIndex = data.findIndex((d) => {
+    const date = new Date(d.date + "T00:00:00");
+    date.setHours(0, 0, 0, 0);
+    return date.getTime() === today.getTime();
+  });
+
   // Generate smooth paths
   const profitValues = data.map((d) => linearScale(d.profit, maxValue, chartHeight));
   const ordersValues = data.map((d) => linearScale(d.orders * 1000, maxValue, chartHeight));
@@ -195,15 +204,6 @@ export default function ProfitOrdersChart({
   const handleMouseLeave = () => {
     setHoveredIndex(null);
   };
-
-  // Get current date index
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const currentDateIndex = data.findIndex((d) => {
-    const date = new Date(d.date + "T00:00:00");
-    date.setHours(0, 0, 0, 0);
-    return date.getTime() === today.getTime();
-  });
 
   const hoveredData = hoveredIndex !== null ? data[hoveredIndex] : null;
   const hoveredX = hoveredIndex !== null ? getX(hoveredIndex) : null;
