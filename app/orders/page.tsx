@@ -514,9 +514,16 @@ export default function OrdersPage() {
     return null;
   };
 
-  // Handle double click to navigate to order
-  const handleOrderDoubleClick = (orderCode: string) => {
+  // Handle click to navigate to order (changed from double-click to single-click)
+  const handleOrderClick = (orderCode: string) => {
     router.push(`/orders/${orderCodeToSlug(orderCode)}`);
+  };
+
+  // Handle keyboard navigation (Enter key)
+  const handleOrderKeyDown = (e: React.KeyboardEvent, orderCode: string) => {
+    if (e.key === "Enter") {
+      router.push(`/orders/${orderCodeToSlug(orderCode)}`);
+    }
   };
 
   // Loading state
@@ -526,9 +533,18 @@ export default function OrdersPage() {
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+            <div className="h-10 w-32 bg-gray-200 rounded-lg animate-pulse"></div>
           </div>
-          <div className="flex items-center justify-center py-12">
-            <div className="text-gray-500">Loading orders...</div>
+          <div className="rounded-lg bg-white shadow-sm p-6">
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="h-4 bg-gray-200 rounded flex-1 animate-pulse"></div>
+                  <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+                  <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -568,7 +584,14 @@ export default function OrdersPage() {
       <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+            {(searchState.clientSearch || searchState.orderCodeSearch || searchState.statusFilter.length > 0) && (
+              <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                Filtered ({filteredOrders.length} results)
+              </span>
+            )}
+          </div>
           <button
             onClick={() => router.push("/orders/new")}
             className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
@@ -579,12 +602,21 @@ export default function OrdersPage() {
 
         {/* Empty state */}
         {orders.length === 0 && (
-          <div className="rounded-lg bg-white shadow-sm p-8 text-center">
-            <p className="text-gray-500">No orders yet.</p>
+          <div className="rounded-lg bg-white shadow-sm p-12 text-center">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p className="text-lg font-medium text-gray-900 mb-2">No orders yet</p>
+            <p className="text-gray-500 mb-6">Get started by creating your first order</p>
             <button
               onClick={() => router.push("/orders/new")}
-              className="mt-4 rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
             >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
               Create your first order
             </button>
           </div>
@@ -599,14 +631,14 @@ export default function OrdersPage() {
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Order ID
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Invoice">
-                  Inv
+                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  <span title="Invoice issued" className="cursor-help">Inv 📝</span>
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Payment Status">
-                  Pay
+                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  <span title="Payment Status" className="cursor-help">Pay 💵</span>
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Days to Due">
-                  Due
+                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  <span title="Days to Due Date" className="cursor-help">Due ⏰</span>
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Client
@@ -648,11 +680,11 @@ export default function OrdersPage() {
                 <React.Fragment key={`year-${year.year}`}>
                   {/* Year row */}
                   <tr
-                    className="cursor-pointer bg-gray-100 font-semibold leading-tight hover:bg-gray-200"
+                    className="cursor-pointer bg-gray-100 font-semibold leading-tight hover:bg-gray-200 transition-colors"
                     onClick={() => toggleYear(year.year)}
                   >
                     <td className="px-4 py-1.5 text-sm leading-tight text-gray-900">
-                      <span className="mr-2">
+                      <span className="mr-2 inline-block transition-transform duration-200">
                         {isExpanded("year", year.year) ? "▾" : "▸"}
                       </span>
                       {year.year}
@@ -680,11 +712,11 @@ export default function OrdersPage() {
                     year.months.map((month) => (
                       <React.Fragment key={`month-${month.monthKey}`}>
                         <tr
-                          className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100"
+                          className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100 transition-colors"
                           onClick={() => toggleMonth(month.monthKey)}
                         >
                           <td className="px-4 py-1.5 pl-8 text-sm leading-tight text-gray-900">
-                            <span className="mr-2">
+                            <span className="mr-2 inline-block transition-transform duration-200">
                               {isExpanded("month", month.monthKey) ? "▾" : "▸"}
                             </span>
                             {month.monthLabel}
@@ -712,11 +744,11 @@ export default function OrdersPage() {
                           month.days.map((day) => (
                             <React.Fragment key={`day-${day.dayKey}`}>
                               <tr
-                                className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100"
+                                className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100 transition-colors"
                                 onClick={() => toggleDay(day.dayKey)}
                               >
                                 <td className="px-4 py-1.5 pl-16 text-sm leading-tight text-gray-900">
-                                  <span className="mr-2">
+                                  <span className="mr-2 inline-block transition-transform duration-200">
                                     {isExpanded("day", day.dayKey) ? "▾" : "▸"}
                                   </span>
                                   {day.dayLabel}
@@ -753,8 +785,12 @@ export default function OrdersPage() {
                                   return (
                                     <tr
                                       key={`order-${order.orderId}`}
-                                      className="cursor-pointer leading-tight transition-colors hover:bg-gray-50"
-                                      onDoubleClick={() => handleOrderDoubleClick(order.orderId)}
+                                      className="cursor-pointer leading-tight transition-colors hover:bg-blue-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-inset"
+                                      onClick={() => handleOrderClick(order.orderId)}
+                                      onKeyDown={(e) => handleOrderKeyDown(e, order.orderId)}
+                                      tabIndex={0}
+                                      role="button"
+                                      aria-label={`Open order ${order.orderId}`}
                                     >
                                       <td className="whitespace-nowrap px-4 py-1.5 pl-24 text-sm font-medium leading-tight text-gray-900">
                                         {order.orderId}
@@ -795,8 +831,10 @@ export default function OrdersPage() {
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {order.client}
                                       </td>
-                                      <td className="px-4 py-1.5 text-sm leading-tight text-gray-700">
-                                        {formatCountriesWithFlags(order.countriesCities)}
+                                      <td className="px-4 py-1.5 text-sm leading-tight text-gray-700 max-w-xs" title={order.countriesCities}>
+                                        <div className="truncate">
+                                          {formatCountriesWithFlags(order.countriesCities)}
+                                        </div>
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {formatDate(order.datesFrom)} - {formatDate(order.datesTo)}
@@ -835,7 +873,7 @@ export default function OrdersPage() {
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {order.type}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700" title={`Owner: ${order.owner}`}>
                                         {order.owner}
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">

@@ -253,37 +253,37 @@ export default function OrderServicesBlock({
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Category
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Name
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Supplier
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Client
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Payer
                 </th>
-                <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Service Price
                 </th>
-                <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Client Price
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Res Status
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Ref Nr
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Ticket Nr
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                <th className="px-2 py-1.5 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Travellers
                 </th>
               </tr>
@@ -335,28 +335,28 @@ export default function OrderServicesBlock({
                             onDoubleClick={() => setEditServiceId(service.id)}
                             title="Double-click to edit"
                           >
-                            <td className="px-3 py-2 text-xs text-gray-700">
+                      <td className="px-2 py-1 text-xs text-gray-700 leading-tight">
                               {service.category}
                             </td>
-                            <td className="px-3 py-2 text-xs font-medium text-gray-900">
+                            <td className="px-2 py-1 text-xs font-medium text-gray-900 leading-tight">
                               {service.name}
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-700">
+                            <td className="px-2 py-1 text-xs text-gray-700 leading-tight">
                               {service.supplier}
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-700">
+                            <td className="px-2 py-1 text-xs text-gray-700 leading-tight">
                               {service.client}
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-700">
+                            <td className="px-2 py-1 text-xs text-gray-700 leading-tight">
                               {service.payer}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-gray-700">
+                            <td className="whitespace-nowrap px-2 py-1 text-right text-xs text-gray-700 leading-tight">
                               {formatCurrency(service.servicePrice)}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-right text-xs font-medium text-gray-900">
+                            <td className="whitespace-nowrap px-2 py-1 text-right text-xs font-medium text-gray-900 leading-tight">
                               {formatCurrency(service.clientPrice)}
                             </td>
-                            <td className="px-3 py-2 text-xs">
+                            <td className="px-2 py-1 text-xs leading-tight">
                               <span
                                 className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-medium ${getResStatusColor(
                                   service.resStatus
@@ -365,13 +365,13 @@ export default function OrderServicesBlock({
                                 {service.resStatus}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-700">
+                            <td className="px-2 py-1 text-xs text-gray-700 leading-tight">
                               {service.refNr || "-"}
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-700">
+                            <td className="px-2 py-1 text-xs text-gray-700 leading-tight">
                               {service.ticketNr || "-"}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-1 leading-tight">
                               <div className="flex items-center gap-1">
                                 <div className="flex items-center gap-0.5">
                                   {visibleIds.map((travellerId) => (
