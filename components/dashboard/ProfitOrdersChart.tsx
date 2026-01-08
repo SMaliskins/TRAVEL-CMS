@@ -88,28 +88,28 @@ export default function ProfitOrdersChart({
   // Format currency
   const formatCurrency = (value: number): string => {
     if (value >= 1000000) {
-      return `€${(value / 1000000).toFixed(1)}M`;
+      return `$${(value / 1000000).toFixed(1)}M`;
     }
     if (value >= 1000) {
-      return `€${(value / 1000).toFixed(0)}K`;
+      return `$${(value / 1000).toFixed(0)}K`;
     }
-    return `€${value.toFixed(0)}`;
+    return `$${value.toFixed(0)}`;
   };
 
   // Smooth curve path using cubic bezier curves for smooth transitions
-  const createSmoothPath = (values: number[]): string => {
+  const createSmoothPath = (values: number[], startIndex = 0): string => {
     if (values.length === 0) return "";
-    if (values.length === 1) return `M ${getX(0)} ${values[0]}`;
+    if (values.length === 1) return `M ${getX(startIndex)} ${values[0]}`;
     if (values.length === 2) {
-      return `M ${getX(0)} ${values[0]} L ${getX(1)} ${values[1]}`;
+      return `M ${getX(startIndex)} ${values[0]} L ${getX(startIndex + 1)} ${values[1]}`;
     }
 
-    let path = `M ${getX(0)} ${values[0]}`;
+    let path = `M ${getX(startIndex)} ${values[0]}`;
 
     for (let i = 1; i < values.length; i++) {
-      const x0 = getX(i - 1);
+      const x0 = getX(startIndex + i - 1);
       const y0 = values[i - 1];
-      const x1 = getX(i);
+      const x1 = getX(startIndex + i);
       const y1 = values[i];
 
       if (i === 1) {
@@ -119,7 +119,7 @@ export default function ProfitOrdersChart({
         path += ` Q ${cpX} ${cpY}, ${x1} ${y1}`;
       } else {
         // Subsequent segments: use cubic bezier for smooth transition
-        const xPrev = getX(i - 2);
+        const xPrev = getX(startIndex + i - 2);
         const yPrev = values[i - 2];
         
         // Control points for smooth curve
@@ -139,17 +139,45 @@ export default function ProfitOrdersChart({
   const profitValues = data.map((d) => linearScale(d.profit, maxValue, chartHeight));
   const ordersValues = data.map((d) => linearScale(d.orders * 1000, maxValue, chartHeight));
 
-  const profitPath = createSmoothPath(profitValues);
-  const ordersPath = createSmoothPath(ordersValues);
+  // Split data into actual and forecast based on currentDateIndex
+  const hasCurrentDate = currentDateIndex >= 0;
+  const splitIndex = hasCurrentDate ? currentDateIndex + 1 : data.length;
+
+  // Actual data (up to today)
+  const actualProfitValues = profitValues.slice(0, splitIndex);
+  const actualOrdersValues = ordersValues.slice(0, splitIndex);
+
+  // Forecast data (from today to end) - includes today for smooth connection
+  const forecastProfitValues = hasCurrentDate ? profitValues.slice(currentDateIndex) : [];
+  const forecastOrdersValues = hasCurrentDate ? ordersValues.slice(currentDateIndex) : [];
+
+  // Create smooth paths for actual data
+  const profitPath = createSmoothPath(actualProfitValues, 0);
+  const ordersPath = createSmoothPath(actualOrdersValues, 0);
+
+  // Create smooth paths for forecast data (if exists)
+  const forecastProfitPath = forecastProfitValues.length > 0 ? createSmoothPath(forecastProfitValues, currentDateIndex) : "";
+  const forecastOrdersPath = forecastOrdersValues.length > 0 ? createSmoothPath(forecastOrdersValues, currentDateIndex) : "";
 
   // Create filled area paths (closed paths from line to bottom)
   const profitAreaPath =
     profitPath +
-    ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(0)} ${chartHeight - chartPadding.bottom} Z`;
+    ` L ${getX(splitIndex - 1)} ${chartHeight - chartPadding.bottom} L ${getX(0)} ${chartHeight - chartPadding.bottom} Z`;
 
   const ordersAreaPath =
     ordersPath +
-    ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(0)} ${chartHeight - chartPadding.bottom} Z`;
+    ` L ${getX(splitIndex - 1)} ${chartHeight - chartPadding.bottom} L ${getX(0)} ${chartHeight - chartPadding.bottom} Z`;
+
+  // Forecast area paths (more transparent)
+  const forecastProfitAreaPath = forecastProfitPath
+    ? forecastProfitPath +
+      ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(currentDateIndex)} ${chartHeight - chartPadding.bottom} Z`
+    : "";
+
+  const forecastOrdersAreaPath = forecastOrdersPath
+    ? forecastOrdersPath +
+      ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(currentDateIndex)} ${chartHeight - chartPadding.bottom} Z`
+    : "";
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
@@ -208,6 +236,15 @@ export default function ProfitOrdersChart({
               <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
               <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.05" />
             </linearGradient>
+            {/* Forecast gradients (more transparent) */}
+            <linearGradient id="profitForecastGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#ef4444" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="ordersForecastGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+            </linearGradient>
           </defs>
 
           {/* Y-axis labels */}
@@ -236,6 +273,20 @@ export default function ProfitOrdersChart({
             d={ordersAreaPath}
             fill="url(#ordersGradient)"
           />
+
+          {/* Forecast filled areas (if exists) */}
+          {forecastProfitAreaPath && (
+            <path
+              d={forecastProfitAreaPath}
+              fill="url(#profitForecastGradient)"
+            />
+          )}
+          {forecastOrdersAreaPath && (
+            <path
+              d={forecastOrdersAreaPath}
+              fill="url(#ordersForecastGradient)"
+            />
+          )}
 
           {/* Current date vertical line */}
           {currentDateX !== null && (
@@ -270,6 +321,34 @@ export default function ProfitOrdersChart({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+
+          {/* Forecast Profit line (red dashed) */}
+          {forecastProfitPath && (
+            <path
+              d={forecastProfitPath}
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray="8 4"
+              opacity="0.7"
+            />
+          )}
+
+          {/* Forecast Orders line (blue dashed) */}
+          {forecastOrdersPath && (
+            <path
+              d={forecastOrdersPath}
+              fill="none"
+              stroke="#3b82f6"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray="8 4"
+              opacity="0.7"
+            />
+          )}
 
           {/* X-axis labels (day numbers) */}
           {data.map((d, i) => {
@@ -311,7 +390,7 @@ export default function ProfitOrdersChart({
                   x="-35"
                   y="-35"
                   width="70"
-                  height="25"
+                  height={hoveredIndex! > currentDateIndex && currentDateIndex >= 0 ? "40" : "25"}
                   rx="4"
                   fill="white"
                   stroke="#e5e7eb"
@@ -327,6 +406,17 @@ export default function ProfitOrdersChart({
                 >
                   {formatCurrency(hoveredData.profit)}
                 </text>
+                {hoveredIndex! > currentDateIndex && currentDateIndex >= 0 && (
+                  <text
+                    x="0"
+                    y="-5"
+                    textAnchor="middle"
+                    className="fill-gray-500 text-xs"
+                    fontSize="9"
+                  >
+                    (forecast)
+                  </text>
+                )}
               </g>
               {/* Tooltip for Orders */}
               <g transform={`translate(${hoveredX}, ${ordersValues[hoveredIndex!]})`}>
@@ -335,7 +425,7 @@ export default function ProfitOrdersChart({
                   x="-25"
                   y="10"
                   width="50"
-                  height="20"
+                  height={hoveredIndex! > currentDateIndex && currentDateIndex >= 0 ? "35" : "20"}
                   rx="4"
                   fill="white"
                   stroke="#e5e7eb"
@@ -351,20 +441,43 @@ export default function ProfitOrdersChart({
                 >
                   {hoveredData.orders}
                 </text>
+                {hoveredIndex! > currentDateIndex && currentDateIndex >= 0 && (
+                  <text
+                    x="0"
+                    y="38"
+                    textAnchor="middle"
+                    className="fill-gray-500 text-xs"
+                    fontSize="9"
+                  >
+                    (forecast)
+                  </text>
+                )}
               </g>
             </g>
           )}
         </svg>
       </div>
-      <div className="mt-4 flex items-center justify-center gap-6">
+      <div className="mt-4 flex items-center justify-center gap-6 flex-wrap">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-red-500"></div>
-          <span className="text-sm text-gray-600">Profit</span>
+          <div className="h-3 w-8 rounded-sm bg-red-500"></div>
+          <span className="text-sm text-gray-600">Profit (actual)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-blue-500"></div>
-          <span className="text-sm text-gray-600">Orders</span>
+          <div className="h-3 w-8 rounded-sm bg-blue-500"></div>
+          <span className="text-sm text-gray-600">Orders (actual)</span>
         </div>
+        {hasCurrentDate && (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="h-0.5 w-8 bg-red-500 opacity-70" style={{ borderTop: "2px dashed #ef4444" }}></div>
+              <span className="text-sm text-gray-600">Profit (forecast)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-0.5 w-8 bg-blue-500 opacity-70" style={{ borderTop: "2px dashed #3b82f6" }}></div>
+              <span className="text-sm text-gray-600">Orders (forecast)</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
