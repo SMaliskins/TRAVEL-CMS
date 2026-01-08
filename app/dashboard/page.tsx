@@ -8,6 +8,7 @@ import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelecto
 import ProfitOrdersChart from "@/components/dashboard/ProfitOrdersChart";
 import TargetSpeedometer from "@/components/dashboard/TargetSpeedometer";
 import TouristsMap from "@/components/dashboard/TouristsMap";
+import RecentlyCompletedList from "@/components/dashboard/RecentlyCompletedList";
 import CalendarWithDots from "@/components/dashboard/CalendarWithDots";
 import AIWindowPlaceholder from "@/components/dashboard/AIWindowPlaceholder";
 
@@ -331,6 +332,9 @@ export default function DashboardPage() {
           <TouristsMap locations={touristLocations} />
           <CalendarWithDots events={calendarEvents} />
         </div>
+
+        {/* Recently Completed Row */}
+        <RecentlyCompletedList travelers={touristLocations} />
 
         {/* AI Window */}
         <div className="flex justify-end">
