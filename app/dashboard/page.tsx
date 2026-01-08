@@ -255,7 +255,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-[1600px] space-y-6">
         {/* Header with Period Selector */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">CRM System Agent {email?.split('@')[0] || 'Dashboard'}</h1>
           <PeriodSelector
             value={period}
             onChange={handlePeriodChange}
