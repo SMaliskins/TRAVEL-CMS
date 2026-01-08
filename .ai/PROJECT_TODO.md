@@ -117,3 +117,13 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | 10 | Directory | Check company_id for records | DB/SCHEMA | TODO | - | Records don't open |
 | 12 | Directory | Fix clientType initialization | CODE WRITER | TODO | - | Type switching bug |
 | 13 | Directory | Fix Directory search - company_name | CODE WRITER | TODO | - | Search doesn't find companies |
+
+## PHASE 8: Dashboard UI Improvements (PENDING)
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| DASH2 | Dashboard | Profit & Orders Chart: Future dates as forecast (dashed line) | CODE WRITER | TODO | - | Spec: .ai/tasks/code-writer-fix-profit-orders-chart-forecast.md |
+| DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | TODO | - | Spec: .ai/tasks/code-writer-fix-tourists-map-rename-and-split.md |
+
+| DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | TODO | - | "Showing: 1 Dec - 30 Dec", calendar icon, checkmarks |
+| DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | TODO | - | 280px, tick marks, gradient, glow, SVG stars |
