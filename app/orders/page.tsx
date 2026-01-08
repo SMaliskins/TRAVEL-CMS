@@ -586,7 +586,7 @@ export default function OrdersPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-            {(searchState.clientSearch || searchState.orderCodeSearch || searchState.statusFilter.length > 0) && (
+            {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
               <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
                 Filtered ({filteredOrders.length} results)
               </span>
