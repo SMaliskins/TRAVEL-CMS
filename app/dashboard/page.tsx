@@ -3,28 +3,208 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  monthlyProfitTarget,
-  currentMonthProfit,
-  getAchievedPercentage,
-} from "@/lib/kpi/mockKpis";
+import StatisticCard from "@/components/dashboard/StatisticCard";
+import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
+import ProfitOrdersChart from "@/components/dashboard/ProfitOrdersChart";
+import TargetSpeedometer from "@/components/dashboard/TargetSpeedometer";
+import TouristsMap from "@/components/dashboard/TouristsMap";
+import CalendarWithDots from "@/components/dashboard/CalendarWithDots";
+import AIWindowPlaceholder from "@/components/dashboard/AIWindowPlaceholder";
+
+interface DashboardStatistics {
+  ordersCount: number;
+  activeBookings: number;
+  revenue: number;
+  profit: number;
+  overdueAmount: number;
+}
+
+interface PreviousYearComparison {
+  ordersCount: number;
+  activeBookings: number;
+  revenue: number;
+}
+
+interface ChartDataPoint {
+  date: string;
+  profit: number;
+  orders: number;
+}
+
+interface TouristLocation {
+  id: string;
+  name: string;
+  location: [number, number];
+  orderCode?: string;
+  status?: "upcoming" | "in-progress" | "completed";
+}
+
+interface CalendarEvent {
+  date: string;
+  status: "upcoming" | "in-progress" | "completed";
+  orderCode: string;
+  orderId?: string;
+  count: number;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
 
-  // Mock data (shared with TopBar)
-  const monthSales = 24500;
-  const ordersThisMonth = 47;
-  const estimatedProfit = currentMonthProfit;
-  const targetValue = monthlyProfitTarget;
-  const targetProgress = Math.round(getAchievedPercentage());
+  // Period state
+  const [period, setPeriod] = useState<PeriodType>("thisMonth");
+  const [periodStart, setPeriodStart] = useState<string>("");
+  const [periodEnd, setPeriodEnd] = useState<string>("");
 
-  // Get current month name
-  const getCurrentMonth = () => {
-    return new Date().toLocaleDateString("en-US", { month: "long" });
-  };
+  // Data states
+  const [statistics, setStatistics] = useState<DashboardStatistics | null>(null);
+  const [previousYear, setPreviousYear] = useState<PreviousYearComparison | null>(null);
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [targetCurrent, setTargetCurrent] = useState(8900);
+  const [targetGoal, setTargetGoal] = useState(36000);
+  const [touristLocations, setTouristLocations] = useState<TouristLocation[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  // Calculate period dates
+  useEffect(() => {
+    const now = new Date();
+    let start: Date;
+    let end: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (period) {
+      case "thisMonth":
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case "lastMonth":
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        end = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case "last3Months":
+        start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        break;
+      case "last6Months":
+        start = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+        break;
+      default:
+        // Custom - will be set by PeriodSelector
+        return;
+    }
+
+    const formatDate = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    setPeriodStart(formatDate(start));
+    setPeriodEnd(formatDate(end));
+  }, [period]);
+
+  // Fetch statistics
+  useEffect(() => {
+    if (!periodStart || !periodEnd) return;
+
+    const fetchStatistics = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch(
+          `/api/dashboard/statistics?periodStart=${periodStart}&periodEnd=${periodEnd}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setStatistics(data);
+        }
+      } catch (error) {
+        console.error("Error fetching statistics:", error);
+      }
+    };
+
+    fetchStatistics();
+  }, [periodStart, periodEnd]);
+
+  // Fetch previous year comparison (mock for now)
+  useEffect(() => {
+    // TODO: Implement API endpoint for previous year comparison
+    setPreviousYear({
+      ordersCount: 45,
+      activeBookings: 12,
+      revenue: 22000,
+    });
+  }, [periodStart, periodEnd]);
+
+  // Mock chart data for current month (all days of month)
+  useEffect(() => {
+    // TODO: Replace with actual API call
+    const today = new Date();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const mockData: ChartDataPoint[] = [];
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(today.getFullYear(), today.getMonth(), i);
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      // Generate more realistic data with fluctuations
+      const baseProfit = 15000 + Math.sin(i / 5) * 10000 + Math.random() * 5000;
+      const baseOrders = 15 + Math.cos(i / 3) * 10 + Math.random() * 8;
+      mockData.push({
+        date: dateStr,
+        profit: Math.max(0, Math.floor(baseProfit)),
+        orders: Math.max(0, Math.floor(baseOrders)),
+      });
+    }
+
+    setChartData(mockData);
+  }, []);
+
+  // Mock tourist locations
+  useEffect(() => {
+    // TODO: Replace with actual API call
+    setTouristLocations([
+      {
+        id: "1",
+        name: "John Doe",
+        location: [48.8566, 2.3522], // Paris
+        orderCode: "ORD-001",
+        status: "in-progress",
+      },
+      {
+        id: "2",
+        name: "Jane Smith",
+        location: [40.7128, -74.006], // New York
+        orderCode: "ORD-002",
+        status: "in-progress",
+      },
+    ]);
+  }, []);
+
+  // Mock calendar events
+  useEffect(() => {
+    // TODO: Replace with actual API call
+    const today = new Date();
+    setCalendarEvents([
+      {
+        date: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate() + 2).padStart(2, "0")}`,
+        status: "upcoming",
+        orderCode: "ORD-003",
+        count: 1,
+      },
+      {
+        date: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate() + 5).padStart(2, "0")}`,
+        status: "in-progress",
+        orderCode: "ORD-004",
+        count: 1,
+      },
+    ]);
+  }, []);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -42,6 +222,26 @@ export default function DashboardPage() {
     checkUser();
   }, [router]);
 
+  const handlePeriodChange = (
+    newPeriod: PeriodType,
+    startDate?: string,
+    endDate?: string
+  ) => {
+    setPeriod(newPeriod);
+    if (startDate && endDate) {
+      setPeriodStart(startDate);
+      setPeriodEnd(endDate);
+    }
+  };
+
+  const calculateChangePercent = (
+    current: number,
+    previous: number
+  ): number => {
+    if (previous === 0) return 0;
+    return ((current - previous) / previous) * 100;
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -52,104 +252,89 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header with Welcome and Month Score */}
-        <div className="rounded-lg bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Welcome, {email}
-              </h1>
-              <p className="mt-2 text-gray-600">
-                {getCurrentMonth()} Score
-              </p>
-            </div>
-          </div>
+      <div className="mx-auto max-w-[1600px] space-y-6">
+        {/* Header with Period Selector */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <PeriodSelector
+            value={period}
+            onChange={handlePeriodChange}
+          />
         </div>
 
-        {/* KPI Cards Grid */}
+        {/* Statistic Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {/* Month Sales */}
-          <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-500">
-              Month Sales
-            </h3>
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              €{monthSales.toLocaleString()}
-            </p>
-          </div>
+          <StatisticCard
+            title="Orders"
+            value={statistics?.ordersCount || 0}
+            previousValue={previousYear?.ordersCount}
+            changePercent={
+              previousYear
+                ? calculateChangePercent(
+                    statistics?.ordersCount || 0,
+                    previousYear.ordersCount
+                  )
+                : undefined
+            }
+          />
+          <StatisticCard
+            title="Active Bookings"
+            value={statistics?.activeBookings || 0}
+            previousValue={previousYear?.activeBookings}
+            changePercent={
+              previousYear
+                ? calculateChangePercent(
+                    statistics?.activeBookings || 0,
+                    previousYear.activeBookings
+                  )
+                : undefined
+            }
+          />
+          <StatisticCard
+            title="Revenue"
+            value={`€${(statistics?.revenue || 0).toLocaleString()}`}
+            previousValue={`€${(previousYear?.revenue || 0).toLocaleString()}`}
+            changePercent={
+              previousYear
+                ? calculateChangePercent(
+                    statistics?.revenue || 0,
+                    previousYear.revenue
+                  )
+                : undefined
+            }
+            onClick={() => router.push("/analytics/orders")}
+          />
+          <StatisticCard
+            title="Overdue Payments"
+            value={`€${(statistics?.overdueAmount || 0).toLocaleString()}`}
+            onClick={() => router.push("/analytics/orders")}
+          />
+        </div>
 
-          {/* Target Progress */}
-          <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-500">
-              Target Progress
-            </h3>
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              {targetProgress}%
-            </p>
+        {/* Chart and Target Row */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ProfitOrdersChart data={chartData} />
           </div>
-
-          {/* Orders This Month */}
-          <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-500">
-              Orders This Month
-            </h3>
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              {ordersThisMonth}
-            </p>
-          </div>
-
-          {/* Estimated Profit */}
-          <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-500">
-              Estimated Profit
-            </h3>
-            <p className="mt-2 text-3xl font-bold text-gray-900">
-              €{estimatedProfit.toLocaleString()}
-            </p>
+          <div>
+            <TargetSpeedometer
+              current={targetCurrent}
+              target={targetGoal}
+              rating={3}
+              message="Keep pushing forward!"
+            />
           </div>
         </div>
 
-        {/* Your Progress Block */}
-        <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-gray-900">
-            Your Progress
-          </h2>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>Target: €{targetValue.toLocaleString()}</span>
-              <span>{targetProgress}%</span>
-            </div>
-            <div className="h-4 overflow-hidden rounded-full bg-gray-200">
-              <div
-                className="h-full bg-blue-600 transition-all duration-300"
-                style={{ width: `${targetProgress}%` }}
-              />
-            </div>
-          </div>
+        {/* Map and Calendar Row */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <TouristsMap locations={touristLocations} />
+          <CalendarWithDots events={calendarEvents} />
         </div>
 
-        {/* Insights Block */}
-        <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-gray-900">
-            Insights
-          </h2>
-          <p className="text-gray-600">
-            AI will suggest clients likely to book soon
-          </p>
-        </div>
-
-        {/* Logout Button */}
+        {/* AI Window */}
         <div className="flex justify-end">
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              router.replace("/login");
-            }}
-            className="rounded-lg border border-gray-300 bg-white px-6 py-2 text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            Logout
-          </button>
+          <AIWindowPlaceholder />
         </div>
       </div>
     </div>

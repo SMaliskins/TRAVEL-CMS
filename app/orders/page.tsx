@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import ordersSearchStore from "@/lib/stores/ordersSearchStore";
 import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -25,242 +27,10 @@ interface OrderRow {
   owner: string;
   access: AccessType;
   updated: string;
-  createdAt?: string; // Will use updated as createdAt if not provided
-  invoiceCount?: number; // Number of invoices issued
-  dueDate?: string; // Payment due date (YYYY-MM-DD format)
+  createdAt?: string;
+  invoiceCount?: number;
+  dueDate?: string;
 }
-
-// Mock data with createdAt, invoiceCount, and dueDate fields
-const mockOrders: OrderRow[] = [
-  {
-    orderId: "0001/25-SM",
-    client: "John Smith",
-    countriesCities: "Italy, Rome",
-    datesFrom: "2025-03-15",
-    datesTo: "2025-03-22",
-    amount: 2500,
-    paid: 2500,
-    debt: 0,
-    profit: 850,
-    status: "Active",
-    type: "TA",
-    owner: "JS",
-    access: "Owner",
-    updated: "2025-01-15",
-    createdAt: "2025-01-15",
-    invoiceCount: 1,
-    dueDate: "2025-01-30",
-  },
-  {
-    orderId: "0002/25-AB",
-    client: "Alice Brown",
-    countriesCities: "Spain, Barcelona",
-    datesFrom: "2025-04-01",
-    datesTo: "2025-04-10",
-    amount: 3200,
-    paid: 1500,
-    debt: 1700,
-    profit: 1100,
-    status: "Active",
-    type: "TO",
-    owner: "MK",
-    access: "Delegated",
-    updated: "2025-01-14",
-    createdAt: "2025-01-14",
-    invoiceCount: 1,
-    dueDate: "2025-02-10",
-  },
-  {
-    orderId: "0003/25-CD",
-    client: "Corporate Travel Inc.",
-    countriesCities: "France, Paris",
-    datesFrom: "2025-03-20",
-    datesTo: "2025-03-25",
-    amount: 4500,
-    paid: 4500,
-    debt: 0,
-    profit: 1450,
-    status: "Completed",
-    type: "CORP",
-    owner: "JS",
-    access: "Owner",
-    updated: "2025-01-13",
-    createdAt: "2025-01-13",
-    invoiceCount: 2,
-    dueDate: "2025-01-28",
-  },
-  {
-    orderId: "0004/25-EF",
-    client: "Robert Johnson",
-    countriesCities: "Greece, Athens",
-    datesFrom: "2025-05-10",
-    datesTo: "2025-05-17",
-    amount: 1800,
-    paid: 0,
-    debt: 1800,
-    profit: 600,
-    status: "Draft",
-    type: "TA",
-    owner: "AB",
-    access: "Owner",
-    updated: "2025-01-12",
-    createdAt: "2025-01-12",
-    invoiceCount: 0,
-    dueDate: "2025-02-15",
-  },
-  {
-    orderId: "0005/25-GH",
-    client: "Sarah Williams",
-    countriesCities: "Portugal, Lisbon",
-    datesFrom: "2025-04-15",
-    datesTo: "2025-04-22",
-    amount: 2100,
-    paid: 2100,
-    debt: 0,
-    profit: 720,
-    status: "On hold",
-    type: "TO",
-    owner: "MK",
-    access: "Delegated",
-    updated: "2025-01-11",
-    createdAt: "2025-01-11",
-    invoiceCount: 1,
-    dueDate: "2025-01-25",
-  },
-  {
-    orderId: "0006/25-IJ",
-    client: "Michael Davis",
-    countriesCities: "Germany, Berlin",
-    datesFrom: "2025-03-25",
-    datesTo: "2025-04-02",
-    amount: 2800,
-    paid: 1400,
-    debt: 1400,
-    profit: 950,
-    status: "Active",
-    type: "TA",
-    owner: "JS",
-    access: "Owner",
-    updated: "2025-01-10",
-    createdAt: "2025-01-10",
-    invoiceCount: 1,
-    dueDate: "2025-01-20",
-  },
-  {
-    orderId: "0007/25-KL",
-    client: "Non-Profit Organization",
-    countriesCities: "Netherlands, Amsterdam",
-    datesFrom: "2025-06-01",
-    datesTo: "2025-06-08",
-    amount: 1500,
-    paid: 1500,
-    debt: 0,
-    profit: 400,
-    status: "Completed",
-    type: "NON",
-    owner: "AB",
-    access: "Owner",
-    updated: "2025-01-09",
-    createdAt: "2025-01-09",
-    invoiceCount: 1,
-    dueDate: "2025-01-18",
-  },
-  {
-    orderId: "0008/25-MN",
-    client: "Emma Wilson",
-    countriesCities: "Switzerland, Zurich",
-    datesFrom: "2025-04-20",
-    datesTo: "2025-04-27",
-    amount: 3500,
-    paid: 2000,
-    debt: 1500,
-    profit: 1200,
-    status: "Active",
-    type: "TO",
-    owner: "MK",
-    access: "Delegated",
-    updated: "2025-01-08",
-    createdAt: "2025-01-08",
-    invoiceCount: 1,
-    dueDate: "2025-02-05",
-  },
-  {
-    orderId: "0009/25-OP",
-    client: "Tech Corp Solutions",
-    countriesCities: "UK, London",
-    datesFrom: "2025-05-05",
-    datesTo: "2025-05-12",
-    amount: 5200,
-    paid: 5200,
-    debt: 0,
-    profit: 1800,
-    status: "Completed",
-    type: "CORP",
-    owner: "JS",
-    access: "Owner",
-    updated: "2025-01-07",
-    createdAt: "2025-01-07",
-    invoiceCount: 3,
-    dueDate: "2025-01-30",
-  },
-  {
-    orderId: "0010/25-QR",
-    client: "David Martinez",
-    countriesCities: "Austria, Vienna",
-    datesFrom: "2025-03-10",
-    datesTo: "2025-03-17",
-    amount: 1900,
-    paid: 0,
-    debt: 1900,
-    profit: 650,
-    status: "Cancelled",
-    type: "TA",
-    owner: "AB",
-    access: "Owner",
-    updated: "2025-01-06",
-    createdAt: "2025-01-06",
-    invoiceCount: 0,
-    dueDate: "2024-12-20",
-  },
-  {
-    orderId: "0011/25-ST",
-    client: "Lisa Anderson",
-    countriesCities: "Czech Republic, Prague",
-    datesFrom: "2025-05-15",
-    datesTo: "2025-05-22",
-    amount: 2200,
-    paid: 2200,
-    debt: 0,
-    profit: 750,
-    status: "Active",
-    type: "TO",
-    owner: "MK",
-    access: "Delegated",
-    updated: "2025-01-05",
-    createdAt: "2025-01-05",
-    invoiceCount: 1,
-    dueDate: "2025-02-01",
-  },
-  {
-    orderId: "0012/25-UV",
-    client: "James Taylor",
-    countriesCities: "Belgium, Brussels",
-    datesFrom: "2025-04-25",
-    datesTo: "2025-05-02",
-    amount: 2700,
-    paid: 1350,
-    debt: 1350,
-    profit: 920,
-    status: "Active",
-    type: "TA",
-    owner: "JS",
-    access: "Owner",
-    updated: "2025-01-04",
-    createdAt: "2025-01-04",
-    invoiceCount: 1,
-    dueDate: "2025-01-15",
-  },
-];
 
 interface OrderTotals {
   amount: number;
@@ -512,20 +282,20 @@ function formatCountriesWithFlags(countriesCities: string): string {
     .join(", ");
 }
 
-const getStatusBadgeColor = (status: OrderStatus): string => {
+const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; dot: string } => {
   switch (status) {
     case "Draft":
-      return "bg-gray-100 text-gray-800";
+      return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
     case "Active":
-      return "bg-green-100 text-green-800";
+      return { bg: "bg-green-100", text: "text-green-800", dot: "bg-green-500" };
     case "Cancelled":
-      return "bg-red-100 text-red-800";
+      return { bg: "bg-red-100", text: "text-red-800", dot: "bg-red-500" };
     case "Completed":
-      return "bg-blue-100 text-blue-800";
+      return { bg: "bg-blue-100", text: "text-blue-800", dot: "bg-blue-500" };
     case "On hold":
-      return "bg-yellow-100 text-yellow-800";
+      return { bg: "bg-yellow-100", text: "text-yellow-800", dot: "bg-yellow-500" };
     default:
-      return "bg-gray-100 text-gray-800";
+      return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
   }
 };
 
@@ -570,11 +340,50 @@ function getGroupKey(type: "year" | "month" | "day", key: string): string {
 
 export default function OrdersPage() {
   const router = useRouter();
-  const [orders] = useState<OrderRow[]>(mockOrders);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => 
     loadExpandedFromStorage()
   );
+
+  // Fetch orders from API
+  const fetchOrders = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+
+      // Get session token
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token || null;
+
+      const response = await fetch("/api/orders", {
+        headers: {
+          ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
+        },
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setOrders(data.orders || []);
+    } catch (error) {
+      console.error("Failed to fetch orders:", error);
+      setLoadError(error instanceof Error ? error.message : "Failed to load orders");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Load orders on mount
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
   // Initialize store and subscribe to search store changes
   useEffect(() => {
@@ -646,18 +455,8 @@ export default function OrdersPage() {
     return `€${amount.toLocaleString()}`;
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString + "T00:00:00");
-      if (isNaN(date.getTime())) return "-";
-      const day = String(date.getDate()).padStart(2, "0");
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
-    } catch {
-      return "-";
-    }
-  };
+  // Use centralized date formatting
+  const formatDate = formatDateDDMMYYYY;
 
   const toggleYear = (year: string) => {
     const key = getGroupKey("year", year);
@@ -715,17 +514,84 @@ export default function OrdersPage() {
     return null;
   };
 
-  // Handle double click to navigate to order
-  const handleOrderDoubleClick = (orderCode: string) => {
+  // Handle click to navigate to order (changed from double-click to single-click)
+  const handleOrderClick = (orderCode: string) => {
     router.push(`/orders/${orderCodeToSlug(orderCode)}`);
   };
+
+  // Handle keyboard navigation (Enter key)
+  const handleOrderKeyDown = (e: React.KeyboardEvent, orderCode: string) => {
+    if (e.key === "Enter") {
+      router.push(`/orders/${orderCodeToSlug(orderCode)}`);
+    }
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="bg-gray-50">
+        <div className="mx-auto max-w-[1800px] space-y-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+            <div className="h-10 w-32 bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
+          <div className="rounded-lg bg-white shadow-sm p-6">
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="h-4 bg-gray-200 rounded flex-1 animate-pulse"></div>
+                  <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+                  <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (loadError) {
+    return (
+      <div className="bg-gray-50">
+        <div className="mx-auto max-w-[1800px] space-y-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+            <button
+              onClick={() => router.push("/orders/new")}
+              className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
+            >
+              New Order
+            </button>
+          </div>
+          <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <p className="text-red-700">{loadError}</p>
+            <button
+              onClick={fetchOrders}
+              className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-50">
       <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
+            {(searchState.clientSearch || searchState.orderCodeSearch || searchState.statusFilter.length > 0) && (
+              <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                Filtered ({filteredOrders.length} results)
+              </span>
+            )}
+          </div>
           <button
             onClick={() => router.push("/orders/new")}
             className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
@@ -734,7 +600,30 @@ export default function OrdersPage() {
           </button>
         </div>
 
+        {/* Empty state */}
+        {orders.length === 0 && (
+          <div className="rounded-lg bg-white shadow-sm p-12 text-center">
+            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p className="text-lg font-medium text-gray-900 mb-2">No orders yet</p>
+            <p className="text-gray-500 mb-6">Get started by creating your first order</p>
+            <button
+              onClick={() => router.push("/orders/new")}
+              className="inline-flex items-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create your first order
+            </button>
+          </div>
+        )}
+
         {/* Table */}
+        {orders.length > 0 && (
         <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
           <table className="w-full border-collapse">
             <thead>
@@ -742,14 +631,14 @@ export default function OrdersPage() {
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Order ID
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Invoice">
-                  Inv
+                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  <span title="Invoice issued" className="cursor-help">Inv 📝</span>
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Payment Status">
-                  Pay
+                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  <span title="Payment Status" className="cursor-help">Pay 💵</span>
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Days to Due">
-                  Due
+                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  <span title="Days to Due Date" className="cursor-help">Due ⏰</span>
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Client
@@ -791,11 +680,11 @@ export default function OrdersPage() {
                 <React.Fragment key={`year-${year.year}`}>
                   {/* Year row */}
                   <tr
-                    className="cursor-pointer bg-gray-100 font-semibold leading-tight hover:bg-gray-200"
+                    className="cursor-pointer bg-gray-100 font-semibold leading-tight hover:bg-gray-200 transition-colors"
                     onClick={() => toggleYear(year.year)}
                   >
                     <td className="px-4 py-1.5 text-sm leading-tight text-gray-900">
-                      <span className="mr-2">
+                      <span className="mr-2 inline-block transition-transform duration-200">
                         {isExpanded("year", year.year) ? "▾" : "▸"}
                       </span>
                       {year.year}
@@ -823,11 +712,11 @@ export default function OrdersPage() {
                     year.months.map((month) => (
                       <React.Fragment key={`month-${month.monthKey}`}>
                         <tr
-                          className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100"
+                          className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100 transition-colors"
                           onClick={() => toggleMonth(month.monthKey)}
                         >
                           <td className="px-4 py-1.5 pl-8 text-sm leading-tight text-gray-900">
-                            <span className="mr-2">
+                            <span className="mr-2 inline-block transition-transform duration-200">
                               {isExpanded("month", month.monthKey) ? "▾" : "▸"}
                             </span>
                             {month.monthLabel}
@@ -855,11 +744,11 @@ export default function OrdersPage() {
                           month.days.map((day) => (
                             <React.Fragment key={`day-${day.dayKey}`}>
                               <tr
-                                className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100"
+                                className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100 transition-colors"
                                 onClick={() => toggleDay(day.dayKey)}
                               >
                                 <td className="px-4 py-1.5 pl-16 text-sm leading-tight text-gray-900">
-                                  <span className="mr-2">
+                                  <span className="mr-2 inline-block transition-transform duration-200">
                                     {isExpanded("day", day.dayKey) ? "▾" : "▸"}
                                   </span>
                                   {day.dayLabel}
@@ -896,8 +785,12 @@ export default function OrdersPage() {
                                   return (
                                     <tr
                                       key={`order-${order.orderId}`}
-                                      className="cursor-pointer leading-tight transition-colors hover:bg-gray-50"
-                                      onDoubleClick={() => handleOrderDoubleClick(order.orderId)}
+                                      className="cursor-pointer leading-tight transition-colors hover:bg-blue-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-inset"
+                                      onClick={() => handleOrderClick(order.orderId)}
+                                      onKeyDown={(e) => handleOrderKeyDown(e, order.orderId)}
+                                      tabIndex={0}
+                                      role="button"
+                                      aria-label={`Open order ${order.orderId}`}
                                     >
                                       <td className="whitespace-nowrap px-4 py-1.5 pl-24 text-sm font-medium leading-tight text-gray-900">
                                         {order.orderId}
@@ -938,8 +831,10 @@ export default function OrdersPage() {
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {order.client}
                                       </td>
-                                      <td className="px-4 py-1.5 text-sm leading-tight text-gray-700">
-                                        {formatCountriesWithFlags(order.countriesCities)}
+                                      <td className="px-4 py-1.5 text-sm leading-tight text-gray-700 max-w-xs" title={order.countriesCities}>
+                                        <div className="truncate">
+                                          {formatCountriesWithFlags(order.countriesCities)}
+                                        </div>
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {formatDate(order.datesFrom)} - {formatDate(order.datesTo)}
@@ -963,18 +858,22 @@ export default function OrdersPage() {
                                         {formatCurrency(order.profit)}
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight">
-                                        <span
-                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium leading-tight ${getStatusBadgeColor(
-                                            order.status
-                                          )}`}
-                                        >
-                                          {order.status}
-                                        </span>
+                                        {(() => {
+                                          const colors = getStatusBadgeColor(order.status);
+                                          return (
+                                            <span
+                                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium leading-tight ${colors.bg} ${colors.text}`}
+                                            >
+                                              <span className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} />
+                                              {order.status}
+                                            </span>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
                                         {order.type}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700" title={`Owner: ${order.owner}`}>
                                         {order.owner}
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
@@ -992,6 +891,7 @@ export default function OrdersPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

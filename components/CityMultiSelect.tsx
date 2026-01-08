@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { City, searchCities, getCityByName } from "@/lib/data/cities";
+import { City, searchCities, countryCodeToFlag } from "@/lib/data/cities";
 
 export interface CityWithCountry {
   city: string;
   country: string;
   countryCode?: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface CityMultiSelectProps {
@@ -14,6 +16,7 @@ interface CityMultiSelectProps {
   onChange: (cities: CityWithCountry[]) => void;
   onCountryChange?: (countries: string[]) => void; // Array of unique countries
   error?: string;
+  placeholder?: string;
 }
 
 export default function CityMultiSelect({
@@ -21,6 +24,7 @@ export default function CityMultiSelect({
   onChange,
   onCountryChange,
   error,
+  placeholder = "Search cities...",
 }: CityMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,7 +84,9 @@ export default function CityMultiSelect({
     const cityWithCountry: CityWithCountry = {
       city: city.name,
       country: city.country,
-      countryCode: city.code,
+      countryCode: city.countryCode,
+      lat: city.lat,
+      lng: city.lng,
     };
     const alreadySelected = selectedCities.some((c) => c.city === city.name);
     if (!alreadySelected) {
@@ -96,7 +102,7 @@ export default function CityMultiSelect({
 
   return (
     <div ref={containerRef} className="space-y-2">
-      {/* Selected cities as chips */}
+      {/* Selected cities as chips with flags */}
       {selectedCities.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedCities.map((item) => (
@@ -104,6 +110,9 @@ export default function CityMultiSelect({
               key={item.city}
               className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
             >
+              {item.countryCode && (
+                <span className="mr-0.5">{countryCodeToFlag(item.countryCode)}</span>
+              )}
               {item.city}
               <button
                 type="button"
@@ -130,7 +139,7 @@ export default function CityMultiSelect({
           onFocus={() => {
             if (searchQuery.length >= 2) setIsOpen(true);
           }}
-          placeholder="Search cities..."
+          placeholder={placeholder}
           className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
             error
               ? "border-red-300 focus:border-red-500 focus:ring-red-500"
@@ -147,7 +156,10 @@ export default function CityMultiSelect({
                 className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">{city.name}</span>
+                  <span className="font-medium text-gray-900">
+                    <span className="mr-1.5">{countryCodeToFlag(city.countryCode)}</span>
+                    {city.name}
+                  </span>
                   <span className="text-xs text-gray-500">{city.country}</span>
                 </div>
               </button>

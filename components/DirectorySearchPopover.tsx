@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import directorySearchStore, { DirectorySearchState } from "@/lib/stores/directorySearchStore";
-import { useDebounce } from "@/hooks/useDebounce";
 import { useClampedPopoverPosition } from "@/hooks/useClampedPopoverPosition";
 
 interface DirectorySearchPopoverProps {
@@ -17,15 +16,11 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
   );
   const [mounted, setMounted] = useState(false);
 
-  // Debounce text inputs
+  // Text inputs (no debounce for instant search)
   const [nameValue, setNameValue] = useState(filters.name);
-  const debouncedName = useDebounce(nameValue, 200);
   const [personalCodeValue, setPersonalCodeValue] = useState(filters.personalCode);
-  const debouncedPersonalCode = useDebounce(personalCodeValue, 200);
   const [phoneValue, setPhoneValue] = useState(filters.phone);
-  const debouncedPhone = useDebounce(phoneValue, 200);
   const [emailValue, setEmailValue] = useState(filters.email);
-  const debouncedEmail = useDebounce(emailValue, 200);
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -85,22 +80,22 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     return unsubscribe;
   }, []);
 
-  // Apply debounced text values to store
+  // Apply text values to store instantly (no debounce)
   useEffect(() => {
-    directorySearchStore.getState().setField("name", debouncedName);
-  }, [debouncedName]);
+    directorySearchStore.getState().setName(nameValue);
+  }, [nameValue]);
 
   useEffect(() => {
-    directorySearchStore.getState().setField("personalCode", debouncedPersonalCode);
-  }, [debouncedPersonalCode]);
+    directorySearchStore.getState().setPersonalCode(personalCodeValue);
+  }, [personalCodeValue]);
 
   useEffect(() => {
-    directorySearchStore.getState().setField("phone", debouncedPhone);
-  }, [debouncedPhone]);
+    directorySearchStore.getState().setPhone(phoneValue);
+  }, [phoneValue]);
 
   useEffect(() => {
-    directorySearchStore.getState().setField("email", debouncedEmail);
-  }, [debouncedEmail]);
+    directorySearchStore.getState().setEmail(emailValue);
+  }, [emailValue]);
 
   // Cmd+K / Ctrl+K to focus search and open popover
   useEffect(() => {
@@ -188,12 +183,17 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     } else if (key === "email") {
       setEmailValue(value as string);
     } else {
-      directorySearchStore.getState().setField(key, value);
+      const store = directorySearchStore.getState();
+      if (key === "name") store.setName(value as string);
+      else if (key === "personalCode") store.setPersonalCode(value as string);
+      else if (key === "phone") store.setPhone(value as string);
+      else if (key === "email") store.setEmail(value as string);
+      else if (key === "type") store.setType(value as DirectorySearchState["type"]);
+      else if (key === "isActive") store.setIsActive(value as DirectorySearchState["isActive"]);
     }
   };
 
   const handleRoleChange = (role: "client" | "supplier" | "subagent", checked: boolean) => {
-    // If checked, set the role; if unchecked, reset to "all"
     directorySearchStore.getState().setRole(checked ? role : "all");
   };
 
@@ -383,8 +383,8 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                         </label>
                         <input
                           type="date"
-                          value={filters.dob}
-                          onChange={(e) => handleFieldChange("dob", e.target.value)}
+                          value=""
+                          onChange={(e) => {}}
                           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
                         />
                       </div>

@@ -351,6 +351,12 @@ export default function Sidebar() {
                     })}
                   </ul>
                 </nav>
+                {/* Version display */}
+                <div className="border-t border-gray-200 px-4 py-2">
+                  <span className="text-xs text-gray-400">
+                    v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
+                  </span>
+                </div>
               </div>
             </aside>
           </>
@@ -391,6 +397,13 @@ export default function Sidebar() {
               {renderNavItems({ showTooltip })}
             </ul>
           </nav>
+
+          {/* Version display */}
+          <div className={`px-3 py-1 ${isCollapsed ? "text-center" : ""}`}>
+            <span className="text-xs text-gray-400">
+              {isExpanded ? `v${process.env.NEXT_PUBLIC_APP_VERSION || "dev"}` : `v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").split(".")[0]}`}
+            </span>
+          </div>
 
           {/* Sidebar Control - bottom */}
           <div className="border-t border-gray-200 p-2">
@@ -496,6 +509,13 @@ export default function Sidebar() {
                 {renderNavItems({ showTooltip: false })}
               </ul>
             </nav>
+
+            {/* Version display */}
+            <div className="px-3 py-1">
+              <span className="text-xs text-gray-400">
+                v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
+              </span>
+            </div>
 
             {/* Sidebar Control - bottom (in overlay) */}
             <div className="border-t border-gray-200 p-2">
