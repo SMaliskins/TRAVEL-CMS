@@ -98,6 +98,12 @@ Current tasks and their status. Agents update relevant rows when starting, block
 |----|------|------|-------|--------|--------|-------|
 | D1 | Directory | Add Passport Details to Main Details (AI parsing) | CODE WRITER | DONE | feature/x | ✅ QA SCORE 9/10 - All parts completed: SQL migration, PassportDetailsInput component, AI parsing API, API endpoints integration. Commits: a433eb8, 81c6ad9, 05ce937, e768b6f, cf3df0d, db8168b, ce7719f, 6847594 |
 
+## PHASE 8: Dashboard Redesign
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| DASH1 | Dashboard | Dashboard Redesign (Turion Style) | CODE WRITER | IN_PROGRESS → QA | - | ✅ UI components created (8 components), dashboard page redesigned. Needs QA verification |
+
 ## LEGACY TASKS (Directory)
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
