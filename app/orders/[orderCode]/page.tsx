@@ -141,7 +141,7 @@ export default function OrderPage({
         {/* A) Order Header */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold text-blue-600">
+            <h1 className="text-3xl font-bold text-gray-900">
               Order {orderCode}
             </h1>
             <OrderStatusBadge 
