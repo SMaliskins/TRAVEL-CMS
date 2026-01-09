@@ -86,7 +86,7 @@ export async function POST(
       client_name,
       client_address,
       client_email,
-      services, // Array of { service_id, service_name, service_category, quantity, unit_price }
+      items, // Array of { service_id, service_name, service_category, quantity, unit_price }
       subtotal,
       tax_rate,
       tax_amount,
@@ -95,9 +95,9 @@ export async function POST(
     } = body;
 
     // Validation
-    if (!invoice_number || !services || services.length === 0) {
+    if (!invoice_number || !items || items.length === 0) {
       return NextResponse.json(
-        { error: "Missing required fields: invoice_number, services" },
+        { error: "Missing required fields: invoice_number, items" },
         { status: 400 }
       );
     }
@@ -117,7 +117,7 @@ export async function POST(
     }
 
     // Check if any services are already invoiced
-    const serviceIds = services.map((s: any) => s.service_id);
+    const serviceIds = items.map((s: any) => s.service_id);
     const { data: existingServices, error: checkError } = await supabaseAdmin
       .from("order_services")
       .select("id, invoice_id")
@@ -170,14 +170,14 @@ export async function POST(
     }
 
     // Create invoice items
-    const invoiceItems = services.map((service: any) => ({
+    const invoiceItems = items.map((item: any) => ({
       invoice_id: invoice.id,
-      service_id: service.service_id,
-      service_name: service.service_name || "",
-      service_category: service.service_category || "",
-      quantity: service.quantity || 1,
-      unit_price: service.unit_price || 0,
-      line_total: (service.quantity || 1) * (service.unit_price || 0),
+      service_id: item.service_id,
+      service_name: item.service_name || "",
+      service_category: item.service_category || "",
+      quantity: item.quantity || 1,
+      unit_price: item.unit_price || 0,
+      line_total: (item.quantity || 1) * (item.unit_price || 0),
     }));
 
     const { error: itemsError } = await supabaseAdmin
