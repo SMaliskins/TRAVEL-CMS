@@ -27,6 +27,7 @@
 ├── NEW_PROJECT_RULES.md      ← ⭐ ВСЕ ЧИТАЮТ ПЕРЕД РАБОТОЙ
 ├── PROJECT_TODO.md           ← Единый источник задач
 ├── PROJECT_LOG.md            ← Краткий лог (все агенты)
+├── PROJECT_PROGRESS.md       ← Высокоуровневый дашборд (Runner обновляет)
 │
 ├── logs/                     ← Подробные логи агентов
 │   ├── RUNNER_LOG.md
