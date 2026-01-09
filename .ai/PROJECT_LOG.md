@@ -5526,3 +5526,50 @@ const daysAndNights = useMemo(() => {
 **Commit:** `b4e11c7`
 
 **Next Step:** `OD1-OD3 теперь ПОЛНОСТЬЮ работают. Готов к OD4-OD6 или QA проверке`
+
+### 📅 [2026-01-09] | [21:15]
+**Агент:** `CODE WRITER`
+**Задача:** `Fix merge conflict + OD1-OD3 status compliance`
+**Статус:** `SUCCESS ✅`
+
+**User Report:**
+- Bug 1: Merge conflict markers in PROJECT_LOG.md (lines 4573-4851)
+- Bug 2: OD1-OD3 marked DONE without SCORE (violates NEW_PROJECT_RULES.md)
+
+**Проблемы:**
+- ❌ `.ai/PROJECT_LOG.md` содержал `<<<<<<< HEAD` (line 4573) и `=======` (line 4851), но отсутствовал closing `>>>>>>>` marker
+- ❌ OD1-OD3 имели Status "DONE" но SCORE column пустая
+- ❌ Согласно NEW_PROJECT_RULES.md: DONE только при SCORE >= 8 от QA
+
+**Решения:**
+- ✅ Bug 1: Удалены conflict markers, оставлен весь контент (оба варианта были валидные логи)
+- ✅ Bug 2: OD1-OD3 Status изменён с "DONE" на "READY_FOR_QA"
+- ✅ SCORE column очищена (теперь `-` вместо commit hash)
+
+**Файлы:**
+- `.ai/PROJECT_LOG.md` - удалено 2 conflict markers
+- `.ai/PROJECT_TODO.md` - исправлены 3 записи (OD1-OD3)
+
+**Протокол:**
+- Задачи могут быть DONE только после QA verification с SCORE >= 8
+- OD1-OD3 код завершён, build проходит, но QA ещё не проводилась
+- Правильный статус: READY_FOR_QA
+
+**Commit:** `47f0587`
+
+**Next Step:** `QA verification для OD1-OD3`
+
+### 📅 [2026-01-09] | [21:30]
+**Агент:** `CODE WRITER`
+**Задача:** `OD1-OD3 User Acceptance + Start OD5`
+**Статус:** `START 🚀`
+
+**User Decision:** "OD1-OD3 принимаю лично. иди дальше"
+
+**Действия:**
+- ✅ OD1 → DONE (10/10) - User acceptance
+- ✅ OD2 → DONE (10/10) - User acceptance  
+- ✅ OD3 → DONE (10/10) - User acceptance
+- 🚀 Начинаю OD5: Чекбоксы для выбора сервисов
+
+**Next Step:** `Реализация OD5`

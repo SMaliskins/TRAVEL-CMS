@@ -51,6 +51,7 @@ export default function OrderServicesBlock({
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
 
   // Fetch services from API
   const fetchServices = useCallback(async () => {
@@ -253,6 +254,21 @@ export default function OrderServicesBlock({
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="w-12 px-2 py-1.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={services.length > 0 && selectedServiceIds.length === services.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedServiceIds(services.map(s => s.id));
+                      } else {
+                        setSelectedServiceIds([]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    aria-label="Select all services"
+                  />
+                </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Category
                 </th>
@@ -305,7 +321,7 @@ export default function OrderServicesBlock({
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
                       onClick={() => toggleGroup(groupKey)}
                     >
-                      <td className="px-3 py-1.5" colSpan={11}>
+                      <td className="px-3 py-1.5" colSpan={12}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-600">
@@ -331,11 +347,29 @@ export default function OrderServicesBlock({
                         return (
                           <tr
                             key={service.id}
-                            className="transition-colors hover:bg-gray-50 cursor-pointer"
-                            onDoubleClick={() => setEditServiceId(service.id)}
-                            title="Double-click to edit"
+                            className="transition-colors hover:bg-gray-50"
                           >
-                      <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                            <td className="w-12 px-2 py-1 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedServiceIds.includes(service.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  if (e.target.checked) {
+                                    setSelectedServiceIds(prev => [...prev, service.id]);
+                                  } else {
+                                    setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                aria-label={`Select ${service.name}`}
+                              />
+                            </td>
+                            <td 
+                              className="px-2 py-1 text-sm text-gray-700 leading-tight cursor-pointer"
+                              onDoubleClick={() => setEditServiceId(service.id)}
+                              title="Double-click to edit"
+                            >
                               {service.category}
                             </td>
                             <td className="px-2 py-1 text-sm font-medium text-gray-900 leading-tight">
@@ -451,6 +485,53 @@ export default function OrderServicesBlock({
             setEditServiceId(null);
           }}
         />
+      )}
+
+      {/* Floating Action Bar */}
+      {selectedServiceIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.2s_ease-out]">
+          <div className="bg-black text-white rounded-lg shadow-2xl px-6 py-3 flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span className="font-medium">
+                {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'сервис' : selectedServiceIds.length < 5 ? 'сервиса' : 'сервисов'} выбрано
+              </span>
+            </div>
+            <div className="h-6 w-px bg-gray-600" />
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-bold text-green-400">
+                €{services
+                  .filter(s => selectedServiceIds.includes(s.id))
+                  .reduce((sum, s) => sum + s.clientPrice, 0)
+                  .toLocaleString()}
+              </span>
+            </div>
+            <div className="h-6 w-px bg-gray-600" />
+            <button
+              onClick={() => {
+                // TODO OD6: Open Invoice Modal
+                alert('OD6: Invoice Modal will be implemented next');
+              }}
+              className="px-4 py-2 bg-white text-black font-medium rounded hover:bg-gray-100 transition-colors"
+            >
+              Выписать счёт
+            </button>
+            <button
+              onClick={() => setSelectedServiceIds([])}
+              className="ml-2 text-gray-400 hover:text-white transition-colors"
+              aria-label="Clear selection"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
