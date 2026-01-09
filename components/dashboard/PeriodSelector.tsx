@@ -9,12 +9,16 @@ interface PeriodSelectorProps {
   value: PeriodType;
   onChange: (period: PeriodType, startDate?: string, endDate?: string) => void;
   className?: string;
+  startDate?: string;  // Add: actual period start from parent
+  endDate?: string;    // Add: actual period end from parent
 }
 
 export default function PeriodSelector({
   value,
   onChange,
   className = "",
+  startDate: parentStartDate,
+  endDate: parentEndDate,
 }: PeriodSelectorProps) {
   const [customStart, setCustomStart] = useState<string | undefined>(undefined);
   const [customEnd, setCustomEnd] = useState<string | undefined>(undefined);
@@ -100,6 +104,18 @@ export default function PeriodSelector({
 
   // Format display date as "1 Dec - 30 Dec"
   const getDisplayDates = (): string => {
+    // Use parent dates if provided
+    if (parentStartDate && parentEndDate) {
+      const formatDisplay = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        const day = date.getDate();
+        const month = date.toLocaleString("en-US", { month: "short" });
+        return `${day} ${month}`;
+      };
+      return `${formatDisplay(parentStartDate)} - ${formatDisplay(parentEndDate)}`;
+    }
+
+    // Fallback to local calculation
     const now = new Date();
     let startDate: Date;
     let endDate: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -180,7 +196,7 @@ export default function PeriodSelector({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 rounded-lg border border-gray-200 bg-white shadow-lg z-50">
+        <div className="absolute right-0 mt-2 w-56 rounded-lg border border-gray-200 bg-white shadow-lg z-[999]">
           <div className="py-1">
             {(["thisMonth", "lastMonth", "last3Months", "last6Months", "custom"] as PeriodType[]).map((period) => (
               <button
@@ -209,19 +225,19 @@ export default function PeriodSelector({
                 )}
               </button>
             ))}
+            
+            {/* Custom Date Range Picker inside dropdown */}
+            {value === "custom" && (
+              <div className="border-t border-gray-200 p-3">
+                <DateRangePicker
+                  label="Select custom range"
+                  from={customStart}
+                  to={customEnd}
+                  onChange={handleCustomDatesChange}
+                />
+              </div>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Custom Date Range Picker */}
-      {value === "custom" && !isOpen && (
-        <div className="mt-2">
-          <DateRangePicker
-            label=""
-            from={customStart}
-            to={customEnd}
-            onChange={handleCustomDatesChange}
-          />
         </div>
       )}
     </div>

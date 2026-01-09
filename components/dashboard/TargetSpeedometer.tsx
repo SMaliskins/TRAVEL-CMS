@@ -40,7 +40,7 @@ export default function TargetSpeedometer({
 
   // SVG dimensions - INCREASED to 280px
   const size = 280;
-  const centerX = size / 2;
+  const centerX = size / 2 + 20; // Offset for labels
   const centerY = size / 2 + 20; // Slightly offset down
   const radius = 100;
 
@@ -99,8 +99,8 @@ export default function TargetSpeedometer({
     <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
       <h3 className="mb-4 text-lg font-semibold text-gray-900">Target</h3>
       <div className="flex flex-col items-center">
-        <div className="relative" style={{ width: size, height: size * 0.65 }}>
-          <svg width={size} height={size * 0.65} style={{ filter: `drop-shadow(0 0 8px ${gradient.glow}20)` }}>
+        <div className="relative" style={{ width: size + 40, height: size * 0.65 + 20 }}>
+          <svg width={size + 40} height={size * 0.65 + 20} style={{ filter: `drop-shadow(0 0 8px ${gradient.glow}20)` }}>
             <defs>
               {/* Gradient for speedometer arc */}
               <linearGradient id="speedometerGradient" x1="0%" y1="0%" x2="100%" y2="0%">

@@ -272,6 +272,8 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-gray-900">Hello, {username || email?.split('@')[0] || 'User'"}!</h1>          <PeriodSelector
             value={period}
             onChange={handlePeriodChange}
+            startDate={periodStart}
+            endDate={periodEnd}
           />
         </div>
 
