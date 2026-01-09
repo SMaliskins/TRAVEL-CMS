@@ -238,3 +238,27 @@
 **Commit:** `e4676a2`
 
 ---
+
+### 📅 2026-01-10 | 00:45
+**Задача:** Fix InvoiceCreator — call onSuccess callback
+**Статус:** ✅ SUCCESS
+**Действия:**
+- Добавил onSuccess?.() в handleSave перед onClose()
+- Теперь InvoiceList обновляется после создания счета
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx`
+
+**Build:** ✅ No errors
+**Commit:** `bf33766`
+
+---
+
+### 📅 2026-01-10 | 01:10
+**Задача:** Make "Order" text blue on order detail page
+**Статус:** ⏳ START
+**Действия:**
+- Изменяю цвет текста "Order {orderCode}" с gray-900 на blue-600
+- Файл: app/orders/[orderCode]/page.tsx (строка ~140)
+
+---
