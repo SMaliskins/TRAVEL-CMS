@@ -412,6 +412,16 @@ export default function OrderClientSection({
     return diffDays;
   }, [dateFrom]);
 
+  // Calculate days and nights for display
+  const daysAndNights = useMemo(() => {
+    if (!dateFrom || !dateTo) return null;
+    const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const nights = days - 1;
+    const daysWord = days === 1 ? 'день' : days > 1 && days < 5 ? 'дня' : 'дней';
+    const nightsWord = nights === 1 ? 'ночь' : nights > 1 && nights < 5 ? 'ночи' : 'ночей';
+    return ` (${days} ${daysWord} / ${nights} ${nightsWord})`;
+  }, [dateFrom, dateTo]);
+
   // Filter unique destinations by city name
   const uniqueDestinations = useMemo(() => {
     const seen = new Set<string>();
@@ -556,14 +566,7 @@ export default function OrderClientSection({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <span className="text-sm font-medium text-gray-700">
-                        {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}
-                      {dateFrom && dateTo && (() => {
-                        const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                        const nights = days - 1;
-                        const daysWord = days === 1 ? 'день' : days > 1 && days < 5 ? 'дня' : 'дней';
-                        const nightsWord = nights === 1 ? 'ночь' : nights > 1 && nights < 5 ? 'ночи' : 'ночей';
-                        return ` (${days} ${daysWord} / ${nights} ${nightsWord})`;
-                      }())}
+                        {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}{daysAndNights}
                       </span>
                       {daysUntilTrip !== null && daysUntilTrip >= 0 && (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-full">

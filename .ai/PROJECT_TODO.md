@@ -41,10 +41,10 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 | ID | Area | Task | Pipeline | Current | Status | SCORE | Last Action |
 |----|------|------|----------|---------|--------|-------|-------------|
-| OD1 | Orders | Увеличить размер шрифтов на странице заказа | CW→QA | CW | TODO | - | [09.01] Spec created |
-| OD2 | Orders | Карта на всю ширину внизу секции клиента | CW→QA | CW | TODO | - | [09.01] Spec created |
-| OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | CW | TODO | - | [09.01] Spec created |
-| OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | TODO | - | [09.01] Spec created |
+| OD1 | Orders | Увеличить размер шрифтов на странице заказа | CW→QA | CW | DONE | f469fae | [09.01 20:45] Fonts increased |
+| OD2 | Orders | Карта на всю ширину внизу секции клиента | CW→QA | CW | DONE | f469fae | [09.01 20:45] Map moved fullwidth |
+| OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | CW | DONE | f469fae | [09.01 20:45] Days/nights added |
+| OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | IN_PROGRESS | - | [09.01 20:45] CW started (complex task) |
 | OD5 | Orders | Чекбоксы для выбора сервисов | CW→QA | CW | TODO | - | [09.01] Spec created |
 | OD6 | Orders | Кнопка "Выписать счёт" → Invoice Modal | CW→QA | CW | TODO | - | [09.01] Spec created |
 
