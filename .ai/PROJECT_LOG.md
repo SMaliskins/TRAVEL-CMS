@@ -5397,3 +5397,26 @@ Files:
 
 **Next Step:** QA Agent выполняет тестовую задачу
 
+
+### 📅 [2026-01-09] | [20:10]
+**Агент:** `CODE WRITER`
+**Задача:** `Phase 2.5: Order Detail Redesign (OD1-OD6)`
+**Статус:** `START 🚀`
+
+**Spec:** `.ai/tasks/order-detail-redesign.md`
+
+**Задачи:**
+- OD1: Увеличить размер шрифтов на странице заказа
+- OD2: Карта на всю ширину внизу секции клиента
+- OD3: Дни/ночи в скобках после дат
+- OD4: EditServiceModal = все поля AddServiceModal
+- OD5: Чекбоксы для выбора сервисов
+- OD6: Кнопка "Выписать счёт" → Invoice Modal
+
+**Файлы для изменения:**
+1. `app/orders/[orderCode]/page.tsx`
+2. `app/orders/[orderCode]/_components/OrderClientSection.tsx`
+3. `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+4. `app/orders/[orderCode]/_components/CreateInvoiceModal.tsx` (NEW)
+
+**Next Step:** `Начинаю с OD1 (увеличение шрифтов)`

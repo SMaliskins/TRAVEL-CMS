@@ -15,7 +15,7 @@ const TripMap = dynamic(() => import("@/components/TripMap"), {
   loading: () => (
     <div className="bg-gray-100 rounded-lg animate-pulse h-32 flex items-center justify-center text-gray-400 text-sm">
       Loading map...
-    </div>
+      </div>
   ),
 });
 
@@ -426,7 +426,7 @@ export default function OrderClientSection({
   return (
     <div className="rounded-2xl bg-white/80 backdrop-blur-xl p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50">
       {/* Layout: Client info left, Map right */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 mb-4">
+      <div className="grid grid-cols-1 gap-4 mb-4">
         {/* Left: Client + Route */}
         <div className="space-y-3">
           {/* Compact Header Row: Client + Type */}
@@ -437,7 +437,7 @@ export default function OrderClientSection({
                 "client",
                 "Client",
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-base font-semibold tracking-tight text-gray-900">
+                  <h2 className="text-lg font-semibold tracking-tight text-gray-900">
                     {clientDisplayName || <span className="text-gray-400 italic font-normal">No client</span>}
                   </h2>
                   {clientPhone && (
@@ -513,7 +513,7 @@ export default function OrderClientSection({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {parsedRoute.origin && (
                         <>
-                          <span className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+                          <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
                             {parsedRoute.origin.countryCode && (
                               <span className="text-base">{countryCodeToFlag(parsedRoute.origin.countryCode)}</span>
                             )}
@@ -524,7 +524,7 @@ export default function OrderClientSection({
                       )}
                       {uniqueDestinations.map((city, idx) => (
                         <span key={`${city.city}-${idx}`} className="flex items-center">
-                          <span className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+                          <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
                             {city.countryCode && (
                               <span className="text-base">{countryCodeToFlag(city.countryCode)}</span>
                             )}
@@ -538,7 +538,7 @@ export default function OrderClientSection({
                       {parsedRoute.returnCity && parsedRoute.origin && parsedRoute.returnCity.city !== parsedRoute.origin.city && (
                         <>
                           <span className="text-gray-400 text-xs">→</span>
-                          <span className="flex items-center gap-1 text-sm font-semibold text-gray-700">
+                          <span className="flex items-center gap-1 text-base font-semibold text-gray-700">
                             {parsedRoute.returnCity.countryCode && (
                               <span className="text-base">{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
                             )}
@@ -555,8 +555,15 @@ export default function OrderClientSection({
                       <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <span className="text-[12px] font-medium text-gray-700">
+                      <span className="text-sm font-medium text-gray-700">
                         {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}
+                      {dateFrom && dateTo && (() => {
+                        const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                        const nights = days - 1;
+                        const daysWord = days === 1 ? 'день' : days > 1 && days < 5 ? 'дня' : 'дней';
+                        const nightsWord = nights === 1 ? 'ночь' : nights > 1 && nights < 5 ? 'ночи' : 'ночей';
+                        return ` (${days} ${daysWord} / ${nights} ${nightsWord})`;
+                      }())}
                       </span>
                       {daysUntilTrip !== null && daysUntilTrip >= 0 && (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-full">
@@ -709,10 +716,12 @@ export default function OrderClientSection({
           )}
         </div>
         
+      </div>
+
         {/* Right: Square Map */}
         {allCitiesForMap.length > 0 && (
           <div className="relative z-0">
-            <div className="w-full aspect-square max-w-[280px] rounded-xl overflow-hidden border border-gray-200/60 shadow-sm">
+            <div className="w-full h-[300px] rounded-xl overflow-hidden border border-gray-200/60 shadow-sm">
               <TripMap
                 destinations={allCitiesForMap}
                 dateFrom={dateFrom || undefined}
@@ -726,6 +735,5 @@ export default function OrderClientSection({
           </div>
         )}
       </div>
-    </div>
   );
 }
