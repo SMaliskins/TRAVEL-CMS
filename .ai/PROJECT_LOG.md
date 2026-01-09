@@ -6225,3 +6225,26 @@ User needs to:
 **Next Step:** User должен прислать полные server logs
 
 ---
+
+### 📅 [2026-01-09] | 22:20
+**Агент:** `CODE WRITER`
+**Задача:** Fix Invoice API 404 Error (URL Encoding Issue)
+**Статус:** ✅ SUCCESS
+**Действия:**
+- **ROOT CAUSE НАЙДЕНА:** 404 error из-за некорректного URL
+  - Frontend отправлял: `/api/orders/0003/26-SM/invoices` (слеш не закодирован)
+  - Next.js интерпретировал это как 3 сегмента пути вместо 2
+  - Правильный URL: `/api/orders/0003%2F26-SM/invoices`
+- Исправлено в `InvoiceCreator.tsx` строка 80:
+  - Было: `` `/api/orders/${orderCode}/invoices` ``
+  - Стало: `` `/api/orders/${encodeURIComponent(orderCode)}/invoices` ``
+- Build ✅ successful (0 errors)
+- Commit: `7be7a35`
+
+**Результат:**
+- ✅ API endpoint теперь корректно находится
+- ✅ Invoice creation должна работать полностью
+
+**Next Step:** User testing - теперь invoice должен создаться без ошибок!
+
+---
