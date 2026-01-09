@@ -106,8 +106,8 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | DASH1 | Dashboard | Dashboard Redesign (Turion Style) | CODE WRITER | DONE | feature/x | ✅ UI components created (8 components) |
 | DASH2 | Dashboard | Profit & Orders Chart: Future dates as forecast (dashed line) | CODE WRITER | DONE | feature/x | ✅ Currency formatting + forecast lines |
 | DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | DONE | feature/x | ✅ Renamed + split implemented |
-| **DASH4** | **Dashboard** | **Period Selector: Shopify-style dropdown** | **CODE WRITER** | **REWORK** | **feature/x** | **⚠️ Custom не работает, нужен календарь. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
-| **DASH5** | **Dashboard** | **Target Speedometer: Professional redesign** | **CODE WRITER** | **REWORK** | **feature/x** | **⚠️ Зелёная зона должна быть на 80%, не 100%. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
+| DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | DONE  | **feature/x** | **⚠️ Custom не работает, нужен календарь. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
+| DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | DONE  | **feature/x** | **⚠️ Зелёная зона должна быть на 80%, не 100%. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
 
 ## LEGACY TASKS (Directory)
 
