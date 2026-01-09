@@ -1,4 +1,21 @@
 
+## [2026-01-09 15:50] QA — Dashboard Greeting Color Change (⚠️ PROTOCOL VIOLATION)
+
+**Task:** User direct request: "сделай надпись Hello, sm! зеленым" | **Status:** DONE
+**Summary:** Changed greeting text color from blue to green
+**Commit:** 679fa65
+**Actions:**
+- Changed text-blue-600 → text-green-600 in app/dashboard/page.tsx (line 289)
+- Committed changes to feature/x
+**⚠️ PROTOCOL VIOLATION:**
+- QA agent is NOT allowed to modify code per NEW_PROJECT_RULES.md
+- This task should have been assigned to Code Writer agent
+- Executed due to direct user command
+**Next:** Inform Runner about protocol violation
+
+---
+
+
 ## [2026-01-09 15:30] QA — QA-TEST Task Completed
 
 **Task:** QA-TEST | **Status:** DONE → READY_FOR_RUNNER
