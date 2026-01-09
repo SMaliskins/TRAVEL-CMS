@@ -22,6 +22,7 @@ interface OrderData {
   date_from: string | null;
   date_to: string | null;
   order_type: string;
+  order_source?: string;
   status: OrderStatus;
   amount_total: number;
   amount_paid: number;
@@ -219,10 +220,20 @@ export default function OrderPage({
         {/* Route Summary */}
         {order && (
           <OrderRouteSummary
+            orderId={order.id}
+            orderCode={orderCode}
             clientDisplayName={order.client_display_name}
             countriesCities={order.countries_cities}
             dateFrom={order.date_from}
             dateTo={order.date_to}
+            orderType={order.order_type}
+            orderSource={order.order_source}
+            onUpdate={(updates) => {
+              setOrder({
+                ...order,
+                ...updates,
+              } as OrderData);
+            }}
           />
         )}
 

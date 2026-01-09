@@ -1,22 +1,48 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
+import { supabase } from "@/lib/supabaseClient";
 
 interface OrderRouteSummaryProps {
+  orderId: string;
+  orderCode: string;
   clientDisplayName: string | null;
   countriesCities: string | null;
   dateFrom: string | null;
   dateTo: string | null;
+  orderType?: string;
+  orderSource?: string; // TA/TO/CORP/NON
+  onUpdate?: (updates: { order_type?: string; order_source?: string }) => void;
 }
 
+const ORDER_TYPES = [
+  { value: "leisure", label: "Leisure" },
+  { value: "business", label: "Business" },
+  { value: "lifestyle", label: "Lifestyle" },
+];
+
+const ORDER_SOURCES = [
+  { value: "TA", label: "TA" },
+  { value: "TO", label: "TO" },
+  { value: "CORP", label: "CORP" },
+  { value: "NON", label: "NON" },
+];
+
 export default function OrderRouteSummary({
+  orderId,
+  orderCode,
   clientDisplayName,
   countriesCities,
   dateFrom,
   dateTo,
+  orderType,
+  orderSource,
+  onUpdate,
 }: OrderRouteSummaryProps) {
+  const [isUpdating, setIsUpdating] = useState(false);
+
   // Parse route
   const parsedRoute = useMemo(() => {
     if (!countriesCities) return { origin: null, destinations: [], returnCity: null };
@@ -29,7 +55,7 @@ export default function OrderRouteSummary({
     return { origin, destinations, returnCity };
   }, [countriesCities]);
 
-  // Unique destinations (skip duplicates)
+  // Unique destinations
   const uniqueDestinations = useMemo(() => {
     const seen = new Set<string>();
     return parsedRoute.destinations.filter((city) => {
@@ -59,6 +85,44 @@ export default function OrderRouteSummary({
     return diff;
   }, [dateFrom]);
 
+  // Handle order type change
+  const handleOrderTypeChange = async (newType: string) => {
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ order_type: newType })
+        .eq("id", orderId);
+
+      if (error) throw error;
+      onUpdate?.({ order_type: newType });
+    } catch (err) {
+      console.error("Error updating order type:", err);
+      alert("Failed to update order type");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Handle order source change
+  const handleOrderSourceChange = async (newSource: string) => {
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ order_source: newSource })
+        .eq("id", orderId);
+
+      if (error) throw error;
+      onUpdate?.({ order_source: newSource });
+    } catch (err) {
+      console.error("Error updating order source:", err);
+      alert("Failed to update order source");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   if (!parsedRoute.origin && uniqueDestinations.length === 0 && !dateFrom) {
     return null;
   }
@@ -66,11 +130,38 @@ export default function OrderRouteSummary({
   return (
     <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
       <div className="flex items-center gap-4 flex-wrap">
-        {/* Client Name */}
+        {/* Client Name + Selectors */}
         {clientDisplayName && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="text-lg font-bold text-gray-900">{clientDisplayName}</span>
-            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded">TA</span>
+            
+            {/* Order Source (TA/TO/CORP/NON) */}
+            <select
+              value={orderSource || "TA"}
+              onChange={(e) => handleOrderSourceChange(e.target.value)}
+              disabled={isUpdating}
+              className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded border-none outline-none cursor-pointer hover:bg-blue-100 disabled:opacity-50"
+            >
+              {ORDER_SOURCES.map((source) => (
+                <option key={source.value} value={source.value}>
+                  {source.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Order Type (Leisure/Business/Lifestyle) */}
+            <select
+              value={orderType || "leisure"}
+              onChange={(e) => handleOrderTypeChange(e.target.value)}
+              disabled={isUpdating}
+              className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded border-none outline-none cursor-pointer hover:bg-gray-200 disabled:opacity-50"
+            >
+              {ORDER_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
