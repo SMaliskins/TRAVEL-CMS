@@ -4570,7 +4570,6 @@ Branch: feature/x
 
 ---
 
-<<<<<<< HEAD
 
 ### 📅 [2026-01-08] | [18:45]
 **Агент:** `QA / REGRESSION`
@@ -4848,7 +4847,6 @@ Files:
 4. `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` - Reduced padding
 
 **Next Step:** `git merge feature/x → main && git push`
-=======
 ### 📅 [2026-01-08] | [19:45]
 **Агент:** `CODE WRITER`
 **Задача:** `Персонализация Dashboard - Hello, username!`
