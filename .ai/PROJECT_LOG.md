@@ -1,4 +1,44 @@
 
+## [2026-01-10 01:00] QA — OD6 Invoice List Bug Found
+
+**Task:** OD6-FIX | **Status:** BUG DETECTED → READY_FOR_CODE_WRITER
+**Summary:** Invoice list does not refresh after creating new invoice
+**SCORE:** N/A (Bug report)
+
+**Defect #1: Invoice List Not Refreshing**
+
+**Expected:**
+- After "Save & Issue Invoice" → show alert "Invoice created successfully!"
+- Invoice list should automatically refresh and show new invoice
+
+**Actual:**
+- Alert shows but list does NOT update
+- User cannot see newly created invoice
+
+**Root Cause:**
+1. InvoiceCreator.tsx (line 68-70): handleSave() does NOT call onSuccess()
+2. Without onSuccess(), invoiceRefetchTrigger in page.tsx does not increment
+3. InvoiceList component does not re-render (key not changed)
+
+**Trace:**
+- File: app/orders/[orderCode]/_components/InvoiceCreator.tsx
+- Line: 68-70
+- Missing: onSuccess?.(); call
+
+**Fix Required:**
+```typescript
+const handleSave = () => {
+  alert("✅ Invoice created successfully!");
+  onSuccess?.(); // ← ADD THIS LINE
+  onClose();
+};
+```
+
+**Next:** Code Writer to implement fix
+
+---
+
+
 ## [2026-01-09 21:45] RUNNER — Added Model Check Protocol
 
 **Task:** Update NEW_PROJECT_RULES.md | **Status:** DONE
@@ -5929,5 +5969,33 @@ User needs to:
 
 **Pipeline:** CW → User Testing
 **Estimated:** 5 минут
+
+---
+
+### 📅 [2026-01-10] | [00:45]
+**Агент:** `CODE WRITER`
+**Задача:** `Fix InvoiceCreator — call onSuccess callback`
+**Статус:** `SUCCESS ✅`
+
+**Проблема:**
+- После создания счета InvoiceCreator не вызывал onSuccess()
+- Только onClose() → InvoiceList не обновлялся
+- Счет создавался в БД, но не отображался
+
+**Решение:**
+- Добавил `onSuccess?.()` перед `onClose()` в handleSave
+- Теперь после успешного создания:
+  1. alert('✅ Invoice created successfully!')
+  2. onSuccess?.() — триггер refetch
+  3. onClose() — закрыть creator
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (line 115)
+
+**Build:** ✅ SUCCESS
+**Commit:** `bf33766`
+
+**Результат:** Счета теперь сразу отображаются в InvoiceList после создания
+**Next Step:** User testing
 
 ---
