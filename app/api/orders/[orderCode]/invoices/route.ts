@@ -24,6 +24,8 @@ export async function GET(
     }
 
     // Get all invoices for this order
+    console.log("[Invoices API] Fetching invoices for order_id:", order.id);
+    
     const { data: invoices, error: invoicesError } = await supabaseAdmin
       .from("invoices")
       .select(`
@@ -42,12 +44,15 @@ export async function GET(
       .order("created_at", { ascending: false });
 
     if (invoicesError) {
-      console.error("Error fetching invoices:", invoicesError);
+      console.error("[Invoices API] Error fetching invoices:", invoicesError);
+      console.error("[Invoices API] Error details:", JSON.stringify(invoicesError, null, 2));
       return NextResponse.json(
-        { error: "Failed to fetch invoices" },
+        { error: "Failed to fetch invoices", details: invoicesError.message },
         { status: 500 }
       );
     }
+    
+    console.log("[Invoices API] Found invoices:", invoices?.length || 0);
 
     return NextResponse.json({ invoices: invoices || [] });
   } catch (error) {

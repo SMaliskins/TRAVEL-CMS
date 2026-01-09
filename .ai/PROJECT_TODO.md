@@ -46,7 +46,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | CW | DONE | 10/10 | [09.01 20:45] Days/nights added |
 | OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | TODO | - | [09.01 20:45] CW started (complex task) |
 | OD5 | Orders | Чекбоксы для выбора сервисов + UX improvements | CW→QA | CW | READY_FOR_QA | - | [09.01 23:35] Invoice Phase 1 done | - | [09.01] Spec created |
-| OD6 | Orders | Invoice Creator in Finance tab + live preview | CW→QA | CW | READY_FOR_QA | - | [09.01 23:35] DB+UI complete (API pending) | - | [09.01] Spec created |
+| OD6 | Orders | Invoice Creator in Finance tab + live preview | CW→QA | CW | READY_FOR_DB | - | [10.01 00:20] Awaiting DB verification | - | [09.01] Spec created |
 
 **Spec:** `.ai/tasks/order-detail-redesign.md`
 

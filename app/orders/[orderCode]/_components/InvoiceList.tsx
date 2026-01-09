@@ -36,7 +36,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
 
   const loadInvoices = async () => {
     try {
-      const response = await fetch(`/api/orders/${orderCode}/invoices`);
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`);
       if (!response.ok) throw new Error('Failed to load invoices');
       const data = await response.json();
       setInvoices(data.invoices || []);
@@ -97,7 +97,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       const invoice = invoices.find(inv => inv.id === invoiceId);
       if (!invoice) return;
 
-      const response = await fetch(`/api/orders/${orderCode}/invoices/${invoiceId}`, {
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -5845,3 +5845,22 @@ User needs to:
 **Next Step:** Test full flow: Create Invoice → View in Finance tab → Cancel Invoice
 
 ---
+
+### 📅 [2026-01-10] | [00:20]
+**Агент:** `CODE WRITER`
+**Задача:** `Invoice API + Migration`
+**Статус:** `REJECTED ⚠️`
+
+**Причина отклонения:**
+- Code Writer пропустил DB Specialist этап
+- Миграция должна быть проверена DB Specialist перед запуском
+- Нарушен протокол: DB_VERIFICATION должен идти перед CODING
+
+**Решение:**
+- Передаю задачу DB Specialist для верификации миграции
+- Создаю задачу для DB Specialist: проверка SQL, RLS policies, constraints
+- После его approval — продолжу с API endpoints
+
+**Next Step:** `DB Specialist → проверка migrations/rollback_and_create_invoices.sql`
+
+---
