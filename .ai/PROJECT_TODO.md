@@ -108,6 +108,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | DONE | feature/x | ✅ Renamed + split implemented |
 | DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | DONE  | **feature/x** | **⚠️ Custom не работает, нужен календарь. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
 | DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | DONE  | **feature/x** | **⚠️ Зелёная зона должна быть на 80%, не 100%. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
+| DASH4-FIX | Dashboard | Calendar: ограничить maxDate = сегодня | CW→QA | CW | TODO | - | [09.01 14:15] Spec created |
 
 ## LEGACY TASKS (Directory)
 
