@@ -1,4 +1,4 @@
-# PROMPT FOR CODE WRITER AGENT
+image.png# PROMPT FOR CODE WRITER AGENT
 
 **Task:** Fix Company details field mapping and investigate why record doesn't open
 

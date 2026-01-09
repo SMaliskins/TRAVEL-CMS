@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const [username, setUsername] = useState<string | null>(null);
 
   // Period state
-  const [period, setPeriod] = useState<PeriodType>("thisMonth");
+  const [period, setPeriod] = useState<PeriodType>("currentMonth");
   const [periodStart, setPeriodStart] = useState<string>("");
   const [periodEnd, setPeriodEnd] = useState<string>("");
 
@@ -75,7 +75,7 @@ export default function DashboardPage() {
     let end: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     switch (period) {
-      case "thisMonth":
+      case "currentMonth":
         start = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
       case "lastMonth":
@@ -86,7 +86,10 @@ export default function DashboardPage() {
         start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
         break;
       case "last6Months":
-        start = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        break;
+      case "lastYear":
+        start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
         break;
       default:
         // Custom - will be set by PeriodSelector

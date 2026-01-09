@@ -2,11 +2,12 @@
 
 Current tasks and their status. Agents update relevant rows when starting, blocking, or completing tasks.
 
-**Status values:** TODO / IN_PROGRESS / BLOCKED / DONE
+**Status values:** TODO / IN_PROGRESS / BLOCKED / DONE / REWORK
 
 **When starting:** Set Status to IN_PROGRESS and set Owner to your role.
 **When blocked:** Set Status to BLOCKED and add reason in Notes.
 **When done:** Set Status to DONE and add commit hash or PR link in PR column.
+**When rework:** Set Status to REWORK with link to rework spec.
 
 ---
 
@@ -96,13 +97,17 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
-| D1 | Directory | Add Passport Details to Main Details (AI parsing) | CODE WRITER | DONE | feature/x | ✅ QA SCORE 9/10 - All parts completed: SQL migration, PassportDetailsInput component, AI parsing API, API endpoints integration. Commits: a433eb8, 81c6ad9, 05ce937, e768b6f, cf3df0d, db8168b, ce7719f, 6847594 |
+| D1 | Directory | Add Passport Details to Main Details (AI parsing) | CODE WRITER | DONE | feature/x | ✅ QA SCORE 9/10 - All parts completed |
 
-## PHASE 8: Dashboard Redesign
+## PHASE 8: Dashboard UI Improvements
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
-| DASH1 | Dashboard | Dashboard Redesign (Turion Style) | CODE WRITER | IN_PROGRESS → QA | - | ✅ UI components created (8 components), dashboard page redesigned. Needs QA verification |
+| DASH1 | Dashboard | Dashboard Redesign (Turion Style) | CODE WRITER | DONE | feature/x | ✅ UI components created (8 components) |
+| DASH2 | Dashboard | Profit & Orders Chart: Future dates as forecast (dashed line) | CODE WRITER | DONE | feature/x | ✅ Currency formatting + forecast lines |
+| DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | DONE | feature/x | ✅ Renamed + split implemented |
+| **DASH4** | **Dashboard** | **Period Selector: Shopify-style dropdown** | **CODE WRITER** | **REWORK** | **feature/x** | **⚠️ Custom не работает, нужен календарь. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
+| **DASH5** | **Dashboard** | **Target Speedometer: Professional redesign** | **CODE WRITER** | **REWORK** | **feature/x** | **⚠️ Зелёная зона должна быть на 80%, не 100%. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
 
 ## LEGACY TASKS (Directory)
 
@@ -112,30 +117,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | 3 | Directory | Fix edit navigation, remove Status/View, instant search | CODE WRITER | TODO | - | 3 issues |
 | 4 | Directory | Fix duplicate search, record not found, missing Save buttons | CODE WRITER | TODO | - | 3 issues |
 | 5 | Directory | Fix inconsistent field labels | CODE WRITER | TODO | - | Labels consistency |
-| 6 | Directory | Fix Company details mapping | CODE WRITER | BLOCKED | - | Waiting for DB/SCHEMA |
 | 8 | Directory | Fix Supplier role mapping | CODE WRITER | TODO | - | business_category mapping |
 | 10 | Directory | Check company_id for records | DB/SCHEMA | TODO | - | Records don't open |
 | 12 | Directory | Fix clientType initialization | CODE WRITER | TODO | - | Type switching bug |
 | 13 | Directory | Fix Directory search - company_name | CODE WRITER | TODO | - | Search doesn't find companies |
-
-<<<<<<< HEAD
-## PHASE 8: Dashboard UI Improvements (PENDING)
-
-| ID | Area | Task | Owner | Status | Branch | Notes |
-|----|------|------|-------|--------|--------|-------|
-| DASH2 | Dashboard | Profit & Orders Chart: Future dates as forecast (dashed line) | CODE WRITER | TODO | - | Spec: .ai/tasks/code-writer-fix-profit-orders-chart-forecast.md |
-| DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | TODO | - | Spec: .ai/tasks/code-writer-fix-tourists-map-rename-and-split.md |
-
-| DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | TODO | - | "Showing: 1 Dec - 30 Dec", calendar icon, checkmarks |
-| DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | TODO | - | 280px, tick marks, gradient, glow, SVG stars |
-=======
-## PHASE 8: Dashboard UI Improvements
-
-| ID | Area | Task | Owner | Status | Branch | Notes |
-|----|------|------|-------|--------|--------|-------|
-| DASH2 | Dashboard | Profit & Orders Chart: Future dates as forecast (dashed line) | CODE WRITER | DONE | feature/x | ✅ Currency formatting implemented |
-| DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | DONE | feature/x | ✅ Renamed + split implemented |
-| DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | DONE | feature/x | ✅ Rework completed - 5 defects fixed |
-| DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | DONE | feature/x | ✅ Rework completed - 5 defects fixed |
-
->>>>>>> 852e6bb (docs: update DASH4-5 status - rework completed)
