@@ -72,7 +72,7 @@ export async function PATCH(
 // DELETE /api/orders/[orderCode]/invoices/[invoiceId] - Cancel invoice (alias for PATCH with status=cancelled)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { orderCode: string; invoiceId: string } }
+  { params }: { params: Promise<{ orderCode: string; invoiceId: string }> }
 ) {
   // Just call PATCH with status=cancelled
   const modifiedRequest = new Request(request.url, {

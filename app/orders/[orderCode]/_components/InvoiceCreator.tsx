@@ -64,10 +64,64 @@ export default function InvoiceCreator({
     return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
   };
 
-  const handleSave = () => {
-    // TODO: API call to save invoice
-    alert('Invoice saved! (API integration pending)');
-    onClose();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!clientNameEditable.trim()) {
+      alert('Please enter client name');
+      return;
+    }
+
+    if (selectedServices.length === 0) {
+      alert('Please select at least one service');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/orders/${orderCode}/invoices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_number: invoiceNumber,
+          client_name: clientNameEditable,
+          client_address: clientAddress,
+          client_email: clientEmail,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          subtotal,
+          tax_rate: taxRate,
+          tax_amount: taxAmount,
+          total,
+          status: 'draft',
+          notes,
+          items: selectedServices.map((s) => ({
+            service_id: s.id,
+            service_name: s.name,
+            service_category: s.category,
+            service_date_from: s.dateFrom,
+            service_date_to: s.dateTo,
+            quantity: 1,
+            unit_price: s.clientPrice,
+            line_total: s.clientPrice,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create invoice');
+      }
+
+      alert('✅ Invoice created successfully!');
+      onSuccess?.();
+      onClose();
+    } catch (error: any) {
+      console.error('Error creating invoice:', error);
+      alert(`Failed to create invoice: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
