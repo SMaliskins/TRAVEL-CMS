@@ -1,32 +1,45 @@
+## [2026-01-09 23:24] QA — OD6-FIX Verification (CRITICAL DEFECT)
 
-## [2026-01-10 01:20] QA — OD6-FIX Verification (FOUND NEW BUG)
-
-**Task:** OD6-FIX | **Status:** PARTIAL SUCCESS → REWORK REQUIRED
+**Task:** OD6-FIX | **Status:** REWORK REQUIRED | **SCORE:** 6/10 ❌
 **Code Writer Commit:** 0d32698
 
 **✅ FIXED Issues:**
-1. ✅ API POST call implemented
-2. ✅ onSuccess() callback added
+1. ✅ API POST call implemented correctly
+2. ✅ onSuccess() callback added (line 117) — правильно!
 3. ✅ Loading state (isSaving) added
 4. ✅ Client validation implemented
-5. ✅ Error handling added
+5. ✅ Error handling comprehensive
 
-**❌ NEW DEFECT: Payload Key Mismatch**
+**❌ NEW DEFECT: Payload Key Mismatch (CRITICAL)**
 
 **Problem:**
-- InvoiceCreator sends: `items: [...]` (line 98)
-- API expects: `services: [...]` (line 89)
-- API validation will FAIL: "Missing required fields: services"
+- InvoiceCreator sends: `items: [...]` (line 98) ❌
+- API expects: `services: [...]` (route.ts line 89) ✅
+- API validation FAIL: "Missing required fields: invoice_number, services"
 
 **Trace:**
 - File: app/orders/[orderCode]/_components/InvoiceCreator.tsx
 - Line: 98
-- Current: items: selectedServices.map(...)
-- Fix Required: services: selectedServices.map(...)
+- Current: `items: selectedServices.map(...)`
+- Fix Required: `services: selectedServices.map(...)`
 
-**Impact:** CRITICAL - Invoice creation will ALWAYS fail with validation error
+**Impact:** CRITICAL — Invoice creation will **ALWAYS** fail with 400 validation error
 
-**Next Step:** Code Writer must rename `items` to `services` in payload
+**Why SCORE 6/10:**
+- Original bug (onSuccess) fixed ✅ (+5 points)
+- Code quality good ✅ (+1 point)
+- But new critical bug introduced ❌ (prevents all invoices)
+
+**Next Step:** Code Writer must rename `items` → `services` in payload (ONE LINE FIX)
+
+---
+
+## [2026-01-10 01:20] QA — OD6-FIX Verification (FOUND NEW BUG) [ARCHIVED]
+
+**Task:** OD6-FIX | **Status:** PARTIAL SUCCESS → REWORK REQUIRED
+**Code Writer Commit:** 0d32698
+
+[Эта запись заменена более точной записью выше от 2026-01-09 23:24]
 
 ---
 
