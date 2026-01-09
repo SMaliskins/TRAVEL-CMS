@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 
 interface RangeCalendarProps {
+  maxDate?: string; // YYYY-MM-DD - maximum selectable date
   startDate: string | undefined; // YYYY-MM-DD
   endDate: string | undefined; // YYYY-MM-DD
   onDateSelect: (date: string) => void; // YYYY-MM-DD
@@ -32,6 +33,7 @@ const MONTH_NAMES_SHORT = [
 ];
 
 export default function RangeCalendar({
+  maxDate,
   startDate,
   endDate,
   onDateSelect,
@@ -66,6 +68,9 @@ export default function RangeCalendar({
   })() : null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  const maxSelectableDate = maxDate ? new Date(maxDate + "T00:00:00") : null;
+  maxSelectableDate?.setHours(0, 0, 0, 0);
 
   // Right month is always left month + 1
   const rightMonth = useMemo(() => {
@@ -127,7 +132,15 @@ export default function RangeCalendar({
     return date.getTime() === today.getTime();
   };
 
+  const isFutureDate = (date: Date): boolean => {
+    if (!maxSelectableDate) return false;
+    return date.getTime() > maxSelectableDate.getTime();
+  };
+
   const handleDateClick = (date: Date) => {
+    if (maxSelectableDate && date.getTime() > maxSelectableDate.getTime()) {
+      return; // Block future dates
+    }
     const dateStr = formatDateToISO(date);
     onDateSelect(dateStr);
     
@@ -219,13 +232,16 @@ export default function RangeCalendar({
           const isEnd = isDateEnd(date);
           const isTodayDate = isToday(date);
           const isRangeEndpoint = isStart || isEnd;
+          const isFuture = isFutureDate(date);
 
           return (
             <button
               key={`${side}-${dateStr}`}
               type="button"
-              onClick={() => handleDateClick(date)}
+              disabled={isFuture}
+              onClick={() => { if (!isFuture) handleDateClick(date); }}
               className={`
+                ${isFuture ? "text-gray-300 cursor-not-allowed opacity-50" : ""}
                 h-8 rounded text-sm transition-colors
                 ${isTodayDate && !isRangeEndpoint ? "font-semibold ring-1 ring-blue-500" : ""}
                 ${inRange && !isRangeEndpoint ? "bg-blue-100 text-blue-900" : ""}

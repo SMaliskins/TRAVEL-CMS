@@ -291,6 +291,7 @@ export default function PeriodSelector({
                     setTempEnd(undefined);
                   }}
                   autoCloseOnRangeComplete={false}
+                  maxDate={new Date().toISOString().split('T')[0]}
                 />
                 <div className="mt-4 flex justify-end gap-2 border-t border-gray-200 pt-4">
                   <button
