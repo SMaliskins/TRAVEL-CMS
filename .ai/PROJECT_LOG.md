@@ -5883,3 +5883,51 @@ User needs to:
 **Estimated:** 2-3 минуты
 
 ---
+
+### 📅 [2026-01-10] | [00:35]
+**Агент:** `CODE WRITER`
+**Задача:** `Fix Invoice не отображается после создания`
+**Статус:** `SUCCESS ✅`
+
+**Проблема:**
+- Счет создавался успешно через API
+- Но InvoiceList не показывал созданный счет
+- Root cause: `showInvoiceCreator=true` блокировал рендер InvoiceList
+
+**Решение:**
+- Изменил `onSuccess` callback в `page.tsx`
+- После создания счета:
+  1. `setShowInvoiceCreator(false)` — закрыть creator
+  2. `setInvoiceServices([])` — очистить выбранные услуги
+  3. `setInvoiceRefetchTrigger(prev => prev + 1)` — обновить список
+
+**Файлы:**
+- `app/orders/[orderCode]/page.tsx` (updated onSuccess callback)
+
+**Build:** ✅ SUCCESS (2 warnings, не связаны с изменением)
+**Commit:** `e4676a2`
+
+**Результат:** Счет теперь сразу отображается в InvoiceList после создания
+**Next Step:** User testing
+
+---
+
+### 📅 [2026-01-10] | [00:40]
+**Агент:** `CODE WRITER`
+**Задача:** `Fix InvoiceCreator — add API integration`
+**Статус:** `START ⏳`
+
+**Проблема:**
+- InvoiceCreator показывает "Invoice saved!", но НЕ сохраняет в БД
+- handleSave() только alert() + onClose()
+- API call отсутствует полностью
+
+**Решение:**
+- Добавить POST /api/orders/[orderCode]/invoices в handleSave
+- Передать все поля счета (invoice_number, dates, client, services, VAT, totals)
+- После успешного сохранения вызвать onSuccess callback
+
+**Pipeline:** CW → User Testing
+**Estimated:** 5 минут
+
+---

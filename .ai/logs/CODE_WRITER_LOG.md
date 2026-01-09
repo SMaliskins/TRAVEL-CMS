@@ -222,3 +222,19 @@
 **Root Cause:** showInvoiceCreator=true блокирует InvoiceList render
 
 ---
+
+### 📅 2026-01-10 | 00:35
+**Задача:** Fix Invoice не отображается после создания
+**Статус:** ✅ SUCCESS
+**Действия:**
+- Исправил onSuccess callback в page.tsx
+- Добавил setShowInvoiceCreator(false) и setInvoiceServices([])
+- Теперь InvoiceList показывается сразу после создания
+
+**Файлы:**
+- `app/orders/[orderCode]/page.tsx`
+
+**Build:** ✅ No errors
+**Commit:** `e4676a2`
+
+---
