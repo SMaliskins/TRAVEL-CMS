@@ -272,7 +272,8 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-[1600px] space-y-6">
         {/* Header with Period Selector */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Hello, {username || email?.split('@')[0] || 'User'}!</h1>          <PeriodSelector
+          <h1 className="text-3xl font-bold text-green-600">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
+                    <PeriodSelector
             value={period}
             onChange={handlePeriodChange}
             startDate={periodStart}
