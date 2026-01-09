@@ -6148,3 +6148,30 @@ User needs to:
 **Next Step:** QA verification
 
 ---
+
+### 📅 [2026-01-09] | 21:45
+**Агент:** `CODE WRITER`
+**Задача:** Fix Invoice Creation Error ("JSON.parse: unexpected character")
+**Статус:** ✅ DIAGNOSED - DATABASE MIGRATION REQUIRED
+**Действия:**
+- Диагностирована ошибка "JSON.parse: unexpected character"
+- ✅ Frontend payload корректен (`items`)
+- ✅ Backend API корректен (`items`, `await params`)
+- ✅ Error handling улучшен (try/catch для non-JSON responses)
+- 🔴 **ROOT CAUSE**: Таблицы `invoices` и `invoice_items` НЕ СОЗДАНЫ в БД
+
+**Результат:**
+- Код полностью исправен
+- **Требуется:** Запуск database migration
+
+**Инструкции для пользователя:**
+1. Открыть **Supabase Dashboard** → **SQL Editor**
+2. Скопировать содержимое файла: `migrations/rollback_and_create_invoices.sql`
+3. Вставить в SQL Editor и нажать **Run**
+4. После успешного выполнения Invoice creation будет работать
+
+**Files:**
+- `migrations/rollback_and_create_invoices.sql` (RECOMMENDED - полный rollback + create)
+- `migrations/README_INVOICES_MIGRATION_RU.md` (подробная инструкция на русском)
+
+---
