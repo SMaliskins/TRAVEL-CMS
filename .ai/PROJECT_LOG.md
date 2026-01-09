@@ -5999,3 +5999,26 @@ User needs to:
 **Next Step:** User testing
 
 ---
+
+### 📅 [2026-01-10] | [01:05]
+**Агент:** `CODE WRITER`
+**Задача:** `OD6-FIX — Invoice list refresh issue`
+**Статус:** `ALREADY FIXED ✅`
+
+**Проверка:**
+- Задача OD6-FIX уже исправлена в commit `bf33766`
+- Код содержит `onSuccess?.();` на строке 115
+- Build passing, no errors
+
+**Обновление статуса:**
+- OD6-FIX: TODO → READY_FOR_QA
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (line 115)
+
+**Commit:** `bf33766` (already done)
+
+**Результат:** Task OD6-FIX completed, ready for QA verification
+**Next Step:** QA testing
+
+---
