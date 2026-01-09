@@ -5733,3 +5733,63 @@ const daysAndNights = useMemo(() => {
 - Creating database migration
 - Building InvoiceList component
 - Implementing service locking logic
+
+### 📅 [2026-01-09] | [23:35]
+**Агент:** `CODE WRITER`
+**Задача:** `Invoice System Phase 1 — DB Schema + UI`
+**Статус:** `SUCCESS ✅`
+
+**Реализовано:**
+
+1. ✅ **Database Schema:**
+   - Created `invoices` table (invoice_number, status, totals, client info)
+   - Created `invoice_items` table (line items for services)
+   - Added `invoice_id` column to `order_services` (service locking)
+   - RLS policies for tenant isolation
+   - Indexes for performance
+
+2. ✅ **InvoiceList Component:**
+   - List all invoices for order
+   - Status badges (Draft/Sent/Paid/Cancelled/Overdue)
+   - Service preview (first 3 items)
+   - Actions: View, Cancel, Export PDF (placeholders)
+   - Cancel invoice = unlock services
+   - Auto-refetch on invoice creation
+
+3. ✅ **InvoiceCreator Updates:**
+   - Added API integration (POST /api/orders/[orderCode]/invoices)
+   - onSuccess callback for refetch trigger
+   - Validation before save
+   - Loading state during save
+
+4. ✅ **OrderServicesBlock Updates:**
+   - Added `invoice_id` to Service interface
+   - Checkbox replaced with green document icon if invoiced
+   - Locked services cannot be selected for new invoice
+   - FAB already filters correctly
+
+5. ✅ **Finance Tab Integration:**
+   - InvoiceList as default view
+   - InvoiceCreator on "Issue Invoice" click
+   - Auto-switch from Client tab when issuing invoice
+   - Refetch trigger via key prop
+
+**Файлы:**
+- `migrations/create_invoices_tables.sql` (NEW)
+- `migrations/README_INVOICES_MIGRATION.md` (NEW)
+- `app/orders/[orderCode]/_components/InvoiceList.tsx` (NEW)
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (updated)
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` (updated)
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx` (updated)
+- `app/orders/[orderCode]/page.tsx` (updated)
+
+**Build:** ✅ SUCCESS (0 errors)
+**Commit:** `51add59`
+
+**Note:** API endpoints NOT implemented yet (requires supabaseAdmin setup).
+User needs to:
+1. Run migration: `migrations/create_invoices_tables.sql` in Supabase
+2. Implement API endpoints (or approve approach)
+
+**Результат:** Invoice System Phase 1 → READY_FOR_USER_REVIEW
+**Next Step:** User approval + migration → then API implementation

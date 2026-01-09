@@ -113,3 +113,69 @@
 **Файлы:** `components/DirectoryForm.tsx`
 
 ---
+
+### 📅 2026-01-09 | 23:10
+**Задача:** Invoice System Phase 1 — DB Schema + UI Components
+**Статус:** ⏳ START
+**Действия:**
+- Начинаю работу над Phase 1 Invoice System
+- План:
+  1. Database migration (invoices + invoice_items tables)
+  2. InvoiceList component
+  3. InvoiceCreator API integration
+  4. Service locking UI (invoice icon)
+  5. Finance tab integration
+
+**Estimated Time:** 15-20 minutes
+**Pipeline:** CW → QA
+
+---
+
+### 📅 2026-01-09 | 23:35
+**Задача:** Invoice System Phase 1 — DB Schema + UI Components
+**Статус:** ✅ SUCCESS
+**Действия:**
+1. ✅ Created database migration `migrations/create_invoices_tables.sql`
+   - invoices table (invoice_number, status, totals, client info)
+   - invoice_items table (line items for services)
+   - invoice_id column in order_services (service locking)
+   - RLS policies + indexes
+   
+2. ✅ Created `InvoiceList.tsx` component
+   - List all invoices with status badges
+   - Cancel invoice functionality (unlocks services)
+   - Export PDF placeholder
+   
+3. ✅ Updated `InvoiceCreator.tsx`
+   - API integration (POST /api/orders/[orderCode]/invoices)
+   - Validation before save
+   - Loading state
+   
+4. ✅ Updated `OrderServicesBlock.tsx`
+   - Added invoice_id to Service interface
+   - Green document icon for invoiced services
+   - Locked services cannot be selected
+   
+5. ✅ Updated `page.tsx`
+   - InvoiceList as default Finance tab view
+   - Refetch trigger after invoice creation
+
+**Файлы:**
+- `migrations/create_invoices_tables.sql` (NEW)
+- `migrations/README_INVOICES_MIGRATION.md` (NEW)
+- `migrations/CREATE_INVOICE_API_NOTE.md` (NEW)
+- `app/orders/[orderCode]/_components/InvoiceList.tsx` (NEW)
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (UPDATED)
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` (UPDATED)
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx` (UPDATED)
+- `app/orders/[orderCode]/page.tsx` (UPDATED)
+- `app/globals.css` (UPDATED - slideUp animation)
+
+**Build:** ✅ SUCCESS (0 errors)
+**Commit:** `51add59`
+
+**⚠️ Note:** API endpoints NOT implemented (requires supabaseAdmin setup)
+
+**Next:** User needs to run migration in Supabase, then API implementation
+
+---
