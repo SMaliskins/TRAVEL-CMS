@@ -4,6 +4,36 @@
 
 ---
 
+### 📅 2026-01-10 | 01:12
+**Задача:** OD6-FIX — Invoice list не обновляется после создания
+**Статус:** ✅ BUG CONFIRMED → READY_FOR_CODE_WRITER
+**SCORE:** N/A (Defect Report)
+**Действия:**
+- ✅ Проанализировал код InvoiceCreator.tsx
+- ✅ Проверил схему БД (invoices, invoice_items)
+- ✅ Проверил API endpoint POST /api/orders/[orderCode]/invoices
+- ✅ Подтвердил: API правильный, БД правильная
+- ✅ Root cause: handleSave() не вызывает API и onSuccess()
+
+**Defects Found:**
+1. ❌ No API call in handleSave() (line 67-71)
+2. ❌ No onSuccess() callback → list doesn't refresh
+3. ❌ Services не маркируются как invoiced
+4. ❌ Invoice не появляется в списке
+
+**Database Schema Verified:**
+- ✅ invoices table: все поля присутствуют
+- ✅ invoice_items table: все поля присутствуют  
+- ✅ order_services.invoice_id: добавлен для маркировки
+- ✅ API endpoint: работает корректно
+
+**Fix Required:** Code Writer должен добавить async API call в handleSave()
+
+**Результат:** Создан подробный defect report в PROJECT_LOG.md
+**Next Step:** Code Writer implements fix
+
+---
+
 ### 📅 2026-01-09 | 15:30
 **Задача:** QA-TEST — Тестовая задача для проверки работы QA агента
 **Статус:** ✅ SUCCESS
