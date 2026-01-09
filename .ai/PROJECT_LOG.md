@@ -1,4 +1,36 @@
 
+## [2026-01-10 01:20] QA — OD6-FIX Verification (FOUND NEW BUG)
+
+**Task:** OD6-FIX | **Status:** PARTIAL SUCCESS → REWORK REQUIRED
+**Code Writer Commit:** 0d32698
+
+**✅ FIXED Issues:**
+1. ✅ API POST call implemented
+2. ✅ onSuccess() callback added
+3. ✅ Loading state (isSaving) added
+4. ✅ Client validation implemented
+5. ✅ Error handling added
+
+**❌ NEW DEFECT: Payload Key Mismatch**
+
+**Problem:**
+- InvoiceCreator sends: `items: [...]` (line 98)
+- API expects: `services: [...]` (line 89)
+- API validation will FAIL: "Missing required fields: services"
+
+**Trace:**
+- File: app/orders/[orderCode]/_components/InvoiceCreator.tsx
+- Line: 98
+- Current: items: selectedServices.map(...)
+- Fix Required: services: selectedServices.map(...)
+
+**Impact:** CRITICAL - Invoice creation will ALWAYS fail with validation error
+
+**Next Step:** Code Writer must rename `items` to `services` in payload
+
+---
+
+
 ## [2026-01-10 01:00] QA — OD6 Invoice List Bug Found
 
 **Task:** OD6-FIX | **Status:** BUG DETECTED → READY_FOR_CODE_WRITER
