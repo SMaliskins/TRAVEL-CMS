@@ -122,3 +122,19 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | 10 | Directory | Check company_id for records | DB/SCHEMA | TODO | - | Records don't open |
 | 12 | Directory | Fix clientType initialization | CODE WRITER | TODO | - | Type switching bug |
 | 13 | Directory | Fix Directory search - company_name | CODE WRITER | TODO | - | Search doesn't find companies |
+
+---
+
+## 🧪 QA TEST TASK
+
+| ID | Task | Pipeline | Current | Status | SCORE | Last Action |
+|----|------|----------|---------|--------|-------|-------------|
+| QA-TEST | Тестовая задача: проверить работу QA агента | QA | QA | TODO | - | [09.01 15:00] Created by Runner |
+
+**Инструкция для QA:**
+1. Прочитать QA_INSTRUCTIONS.md
+2. Выполнить команды проверки директории
+3. Добавить тестовую запись в QA_LOG.md
+4. Закоммитить изменение
+5. Обновить статус задачи на DONE
+
