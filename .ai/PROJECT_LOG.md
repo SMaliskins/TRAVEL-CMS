@@ -1,4 +1,18 @@
 
+## [2026-01-09 21:45] RUNNER — Added Model Check Protocol
+
+**Task:** Update NEW_PROJECT_RULES.md | **Status:** DONE
+**Summary:** Added mandatory model check at session start
+**Changes:**
+- Agents must check if current model matches task complexity
+- If mismatch → show warning and wait for user confirmation
+- Updated model names to match Cursor UI (Opus 4.5, Sonnet 4.5, Gemini 3 Flash)
+- Added escalation rules
+**Commit:** pending
+**Next:** All agents will now validate model before starting work
+
+---
+
 ## [2026-01-09 21:30] RUNNER — Added AI Model Selection Rules
 
 **Task:** Update NEW_PROJECT_RULES.md | **Status:** DONE
