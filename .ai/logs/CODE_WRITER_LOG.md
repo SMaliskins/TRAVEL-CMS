@@ -1,9 +1,115 @@
 # 💻 CODE WRITER LOG
 
-Подробный лог агента Code Writer.
+Лог агента Code Writer — реализация кода по утверждённым задачам.
 
 ---
 
-*Entries will appear below*
+### 📅 2026-01-09 | 20:00
+**Задача:** Fix Last 3/6 months period calculation
+**Статус:** ✅ SUCCESS
+**Проблема:**
+- Дата "прыгала" с 09 на 01 при выборе Last 3/6 months
+- dashboard/page.tsx имел дублирующий useEffect
+
+**Решение:**
+- Синхронизировал логику в `dashboard/page.tsx` с `PeriodSelector.tsx`
+- Теперь использует текущий день для расчёта (не 1-е число)
+
+**Файлы:** `app/dashboard/page.tsx`
+**Commit:** `9891eeb`
+
+---
+
+### 📅 2026-01-09 | 19:35
+**Задача:** Target Speedometer — Green zone at 100%
+**Статус:** ✅ SUCCESS (USER APPROVED)
+**Проблема:**
+- Зелёный цвет начинался с 80%, а не с 100%
+- Шкала содержала метку 80% вместо 75%
+
+**Решение:**
+- Шкала: `[0%, 25%, 50%, 75%, 100%, 120%]`
+- Зелёный цвет строго с 100%
+- Special marker на 100%
+
+**Файлы:** `components/dashboard/TargetSpeedometer.tsx`
+**Commits:** `cc0e1c1`, `8ee8f15`
+
+---
+
+### 📅 2026-01-09 | 15:00
+**Задача:** DASH4-5 Rework
+**Статус:** ✅ SUCCESS
+**Действия:**
+- DASH4: Shopify-style Period Selector с календарём
+- DASH5: Professional Speedometer redesign
+- Добавлен "Last year" option
+- Формат даты включает год
+
+**Файлы:**
+- `components/dashboard/PeriodSelector.tsx`
+- `components/dashboard/TargetSpeedometer.tsx`
+
+**Commit:** `dfea3ca`
+
+---
+
+### 📅 2026-01-09 | 12:00
+**Задача:** DASH2-3 Implementation
+**Статус:** ✅ SUCCESS
+**Действия:**
+- DASH2: Forecast lines для будущих дат в ProfitOrdersChart
+- DASH3: Renamed "Tourists Map" → "Travelers on map"
+- Добавлен RecentlyCompletedList component
+
+**Файлы:**
+- `components/dashboard/ProfitOrdersChart.tsx`
+- `components/dashboard/TouristsMap.tsx`
+- `components/dashboard/RecentlyCompletedList.tsx`
+
+**Commits:** `1980267`, `7c85a3a`
+
+---
+
+### 📅 2026-01-08 | 16:00
+**Задача:** S8-S10 — Orders Page Fixes
+**Статус:** ✅ SUCCESS
+**Действия:**
+- S8: Fix duplicate `</div>` tags in OrderClientSection
+- S9: Add `aria-label="Order Type"` to select element
+- S10: Null/undefined handling in route display
+
+**Файлы:** `app/orders/[orderCode]/_components/OrderClientSection.tsx`
+**Commit:** `43485de`
+
+---
+
+### 📅 2026-01-07 | 01:25
+**Задача:** D1 — Passport Details with AI Parsing
+**Статус:** ✅ SUCCESS
+**Действия:**
+- Создана SQL миграция для полей паспорта
+- Создан компонент `PassportDetailsInput.tsx`
+- Создан API endpoint `/api/ai/parse-passport`
+- Интегрировано в `DirectoryForm.tsx`
+
+**Файлы:**
+- `migrations/add_passport_fields_to_party_person.sql`
+- `components/PassportDetailsInput.tsx`
+- `app/api/ai/parse-passport/route.ts`
+- `components/DirectoryForm.tsx`
+
+---
+
+### 📅 2026-01-07 | 01:00
+**Задача:** UI1-UI4 — Directory Form UI Improvements
+**Статус:** ✅ SUCCESS
+**Действия:**
+- UI1: Ripple Effect on buttons
+- UI2: Inline Validation with icons
+- UI3: Smooth Section Transitions
+- UI4: Mobile-first Layout
+
+**Файлы:** `components/DirectoryForm.tsx`
 
 ---
