@@ -6071,3 +6071,35 @@ User needs to:
 **Estimated:** 5 минут
 
 ---
+
+### 📅 [2026-01-10] | [01:40]
+**Агент:** `CODE WRITER`
+**Задача:** `OD6-FIX — Fix Invoice list не обновляется после создания`
+**Статус:** `SUCCESS ✅`
+
+**Проблема найдена:**
+- InvoiceCreator.tsx имел только placeholder handleSave()
+- Отсутствовала API интеграция (только alert + onClose)
+- onSuccess callback не вызывался
+- Файл в main directory отличался от worktree rxe
+
+**Решение реализовано:**
+1. ✅ Добавлена полная API интеграция в handleSave():
+   - Validation (client name, services required)
+   - fetch POST to /api/orders/[orderCode]/invoices
+   - Error handling with try/catch
+   - Loading state (isSaving)
+2. ✅ Добавлен вызов `onSuccess?.()` после успешного создания (строка 117)
+3. ✅ Исправлен тип params в DELETE endpoint (Promise<...> для Next.js 15)
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (67-123)
+- `app/api/orders/[orderCode]/invoices/[invoiceId]/route.ts` (line 75)
+
+**Build:** ✅ SUCCESS (0 errors, 2 warnings не связаны)
+**Commit:** `0d32698`
+
+**Результат:** Invoice list теперь автоматически обновляется после создания счета
+**Next Step:** QA verification
+
+---
