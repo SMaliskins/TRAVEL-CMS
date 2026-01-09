@@ -4474,6 +4474,7 @@ Branch: feature/x
 
 ---
 
+<<<<<<< HEAD
 
 ### 📅 [2026-01-08] | [18:45]
 **Агент:** `QA / REGRESSION`
@@ -4751,3 +4752,68 @@ Files:
 4. `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` - Reduced padding
 
 **Next Step:** `git merge feature/x → main && git push`
+=======
+### 📅 [2026-01-08] | [19:45]
+**Агент:** `CODE WRITER`
+**Задача:** `Персонализация Dashboard - Hello, username!`
+**Статус:** `SUCCESS`
+
+**Действия:**
+- Добавил state `username` в `DashboardPage` компонент
+- Изменил `checkUser()` useEffect для загрузки `username` из таблицы `profile`
+- Обновил заголовок Dashboard: `Hello, {username || email?.split('@')[0] || 'User'}!`
+
+**Изменённые файлы:**
+- `app/dashboard/page.tsx`:
+  - Добавлен `useState` для `username`
+  - Добавлен запрос к `profile.username` в `checkUser()`
+  - Изменён заголовок с "CRM System Agent" на "Hello, {username}!"
+
+**Результат:**
+- ✅ Заголовок Dashboard показывает персонализированное приветствие
+- ✅ Приоритет: username → email prefix → "User"
+- ✅ Линтер: 0 ошибок
+- **Next Step:** `Ожидаем новых задач`
+
+---
+
+### 📅 [2026-01-09] | [15:30]
+**Агент:** `CODE WRITER`
+**Задача:** `DASH4-5: Dashboard UI Professional Improvements`
+**Статус:** `SUCCESS`
+
+**Действия:**
+
+**DASH4: Period Selector - Shopify-style dropdown**
+- Заменил нативный `<select>` на кастомный dropdown с кнопкой
+- Добавил calendar icon (SVG) слева от текста
+- Реализовал формат "Showing: 1 Dec - 30 Dec" вместо "This Month"
+- Добавил checkmark (✓) для выбранного периода
+- Реализовал toggle arrow с анимацией rotation
+- Добавил hover эффекты и blue highlight для активного пункта
+- Добавил outside click handling для закрытия dropdown
+- Dropdown открывается справа (right-0) для лучшего UX
+
+**DASH5: Target Speedometer - Professional redesign**
+- Увеличил размер с 200px до 280px
+- Добавил tick marks (11 штук: 0%, 10%, 20%...100%)
+- Major tick marks (0%, 50%, 100%) с labels
+- Реализовал gradient fill для progress arc (linearGradient)
+- Добавил glow эффект через SVG filters (feGaussianBlur)
+- Добавил drop-shadow для всего SVG
+- Заменил emoji stars (★) на SVG stars с proper fill
+- Утолщённая стрелка (4px) с glow filter
+- Динамический gradient цвет: red → orange → yellow → green
+- Улучшенная типографика: 2xl для процентов
+
+**Изменённые файлы:**
+- `components/dashboard/PeriodSelector.tsx`: Полная переработка UI
+- `components/dashboard/TargetSpeedometer.tsx`: Professional redesign с SVG эффектами
+
+**Результат:**
+- ✅ DASH4: Shopify-style dropdown реализован (календарь icon, checkmarks, "Showing: X - Y")
+- ✅ DASH5: Professional speedometer (280px, tick marks, gradient, glow, SVG stars)
+- ✅ 0 linter errors
+- **Next Step:** `Готов к QA verification или новым задачам`
+
+---

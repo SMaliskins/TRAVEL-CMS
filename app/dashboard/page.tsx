@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
 
   // Period state
   const [period, setPeriod] = useState<PeriodType>("thisMonth");
@@ -217,6 +218,18 @@ export default function DashboardPage() {
       }
 
       setEmail(data.user.email || null);
+      
+      // Fetch username from profile
+      if (data.user.id) {
+        const { data: profile } = await supabase
+          .from('profile')
+          .select('username')
+          .eq('id', data.user.id)
+          .single();
+        
+        setUsername(profile?.username || null);
+      }
+      
       setLoading(false);
     };
 
@@ -256,8 +269,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-[1600px] space-y-6">
         {/* Header with Period Selector */}
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">CRM System Agent {email?.split('@')[0] || 'Dashboard'}</h1>
-          <PeriodSelector
+          <h1 className="text-3xl font-bold text-gray-900">Hello, {username || email?.split('@')[0] || 'User'"}!</h1>          <PeriodSelector
             value={period}
             onChange={handlePeriodChange}
           />
