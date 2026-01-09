@@ -312,12 +312,6 @@ export default function OrderPage({
           )}
         </div>
 
-        {/* C) Services Block - Always visible */}
-        <OrderServicesBlock 
-          orderCode={orderCode}
-          defaultClientId={order?.client_party_id}
-          defaultClientName={order?.client_display_name || undefined}
-        />
       </div>
     </div>
   );
