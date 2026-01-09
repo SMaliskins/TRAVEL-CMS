@@ -37,6 +37,19 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | S9 | Orders | Add accessible name to Order Type select | CODE WRITER | DONE | feature/x | ✅ Added aria-label="Order Type" for WCAG compliance |
 | S10 | Orders | Fix null/undefined handling in route display | CODE WRITER | DONE | feature/x | ✅ Added null checks for dateFrom/dateTo and parsedRoute.origin |
 
+## PHASE 2.5: Order Detail Redesign (ACTIVE)
+
+| ID | Area | Task | Pipeline | Current | Status | SCORE | Last Action |
+|----|------|------|----------|---------|--------|-------|-------------|
+| OD1 | Orders | Увеличить размер шрифтов на странице заказа | CW→QA | CW | TODO | - | [09.01] Spec created |
+| OD2 | Orders | Карта на всю ширину внизу секции клиента | CW→QA | CW | TODO | - | [09.01] Spec created |
+| OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | CW | TODO | - | [09.01] Spec created |
+| OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | TODO | - | [09.01] Spec created |
+| OD5 | Orders | Чекбоксы для выбора сервисов | CW→QA | CW | TODO | - | [09.01] Spec created |
+| OD6 | Orders | Кнопка "Выписать счёт" → Invoice Modal | CW→QA | CW | TODO | - | [09.01] Spec created |
+
+**Spec:** `.ai/tasks/order-detail-redesign.md`
+
 ## PHASE 3: Finance
 
 | ID | Area | Task | Owner | Status | Branch | Notes |

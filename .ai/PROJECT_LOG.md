@@ -1,4 +1,25 @@
 
+## [2026-01-09 16:30] RUNNER — Order Detail Redesign Specification Created
+
+**Task:** OD-REDESIGN (OD1-OD6) | **Status:** SPECIFICATION DONE → READY_FOR_CW
+**Summary:** Created comprehensive spec for Order Detail page redesign
+**Actions:**
+- Analyzed current page structure (page.tsx, OrderClientSection.tsx, OrderServicesBlock.tsx, AddServiceModal.tsx)
+- Identified gap: EditServiceModal has 7 fields vs AddServiceModal's 25+ fields
+- Created spec: `.ai/tasks/order-detail-redesign.md`
+- Added 6 tasks to PROJECT_TODO.md (OD1-OD6)
+**Tasks Created:**
+1. OD1: Увеличить шрифты
+2. OD2: Карта на всю ширину внизу
+3. OD3: Дни/ночи после дат
+4. OD4: EditServiceModal = AddServiceModal
+5. OD5: Чекбоксы для выбора сервисов
+6. OD6: Кнопка "Выписать счёт"
+**Pipeline:** CW → QA
+**Next:** Code Writer implementation
+
+---
+
 ## [2026-01-09 16:00] RUNNER/CW — Dashboard Greeting Color: Green → Blue
 
 **Task:** User direct request: "сделай надпись Hello, sm! синим" | **Status:** DONE
