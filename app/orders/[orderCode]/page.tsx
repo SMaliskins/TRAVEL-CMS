@@ -6,6 +6,7 @@ import { slugToOrderCode } from "@/lib/orders/orderCode";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock from "./_components/OrderServicesBlock";
 import OrderClientSection from "./_components/OrderClientSection";
+import OrderRouteSummary from "./_components/OrderRouteSummary";
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
 
@@ -214,6 +215,16 @@ export default function OrderPage({
             </button>
           </nav>
         </div>
+
+        {/* Route Summary */}
+        {order && (
+          <OrderRouteSummary
+            clientDisplayName={order.client_display_name}
+            countriesCities={order.countries_cities}
+            dateFrom={order.date_from}
+            dateTo={order.date_to}
+          />
+        )}
 
         {/* Tab Content */}
         <div className="mb-6">
