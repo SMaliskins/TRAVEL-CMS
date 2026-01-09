@@ -267,6 +267,8 @@ export default function OrderPage({
                     setInvoiceServices([]);
                   }}
                   onSuccess={() => {
+                    setShowInvoiceCreator(false);
+                    setInvoiceServices([]);
                     setInvoiceRefetchTrigger(prev => prev + 1);
                   }}
                 />
