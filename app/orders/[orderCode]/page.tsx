@@ -6,6 +6,7 @@ import { slugToOrderCode } from "@/lib/orders/orderCode";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock from "./_components/OrderServicesBlock";
 import OrderClientSection from "./_components/OrderClientSection";
+import InvoiceCreator from "./_components/InvoiceCreator";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -39,6 +40,8 @@ export default function OrderPage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
+  const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
 
   // Fetch order data
   useEffect(() => {
@@ -219,6 +222,11 @@ export default function OrderPage({
                 orderCode={orderCode}
                 defaultClientId={order.client_party_id}
                 defaultClientName={order.client_display_name || undefined}
+                onIssueInvoice={(services) => {
+                  setInvoiceServices(services);
+                  setShowInvoiceCreator(true);
+                  setActiveTab("finance");
+                }}
               />
               
               {/* Client Section */}
@@ -246,29 +254,38 @@ export default function OrderPage({
           )}
 
           {activeTab === "finance" && (
-            <div className="rounded-lg bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
-                Finance
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-gray-500">Amount</span>
-                  <p className="text-lg font-semibold">€{order?.amount_total || 0}</p>
-                </div>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <span className="text-sm text-gray-500">Paid</span>
-                  <p className="text-lg font-semibold text-green-700">€{order?.amount_paid || 0}</p>
-                </div>
-                <div className="p-3 bg-red-50 rounded-lg">
-                  <span className="text-sm text-gray-500">Debt</span>
-                  <p className="text-lg font-semibold text-red-700">€{order?.amount_debt || 0}</p>
-                </div>
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <span className="text-sm text-gray-500">Profit</span>
-                  <p className="text-lg font-semibold text-blue-700">€{order?.profit_estimated || 0}</p>
+            showInvoiceCreator ? (
+              <InvoiceCreator
+                orderCode={orderCode}
+                clientName={order?.client_display_name || null}
+                selectedServices={invoiceServices}
+                onClose={() => setShowInvoiceCreator(false)}
+              />
+            ) : (
+              <div className="rounded-lg bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                  Finance
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-500">Amount</span>
+                    <p className="text-lg font-semibold">€{order?.amount_total || 0}</p>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <span className="text-sm text-gray-500">Paid</span>
+                    <p className="text-lg font-semibold text-green-700">€{order?.amount_paid || 0}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-lg">
+                    <span className="text-sm text-gray-500">Debt</span>
+                    <p className="text-lg font-semibold text-red-700">€{order?.amount_debt || 0}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <span className="text-sm text-gray-500">Profit</span>
+                    <p className="text-lg font-semibold text-blue-700">€{order?.profit_estimated || 0}</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           )}
 
           {activeTab === "documents" && (

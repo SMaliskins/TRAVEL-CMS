@@ -45,7 +45,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | OD2 | Orders | Карта на всю ширину внизу секции клиента | CW→QA | CW | DONE | 10/10 | [09.01 20:45] Map moved fullwidth |
 | OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | CW | DONE | 10/10 | [09.01 20:45] Days/nights added |
 | OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | TODO | - | [09.01 20:45] CW started (complex task) |
-| OD5 | Orders | Чекбоксы для выбора сервисов | CW→QA | CW | READY_FOR_QA | - | [09.01 21:32] CW done | - | [09.01] Spec created |
+| OD5 | Orders | Чекбоксы для выбора сервисов + UX improvements | CW→QA | CW | READY_FOR_QA | - | [09.01 21:56] UX improved | - | [09.01] Spec created |
 | OD6 | Orders | Кнопка "Выписать счёт" → Invoice Modal | CW→QA | CW | TODO | - | [09.01] Spec created |
 
 **Spec:** `.ai/tasks/order-detail-redesign.md`

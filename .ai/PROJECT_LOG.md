@@ -5616,3 +5616,48 @@ const daysAndNights = useMemo(() => {
 **Actions:**
 - Implementing UX improvements for OD5
 - Restructuring page layout (services priority)
+
+### 📅 [2026-01-09] | [21:56]
+**Агент:** `CODE WRITER`
+**Задача:** `OD5 — UX Improvements (User Feedback)`
+**Статус:** `SUCCESS ✅`
+
+**User Feedback Implemented:**
+1. ✅ **Floating Action Bar → English**
+   - "X services selected"
+   - "Issue Invoice" button
+2. ✅ **Services → Priority** (moved above Client Section)
+3. ✅ **Checkboxes → "Invoice" column** with header
+4. ✅ **Route → Labels** ("From", "To", "Return" - vertical layout)
+5. ✅ **Payment Status → Client Section** (after route, before map)
+6. ✅ **Map → Below Client Section** (after payment status)
+
+**Изменённые файлы:**
+- `app/orders/[orderCode]/page.tsx` - order swap
+- `app/orders/[orderCode]/_components/OrderClientSection.tsx` - labels + payment status
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` - Invoice column + English
+
+**Build:** SUCCESS (0 errors)
+**Commit:** `b6ecd50`
+
+**Результат:** OD5 → READY_FOR_QA
+**Next Step:** `QA verification` or `OD6 / OD4`
+
+### 📅 [2026-01-09] | [22:05]
+**Агент:** `CODE WRITER`
+**Задача:** `OD6 — Invoice Creator in Finance Tab`
+**Статус:** `START 🚀`
+
+**User Decision:** Вариант B - Finance tab с live preview
+
+**Концепция:**
+1. Floating Action Bar → кнопка "Issue Invoice"
+2. При клике → переключение на Finance tab
+3. Finance tab структура:
+   - Left Panel: Invoice form + selected services list
+   - Right Panel: Live preview (PDF-like view)
+   - Real-time updates при изменении формы
+
+**Actions:**
+- Implementing OD6: Invoice Creator with live preview
+- Creating InvoiceCreator component for Finance tab

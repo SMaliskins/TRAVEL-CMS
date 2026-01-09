@@ -37,12 +37,14 @@ interface OrderServicesBlockProps {
   // Default client from order for auto-fill in AddServiceModal
   defaultClientId?: string | null;
   defaultClientName?: string;
+  onIssueInvoice?: (services: any[]) => void;
 }
 
 export default function OrderServicesBlock({ 
   orderCode,
   defaultClientId,
   defaultClientName,
+  onIssueInvoice,
 }: OrderServicesBlockProps) {
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -506,8 +508,20 @@ export default function OrderServicesBlock({
             <div className="h-6 w-px bg-gray-600" />
             <button
               onClick={() => {
-                // TODO OD6: Open Invoice Modal
-                alert('OD6: Invoice Modal will be implemented next');
+                if (onIssueInvoice) {
+                  const selectedServicesData = services
+                    .filter(s => selectedServiceIds.includes(s.id))
+                    .map(s => ({
+                      id: s.id,
+                      name: s.name,
+                      clientPrice: s.clientPrice,
+                      category: s.category,
+                      dateFrom: s.dateFrom,
+                      dateTo: s.dateTo,
+                    }));
+                  onIssueInvoice(selectedServicesData);
+                  setSelectedServiceIds([]); // Clear selection
+                }
               }}
               className="px-4 py-2 bg-white text-black font-medium rounded hover:bg-gray-100 transition-colors"
             >
