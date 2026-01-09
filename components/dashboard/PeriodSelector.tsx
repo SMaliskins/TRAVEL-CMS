@@ -69,7 +69,7 @@ export default function PeriodSelector({
         break;
       case "last3Months": {
         const day = now.getDate() === 1 ? 1 : now.getDate();
-        const targetMonth = now.getMonth() - 2;
+        const targetMonth = now.getMonth() - 3;
         const targetYear = now.getFullYear();
         // Handle month overflow
         const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
@@ -80,10 +80,9 @@ export default function PeriodSelector({
         startDate = new Date(actualYear, actualMonth, safeDay);
         break;
       }
-        break;
       case "last6Months": {
         const day = now.getDate() === 1 ? 1 : now.getDate();
-        const targetMonth = now.getMonth() - 5;
+        const targetMonth = now.getMonth() - 6;
         const targetYear = now.getFullYear();
         // Handle month overflow
         const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
@@ -94,7 +93,6 @@ export default function PeriodSelector({
         startDate = new Date(actualYear, actualMonth, safeDay);
         break;
       }
-        break;
       case "lastYear":
         startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
         break;
@@ -196,7 +194,7 @@ export default function PeriodSelector({
         break;
       case "last3Months": {
         const day = now.getDate() === 1 ? 1 : now.getDate();
-        const targetMonth = now.getMonth() - 2;
+        const targetMonth = now.getMonth() - 3;
         const targetYear = now.getFullYear();
         // Handle month overflow
         const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
@@ -207,10 +205,9 @@ export default function PeriodSelector({
         startDate = new Date(actualYear, actualMonth, safeDay);
         break;
       }
-        break;
       case "last6Months": {
         const day = now.getDate() === 1 ? 1 : now.getDate();
-        const targetMonth = now.getMonth() - 5;
+        const targetMonth = now.getMonth() - 6;
         const targetYear = now.getFullYear();
         // Handle month overflow
         const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
@@ -221,7 +218,6 @@ export default function PeriodSelector({
         startDate = new Date(actualYear, actualMonth, safeDay);
         break;
       }
-        break;
       case "lastYear":
         startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
         break;
