@@ -79,7 +79,7 @@ export default function InvoiceCreator({
 
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/orders/${orderCode}/invoices`, {
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
