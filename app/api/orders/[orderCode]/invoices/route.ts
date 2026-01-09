@@ -4,10 +4,15 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 // GET /api/orders/[orderCode]/invoices - List all invoices for an order
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderCode: string } }
+  { params }: { params: Promise<{ orderCode: string }> }
 ) {
   try {
-    const { orderCode } = params;
+    const { orderCode: rawOrderCode } = await params;
+    // Decode URI component in case it's encoded (e.g., %2F -> /)
+    const orderCode = decodeURIComponent(rawOrderCode);
+    
+    console.log("[Invoices API] Raw orderCode:", rawOrderCode);
+    console.log("[Invoices API] Decoded orderCode:", orderCode);
 
     // Get order ID from order_code
     const { data: order, error: orderError } = await supabaseAdmin
@@ -67,10 +72,11 @@ export async function GET(
 // POST /api/orders/[orderCode]/invoices - Create a new invoice
 export async function POST(
   request: NextRequest,
-  { params }: { params: { orderCode: string } }
+  { params }: { params: Promise<{ orderCode: string }> }
 ) {
   try {
-    const { orderCode } = params;
+    const { orderCode: rawOrderCode } = await params;
+    const orderCode = decodeURIComponent(rawOrderCode);
     const body = await request.json();
 
     const {

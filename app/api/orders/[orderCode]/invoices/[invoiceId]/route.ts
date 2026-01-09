@@ -4,10 +4,10 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 // PATCH /api/orders/[orderCode]/invoices/[invoiceId] - Update invoice status (e.g., cancel)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { orderCode: string; invoiceId: string } }
+  { params }: { params: Promise<{ orderCode: string; invoiceId: string }> }
 ) {
   try {
-    const { invoiceId } = params;
+    const { invoiceId } = await params;
     const body = await request.json();
     const { status } = body;
 
