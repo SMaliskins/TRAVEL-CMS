@@ -82,11 +82,25 @@ export default function DashboardPage() {
         start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         end = new Date(now.getFullYear(), now.getMonth(), 0);
         break;
-      case "last3Months":
-        start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      case "last3Months": {
+        const day = now.getDate() === 1 ? 1 : now.getDate();
+        const targetMonth = now.getMonth() - 3;
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? now.getFullYear() - 1 : now.getFullYear();
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        start = new Date(actualYear, actualMonth, safeDay);
+      }
         break;
-      case "last6Months":
-        start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      case "last6Months": {
+        const day = now.getDate() === 1 ? 1 : now.getDate();
+        const targetMonth = now.getMonth() - 6;
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? now.getFullYear() - 1 : now.getFullYear();
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        start = new Date(actualYear, actualMonth, safeDay);
+      }
         break;
       case "lastYear":
         start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
