@@ -5661,3 +5661,75 @@ const daysAndNights = useMemo(() => {
 **Actions:**
 - Implementing OD6: Invoice Creator with live preview
 - Creating InvoiceCreator component for Finance tab
+
+### 📅 [2026-01-09] | [23:00]
+**Агент:** `CODE WRITER`
+**Задача:** `OD6 — Invoice Creator in Finance Tab`
+**Статус:** `SUCCESS ✅`
+
+**User Decision:** Вариант B - Finance tab с live preview
+
+**Реализовано:**
+1. ✅ **InvoiceCreator Component** (новый файл)
+   - Split layout: Left (form) + Right (preview)
+   - Live preview с real-time updates
+   
+2. ✅ **Left Panel - Invoice Form:**
+   - Invoice Details (number, date, due date)
+   - Bill To (client name, address, email)
+   - Services List (selected from Client tab)
+   - Tax & Total (VAT calculation)
+   - Notes field
+   - Actions: Save & Issue, Cancel
+
+3. ✅ **Right Panel - Live Preview:**
+   - Professional invoice layout
+   - From/To sections
+   - Services table
+   - Subtotal/VAT/Total
+   - Notes display
+   - Export PDF button (placeholder)
+
+4. ✅ **Integration:**
+   - OrderServicesBlock: "Issue Invoice" button
+   - Auto-switch to Finance tab
+   - Selected services passed to InvoiceCreator
+   - Conditional rendering in Finance tab
+
+5. ✅ **Features:**
+   - Auto-generated invoice number
+   - Due date default: +14 days
+   - Currency formatting (€)
+   - Date formatting (DD/MM/YYYY)
+   - Real-time totals calculation
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (NEW)
+- `app/orders/[orderCode]/page.tsx` (integration)
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` (button handler)
+
+**Build:** SUCCESS (0 errors)
+**Commit:** `b21bb9a`
+
+**Результат:** OD6 → READY_FOR_QA
+**Next Step:** `QA verification` or `OD4 (сложная задача)`
+
+### 📅 [2026-01-09] | [23:10]
+**Агент:** `CODE WRITER`
+**Задача:** `Invoice System Phase 1 — Management & UX`
+**Статус:** `START 🚀`
+
+**Scope:**
+1. Database schema: invoices + invoice_items tables
+2. Invoice list в Finance tab
+3. Invoice CRUD operations (Create/Edit/Cancel)
+4. FAB positioning fix (под последним сервисом)
+5. Service locking (prevent double-invoicing)
+6. Invoice icon в строке сервиса
+
+**Estimated Time:** ~15-20 minutes
+
+**Actions:**
+- Creating database migration
+- Building InvoiceList component
+- Implementing service locking logic

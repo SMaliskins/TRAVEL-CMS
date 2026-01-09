@@ -34,6 +34,7 @@ export interface ServiceData {
   refNr: string;
   ticketNr: string;
   travellerIds: string[];
+  invoice_id?: string | null;
   // Hotel-specific
   hotelName?: string;
   hotelAddress?: string;

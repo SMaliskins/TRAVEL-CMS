@@ -16,6 +16,7 @@ interface InvoiceCreatorProps {
   clientName: string | null;
   selectedServices: Service[];
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 export default function InvoiceCreator({
@@ -23,6 +24,7 @@ export default function InvoiceCreator({
   clientName,
   selectedServices,
   onClose,
+  onSuccess,
 }: InvoiceCreatorProps) {
   const [invoiceNumber, setInvoiceNumber] = useState(`INV-${orderCode}-${Date.now().toString().slice(-6)}`);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);

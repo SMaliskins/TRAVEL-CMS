@@ -30,6 +30,7 @@ interface Service {
   refNr?: string;
   ticketNr?: string;
   assignedTravellerIds: string[];
+  invoice_id?: string | null; // NEW: Invoice lock
 }
 
 interface OrderServicesBlockProps {
@@ -87,6 +88,7 @@ export default function OrderServicesBlock({
           refNr: s.refNr || "",
           ticketNr: s.ticketNr || "",
           assignedTravellerIds: s.travellerIds || [],
+          invoice_id: s.invoice_id || null,
         }));
         setServices(mappedServices);
       }
@@ -112,6 +114,7 @@ export default function OrderServicesBlock({
       supplier: service.supplierName || "-",
       client: service.clientName || "-",
       payer: service.payerName || "-",
+      invoice_id: null,
       servicePrice: service.servicePrice || 0,
       clientPrice: service.clientPrice || 0,
       resStatus: service.resStatus || "booked",
@@ -341,22 +344,29 @@ export default function OrderServicesBlock({
                           >
                             <td className="w-20 px-2 py-1 text-center">
                               <div className="flex items-center justify-center gap-1">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedServiceIds.includes(service.id)}
-                                  onChange={(e) => {
-                                    e.stopPropagation();
-                                    if (e.target.checked) {
-                                      setSelectedServiceIds(prev => [...prev, service.id]);
-                                    } else {
-                                      setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
-                                    }
-                                  }}
-                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                  aria-label={`Select ${service.name} for invoice`}
-                                  title="Select for invoice"
-                                />
-                                {/* TODO: Show invoice icon if already invoiced */}
+                                {service.invoice_id ? (
+                                  <div className="flex items-center justify-center" title="Invoiced">
+                                    <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedServiceIds.includes(service.id)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      if (e.target.checked) {
+                                        setSelectedServiceIds(prev => [...prev, service.id]);
+                                      } else {
+                                        setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    aria-label={`Select ${service.name} for invoice`}
+                                    title="Select for invoice"
+                                  />
+                                )}
                               </div>
                             </td>
                             <td 
