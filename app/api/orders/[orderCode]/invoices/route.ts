@@ -163,8 +163,15 @@ export async function POST(
 
     if (invoiceError || !invoice) {
       console.error("Error creating invoice:", invoiceError);
+      console.error("Invoice data attempted:", {
+        invoice_number,
+        order_id: order.id,
+        company_id: order.company_id,
+        invoice_date: invoice_date || new Date().toISOString().split("T")[0],
+        due_date: due_date || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      });
       return NextResponse.json(
-        { error: "Failed to create invoice" },
+        { error: `Failed to create invoice: ${invoiceError?.message || "Unknown error"}` },
         { status: 500 }
       );
     }
@@ -186,10 +193,11 @@ export async function POST(
 
     if (itemsError) {
       console.error("Error creating invoice items:", itemsError);
+      console.error("Invoice items attempted:", invoiceItems);
       // Rollback: delete the invoice
       await supabaseAdmin.from("invoices").delete().eq("id", invoice.id);
       return NextResponse.json(
-        { error: "Failed to create invoice items" },
+        { error: `Failed to create invoice items: ${itemsError?.message || "Unknown error"}` },
         { status: 500 }
       );
     }
@@ -202,11 +210,12 @@ export async function POST(
 
     if (updateServicesError) {
       console.error("Error updating services:", updateServicesError);
+      console.error("Service IDs attempted:", serviceIds);
       // Rollback: delete invoice and items
       await supabaseAdmin.from("invoice_items").delete().eq("invoice_id", invoice.id);
       await supabaseAdmin.from("invoices").delete().eq("id", invoice.id);
       return NextResponse.json(
-        { error: "Failed to update services" },
+        { error: `Failed to update services: ${updateServicesError?.message || "Unknown error"}` },
         { status: 500 }
       );
     }
