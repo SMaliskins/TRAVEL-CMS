@@ -55,7 +55,7 @@ export default function TargetSpeedometer({
 
   // Generate tick marks
   const tickMarks = [];
-  const tickLabels = [0, 25, 50, 80, 100, 120];
+  const tickLabels = [0, 25, 50, 75, 100, 120];
   
   for (let i = 0; i <= 12; i++) {
     const tickPct = (i / 12) * 120;
@@ -67,7 +67,7 @@ export default function TargetSpeedometer({
     const x2 = centerX + tickOuterRadius * Math.cos(toRadians(180 - tickAngle));
     const y2 = centerY - tickOuterRadius * Math.sin(toRadians(180 - tickAngle));
 
-    const isMajor = tickPct === 0 || tickPct === 50 || tickPct === 80 || tickPct === 100 || tickPct === 120;
+    const isMajor = tickPct === 0 || tickPct === 50 ||  tickPct === 100 || tickPct === 120;
     
     tickMarks.push(
       <line
@@ -76,7 +76,7 @@ export default function TargetSpeedometer({
         y1={y1}
         x2={x2}
         y2={y2}
-        stroke={tickPct === 80 ? "#22c55e" : "#9ca3af"}
+        stroke={tickPct === 100 ? "#22c55e" : "#9ca3af"}
         strokeWidth={isMajor ? "2" : "1"}
       />
     );
@@ -95,7 +95,7 @@ export default function TargetSpeedometer({
         x={labelX}
         y={labelY}
         textAnchor="middle"
-        className={`text-xs ${pct === 80 ? "fill-green-600 font-semibold" : "fill-gray-500"}`}
+        className={`text-xs ${pct === 100 ? "fill-green-600 font-semibold" : "fill-gray-500"}`}
         dominantBaseline="middle"
       >
         {pct}%
@@ -149,9 +149,9 @@ export default function TargetSpeedometer({
             {/* Background colored zones */}
             <path d={createArcPath(0, 25)} fill="none" stroke="#fecaca" strokeWidth="16" strokeLinecap="butt" />
             <path d={createArcPath(25, 50)} fill="none" stroke="#fed7aa" strokeWidth="16" strokeLinecap="butt" />
-            <path d={createArcPath(50, 80)} fill="none" stroke="#fef08a" strokeWidth="16" strokeLinecap="butt" />
-            <path d={createArcPath(80, 100)} fill="none" stroke="#bbf7d0" strokeWidth="16" strokeLinecap="butt" />
-            <path d={createArcPath(100, 120)} fill="none" stroke="#a7f3d0" strokeWidth="16" strokeLinecap="round" />
+            <path d={createArcPath(50, 75)} fill="none" stroke="#fef08a" strokeWidth="16" strokeLinecap="butt" />
+            <path d={createArcPath(75, 100)} fill="none" stroke="#fde047" strokeWidth="16" strokeLinecap="butt" />
+            <path d={createArcPath(100, 120)} fill="none" stroke="#bbf7d0" strokeWidth="16" strokeLinecap="round" />
 
             {/* Progress arc */}
             <path
@@ -165,9 +165,9 @@ export default function TargetSpeedometer({
               style={{ filter: `drop-shadow(0 0 6px ${gradient.glow}40)` }}
             />
 
-            {/* Special marker at 80% */}
+            {/* Special marker at 100% */}
             {(() => {
-              const targetAngle = startAngle + (80 / 120) * angleRange;
+              const targetAngle = startAngle + (100 / 120) * angleRange;
               const markerRadius = radius + 12;
               const mx = centerX + markerRadius * Math.cos(toRadians(180 - targetAngle));
               const my = centerY - markerRadius * Math.sin(toRadians(180 - targetAngle));
@@ -181,7 +181,7 @@ export default function TargetSpeedometer({
             <circle cx={centerX} cy={centerY} r="8" fill={gradient.from} filter="url(#needleGlow)" />
 
             {/* Center percentage */}
-            <text x={centerX} y={centerY + 35} textAnchor="middle" className={`text-2xl font-bold ${percentage >= 80 ? "fill-green-600" : "fill-gray-900"}`}>
+            <text x={centerX} y={centerY + 35} textAnchor="middle" className={`text-2xl font-bold ${percentage >= 100 ? "fill-green-600" : "fill-gray-900"}`}>
               {percentage.toFixed(0)}%
             </text>
           </svg>
