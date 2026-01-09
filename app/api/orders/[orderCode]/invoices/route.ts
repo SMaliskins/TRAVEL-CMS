@@ -227,10 +227,18 @@ export async function POST(
         invoice_items: invoiceItems,
       },
     });
-  } catch (error) {
-    console.error("Error in POST /api/orders/[orderCode]/invoices:", error);
+  } catch (error: any) {
+    console.error("❌ CRITICAL ERROR in POST /api/orders/[orderCode]/invoices:");
+    console.error("Error message:", error?.message);
+    console.error("Error code:", error?.code);
+    console.error("Error details:", error?.details);
+    console.error("Full error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        error: `Internal server error: ${error?.message || "Unknown error"}`,
+        code: error?.code || "UNKNOWN",
+        details: error?.details || null
+      },
       { status: 500 }
     );
   }
