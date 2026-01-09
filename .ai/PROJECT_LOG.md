@@ -1,4 +1,18 @@
 
+## [2026-01-09 21:30] RUNNER — Added AI Model Selection Rules
+
+**Task:** Update NEW_PROJECT_RULES.md | **Status:** DONE
+**Summary:** Added AI model selection guidelines to optimize costs
+**Changes:**
+- Added new section "🤖 ВЫБОР AI МОДЕЛИ ПО СЛОЖНОСТИ ЗАДАЧИ"
+- Defined complexity levels: 🟢 Micro, 🟡 Simple, 🟠 Medium, 🔴 Complex, ⚫ Critical
+- Model recommendations per complexity (haiku/sonnet/opus)
+- Updated PROJECT_TODO.md format to include Complexity column
+**Files:** `.ai/NEW_PROJECT_RULES.md`
+**Next:** Apply to all new tasks
+
+---
+
 ## [2026-01-09 16:30] RUNNER — Order Detail Redesign Specification Created
 
 **Task:** OD-REDESIGN (OD1-OD6) | **Status:** SPECIFICATION DONE → READY_FOR_CW
@@ -5457,3 +5471,46 @@ Files:
 **Commit:** `f469fae`
 
 **Next Step:** `OD4-OD6 требуют значительного времени (~4-6 часов). Рекомендуется QA проверка OD1-OD3 перед продолжением`
+
+### 📅 [2026-01-09] | [21:00]
+**Агент:** `CODE WRITER`
+**Задача:** `Fix OD3 JSX Syntax Error`
+**Статус:** `SUCCESS ✅`
+
+**User Feedback:** "ты когда код делаешь, сразу проверяй, что вск работает"
+
+**Проблема:**
+- ❌ Build Error: "Parsing ecmascript source code failed" (line 566)
+- ❌ "Expected '</>', got '('" - inline IIFE в JSX не поддерживается Turbopack
+- ❌ Нарушил протокол: не проверил build перед объявлением SUCCESS
+
+**Решение:**
+- ✅ Заменил inline IIFE на `useMemo` hook
+- ✅ Вынес расчёт дней/ночей в отдельную мемоизированную переменную
+- ✅ **Проверил build** - прошёл успешно
+- ✅ TypeScript compilation: OK
+- ✅ Static generation: OK (22 pages)
+
+**Код:**
+```typescript
+const daysAndNights = useMemo(() => {
+  if (!dateFrom || !dateTo) return null;
+  const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const nights = days - 1;
+  const daysWord = days === 1 ? 'день' : days > 1 && days < 5 ? 'дня' : 'дней';
+  const nightsWord = nights === 1 ? 'ночь' : nights > 1 && nights < 5 ? 'ночи' : 'ночей';
+  return ` (${days} ${daysWord} / ${nights} ${nightsWord})`;
+}, [dateFrom, dateTo]);
+
+// Usage in JSX:
+{dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}{daysAndNights}
+```
+
+**Lesson Learned:**
+- 🔴 **ВСЕГДА** проверять `npm run build` перед объявлением SUCCESS
+- 🔴 Inline IIFE в JSX не работает с Turbopack
+- ✅ Использовать `useMemo` для вычислений
+
+**Commit:** `b4e11c7`
+
+**Next Step:** `OD1-OD3 теперь ПОЛНОСТЬЮ работают. Готов к OD4-OD6 или QA проверке`
