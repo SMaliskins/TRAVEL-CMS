@@ -23,14 +23,13 @@ export default function TargetSpeedometer({
   const displayPercentage = Math.min(percentage, 120);
   const clampedForAngle = Math.min(displayPercentage, 120);
 
-  // Color based on achievement - GREEN ZONE STARTS AT 80%!
+  // Color based on achievement - GREEN ZONE STARTS AT 100%!
   const getGradient = (pct: number): { from: string; to: string; glow: string } => {
-    if (pct < 25) return { from: "#ef4444", to: "#dc2626", glow: "#ef4444" }; // red
-    if (pct < 50) return { from: "#f97316", to: "#ea580c", glow: "#f97316" }; // orange
-    if (pct < 75) return { from: "#eab308", to: "#d97706", glow: "#eab308" }; // yellow
-    if (pct < 80) return { from: "#fde047", to: "#facc15", glow: "#fde047" }; // light yellow
-    if (pct <= 100) return { from: "#22c55e", to: "#16a34a", glow: "#22c55e" }; // green (80-100%)
-    return { from: "#10b981", to: "#059669", glow: "#10b981" }; // emerald for over-achievement (>100%)
+    if (pct < 25) return { from: "#ef4444", to: "#dc2626", glow: "#ef4444" }; // red (0-25%)
+    if (pct < 50) return { from: "#f97316", to: "#ea580c", glow: "#f97316" }; // orange (25-50%)
+    if (pct < 75) return { from: "#eab308", to: "#d97706", glow: "#eab308" }; // yellow (50-75%)
+    if (pct < 100) return { from: "#fde047", to: "#facc15", glow: "#fde047" }; // light yellow (75-99%)
+    return { from: "#22c55e", to: "#16a34a", glow: "#22c55e" }; // green (100%+)
   };
 
   // Angle for speedometer (180 degrees range for 0-120%)
