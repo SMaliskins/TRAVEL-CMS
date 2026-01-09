@@ -118,6 +118,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | 12 | Directory | Fix clientType initialization | CODE WRITER | TODO | - | Type switching bug |
 | 13 | Directory | Fix Directory search - company_name | CODE WRITER | TODO | - | Search doesn't find companies |
 
+<<<<<<< HEAD
 ## PHASE 8: Dashboard UI Improvements (PENDING)
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
@@ -127,3 +128,14 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 | DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | TODO | - | "Showing: 1 Dec - 30 Dec", calendar icon, checkmarks |
 | DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | TODO | - | 280px, tick marks, gradient, glow, SVG stars |
+=======
+## PHASE 8: Dashboard UI Improvements
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| DASH2 | Dashboard | Profit & Orders Chart: Future dates as forecast (dashed line) | CODE WRITER | DONE | feature/x | ✅ Currency formatting implemented |
+| DASH3 | Dashboard | Travelers Map: Rename + Recently Completed split | CODE WRITER | DONE | feature/x | ✅ Renamed + split implemented |
+| DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | DONE | feature/x | ✅ Rework completed - 5 defects fixed |
+| DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | DONE | feature/x | ✅ Rework completed - 5 defects fixed |
+
+>>>>>>> 852e6bb (docs: update DASH4-5 status - rework completed)

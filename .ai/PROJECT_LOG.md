@@ -4900,3 +4900,47 @@ Files:
 **Next Step:** `Приступаю к исправлениям`
 
 ---
+
+### 📅 [2026-01-09] | [16:45]
+**Агент:** `CODE WRITER`
+**Задача:** `DASH4-5: REWORK COMPLETED`
+**Статус:** `SUCCESS`
+
+**Действия:**
+1. ✅ DEFECT #1 (CRITICAL) - Исправлен syntax error в `app/dashboard/page.tsx:272`
+   - Убрана лишняя кавычка: `'User'"}` → `'User'}`
+   
+2. ✅ DEFECT #2 (HIGH) - Добавлены `startDate`/`endDate` props в PeriodSelector
+   - Добавлены props в interface: `startDate?: string; endDate?: string;`
+   - `getDisplayDates()` теперь использует parent dates если переданы
+   - `DashboardPage` передаёт `periodStart` и `periodEnd`
+   
+3. ✅ DEFECT #3 (HIGH) - Увеличен z-index dropdown
+   - `z-50` → `z-[999]` для гарантии отображения поверх всех элементов
+   
+4. ✅ DEFECT #4 (MEDIUM) - Исправлен SVG viewport в TargetSpeedometer
+   - SVG размеры: `width={size + 40}`, `height={size * 0.65 + 20}`
+   - `centerX` offset +20 для размещения labels
+   - Labels больше не обрезаются
+   
+5. ✅ DEFECT #5 (MEDIUM) - Date picker встроен в dropdown (UX)
+   - Убран отдельный блок под кнопкой
+   - Date picker показывается внутри dropdown menu после "Custom" option
+   - Добавлен separator и правильный layout
+
+**Результат:**
+- ✅ 0 linter errors
+- ✅ 0 syntax errors
+- ✅ Все 5 defects исправлены
+- ✅ Commit: `fix(dashboard): DASH4-5 rework - fix 5 defects` (165ecda)
+- ✅ Cherry-picked в feature/x branch (a564f61)
+
+**Файлы изменены:**
+- `app/dashboard/page.tsx` - исправлен syntax error, добавлены props
+- `components/dashboard/PeriodSelector.tsx` - все 3 дефекта (props, z-index, UX)
+- `components/dashboard/TargetSpeedometer.tsx` - SVG viewport fix
+- `.ai/tasks/code-writer-complete-dash4-5-implementation.md` - Defect List документация
+
+**Next Step:** `Готов к QA verification (ожидаю SCORE >= 8/10)`
+
+---
