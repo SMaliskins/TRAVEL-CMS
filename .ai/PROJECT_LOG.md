@@ -5573,3 +5573,46 @@ const daysAndNights = useMemo(() => {
 - 🚀 Начинаю OD5: Чекбоксы для выбора сервисов
 
 **Next Step:** `Реализация OD5`
+
+### 📅 [2026-01-09] | [21:32]
+**Агент:** `CODE WRITER`
+**Задача:** `OD5 — Чекбоксы для выбора сервисов`
+**Статус:** `SUCCESS ✅`
+
+**Действия:**
+1. ✅ Добавлена колонка с чекбоксами в таблицу сервисов
+2. ✅ "Select All" чекбокс в header
+3. ✅ State: `selectedServiceIds: string[]`
+4. ✅ Floating Action Bar при выборе сервисов:
+   - Счётчик выбранных сервисов (с русским склонением)
+   - Общая сумма (clientPrice)
+   - Кнопка "Выписать счёт" (заглушка для OD6)
+   - Кнопка очистки выбора
+5. ✅ CSS анимация `slideUp` для floating bar
+6. ✅ Build: SUCCESS (0 errors)
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+- `app/globals.css`
+
+**Commit:** `357d081`
+
+**Результат:** OD5 → READY_FOR_QA
+**Next Step:** `QA verification` или `продолжить с OD6`
+
+### 📅 [2026-01-09] | [21:40]
+**Агент:** `CODE WRITER`
+**Задача:** `OD5 Improvements — User Feedback`
+**Статус:** `START 🔧`
+
+**User Feedback:**
+1. Floating Action Bar → English
+2. Map → move below services (services are priority)
+3. Checkboxes → separate "Invoice" column with status icon
+4. Payment Status → move to client info (near route)
+5. Route → add labels: "From", "To", "Return"
+6. Invoice Modal (OD6): left = form, right = live preview
+
+**Actions:**
+- Implementing UX improvements for OD5
+- Restructuring page layout (services priority)

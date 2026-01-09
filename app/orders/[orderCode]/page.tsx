@@ -213,26 +213,36 @@ export default function OrderPage({
         {/* Tab Content */}
         <div className="mb-6">
           {activeTab === "client" && order && (
-            <OrderClientSection
-              orderId={order.id}
-              orderCode={orderCode}
-              clientDisplayName={order.client_display_name}
-              clientPartyId={order.client_party_id}
-              countriesCities={order.countries_cities}
-              dateFrom={order.date_from}
-              dateTo={order.date_to}
-              clientPhone={order.client_phone}
-              clientEmail={order.client_email}
-              amountTotal={order.amount_total}
-              amountPaid={order.amount_paid}
-              orderType={order.order_type}
-              onUpdate={(updates) => {
-                setOrder({
-                  ...order,
-                  ...updates,
-                } as OrderData);
-              }}
-            />
+            <div className="space-y-6">
+              {/* Services Block - Priority */}
+              <OrderServicesBlock 
+                orderCode={orderCode}
+                defaultClientId={order.client_party_id}
+                defaultClientName={order.client_display_name || undefined}
+              />
+              
+              {/* Client Section */}
+              <OrderClientSection
+                orderId={order.id}
+                orderCode={orderCode}
+                clientDisplayName={order.client_display_name}
+                clientPartyId={order.client_party_id}
+                countriesCities={order.countries_cities}
+                dateFrom={order.date_from}
+                dateTo={order.date_to}
+                clientPhone={order.client_phone}
+                clientEmail={order.client_email}
+                amountTotal={order.amount_total}
+                amountPaid={order.amount_paid}
+                orderType={order.order_type}
+                onUpdate={(updates) => {
+                  setOrder({
+                    ...order,
+                    ...updates,
+                  } as OrderData);
+                }}
+              />
+            </div>
           )}
 
           {activeTab === "finance" && (

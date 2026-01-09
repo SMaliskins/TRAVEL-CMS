@@ -254,20 +254,8 @@ export default function OrderServicesBlock({
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-12 px-2 py-1.5 text-center">
-                  <input
-                    type="checkbox"
-                    checked={services.length > 0 && selectedServiceIds.length === services.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedServiceIds(services.map(s => s.id));
-                      } else {
-                        setSelectedServiceIds([]);
-                      }
-                    }}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    aria-label="Select all services"
-                  />
+                <th className="w-20 px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Invoice
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Category
@@ -349,21 +337,25 @@ export default function OrderServicesBlock({
                             key={service.id}
                             className="transition-colors hover:bg-gray-50"
                           >
-                            <td className="w-12 px-2 py-1 text-center">
-                              <input
-                                type="checkbox"
-                                checked={selectedServiceIds.includes(service.id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  if (e.target.checked) {
-                                    setSelectedServiceIds(prev => [...prev, service.id]);
-                                  } else {
-                                    setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
-                                  }
-                                }}
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                aria-label={`Select ${service.name}`}
-                              />
+                            <td className="w-20 px-2 py-1 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedServiceIds.includes(service.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    if (e.target.checked) {
+                                      setSelectedServiceIds(prev => [...prev, service.id]);
+                                    } else {
+                                      setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
+                                    }
+                                  }}
+                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  aria-label={`Select ${service.name} for invoice`}
+                                  title="Select for invoice"
+                                />
+                                {/* TODO: Show invoice icon if already invoiced */}
+                              </div>
                             </td>
                             <td 
                               className="px-2 py-1 text-sm text-gray-700 leading-tight cursor-pointer"
@@ -496,7 +488,7 @@ export default function OrderServicesBlock({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
               <span className="font-medium">
-                {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'сервис' : selectedServiceIds.length < 5 ? 'сервиса' : 'сервисов'} выбрано
+                {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'service' : 'services'} selected
               </span>
             </div>
             <div className="h-6 w-px bg-gray-600" />
@@ -519,7 +511,7 @@ export default function OrderServicesBlock({
               }}
               className="px-4 py-2 bg-white text-black font-medium rounded hover:bg-gray-100 transition-colors"
             >
-              Выписать счёт
+              Issue Invoice
             </button>
             <button
               onClick={() => setSelectedServiceIds([])}
