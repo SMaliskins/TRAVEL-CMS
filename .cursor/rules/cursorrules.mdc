@@ -9,16 +9,16 @@ alwaysApply: true
 
     ПЕРЕД началом любой работы — запись в PROJECT_LOG.md со статусом START.
 
-    ПОСЛЕ внесения изменений в код — запись в PROJECT_LOG.md со статусом SUCCESS и обновление PROJECT_PROGRESS.md.
+    ПОСЛЕ внесения изменений в код — запись в PROJECT_LOG.md со статусом SUCCESS.
 
     ПОСЛЕ тестирования — запись в PROJECT_LOG.md со SCORE и Defect List.
 
-    ПРИ ЗАВЕРШЕНИИ ТАСКА — обновление PROJECT_TODO.md (чекбокс и статус)."
+    ПРИ ЗАВЕРШЕНИИ ТАСКА — обновление PROJECT_TODO.md (статус и Last Action)."
 
 ## 1. ПРИОРИТЕТ КОНТЕКСТА (ROOT RULES)
 - **ROOT CONTEXT:** Проект не содержит папки `src`. Все пути начинаются от корня: `/app`, `/components`, `/lib`, `/api`.
 - **TRUTH SOURCE:** Перед любым действием ты ОБЯЗАН прочитать:
-    1. `.ai/PROJECT_RULES.md` — твои полномочия и протоколы.
+    1. `.ai/NEW_PROJECT_RULES.md` — твои полномочия и протоколы.
     2. `.ai/PROJECT_TODO.md` — текущий шаг и активная задача.
     3. `.ai/PROJECT_LOG.md` — контекст предыдущих итераций.
 
@@ -57,31 +57,21 @@ alwaysApply: true
 - [Defect List / Rework Directive] (Если SCORE < 8)
 - **Next Step:** `[Следующая роль или статус]`
 
-### Б. Формат PROJECT_TODO.md (Очередь)
-- [ ] **ID:** `[Task-ID]` | **Task:** `[Name]`
-  - **Status:** `[PENDING | CODING | TESTING | DONE]`
-  - **Owner:** `[Current Agent]`
-  - **Priority:** `[High | Medium | Low]`
-  - **Log Link:** `[Дата последней записи в LOG]`
+### Б. Формат PROJECT_TODO.md (Таблица задач)
+| ID | Task | Pipeline | Current | Status | SCORE | Last Action |
+|----|------|----------|---------|--------|-------|-------------|
+| O7 | Payment form | DB→CW→QA | CW | IN_PROGRESS | - | [08.01 15:00] DB done |
 
-### В. Формат PROJECT_PROGRESS.md (Дашборд)
-Обновлять только таблицу модулей:
-| Модуль | Статус | Готовность | Последний лог |
-| :--- | :--- | :--- | :--- |
-| `[Module Name]` | `[Stable/In Progress]` | `[X%]` | `[Date]` |
-
-### Г. Формат ISSUES_AND_SOLUTIONS.md (База знаний)
-### ⚠️ [Краткое описание проблемы]
-- **Дата:** [YYYY-MM-DD]
-- **Симптомы:** [Лог ошибки или описание]
-- **Решение:** [Код или действие, которое помогло]
-- **Предотвращение:** [Как не допустить этого снова]
+**Статусы:** TODO | IN_PROGRESS | READY_FOR_[AGENT] | IN_QA | REWORK | DONE | BLOCKED
 
 ## 5. ОГРАНИЧЕНИЯ
 - Один коммит/логический шаг = одна запись в лог.
 - Запрещено удалять историю из `.ai/PROJECT_LOG.md`.
-- Запрещено менять Sidebar или Global Layout без спец. задачи от Runner.
+- **Главное правило UI: НЕ ЛОМАТЬ САЙТ.**
 - Работа с БД не начинается без подтверждения маппинга от DB Specialist.
+- **ВСЕ агенты работают в:** `/Users/sergejsmaliskins/Projects/travel-cms/`
+- **ВСЕ коммиты в ветку:** `feature/x`
+- **ЗАПРЕЩЕНО использовать worktrees** (fjp, yyd, etc.)
 
 ## 6. ИНИЦИАЛИЗАЦИЯ СЕССИИ
 При каждом новом запросе пользователя, начни с фразы:
