@@ -5793,3 +5793,55 @@ User needs to:
 
 **Результат:** Invoice System Phase 1 → READY_FOR_USER_REVIEW
 **Next Step:** User approval + migration → then API implementation
+
+### 📅 [2026-01-10] | [00:05]
+**Агент:** `CODE WRITER`
+**Задача:** `Invoice API Endpoints Implementation`
+**Статус:** `START ⏳`
+
+**План:**
+1. Создать GET /api/orders/[orderCode]/invoices (список счетов)
+2. Создать POST /api/orders/[orderCode]/invoices (создание счета)
+3. Создать PATCH /api/orders/[orderCode]/invoices/[invoiceId] (отмена счета)
+4. Использовать supabaseAdmin для всех операций
+5. Тестирование
+
+**Pipeline:** CW → QA
+**Estimated:** 10-15 минут
+
+---
+
+### 📅 [2026-01-10] | [00:10]
+**Агент:** `CODE WRITER`
+**Задача:** `Invoice API Endpoints Implementation`
+**Статус:** `SUCCESS ✅`
+
+**Реализовано:**
+1. ✅ **GET /api/orders/[orderCode]/invoices** - Список всех счетов для заказа
+   - Fetches invoices with invoice_items (nested)
+   - Returns empty array if no invoices found
+   
+2. ✅ **POST /api/orders/[orderCode]/invoices** - Создание нового счета
+   - Validation (invoice_number, services required)
+   - Проверка что сервисы не используются в других счетах
+   - Транзакция: invoice → invoice_items → update order_services
+   - Rollback при ошибках
+   - Автоматический статус "draft"
+   
+3. ✅ **PATCH /api/orders/[orderCode]/invoices/[invoiceId]** - Обновление статуса счета
+   - Поддерживает статусы: draft, sent, paid, cancelled, overdue
+   - При отмене (cancelled) — unlock services (invoice_id = null)
+   
+4. ✅ **DELETE /api/orders/[orderCode]/invoices/[invoiceId]** - Удаление счета (alias для PATCH status=cancelled)
+
+**Файлы:**
+- `app/api/orders/[orderCode]/invoices/route.ts` (NEW)
+- `app/api/orders/[orderCode]/invoices/[invoiceId]/route.ts` (NEW)
+
+**Build:** ✅ SUCCESS (0 errors, 2 warnings pdf-parse)
+**Commit:** Pending
+
+**Результат:** Invoice API endpoints → READY_FOR_QA
+**Next Step:** Test full flow: Create Invoice → View in Finance tab → Cancel Invoice
+
+---

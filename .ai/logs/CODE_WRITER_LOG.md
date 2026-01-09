@@ -179,3 +179,34 @@
 **Next:** User needs to run migration in Supabase, then API implementation
 
 ---
+
+### 📅 2026-01-10 | 00:05
+**Задача:** Invoice API Endpoints Implementation
+**Статус:** ⏳ START
+**Действия:**
+- Создаю API endpoints для Invoice System
+- GET /api/orders/[orderCode]/invoices - список счетов
+- POST /api/orders/[orderCode]/invoices - создание счета
+- PATCH /api/orders/[orderCode]/invoices/[invoiceId] - отмена счета
+
+**Причина:** Frontend показывает "Failed to load invoices" - нужны рабочие endpoints
+
+---
+
+### 📅 2026-01-10 | 00:10
+**Задача:** Invoice API Endpoints Implementation
+**Статус:** ✅ SUCCESS
+**Действия:**
+1. ✅ GET /api/orders/[orderCode]/invoices - список счетов (с invoice_items)
+2. ✅ POST /api/orders/[orderCode]/invoices - создание счета (с транзакцией + rollback)
+3. ✅ PATCH /api/orders/[orderCode]/invoices/[invoiceId] - обновление статуса
+4. ✅ DELETE /api/orders/[orderCode]/invoices/[invoiceId] - отмена счета
+5. ✅ Build passed (0 errors)
+
+**Файлы:**
+- `app/api/orders/[orderCode]/invoices/route.ts` (NEW)
+- `app/api/orders/[orderCode]/invoices/[invoiceId]/route.ts` (NEW)
+
+**Next:** QA testing
+
+---
