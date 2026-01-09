@@ -67,11 +67,33 @@ export default function PeriodSelector({
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         endDate = new Date(now.getFullYear(), now.getMonth(), 0);
         break;
-      case "last3Months":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      case "last3Months": {
+        const day = now.getDate() === 1 ? 1 : now.getDate();
+        const targetMonth = now.getMonth() - 2;
+        const targetYear = now.getFullYear();
+        // Handle month overflow
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? targetYear - 1 : targetYear;
+        // Get last day of target month to avoid invalid dates (e.g., Jan 31 -> Nov 31)
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        startDate = new Date(actualYear, actualMonth, safeDay);
         break;
-      case "last6Months":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      }
+        break;
+      case "last6Months": {
+        const day = now.getDate() === 1 ? 1 : now.getDate();
+        const targetMonth = now.getMonth() - 5;
+        const targetYear = now.getFullYear();
+        // Handle month overflow
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? targetYear - 1 : targetYear;
+        // Get last day of target month to avoid invalid dates (e.g., Jan 31 -> Jul 31)
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        startDate = new Date(actualYear, actualMonth, safeDay);
+        break;
+      }
         break;
       case "lastYear":
         startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
@@ -172,11 +194,33 @@ export default function PeriodSelector({
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         endDate = new Date(now.getFullYear(), now.getMonth(), 0);
         break;
-      case "last3Months":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      case "last3Months": {
+        const day = now.getDate() === 1 ? 1 : now.getDate();
+        const targetMonth = now.getMonth() - 2;
+        const targetYear = now.getFullYear();
+        // Handle month overflow
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? targetYear - 1 : targetYear;
+        // Get last day of target month to avoid invalid dates (e.g., Jan 31 -> Nov 31)
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        startDate = new Date(actualYear, actualMonth, safeDay);
         break;
-      case "last6Months":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      }
+        break;
+      case "last6Months": {
+        const day = now.getDate() === 1 ? 1 : now.getDate();
+        const targetMonth = now.getMonth() - 5;
+        const targetYear = now.getFullYear();
+        // Handle month overflow
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? targetYear - 1 : targetYear;
+        // Get last day of target month to avoid invalid dates (e.g., Jan 31 -> Jul 31)
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        startDate = new Date(actualYear, actualMonth, safeDay);
+        break;
+      }
         break;
       case "lastYear":
         startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
