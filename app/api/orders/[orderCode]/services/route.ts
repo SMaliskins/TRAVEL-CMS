@@ -135,6 +135,7 @@ export async function GET(
       refNr: s.ref_nr || "",
       ticketNr: s.ticket_nr || "",
       travellerIds: travellerMap[s.id] || [],
+      invoice_id: s.invoice_id || null,
     }));
 
     return NextResponse.json({ services: mappedServices });
