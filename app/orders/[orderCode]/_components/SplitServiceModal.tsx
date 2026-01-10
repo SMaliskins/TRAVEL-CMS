@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 interface Service {
   id: string;
@@ -72,8 +73,16 @@ export default function SplitServiceModal({
     console.log("[SplitModal] Service payerPartyId:", service.payerPartyId);
     console.log("[SplitModal] Order code:", orderCode);
     try {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      
       // Fetch all parties
-      const allPartiesRes = await fetch("/api/party");
+      const allPartiesRes = await fetch("/api/party", {
+        headers: {
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+      });
       let allParties: Party[] = [];
       if (allPartiesRes.ok) {
         const data = await allPartiesRes.json();
