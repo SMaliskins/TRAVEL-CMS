@@ -595,9 +595,9 @@ export default function OrderServicesBlock({
                               </td>
                             </tr>
                           )}
+                          </React.Fragment>
                         );
                       })}
-                  </React.Fragment>
                 );
               })}
             </tbody>
