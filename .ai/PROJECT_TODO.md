@@ -45,16 +45,23 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | OD2 | Orders | Карта на всю ширину внизу секции клиента | CW→QA | CW | DONE | 10/10 | [09.01 20:45] Map moved fullwidth |
 | OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | CW | DONE | 10/10 | [09.01 20:45] Days/nights added |
 | OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | TODO | - | [09.01 20:45] CW started (complex task) |
-| OD5 | Orders | Чекбоксы для выбора сервисов + UX improvements | CW→QA | CW | READY_FOR_QA | - | [09.01 23:35] Invoice Phase 1 done | - | [09.01] Spec created |
+| OD5 | Orders | Чекбоксы для выбора сервисов + UX improvements | CW→QA | CW | READY_FOR_QA | - | [09.01 23:35] Invoice Phase 1 done |
 | OD6 | Orders | Invoice Creator in Finance tab + live preview | CW→QA | CW | REWORK | - | [10.01 01:00] QA found bug - invoice list not refreshing |
-| **OD6-FIX** | **Orders** | **Fix: Invoice list не обновляется после создания** | **CW→QA** | **CW** | **READY_FOR_QA** | **-** | **[10.01 01:40] CW implemented API integration (commit 0d32698)** |
+| **OD6-FIX** | **Orders** | **Fix: Invoice list не обновляется** | **CW→QA** | **QA** | **REWORK** | **6/10** | **[09.01 23:24] QA found payload key mismatch (items→services)** |
+| **OD6-FIX-2** | **Orders** | **Fix payload key: items → services** | **CW→QA** | **CW** | **TODO** | **-** | **[09.01 23:24] QA: ONE LINE FIX required (InvoiceCreator:98)** |
 
 **Spec:** `.ai/tasks/order-detail-redesign.md`
 
-**OD6-FIX Defect:**
-- **File:** `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (line 68-70)
+**OD6-FIX ORIGINAL Defect (FIXED ✅):**
+- **File:** `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (line 117)
 - **Problem:** `handleSave()` doesn't call `onSuccess()` → list doesn't refresh
-- **Fix:** Add `onSuccess?.();` after alert and before `onClose()`
+- **Fix Applied:** ✅ Added `onSuccess?.();` after alert and before `onClose()`
+
+**OD6-FIX NEW Defect (CRITICAL ❌):**
+- **File:** `app/orders/[orderCode]/_components/InvoiceCreator.tsx` (line 98)
+- **Problem:** Payload sends `items: [...]` but API expects `services: [...]`
+- **Impact:** Invoice creation ALWAYS fails with 400 validation error
+- **Fix Required:** Rename `items` to `services` (ONE LINE CHANGE)
 
 ## PHASE 3: Finance
 
@@ -149,7 +156,6 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | ID | Task | Pipeline | Current | Status | SCORE | Last Action |
 |----|------|----------|---------|--------|-------|-------------|
 | QA-TEST | Тестовая задача: проверить работу QA агента | QA | QA | DONE | 10/10 | [09.01 15:30] QA completed all steps successfully |
-| ORDERS-LIST | Orders INV/PAY/Cities | CW→QA | QA | READY_FOR_QA | - | [10.01 12:30] Implemented |
 
 **Выполнено:**
 1. ✅ Прочитан NEW_PROJECT_RULES.md

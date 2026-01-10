@@ -517,7 +517,7 @@ export default function OrderServicesBlock({
                           </tr>
                           
                           {/* Expanded Details Row */}
-                          {expandedServiceId === service.id && (
+                          {(expandedServiceId === service.id) && (
                             <tr className="bg-gray-50 border-b border-gray-200">
                               <td colSpan={13} className="px-6 py-4">
                                 <div className="flex items-start justify-between gap-6">
