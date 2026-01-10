@@ -44,28 +44,28 @@ export async function GET(request: NextRequest) {
     // Fetch all parties for the company
     const { data: parties, error } = await supabaseAdmin
       .from("party")
-      .select(\`
+      .select(`
         id,
         display_name,
         party_type,
         email,
         phone
-      \`)
+      `)
       .eq("company_id", companyId)
       .order("display_name", { ascending: true });
 
     if (error) {
       console.error("[API /party] Database error:", error);
-      return NextResponse.json({ error: \`Failed to fetch parties: \${error.message}\` }, { status: 500 });
+      return NextResponse.json({ error: `Failed to fetch parties: \${error.message}` }, { status: 500 });
     }
 
-    console.log(\`[API /party] Fetched \${parties?.length || 0} parties\`);
+    console.log(`[API /party] Fetched \${parties?.length || 0} parties`);
 
     return NextResponse.json({ parties: parties || [] });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[API /party] Error:", errorMsg);
-    return NextResponse.json({ error: \`Server error: \${errorMsg}\` }, { status: 500 });
+    return NextResponse.json({ error: `Server error: \${errorMsg}` }, { status: 500 });
   }
 }
 
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("[API /party] Create error:", error);
-      return NextResponse.json({ error: \`Failed to create party: \${error.message}\` }, { status: 500 });
+      return NextResponse.json({ error: `Failed to create party: \${error.message}` }, { status: 500 });
     }
 
     console.log("[API /party] Created party:", newParty.id);
@@ -117,6 +117,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[API /party] Error:", errorMsg);
-    return NextResponse.json({ error: \`Server error: \${errorMsg}\` }, { status: 500 });
+    return NextResponse.json({ error: `Server error: \${errorMsg}` }, { status: 500 });
   }
 }
