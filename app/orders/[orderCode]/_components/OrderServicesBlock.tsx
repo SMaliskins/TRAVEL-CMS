@@ -598,6 +598,7 @@ export default function OrderServicesBlock({
                           </React.Fragment>
                         );
                       })}
+                  </React.Fragment>
                 );
               })}
             </tbody>
