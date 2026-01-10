@@ -420,9 +420,9 @@ const handleSplit = async () => {
                           Client Price (€) {index === parts.length - 1 && "(Auto)"}
                         </label>
                         <input
-                          type="number"
+                          type="text" inputMode="decimal"
                           value={part.clientAmount}
-                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value.replace(",", ".")) || 0)}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
                             index === parts.length - 1 ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300'
