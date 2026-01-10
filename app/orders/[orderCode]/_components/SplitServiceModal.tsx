@@ -47,6 +47,7 @@ export default function SplitServiceModal({
   const [isLoadingParties, setIsLoadingParties] = useState(true);
   const [originalPayer, setOriginalPayer] = useState<Party | null>(null);
   const [showAddPayerModal, setShowAddPayerModal] = useState(false);
+  const [newPayerName, setNewPayerName] = useState("");
   
   const [parts, setParts] = useState<SplitPart[]>([
     { 
@@ -306,17 +307,9 @@ export default function SplitServiceModal({
           <div className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-medium text-gray-900">Split into parts:</h3>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setShowAddPayerModal(true)} 
-                  className="text-sm text-green-600 hover:text-green-800"
-                >
-                  + Add New Payer
-                </button>
-                <button onClick={addPart} className="text-sm text-blue-600 hover:text-blue-800">
-                  + Add Part
-                </button>
-              </div>
+              <button onClick={addPart} className="text-sm text-blue-600 hover:text-blue-800">
+                + Add Part
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -333,6 +326,10 @@ export default function SplitServiceModal({
                         onChange={(partyId) => updatePart(index, "payerPartyId", partyId)}
                         disabled={isLoadingParties}
                         label={`Payer ${index === 0 && originalPayer ? "(Original)" : ""}`}
+                        onAddNew={(name) => {
+                          setNewPayerName(name);
+                          setShowAddPayerModal(true);
+                        }}
                       />
 
                       {/* Client Amount */}
@@ -427,9 +424,14 @@ export default function SplitServiceModal({
       {/* Add New Payer Modal */}
       {showAddPayerModal && (
         <AddPayerModal
-          onClose={() => setShowAddPayerModal(false)}
+          defaultName={newPayerName}
+          onClose={() => {
+            setShowAddPayerModal(false);
+            setNewPayerName("");
+          }}
           onSuccess={() => {
             setShowAddPayerModal(false);
+            setNewPayerName("");
             fetchParties();
           }}
         />
@@ -445,12 +447,14 @@ function PayerCombobox({
   onChange,
   disabled,
   label,
+  onAddNew,
 }: {
   parties: Party[];
   value: string;
   onChange: (partyId: string) => void;
   disabled?: boolean;
   label?: string;
+  onAddNew?: (name: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -461,6 +465,12 @@ function PayerCombobox({
   const filteredParties = parties.filter((p) =>
     p.display_name.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Check if search query matches any existing party
+  const hasExactMatch = filteredParties.some(
+    (p) => p.display_name.toLowerCase() === search.trim().toLowerCase()
+  );
+  const showAddNew = search.trim() && !hasExactMatch && onAddNew;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -501,7 +511,23 @@ function PayerCombobox({
 
       {isOpen && !disabled && (
         <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200 max-h-60 overflow-auto">
-          {filteredParties.length === 0 ? (
+          {showAddNew && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onAddNew) {
+                  onAddNew(search.trim());
+                  setIsOpen(false);
+                  setSearch("");
+                }
+              }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-green-50 text-green-600 font-medium border-b border-gray-200"
+            >
+              + Add &quot;{search.trim()}&quot;
+            </button>
+          )}
+          
+          {filteredParties.length === 0 && !showAddNew ? (
             <div className="px-3 py-2 text-sm text-gray-500">No payers found</div>
           ) : (
             filteredParties.map((party) => (
@@ -534,8 +560,16 @@ function PayerCombobox({
 }
 
 // Simple Add Payer Modal component
-function AddPayerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [displayName, setDisplayName] = useState("");
+function AddPayerModal({ 
+  defaultName, 
+  onClose, 
+  onSuccess 
+}: { 
+  defaultName?: string;
+  onClose: () => void; 
+  onSuccess: () => void;
+}) {
+  const [displayName, setDisplayName] = useState(defaultName || "");
   const [partyType, setPartyType] = useState<"person" | "company">("person");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
