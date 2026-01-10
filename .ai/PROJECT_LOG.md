@@ -7032,3 +7032,56 @@ User needs to:
 
 ---
 
+
+
+### 📅 [2026-01-10] | [21:45]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Fix original payer not loading in Payer #1
+**Статус:** `SUCCESS`
+**Действия:**
+1. **Исправил race condition с setParts:**
+   - Проблема: `setParts` вызывался внутри `fetchParties()` синхронно
+   - Решение: Создал отдельный `useEffect` который срабатывает когда `originalPayer` установлен
+   - Теперь: `fetchParties()` → `setOriginalPayer()` → `useEffect` → `setParts()`
+
+2. **Добавил debug logging в PayerCombobox:**
+   - Логирует value, selectedParty, parties count для первого payer (Original)
+   - Позволяет увидеть получает ли combobox правильный value
+
+**Root cause:**
+- ❌ `setParts` с функцией внутри `fetchParties()` мог не обновлять UI
+- ❌ React мог батчить state updates и parts не обновлялись вовремя
+
+**Решение:**
+- ✅ useEffect отслеживает `originalPayer` и `parties.length`
+- ✅ Когда оба загружены → обновляет первую часть с original payer
+- ✅ Разделение ответственности: fetch → set state → useEffect → update parts
+
+**Коммит:** `516d8f2` - fix: use useEffect to set original payer + add PayerCombobox debug logging
+
+**Next Step:**
+1. **Hard Refresh** (Cmd+Shift+R)
+2. Открой Split modal
+3. Проверь Console логи:
+   - `[SplitModal useEffect] Setting original payer to first part:` — должен сработать
+   - `[PayerCombobox Original]` — должен показать value и selectedParty
+4. Теперь **Payer 1** должен быть заполнен!
+
+**Если НЕ работает — пришли логи:**
+- `[SplitModal INIT]`
+- `[SplitModal] Found original payer:`
+- `[SplitModal useEffect]`
+- `[PayerCombobox Original]`
+
+---
+
+
+### 📅 [2026-01-10] | [21:45]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Fix decimal input and round Service Price
+**Статус:** `START`
+**Действия:**
+1. Ограничить Service Price до 2 знаков после запятой
+2. Разрешить ввод "." и "," в Client Price input
+3. Округлять значения до центов (целые числа где возможно)
+

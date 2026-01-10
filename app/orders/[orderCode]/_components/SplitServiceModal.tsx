@@ -243,7 +243,7 @@ export default function SplitServiceModal({
         
         newParts.forEach((part, i) => {
           const ratio = part.clientAmount / service.clientPrice;
-          newParts[i].serviceAmount = service.servicePrice * ratio;
+          newParts[i].serviceAmount = Math.round(service.servicePrice * ratio * 100) / 100;
         });
       }
     } else {
@@ -438,7 +438,7 @@ const handleSplit = async () => {
                         <input
                           type="number"
                           step="0.01"
-                          value={part.serviceAmount}
+                          value={part.serviceAmount.toFixed(2)}
                           readOnly
                           className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
                         />
