@@ -347,28 +347,20 @@ export default function OrderServicesBlock({
                             <td className="w-20 px-2 py-1 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 {service.invoice_id ? (
-                                  <div className="group relative flex items-center justify-center">
-                                    {/* Clickable Invoice Icon with hover preview */}
+                                  <div className="flex items-center justify-center">
+                                    {/* Clickable Invoice Icon */}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         window.location.href = `/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`;
                                       }}
-                                      className="flex items-center justify-center hover:scale-110 transition-transform cursor-pointer"
-                                      title="Click to view invoice"
+                                      className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
+                                      title="View invoice"
                                     >
-                                      <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                       </svg>
                                     </button>
-                                    
-                                    {/* Hover Preview Tooltip */}
-                                    <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 z-50 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-3">
-                                      <div className="text-xs text-gray-500 mb-2">Invoice Preview</div>
-                                      <div className="text-sm font-medium mb-1">Invoice #: {service.invoice_id?.slice(0, 8)}</div>
-                                      <div className="text-xs text-gray-600">Click icon to view full invoice</div>
-                                      {/* TODO: Load actual invoice data */}
-                                    </div>
                                   </div>
                                 ) : (
                                   <input
