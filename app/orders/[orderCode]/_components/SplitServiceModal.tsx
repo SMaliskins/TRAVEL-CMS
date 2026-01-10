@@ -390,9 +390,8 @@ const handleSplit = async () => {
                         </label>
                         <input
                           type="number"
-                          
-                          value={part.clientAmount}
-                          onChange={(e) => updatePart(index, "clientAmount", normalizeDecimal(e.target.value))}
+                          value={part.clientAmount.toFixed(2)}
+                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
                             index === parts.length - 1 ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300'
@@ -407,8 +406,7 @@ const handleSplit = async () => {
                         </label>
                         <input
                           type="number"
-                          
-                          value={part.serviceAmount.toFixed(2)}
+                          step="0.01"
                           readOnly
                           className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
                         />
