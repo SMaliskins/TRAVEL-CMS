@@ -357,3 +357,68 @@ f2d61b5 - feat: remove invoice hover preview
 
 **Время:** ~1.5 часа (включая отладку JSX ошибок)
 
+
+---
+
+## 2026-01-10 | 17:00-17:30
+
+### Задача: inv-split-services - Split Service Modal & API
+
+**Статус:** ✅ SUCCESS
+
+**Реализация:**
+
+1. **SplitServiceModal.tsx** - новый компонент:
+   - Props: service, orderCode, onClose, onSuccess
+   - State: parts (array of {amount, payerName, payerPartyId?})
+   - Default: 2 части по 50% от оригинальной цены
+   - UI:
+     - Header с названием сервиса
+     - Original service info блок (category, price, supplier, dates)
+     - Список частей: каждая с полями "Payer Name" и "Amount"
+     - Кнопки: "+ Add Part", "Remove" (если > 2)
+     - Total с валидацией (green/red)
+     - Footer: Cancel / Split Service buttons
+   - Валидация:
+     - Total = original price (допуск ±0.01€)
+     - Все части имеют payer name
+   - API call: POST /api/orders/.../services/.../split
+
+2. **API route.ts** - split endpoint:
+   - Path: `/api/orders/[orderCode]/services/[serviceId]/split/route.ts`
+   - Method: POST
+   - Body: `{ parts: [{amount, payerName, payerPartyId?}] }`
+   - Логика:
+     - Fetch original service from DB
+     - Validate: total amount, min 2 parts, no invoice_id
+     - Calculate proportional service_price for each part
+     - Insert new order_services records
+     - Delete original service
+   - Response: `{ success, createdServices, message }`
+
+3. **Integration:**
+   - OrderServicesBlock: добавил import, state, onClick handler
+   - Render modal when splitServiceId is set
+   - Callbacks: onSuccess → fetchServices + close modal
+
+**Технические детали:**
+
+- Пропорциональная цена: `priceRatio = partAmount / originalPrice`, `servicePrice = originalServicePrice * priceRatio`
+- Notes: добавляется `[Split from original service - Payer: {name}]`
+- URL encoding для orderCode в API call
+- Error handling на frontend и backend
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/SplitServiceModal.tsx` - NEW
+- `app/api/orders/[orderCode]/services/[serviceId]/split/route.ts` - NEW
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` - MODIFIED
+
+**Коммит:** `cb98435` - feat: implement Split Service modal and API
+
+**TODO Next:**
+- User testing
+- Возможно: добавить выбор плательщика из списка party (сейчас только текстовое поле)
+- Возможно: показывать split history / parent service info
+
+**Время:** ~30 минут
+
