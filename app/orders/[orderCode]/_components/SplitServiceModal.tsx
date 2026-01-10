@@ -349,9 +349,18 @@ const handleSplit = async () => {
           <div className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-medium text-gray-900">Split into parts:</h3>
-              <button onClick={addPart} className="text-sm text-blue-600 hover:text-blue-800">
-                + Add Part
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={divideEqually}
+                  className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded border border-blue-300 transition-colors"
+                >
+                  Divide Equally
+                </button>
+                <button onClick={addPart} className="text-sm text-blue-600 hover:text-blue-800">
+                  + Add Part
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -381,9 +390,9 @@ const handleSplit = async () => {
                         </label>
                         <input
                           type="number"
-                          step="0.01"
-                          value={part.clientAmount.toFixed(2)}
-                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
+                          
+                          value={part.clientAmount}
+                          onChange={(e) => updatePart(index, "clientAmount", normalizeDecimal(e.target.value))}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
                             index === parts.length - 1 ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300'
@@ -398,7 +407,7 @@ const handleSplit = async () => {
                         </label>
                         <input
                           type="number"
-                          step="0.01"
+                          
                           value={part.serviceAmount.toFixed(2)}
                           readOnly
                           className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
