@@ -6341,3 +6341,90 @@ User needs to:
 - Коммиты: `f4c0e91`, `e1a8a3c` запушены в `feature/x` ✅
 - **Next Step:** `Remove debug logs & QA verification`
 
+
+### 📅 [2026-01-10] | [15:30]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Move Edit/Split/Delete actions inside expanded service row
+**Статус:** `START`
+**Действия:**
+- Начал реализацию UI для Split функционала
+- Решил перенести кнопки Edit/Split/Delete внутрь expanded view сервиса (по запросу пользователя)
+- План: убрать колонку Actions, добавить expanded row при клике на сервис
+
+---
+
+### 📅 [2026-01-10] | [16:45]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Move Edit/Split/Delete actions inside expanded service row
+**Статус:** `SUCCESS`
+**Действия:**
+- Убрал колонку "Actions" из таблицы сервисов
+- Добавил `expandedServiceId` state для отслеживания развернутого сервиса
+- Изменил структуру: каждый сервис в `groupServices.map()` теперь возвращает `<React.Fragment>` с двумя `<tr>`:
+  - Основная строка сервиса (кликабельна, открывает/закрывает expanded view)
+  - Expanded row с деталями сервиса (Category, Supplier, Ref Nr, Ticket Nr) и кнопками действий
+- Кнопки в expanded view: **Edit | Split | Delete** с иконками и hover эффектами
+- Split кнопка скрыта если `service.invoice_id` существует (уже выставлен счет)
+- Исправил несколько JSX ошибок:
+  - Неправильная вложенность Fragment (expanded row был вне map)
+  - Отсутствующий закрывающий `</React.Fragment>` для группы
+  - Недостающий `expandedServiceId` state
+- Убрал Invoice Preview hover tooltip, оставил только кликабельную иконку счета
+**Результат:**
+- ✅ Actions перенесены внутрь expanded view
+- ✅ Таблица стала чище (нет лишней колонки)
+- ✅ UX улучшен: клик на сервис → детали + действия
+- ✅ Split кнопка готова для дальнейшей реализации логики
+**Коммиты:**
+- `2637e33` - Move actions inside expanded service row
+- `fc08d60` - fix: move expanded row inside table structure
+- `2084f85` - fix: JSX syntax
+- `5d254eb` - fix: move expanded row INSIDE map
+- `a473be7` - fix: correct closing parens
+- `979b6bc` - fix: add missing Fragment close
+- `6fe2198` - fix: add missing expandedServiceId state
+- `f2d61b5` - feat: remove invoice hover preview
+**Next Step:** `QA` - тестирование expanded view и подготовка к реализации Split Modal
+
+
+---
+
+### 📅 [2026-01-10] | [17:15]
+**Агент:** `SECURITY_CI`
+**Задача:** `Security Audit /orders API`
+**Статус:** `SUCCESS`
+**Действия:**
+- Провёл аудит безопасности `/api/orders/*` endpoints
+- Проверил authentication, authorization, SQL injection vectors
+- Проанализировал company_id isolation
+- Обнаружил критическую уязвимость в `/api/directory/check-duplicates`
+
+**Результат:**
+- ✅ Orders API защищён: auth + company isolation + parameterized queries
+- ✅ PATCH endpoint имеет whitelist полей (mass assignment protection)
+- 🔴 CRITICAL: `/api/directory/check-duplicates` — нет аутентификации!
+  - Позволяет enumeration attack (email, phone, personal codes)
+  - Нет company isolation — видны данные всех компаний
+- 🟡 MEDIUM: console.log в orders/route.ts (удалить в production)
+- 🟡 MEDIUM: нет rate limiting
+
+**Рекомендации:**
+1. CRITICAL — добавить auth в check-duplicates endpoint
+2. MEDIUM — удалить debug logs
+3. MEDIUM — добавить rate limiting
+
+**Next Step:** `Code Writer` — исправить check-duplicates endpoint
+
+### 📅 [2026-01-10] | [17:00]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Implement SplitServiceModal & API
+**Статус:** `START`
+**Действия:**
+- Начинаю реализацию Split Service функционала
+- План:
+  1. Создать SplitServiceModal.tsx компонент
+  2. Форма для разделения сервиса на N частей с указанием суммы и плательщика для каждой части
+  3. Валидация: сумма всех частей должна равняться оригинальной цене
+  4. API endpoint POST /api/orders/[orderCode]/services/[serviceId]/split
+  5. Создание новых order_services записей с пропорциональными ценами
+

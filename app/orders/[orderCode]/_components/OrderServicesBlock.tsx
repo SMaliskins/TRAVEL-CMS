@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import AssignedTravellersModal from "./AssignedTravellersModal";
+import SplitServiceModal from "./SplitServiceModal";
 import AddServiceModal, { ServiceData } from "./AddServiceModal";
 
 interface Traveller {
@@ -55,6 +56,7 @@ export default function OrderServicesBlock({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
+  const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
 
   // Fetch services from API
@@ -557,7 +559,7 @@ export default function OrderServicesBlock({
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          alert(`Split service: ${service.name} (€${service.clientPrice})`);
+                                          setSplitServiceId(service.id);
                                         }}
                                         className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-blue-600 hover:border-blue-400 transition-all shadow-sm"
                                       >

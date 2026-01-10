@@ -299,3 +299,61 @@
 **Commit:** `0d32698`
 
 ---
+
+---
+
+## 2026-01-10 | 15:30-16:45
+
+### Задача: inv-split-services - Move Edit/Split/Delete to Expanded View
+
+**Статус:** ✅ SUCCESS
+
+**Контекст:**
+Пользователь попросил улучшить визуал Actions кнопок, затем переместить их внутрь сервиса при его раскрытии.
+
+**Реализация:**
+
+1. **Убрал Actions колонку** из таблицы
+2. **Добавил expanded row механизм:**
+   - Новый state: `expandedServiceId: string | null`
+   - Клик на строку → toggle expanded view
+   - Структура: `<Fragment>` с двумя `<tr>`: основная строка + expanded row
+
+3. **Expanded row содержимое:**
+   - **Левая часть:** детали сервиса (Category, Supplier, Ref Nr, Ticket Nr) в grid 2 колонки
+   - **Правая часть:** кнопки действий с border-left разделителем:
+     - **Edit** - открывает EditServiceModal, закрывает expanded view
+     - **Split** - показывает alert (TODO: реализовать SplitServiceModal), скрыта если invoice_id exists
+     - **Delete** - показывает confirm, затем alert (TODO: реализовать delete API)
+
+4. **Исправленные ошибки:**
+   - JSX parsing: неправильная структура Fragment/map
+   - Runtime: отсутствующий expandedServiceId state
+   - HTML structure: неправильное размещение expanded row вне map
+
+5. **Дополнительно:**
+   - Убрал Invoice Preview hover tooltip (мешал UX)
+   - Оставил только кликабельную иконку счета
+
+**Файлы:**
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx` - основные изменения
+
+**Коммиты:**
+```
+2637e33 - Move actions inside expanded service row
+fc08d60 - fix: move expanded row inside table structure
+2084f85 - fix: JSX syntax
+5d254eb - fix: move expanded row INSIDE map
+a473be7 - fix: correct closing parens
+979b6bc - fix: add missing Fragment close
+6fe2198 - fix: add missing expandedServiceId state
+f2d61b5 - feat: remove invoice hover preview
+```
+
+**TODO (Next):**
+- Реализовать `SplitServiceModal` компонент
+- API endpoint для split service: `POST /api/orders/[orderCode]/services/[serviceId]/split`
+- Логика создания новых `order_services` записей с пропорциональными ценами
+
+**Время:** ~1.5 часа (включая отладку JSX ошибок)
+
