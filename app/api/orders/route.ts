@@ -117,8 +117,6 @@ export async function GET(request: NextRequest) {
     
     
     // Get all invoices for these orders with their payment status
-    console.log('🔍 Querying invoices for orderIds:', orderIds);
-    console.log('🔍 Company ID:', companyId);
     const invoicesQuery = await supabaseAdmin
       .from("invoices")
       .select("id, order_id, status, total")
@@ -129,9 +127,7 @@ export async function GET(request: NextRequest) {
     const invoicesError = invoicesQuery.error;
     
     if (invoicesError) {
-      console.error('❌ Error fetching invoices:', invoicesError);
     } else {
-      console.log('✅ Invoices query successful, rows:', invoicesData?.length || 0);
     }
     
     // Build invoice statistics per order
@@ -145,8 +141,6 @@ export async function GET(request: NextRequest) {
     }>();
     
     
-    // DEBUG: Log invoice data
-    console.log('📊 Invoice Statistics Debug:');
     console.log('Total orders:', orderIds.length);
     console.log('Services data:', servicesData?.length || 0, 'rows');
     console.log('Invoices data:', invoicesData?.length || 0, 'rows');
@@ -178,8 +172,6 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // DEBUG: Log final stats
-    console.log("📈 Final Invoice Stats:", Array.from(invoiceStats.entries()).map(([id, s]) => ({ id, ...s })));
     // Transform to frontend format
     // Handle both old schema (without client_display_name) and new schema
     const transformedOrders = (orders || []).map((order: Record<string, unknown>) => ({
