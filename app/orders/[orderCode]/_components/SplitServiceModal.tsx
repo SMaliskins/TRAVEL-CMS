@@ -102,7 +102,12 @@ export default function SplitServiceModal({
       if (orderRes.ok) {
         const orderData = await orderRes.json();
         // Get unique party IDs from order services
-        const servicesRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`);
+        const servicesRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, {
+          headers: {
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include",
+        });
         if (servicesRes.ok) {
           const servicesData = await servicesRes.json();
           orderPartyIds = [
