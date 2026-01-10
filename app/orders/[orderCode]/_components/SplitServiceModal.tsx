@@ -51,6 +51,15 @@ export default function SplitServiceModal({
   onClose,
   onSuccess,
 }: SplitServiceModalProps) {
+  console.log("[SplitModal INIT] Service:", {
+    id: service.id,
+    name: service.name,
+    payerPartyId: service.payerPartyId,
+    clientPartyId: service.clientPartyId,
+    clientPrice: service.clientPrice,
+    servicePrice: service.servicePrice,
+  });
+
   const [parties, setParties] = useState<Party[]>([]);
   const [isLoadingParties, setIsLoadingParties] = useState(true);
   const [originalPayer, setOriginalPayer] = useState<Party | null>(null);
@@ -62,7 +71,7 @@ export default function SplitServiceModal({
       clientAmount: service.clientPrice / 2,
       serviceAmount: service.servicePrice / 2,
       payerName: "",
-      payerPartyId: service.payerPartyId || undefined,
+      payerPartyId: undefined,
     },
     { 
       clientAmount: service.clientPrice / 2,
@@ -142,22 +151,31 @@ export default function SplitServiceModal({
 
       console.log("[SplitModal] Fetched parties:", allParties.length);
       console.log("[SplitModal] Order party IDs:", orderPartyIds);
+      console.log("[SplitModal] Looking for payer with ID:", service.payerPartyId);
       setParties(allParties);
       
       // Find original payer
       if (service.payerPartyId) {
         const payer = allParties.find((p) => p.id === service.payerPartyId);
+        console.log("[SplitModal] Search result for payerPartyId:", payer);
         if (payer) {
           console.log("[SplitModal] Found original payer:", payer.display_name);
           setOriginalPayer(payer);
           // Set first part to original payer
-          setParts(prev => [
-            { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
-            ...prev.slice(1)
-          ]);
+          setParts(prev => {
+            const updated = [
+              { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
+              ...prev.slice(1)
+            ];
+            console.log("[SplitModal] Updated parts with original payer:", updated);
+            return updated;
+          });
         } else {
           console.log("[SplitModal] Original payer NOT found for ID:", service.payerPartyId);
+          console.log("[SplitModal] Available party IDs:", allParties.map(p => p.id));
         }
+      } else {
+        console.log("[SplitModal] No payerPartyId in service, cannot set original payer");
       }
     } catch (err) {
       console.error("Failed to fetch parties:", err);
@@ -417,6 +435,7 @@ const handleSplit = async () => {
                         <input
                           type="number"
                           step="0.01"
+                          value={part.serviceAmount}
                           readOnly
                           className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
                         />
