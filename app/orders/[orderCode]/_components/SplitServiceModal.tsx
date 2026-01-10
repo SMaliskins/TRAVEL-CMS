@@ -45,6 +45,7 @@ export default function SplitServiceModal({
   const [parties, setParties] = useState<Party[]>([]);
   const [isLoadingParties, setIsLoadingParties] = useState(true);
   const [originalPayer, setOriginalPayer] = useState<Party | null>(null);
+  const [showAddPayerModal, setShowAddPayerModal] = useState(false);
   
   const [parts, setParts] = useState<SplitPart[]>([
     { 
@@ -64,33 +65,34 @@ export default function SplitServiceModal({
   const [error, setError] = useState<string | null>(null);
 
   // Fetch parties list
-  useEffect(() => {
-    const fetchParties = async () => {
-      try {
-        const response = await fetch("/api/party");
-        if (response.ok) {
-          const data = await response.json();
-          setParties(data.parties || []);
-          
-          // Find original payer
-          if (service.payerPartyId) {
-            const payer = data.parties.find((p: Party) => p.id === service.payerPartyId);
-            if (payer) {
-              setOriginalPayer(payer);
-              // Set first part to original payer
-              setParts(prev => [
-                { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
-                ...prev.slice(1)
-              ]);
-            }
+  const fetchParties = async () => {
+    try {
+      const response = await fetch("/api/party");
+      if (response.ok) {
+        const data = await response.json();
+        setParties(data.parties || []);
+        
+        // Find original payer
+        if (service.payerPartyId) {
+          const payer = data.parties.find((p: Party) => p.id === service.payerPartyId);
+          if (payer) {
+            setOriginalPayer(payer);
+            // Set first part to original payer
+            setParts(prev => [
+              { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
+              ...prev.slice(1)
+            ]);
           }
         }
-      } catch (err) {
-        console.error("Failed to fetch parties:", err);
-      } finally {
-        setIsLoadingParties(false);
       }
-    };
+    } catch (err) {
+      console.error("Failed to fetch parties:", err);
+    } finally {
+      setIsLoadingParties(false);
+    }
+  };
+
+  useEffect(() => {
     fetchParties();
   }, [service.payerPartyId]);
 
@@ -131,13 +133,26 @@ export default function SplitServiceModal({
         payerName: party?.display_name || "",
       };
     } else if (field === "clientAmount") {
-      // When client amount changes, proportionally adjust service amount
-      const ratio = value / service.clientPrice;
+      // Update this part's client amount
       newParts[index] = {
         ...newParts[index],
         clientAmount: value,
-        serviceAmount: service.servicePrice * ratio,
       };
+      
+      // Auto-calculate last part's amount (remainder)
+      if (index !== parts.length - 1) {
+        const sumOfOthers = newParts
+          .slice(0, -1)
+          .reduce((sum, p) => sum + p.clientAmount, 0);
+        const remainder = service.clientPrice - sumOfOthers;
+        newParts[newParts.length - 1].clientAmount = Math.max(0, remainder);
+        
+        // Also update service amounts proportionally for all parts
+        newParts.forEach((part, i) => {
+          const ratio = part.clientAmount / service.clientPrice;
+          newParts[i].serviceAmount = service.servicePrice * ratio;
+        });
+      }
     } else {
       newParts[index] = { ...newParts[index], [field]: value };
     }
@@ -196,164 +211,293 @@ export default function SplitServiceModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="mb-6 flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Split Service</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Divide &quot;{service.name}&quot; into multiple parts for different payers
-            </p>
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Split Service</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Divide &quot;{service.name}&quot; into multiple parts for different payers
+              </p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
+
+          {/* Original Service Info */}
+          <div className="mb-6 rounded-lg bg-gray-50 p-4">
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="font-medium text-gray-700">Category:</span>
+                <span className="ml-2 text-gray-900">{service.category}</span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Client Price:</span>
+                <span className="ml-2 text-lg font-semibold text-blue-600">€{service.clientPrice.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Service Price:</span>
+                <span className="ml-2 text-lg font-semibold text-green-600">€{service.servicePrice.toFixed(2)}</span>
+              </div>
+              {service.supplier && (
+                <div>
+                  <span className="font-medium text-gray-700">Supplier:</span>
+                  <span className="ml-2 text-gray-900">{service.supplier}</span>
+                </div>
+              )}
+              {service.dateFrom && (
+                <div className="col-span-2">
+                  <span className="font-medium text-gray-700">Dates:</span>
+                  <span className="ml-2 text-gray-900">
+                    {new Date(service.dateFrom).toLocaleDateString()} - {new Date(service.dateTo || service.dateFrom).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+              {originalPayer && (
+                <div className="col-span-3">
+                  <span className="font-medium text-gray-700">Original Payer:</span>
+                  <span className="ml-2 text-gray-900">{originalPayer.display_name}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Split Parts Form */}
+          <div className="mb-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-900">Split into parts:</h3>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowAddPayerModal(true)} 
+                  className="text-sm text-green-600 hover:text-green-800"
+                >
+                  + Add New Payer
+                </button>
+                <button onClick={addPart} className="text-sm text-blue-600 hover:text-blue-800">
+                  + Add Part
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {parts.map((part, index) => (
+                <div key={index} className="rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 text-sm font-medium text-gray-500">#{index + 1}</div>
+                    
+                    <div className="flex-1 grid grid-cols-3 gap-3">
+                      {/* Payer Dropdown */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Payer {index === 0 && originalPayer && "(Original)"}
+                        </label>
+                        <select
+                          value={part.payerPartyId || ""}
+                          onChange={(e) => updatePart(index, "payerPartyId", e.target.value)}
+                          disabled={isLoadingParties}
+                          className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="">Select payer...</option>
+                          {parties.map((party) => (
+                            <option key={party.id} value={party.id}>
+                              {party.display_name} ({party.party_type})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Client Amount */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Client Price (€) {index === parts.length - 1 && "(Auto)"}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={part.clientAmount.toFixed(2)}
+                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
+                          disabled={index === parts.length - 1}
+                          className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
+                            index === parts.length - 1 ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300'
+                          }`}
+                        />
+                      </div>
+
+                      {/* Service Amount (auto-calculated, read-only) */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Service Price (€) (Auto)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={part.serviceAmount.toFixed(2)}
+                          readOnly
+                          className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
+                        />
+                      </div>
+                    </div>
+
+                    {parts.length > 2 && (
+                      <button onClick={() => removePart(index)} className="flex-shrink-0 text-red-600 hover:text-red-800 mt-6" title="Remove part">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Totals Validation */}
+            <div className="mt-4 rounded-lg bg-gray-50 p-4 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">Total Client Price:</span>
+                <span className={`text-lg font-semibold ${isValidClientTotal ? "text-green-600" : "text-red-600"}`}>
+                  €{totalClientAmount.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">Total Service Price:</span>
+                <span className={`text-lg font-semibold ${isValidServiceTotal ? "text-green-600" : "text-red-600"}`}>
+                  €{totalServiceAmount.toFixed(2)}
+                </span>
+              </div>
+              {(!isValidClientTotal || !isValidServiceTotal) && (
+                <p className="text-xs text-red-600">
+                  ⚠️ Totals must equal original amounts
+                </p>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              disabled={isSaving}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSplit}
+              disabled={isSaving || !isValidClientTotal || !isValidServiceTotal || hasEmptyPayers || isLoadingParties}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSaving ? "Splitting..." : "Split Service"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Add New Payer Modal */}
+      {showAddPayerModal && (
+        <AddPayerModal
+          onClose={() => setShowAddPayerModal(false)}
+          onSuccess={() => {
+            setShowAddPayerModal(false);
+            fetchParties(); // Refresh parties list
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// Simple Add Payer Modal component
+function AddPayerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [displayName, setDisplayName] = useState("");
+  const [partyType, setPartyType] = useState<"person" | "company">("person");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!displayName.trim()) {
+      setError("Display name is required");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/party", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          display_name: displayName,
+          party_type: partyType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create payer");
+      }
+
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || "Failed to create payer");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-start justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Add New Payer</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Original Service Info */}
-        <div className="mb-6 rounded-lg bg-gray-50 p-4">
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <span className="font-medium text-gray-700">Category:</span>
-              <span className="ml-2 text-gray-900">{service.category}</span>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Client Price:</span>
-              <span className="ml-2 text-lg font-semibold text-blue-600">€{service.clientPrice.toFixed(2)}</span>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Service Price:</span>
-              <span className="ml-2 text-lg font-semibold text-green-600">€{service.servicePrice.toFixed(2)}</span>
-            </div>
-            {service.supplier && (
-              <div>
-                <span className="font-medium text-gray-700">Supplier:</span>
-                <span className="ml-2 text-gray-900">{service.supplier}</span>
-              </div>
-            )}
-            {service.dateFrom && (
-              <div className="col-span-2">
-                <span className="font-medium text-gray-700">Dates:</span>
-                <span className="ml-2 text-gray-900">
-                  {new Date(service.dateFrom).toLocaleDateString()} - {new Date(service.dateTo || service.dateFrom).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-            {originalPayer && (
-              <div className="col-span-3">
-                <span className="font-medium text-gray-700">Original Payer:</span>
-                <span className="ml-2 text-gray-900">{originalPayer.display_name}</span>
-              </div>
-            )}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Display Name
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Enter payer name"
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Party Type
+            </label>
+            <select
+              value={partyType}
+              onChange={(e) => setPartyType(e.target.value as "person" | "company")}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="person">Person</option>
+              <option value="company">Company</option>
+            </select>
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>
+          )}
         </div>
 
-        {/* Split Parts Form */}
-        <div className="mb-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-900">Split into parts:</h3>
-            <button onClick={addPart} className="text-sm text-blue-600 hover:text-blue-800">
-              + Add Part
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {parts.map((part, index) => (
-              <div key={index} className="rounded-lg border border-gray-200 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 text-sm font-medium text-gray-500">#{index + 1}</div>
-                  
-                  <div className="flex-1 grid grid-cols-3 gap-3">
-                    {/* Payer Dropdown */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Payer {index === 0 && originalPayer && "(Original)"}
-                      </label>
-                      <select
-                        value={part.payerPartyId || ""}
-                        onChange={(e) => updatePart(index, "payerPartyId", e.target.value)}
-                        disabled={isLoadingParties}
-                        className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                      >
-                        <option value="">Select payer...</option>
-                        {parties.map((party) => (
-                          <option key={party.id} value={party.id}>
-                            {party.display_name} ({party.party_type})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Client Amount */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Client Price (€)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={part.clientAmount}
-                        onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
-                        className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Service Amount (auto-calculated, read-only) */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Service Price (€)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={part.serviceAmount.toFixed(2)}
-                        readOnly
-                        className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
-                      />
-                    </div>
-                  </div>
-
-                  {parts.length > 2 && (
-                    <button onClick={() => removePart(index)} className="flex-shrink-0 text-red-600 hover:text-red-800 mt-6" title="Remove part">
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Totals Validation */}
-          <div className="mt-4 rounded-lg bg-gray-50 p-4 space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-gray-700">Total Client Price:</span>
-              <span className={`text-lg font-semibold ${isValidClientTotal ? "text-green-600" : "text-red-600"}`}>
-                €{totalClientAmount.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-gray-700">Total Service Price:</span>
-              <span className={`text-lg font-semibold ${isValidServiceTotal ? "text-green-600" : "text-red-600"}`}>
-                €{totalServiceAmount.toFixed(2)}
-              </span>
-            </div>
-            {(!isValidClientTotal || !isValidServiceTotal) && (
-              <p className="text-xs text-red-600">
-                ⚠️ Totals must equal original amounts
-              </p>
-            )}
-          </div>
-        </div>
-
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>
-        )}
-
-        <div className="flex justify-end gap-3">
+        <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
             disabled={isSaving}
@@ -362,11 +506,11 @@ export default function SplitServiceModal({
             Cancel
           </button>
           <button
-            onClick={handleSplit}
-            disabled={isSaving || !isValidClientTotal || !isValidServiceTotal || hasEmptyPayers || isLoadingParties}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            onClick={handleSave}
+            disabled={isSaving || !displayName.trim()}
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
           >
-            {isSaving ? "Splitting..." : "Split Service"}
+            {isSaving ? "Saving..." : "Add Payer"}
           </button>
         </div>
       </div>
