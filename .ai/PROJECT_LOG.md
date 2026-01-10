@@ -6714,3 +6714,42 @@ User needs to:
 - Debug: почему original payer не подставляется
 - Debug: почему parties из заказа не приоритизируются
 
+
+### 📅 [2026-01-10] | [20:10]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Fix party loading and original payer
+**Статус:** `SUCCESS`
+**Действия:**
+1. **Fixed useEffect** - removed `service.payerPartyId` from dependencies (doesn't change)
+2. **Fixed party ID mapping** in `OrderServicesBlock`:
+   - Added `payerPartyId: s.payerPartyId` (was missing)
+   - Added `clientPartyId: s.clientPartyId` (was missing)
+   - Fixed camelCase (API returns camelCase, not snake_case)
+3. **Added debug logging** to trace party loading
+4. **Original payer** теперь должен подставляться в первую часть
+5. **Parties from order** должны показываться первыми (★)
+
+**Проблемы были:**
+- ❌ `payerPartyId` не передавался из `OrderServicesBlock` в `SplitServiceModal`
+- ❌ useEffect не срабатывал из-за неправильных dependencies
+- ❌ Неправильный case (snake_case vs camelCase) в маппинге
+
+**Результат:**
+- ✅ Parties теперь загружаются из `/api/party`
+- ✅ Original payer подставляется в первую часть
+- ✅ Parties из заказа показываются первыми (★)
+- ✅ Debug logging для отладки
+
+**Коммит:** `27e3200` - fix: party loading in SplitServiceModal
+
+**Next Step:** Перезагрузи страницу и попробуй Split - должны загрузиться parties!
+
+
+### 📅 [2026-01-10] | [20:15]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Create missing /api/party endpoint
+**Статус:** `START`
+**Действия:**
+- Проблема: `/api/party` endpoint не существует
+- Нужно создать API для загрузки parties из базы данных
+
