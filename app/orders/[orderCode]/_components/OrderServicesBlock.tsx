@@ -25,6 +25,8 @@ interface Service {
   supplier: string;
   client: string;
   payer: string;
+  payerPartyId?: string;
+  clientPartyId?: string;
   servicePrice: number;
   clientPrice: number;
   resStatus: "booked" | "confirmed" | "changed" | "rejected" | "cancelled";

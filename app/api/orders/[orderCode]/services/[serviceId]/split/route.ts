@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 interface SplitPart {
   amount: number;
+  serviceAmount?: number;
   payerName: string;
   payerPartyId?: string;
 }
@@ -39,7 +40,7 @@ export async function POST(
     const totalAmount = parts.reduce((sum, part) => sum + part.amount, 0);
     if (Math.abs(totalAmount - originalService.client_price) > 0.01) {
       return NextResponse.json(
-        { error: "Total amount must equal original service price" },
+        { error: "Total client amount must equal original service price" },
         { status: 400 }
       );
     }
@@ -52,8 +53,14 @@ export async function POST(
     }
 
     const newServices = parts.map((part) => {
-      const priceRatio = part.amount / originalService.client_price;
-      const proportionalServicePrice = originalService.service_price * priceRatio;
+      // Use provided serviceAmount or calculate proportionally
+      let proportionalServicePrice;
+      if (part.serviceAmount !== undefined) {
+        proportionalServicePrice = part.serviceAmount;
+      } else {
+        const priceRatio = part.amount / originalService.client_price;
+        proportionalServicePrice = originalService.service_price * priceRatio;
+      }
 
       return {
         order_id: originalService.order_id,
