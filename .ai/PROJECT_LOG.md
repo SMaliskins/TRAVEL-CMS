@@ -6816,3 +6816,35 @@ User needs to:
 
 **Next Step:** После refresh попробуй Split modal - должны загрузиться parties!
 
+
+### 📅 [2026-01-10] | [20:35]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Fix auth token in party fetch
+**Статус:** `SUCCESS`
+**Действия:**
+1. **Root cause:** `fetch("/api/party")` был БЕЗ авторизационного токена
+2. **API требует:** `Authorization: Bearer ...` header
+3. **Fix:**
+   - Добавил `supabase.auth.getSession()` перед fetch
+   - Добавил `Authorization` header с токеном
+   - Добавил `credentials: "include"`
+   - Добавил import для `supabase` из `@/lib/supabaseClient`
+
+**Результат:**
+- ✅ Запросы теперь идут с Authorization header
+- ✅ API должен вернуть 200 вместо 401/404
+
+**Коммит:** `cfd97d0` - fix: add auth token to /api/party fetch
+
+**Next Step:** Hard Refresh → Split modal → Parties должны загрузиться!
+
+
+### 📅 [2026-01-10] | [20:45]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Improve number input UX
+**Статус:** `START`
+**Действия:**
+1. Убрать step="0.01" - разрешить свободный ввод
+2. Принимать "," и "." как decimal separator
+3. Добавить кнопку "Divide Equally" для равного разделения
+

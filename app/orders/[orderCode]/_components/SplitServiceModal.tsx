@@ -38,6 +38,13 @@ interface SplitServiceModalProps {
   onSuccess: () => void;
 }
 
+
+// Helper to normalize decimal input (accept both "," and ".")
+const normalizeDecimal = (value: string): number => {
+  const normalized = value.replace(",", ".");
+  return parseFloat(normalized) || 0;
+};
+
 export default function SplitServiceModal({
   service,
   orderCode,
@@ -215,7 +222,24 @@ export default function SplitServiceModal({
     setParts(newParts);
   };
 
-  const handleSplit = async () => {
+    const divideEqually = () => {
+    const equalClientAmount = Math.round((service.clientPrice / parts.length) * 100) / 100;
+    const equalServiceAmount = Math.round((service.servicePrice / parts.length) * 100) / 100;
+    
+    // Calculate remainder for last part
+    const totalClientExceptLast = equalClientAmount * (parts.length - 1);
+    const totalServiceExceptLast = equalServiceAmount * (parts.length - 1);
+    const lastClientAmount = Math.round((service.clientPrice - totalClientExceptLast) * 100) / 100;
+    const lastServiceAmount = Math.round((service.servicePrice - totalServiceExceptLast) * 100) / 100;
+    
+    setParts(parts.map((part, idx) => ({
+      ...part,
+      clientAmount: idx === parts.length - 1 ? lastClientAmount : equalClientAmount,
+      serviceAmount: idx === parts.length - 1 ? lastServiceAmount : equalServiceAmount,
+    })));
+  };
+
+const handleSplit = async () => {
     if (!isValidClientTotal) {
       setError(`Total client amount (€${totalClientAmount.toFixed(2)}) must equal original (€${service.clientPrice.toFixed(2)})`);
       return;
