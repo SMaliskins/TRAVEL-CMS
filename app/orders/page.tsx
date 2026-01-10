@@ -797,7 +797,7 @@ export default function OrdersPage() {
                                 day.orders.map((order) => {
                                   const daysToDue = getDaysToDue(order.dueDate);
                                   const paymentIcon = getPaymentIcon(order);
-                                  const hasInvoice = (order.invoiceCount || 0) > 0;
+
                                   
                                   return (
                                     <tr
@@ -815,9 +815,14 @@ export default function OrdersPage() {
                                       
                                       {/* Invoice icon column */}
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
-                                        {hasInvoice && (
-                                          <span title="Invoice issued" className="cursor-help">
+                                        {order.hasInvoice && order.allServicesInvoiced && (
+                                          <span title="All services invoiced" className="cursor-help">
                                             📝
+                                          </span>
+                                        )}
+                                        {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && (
+                                          <span title={`${order.invoicedServices}/${order.totalServices} services invoiced`} className="cursor-help">
+                                            📋
                                           </span>
                                         )}
                                       </td>

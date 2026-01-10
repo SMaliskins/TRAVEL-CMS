@@ -149,6 +149,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | ID | Task | Pipeline | Current | Status | SCORE | Last Action |
 |----|------|----------|---------|--------|-------|-------------|
 | QA-TEST | Тестовая задача: проверить работу QA агента | QA | QA | DONE | 10/10 | [09.01 15:30] QA completed all steps successfully |
+| ORDERS-LIST | Orders INV/PAY/Cities | CW→QA | QA | READY_FOR_QA | - | [10.01 12:30] Implemented |
 
 **Выполнено:**
 1. ✅ Прочитан NEW_PROJECT_RULES.md

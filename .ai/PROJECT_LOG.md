@@ -6280,3 +6280,20 @@ User needs to:
 **Next:** Phase 2 (Invoice Layout) или другие задачи по запросу пользователя
 
 ---
+
+### 📅 [2026-01-10] | [12:30]
+**Агент:** `Code Writer`
+**Задача:** `Orders List - INV/PAY/Countries columns logic`
+**Статус:** `SUCCESS`
+**Действия:**
+- Добавил invoice statistics в API `/api/orders` (totalServices, invoicedServices, hasInvoice, allServicesInvoiced, allInvoicesPaid)
+- Обновил `OrderRow` interface с новыми полями invoice статистики
+- INV колонка: 📝 когда все сервисы выписаны в счета, 📋 для частично выписанных
+- PAY колонка: ✅ только когда ВСЕ счета полностью оплачены
+- `formatCountriesWithFlags()`: фильтрация только destinations (удалены origin/return)
+- Запрос к `order_services` и `invoices` таблицам для статистики по каждому order
+**Результат:**
+- Build успешен ✅
+- Коммит `c011cb7` запушен в `feature/x` ✅
+- **Next Step:** `QA verification`
+
