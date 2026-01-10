@@ -104,6 +104,56 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    
+    // Get invoice statistics for all orders
+    const orderIds = (orders || []).map((o: any) => o.id);
+    
+    // Get all services for these orders with their invoice status
+    const { data: servicesData } = await supabaseAdmin
+      .from("order_services")
+      .select("order_id, invoice_id")
+      .in("order_id", orderIds);
+    
+    // Get all invoices for these orders with their payment status
+    const { data: invoicesData } = await supabaseAdmin
+      .from("invoices")
+      .select("id, order_id, status, amount_total, amount_paid")
+      .in("order_id", orderIds);
+    
+    // Build invoice statistics per order
+    const invoiceStats = new Map<string, {
+      totalServices: number;
+      invoicedServices: number;
+      hasInvoice: boolean;
+      allServicesInvoiced: boolean;
+      totalInvoices: number;
+      allInvoicesPaid: boolean;
+    }>();
+    
+    orderIds.forEach((orderId: string) => {
+      const services = (servicesData || []).filter((s: any) => s.order_id === orderId);
+      const invoices = (invoicesData || []).filter((i: any) => i.order_id === orderId);
+      
+      const totalServices = services.length;
+      const invoicedServices = services.filter((s: any) => s.invoice_id).length;
+      const hasInvoice = invoices.length > 0;
+      const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
+      
+      // Check if all invoices are fully paid
+      const allInvoicesPaid = invoices.length > 0 && invoices.every((inv: any) => 
+        inv.status === 'paid' || (inv.amount_paid >= inv.amount_total && inv.amount_total > 0)
+      );
+      
+      invoiceStats.set(orderId, {
+        totalServices,
+        invoicedServices,
+        hasInvoice,
+        allServicesInvoiced,
+        totalInvoices: invoices.length,
+        allInvoicesPaid,
+      });
+    });
+
     // Transform to frontend format
     // Handle both old schema (without client_display_name) and new schema
     const transformedOrders = (orders || []).map((order: Record<string, unknown>) => ({
@@ -122,6 +172,18 @@ export async function GET(request: NextRequest) {
       access: "Owner",
       updated: ((order.updated_at as string) || "").split("T")[0] || "",
       createdAt: ((order.created_at as string) || "").split("T")[0] || "",
+      // Invoice statistics
+      ...(() => {
+        const stats = invoiceStats.get(order.id as string);
+        return {
+          totalServices: stats?.totalServices || 0,
+          invoicedServices: stats?.invoicedServices || 0,
+          hasInvoice: stats?.hasInvoice || false,
+          allServicesInvoiced: stats?.allServicesInvoiced || false,
+          totalInvoices: stats?.totalInvoices || 0,
+          allInvoicesPaid: stats?.allInvoicesPaid || false,
+        };
+      })(),
     }));
 
     return NextResponse.json({ orders: transformedOrders });

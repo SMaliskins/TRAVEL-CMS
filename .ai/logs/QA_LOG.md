@@ -4,6 +4,34 @@
 
 ---
 
+### 📅 2026-01-09 | 23:24
+**Задача:** OD6-FIX — Invoice list refresh fix verification
+**Статус:** ❌ REWORK REQUIRED
+**SCORE:** 6/10
+**Действия:**
+- ✅ Прочитал NEW_PROJECT_RULES.md
+- ✅ Проверил рабочую директорию (pwd, git branch, worktree)
+- ✅ Проверил исправление в InvoiceCreator.tsx (line 117)
+- ✅ Подтвердил: `onSuccess?.()` добавлен корректно
+- ❌ Обнаружен НОВЫЙ дефект: payload key mismatch
+
+**Дефект #1: Payload Key Mismatch (CRITICAL)**
+- **Expected:** `services: [...]` в POST body (API ожидает это)
+- **Actual:** `items: [...]` в InvoiceCreator.tsx line 98
+- **Impact:** Invoice creation ВСЕГДА fail с "Missing required fields: services"
+- **Trace:** app/orders/[orderCode]/_components/InvoiceCreator.tsx:98
+
+**Положительные стороны:**
+1. ✅ `onSuccess?.()` добавлен правильно (line 117)
+2. ✅ Вызов после alert, перед onClose
+3. ✅ API integration реализован полностью
+4. ✅ Error handling корректный
+
+**Результат:** REWORK — нужно исправить payload key (items → services)
+**Next Step:** Code Writer fixes payload key mismatch
+
+---
+
 ### 📅 2026-01-10 | 01:12
 **Задача:** OD6-FIX — Invoice list не обновляется после создания
 **Статус:** ✅ BUG CONFIRMED → READY_FOR_CODE_WRITER

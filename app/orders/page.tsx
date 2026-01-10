@@ -30,6 +30,12 @@ interface OrderRow {
   createdAt?: string;
   invoiceCount?: number;
   dueDate?: string;
+  totalServices?: number;
+  invoicedServices?: number;
+  hasInvoice?: boolean;
+  allServicesInvoiced?: boolean;
+  totalInvoices?: number;
+  allInvoicesPaid?: boolean;
 }
 
 interface OrderTotals {
@@ -246,40 +252,48 @@ function getCountryFlag(countryName: string): string | null {
 function formatCountriesWithFlags(countriesCities: string): string {
   if (!countriesCities) return countriesCities;
 
-  // First, try to split by ", " to detect multiple countries vs country+city
-  // Format examples:
-  // - "Italy, Rome" (country + city)
-  // - "Spain, France" (multiple countries)
-  // - "Italy, Rome, Spain, Barcelona" (mixed)
+  // Remove "origin:" and "return:" prefixes, only show destinations
+  // Format: "origin:Riga, Latvia|Sharm El Sheikh, Egypt|return:Vilnius, Lithuania"
+  // We want only: "Sharm El Sheikh, Egypt"
   
-  // Strategy: split by comma, then try to identify country+city pairs
-  const parts = countriesCities.split(",").map((p) => p.trim());
+  const parts = countriesCities.split('|').map(p => p.trim());
+  const destinations = parts.filter(p => !p.startsWith('origin:') && !p.startsWith('return:'));
   
-  // If we have 2 parts and second part looks like a city (starts with capital, shorter, no known country match)
-  // treat as "Country, City"
-  if (parts.length === 2) {
-    const first = parts[0];
-    const second = parts[1];
-    const firstFlag = getCountryFlag(first);
-    
-    // If first part has a flag, likely it's a country
-    // And second part is probably a city (especially if it doesn't match a known country)
-    if (firstFlag && !getCountryFlag(second)) {
-      // Format: "Country, City"
-      return `${firstFlag} ${first}, ${second}`;
-    }
+  // If no explicit destinations, try to extract from the full string
+  if (destinations.length === 0) {
+    // Fallback: show everything without origin/return prefixes
+    return parts
+      .map(p => p.replace(/^(origin|return):/i, '').trim())
+      .filter(p => p.length > 0)
+      .map(p => {
+        // Try to add country flag
+        const countryMatch = p.match(/,\s*([^,|]+)$/);
+        if (countryMatch) {
+          const country = countryMatch[1].trim();
+          const flag = getCountryFlag(country);
+          if (flag) {
+            return p.replace(country, `${flag} ${country}`);
+          }
+        }
+        return p;
+      })
+      .join(', ');
   }
   
-  // Multiple countries or unknown format - add flags to each known country
-  return parts
-    .map((part) => {
-      const flag = getCountryFlag(part);
-      if (flag) {
-        return `${flag} ${part}`;
+  // Format destinations with flags
+  return destinations
+    .map(dest => {
+      const countryMatch = dest.match(/,\s*([^,|]+)$/);
+      if (countryMatch) {
+        const country = countryMatch[1].trim();
+        const flag = getCountryFlag(country);
+        if (flag) {
+          return dest.replace(country, `${flag} ${country}`);
+        }
       }
-      return part;
+      return dest;
     })
-    .join(", ");
+    .join(', ');
 }
 
 const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; dot: string } => {
@@ -506,13 +520,16 @@ export default function OrdersPage() {
 
   // Helper to get payment status icon
   const getPaymentIcon = (order: OrderRow): { icon: string; tooltip: string } | null => {
-    if (order.paid >= order.amount) {
+    // Full checkmark only if all invoices are fully paid
+    if (order.allInvoicesPaid && order.totalInvoices && order.totalInvoices > 0) {
+      return { icon: "✅", tooltip: "All invoices paid in full" };
+    } else if (order.paid >= order.amount) {
       return { icon: "✅", tooltip: "Paid in full" };
     } else if (order.paid > 0) {
       return { icon: "💵", tooltip: "Partial payment" };
     }
     return null;
-  };
+  };;
 
   // Handle click to navigate to order (changed from double-click to single-click)
   const handleOrderClick = (orderCode: string) => {
