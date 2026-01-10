@@ -515,6 +515,85 @@ export default function OrderServicesBlock({
                               </div>
                             </td>
                           </tr>
+                          
+                          {/* Expanded Details Row */}
+                          {expandedServiceId === service.id && (
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <td colSpan={13} className="px-6 py-4">
+                                <div className="flex items-start justify-between gap-6">
+                                  {/* Left: Service Details */}
+                                  <div className="flex-1 grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <span className="font-medium text-gray-700">Category:</span>
+                                      <span className="ml-2 text-gray-900">{service.category}</span>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-700">Supplier:</span>
+                                      <span className="ml-2 text-gray-900">{service.supplier || '-'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-700">Ref Nr:</span>
+                                      <span className="ml-2 text-gray-900">{service.refNr || '-'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-700">Ticket Nr:</span>
+                                      <span className="ml-2 text-gray-900">{service.ticketNr || '-'}</span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Right: Action Buttons */}
+                                  <div className="flex items-center gap-2 border-l border-gray-300 pl-6">
+                                    {/* Edit Button */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditServiceId(service.id);
+                                        setExpandedServiceId(null);
+                                      }}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-blue-600 hover:border-blue-400 transition-all shadow-sm"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                      Edit
+                                    </button>
+                                    
+                                    {/* Split Button (only if not invoiced) */}
+                                    {!service.invoice_id && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          alert(`Split service: ${service.name} (€${service.clientPrice})`);
+                                        }}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-blue-600 hover:border-blue-400 transition-all shadow-sm"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                        Split
+                                      </button>
+                                    )}
+                                    
+                                    {/* Delete Button */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`Delete service: ${service.name}?`)) {
+                                          alert('Delete functionality coming soon');
+                                        }
+                                      }}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 hover:border-red-400 transition-all shadow-sm"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                         );
                       })}
                   </React.Fragment>
