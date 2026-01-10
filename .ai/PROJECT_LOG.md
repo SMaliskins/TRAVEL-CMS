@@ -1,3 +1,24 @@
+## [2026-01-10 13:30] RUNNER — OD7-BUG Task Created (Service Edit Regression)
+
+**Task:** OD7-BUG | **Status:** TODO → READY_FOR_CW
+**Summary:** Service Edit modal stopped opening (double-click regression)
+**URL:** http://localhost:3000/orders/0002-26-sm
+**Complexity:** 🟡 Simple
+
+**Symptoms:**
+- Double-click on service row does NOT open EditServiceModal
+- Previously worked (OD4 functionality)
+- Likely cause: recent changes to OrderServicesBlock.tsx
+
+**Files to check:**
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+- Look for: `onDoubleClick`, `setEditServiceId`, `EditServiceModal`
+
+**Pipeline:** CW → QA
+**Next:** Code Writer investigates and fixes
+
+---
+
 ## [2026-01-09 23:24] QA — OD6-FIX Verification (CRITICAL DEFECT)
 
 **Task:** OD6-FIX | **Status:** REWORK REQUIRED | **SCORE:** 6/10 ❌
