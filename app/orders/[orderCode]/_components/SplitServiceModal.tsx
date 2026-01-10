@@ -161,15 +161,7 @@ export default function SplitServiceModal({
         if (payer) {
           console.log("[SplitModal] Found original payer:", payer.display_name);
           setOriginalPayer(payer);
-          // Set first part to original payer
-          setParts(prev => {
-            const updated = [
-              { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
-              ...prev.slice(1)
-            ];
-            console.log("[SplitModal] Updated parts with original payer:", updated);
-            return updated;
-          });
+          // Parts will be updated in useEffect when originalPayer changes
         } else {
           console.log("[SplitModal] Original payer NOT found for ID:", service.payerPartyId);
           console.log("[SplitModal] Available party IDs:", allParties.map(p => p.id));
@@ -188,6 +180,17 @@ export default function SplitServiceModal({
     fetchParties();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
+
+  // Update first part with original payer when it's found
+  useEffect(() => {
+    if (originalPayer && parties.length > 0) {
+      console.log("[SplitModal useEffect] Setting original payer to first part:", originalPayer.display_name);
+      setParts(prev => [
+        { ...prev[0], payerName: originalPayer.display_name, payerPartyId: originalPayer.id },
+        ...prev.slice(1)
+      ]);
+    }
+  }, [originalPayer, parties.length]); // Run when originalPayer is set
 
   const totalClientAmount = parts.reduce((sum, part) => sum + part.clientAmount, 0);
   const totalServiceAmount = parts.reduce((sum, part) => sum + part.serviceAmount, 0);
@@ -539,6 +542,17 @@ function PayerCombobox({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const selectedParty = parties.find((p) => p.id === value);
+
+  // Debug logging for first part
+  useEffect(() => {
+    if (label?.includes("Original")) {
+      console.log("[PayerCombobox Original]", {
+        value,
+        selectedParty: selectedParty?.display_name,
+        partiesCount: parties.length,
+      });
+    }
+  }, [value, selectedParty, parties.length, label]);
 
   const filteredParties = parties.filter((p) =>
     p.display_name.toLowerCase().includes(search.toLowerCase())
