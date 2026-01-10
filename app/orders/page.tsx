@@ -523,13 +523,13 @@ export default function OrdersPage() {
     // Full checkmark only if all invoices are fully paid
     if (order.allInvoicesPaid && order.totalInvoices && order.totalInvoices > 0) {
       return { icon: "✅", tooltip: "All invoices paid in full" };
-    } else if (order.paid >= order.amount) {
+    } else if (order.paid > 0 && order.amount > 0 && order.paid >= order.amount) {
       return { icon: "✅", tooltip: "Paid in full" };
     } else if (order.paid > 0) {
       return { icon: "💵", tooltip: "Partial payment" };
     }
     return null;
-  };;
+  };
 
   // Handle click to navigate to order (changed from double-click to single-click)
   const handleOrderClick = (orderCode: string) => {
