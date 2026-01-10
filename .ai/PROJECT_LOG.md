@@ -6531,3 +6531,62 @@ User needs to:
 - Автоматический расчет остатков: при изменении Client Price в любой части (кроме последней), последняя часть автоматически получает остаток (original - sum of others)
 - То же для Service Price
 
+
+### 📅 [2026-01-10] | [18:45]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Add "Add New Payer" + Auto-calculate remainders
+**Статус:** `SUCCESS`
+**Действия:**
+1. **Добавил "Add New Payer" кнопку:**
+   - Зеленая кнопка "+ Add New Payer" рядом с "+ Add Part"
+   - Открывает отдельный модал `AddPayerModal` (z-index 60, выше основного модала)
+   - Простая форма: Display Name + Party Type (person/company)
+   - POST `/api/party` для создания нового party
+   - После успешного создания: закрывает модал и обновляет список parties (`fetchParties()`)
+
+2. **Автоматический расчет остатков:**
+   - При изменении Client Price в любой части (кроме последней):
+     - Суммируются все части кроме последней
+     - Последняя часть = original - sum of others
+     - Все Service Price пересчитываются пропорционально для всех частей
+   - Последняя часть имеет `disabled` input с меткой "(Auto)"
+   - Visual feedback: серый фон для auto-calculated полей
+
+3. **Логика в `updatePart`:**
+   ```typescript
+   if (field === "clientAmount" && index !== parts.length - 1) {
+     // Update this part
+     newParts[index].clientAmount = value;
+     
+     // Calculate remainder for last part
+     const sumOfOthers = newParts.slice(0, -1).reduce((sum, p) => sum + p.clientAmount, 0);
+     newParts[last].clientAmount = original - sumOfOthers;
+     
+     // Proportionally update all service amounts
+     newParts.forEach(p => {
+       p.serviceAmount = original_service * (p.clientAmount / original_client);
+     });
+   }
+   ```
+
+**Результат:**
+- ✅ "Add New Payer" работает, создает party и обновляет dropdown
+- ✅ Автоматический расчет остатков для последней части
+- ✅ Service Price автоматически пропорционален для всех частей
+- ✅ UX: последняя часть read-only, понятно что она автоматическая
+
+**Коммит:** `7252e47` - feat: Add New Payer + auto-calculate split remainders
+
+**Next Step:** User testing
+
+
+### 📅 [2026-01-10] | [19:00]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Combobox payer selector with search
+**Статус:** `START`
+**Действия:**
+- Заменить простой dropdown на Combobox с поиском
+- Input with typing - фильтрация parties по мере ввода
+- Prioritize: сначала показывать payers из текущей заявки, потом всех остальных
+- Fetch parties из текущей заявки через API
+

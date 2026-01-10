@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Service {
   id: string;
@@ -20,6 +20,7 @@ interface Party {
   id: string;
   display_name: string;
   party_type: string;
+  isFromOrder?: boolean;
 }
 
 interface SplitPart {
@@ -67,22 +68,60 @@ export default function SplitServiceModal({
   // Fetch parties list
   const fetchParties = async () => {
     try {
-      const response = await fetch("/api/party");
-      if (response.ok) {
-        const data = await response.json();
-        setParties(data.parties || []);
-        
-        // Find original payer
-        if (service.payerPartyId) {
-          const payer = data.parties.find((p: Party) => p.id === service.payerPartyId);
-          if (payer) {
-            setOriginalPayer(payer);
-            // Set first part to original payer
-            setParts(prev => [
-              { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
-              ...prev.slice(1)
-            ]);
-          }
+      // Fetch all parties
+      const allPartiesRes = await fetch("/api/party");
+      let allParties: Party[] = [];
+      if (allPartiesRes.ok) {
+        const data = await allPartiesRes.json();
+        allParties = (data.parties || []).map((p: any) => ({ ...p, isFromOrder: false }));
+      }
+
+      // Fetch parties from current order (payers)
+      const orderRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`);
+      let orderPartyIds: string[] = [];
+      if (orderRes.ok) {
+        const orderData = await orderRes.json();
+        // Get unique party IDs from order services
+        const servicesRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`);
+        if (servicesRes.ok) {
+          const servicesData = await servicesRes.json();
+          orderPartyIds = [
+            ...new Set([
+              orderData.order?.client_party_id,
+              ...servicesData.services
+                .map((s: any) => s.payer_party_id)
+                .filter(Boolean),
+            ]),
+          ].filter(Boolean) as string[];
+        }
+      }
+
+      // Mark parties from order
+      allParties.forEach((p) => {
+        if (orderPartyIds.includes(p.id)) {
+          p.isFromOrder = true;
+        }
+      });
+
+      // Sort: order parties first, then alphabetically
+      allParties.sort((a, b) => {
+        if (a.isFromOrder && !b.isFromOrder) return -1;
+        if (!a.isFromOrder && b.isFromOrder) return 1;
+        return a.display_name.localeCompare(b.display_name);
+      });
+
+      setParties(allParties);
+      
+      // Find original payer
+      if (service.payerPartyId) {
+        const payer = allParties.find((p) => p.id === service.payerPartyId);
+        if (payer) {
+          setOriginalPayer(payer);
+          // Set first part to original payer
+          setParts(prev => [
+            { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
+            ...prev.slice(1)
+          ]);
         }
       }
     } catch (err) {
@@ -94,7 +133,7 @@ export default function SplitServiceModal({
 
   useEffect(() => {
     fetchParties();
-  }, [service.payerPartyId]);
+  }, [service.payerPartyId, orderCode]);
 
   const totalClientAmount = parts.reduce((sum, part) => sum + part.clientAmount, 0);
   const totalServiceAmount = parts.reduce((sum, part) => sum + part.serviceAmount, 0);
@@ -133,13 +172,11 @@ export default function SplitServiceModal({
         payerName: party?.display_name || "",
       };
     } else if (field === "clientAmount") {
-      // Update this part's client amount
       newParts[index] = {
         ...newParts[index],
         clientAmount: value,
       };
       
-      // Auto-calculate last part's amount (remainder)
       if (index !== parts.length - 1) {
         const sumOfOthers = newParts
           .slice(0, -1)
@@ -147,7 +184,6 @@ export default function SplitServiceModal({
         const remainder = service.clientPrice - sumOfOthers;
         newParts[newParts.length - 1].clientAmount = Math.max(0, remainder);
         
-        // Also update service amounts proportionally for all parts
         newParts.forEach((part, i) => {
           const ratio = part.clientAmount / service.clientPrice;
           newParts[i].serviceAmount = service.servicePrice * ratio;
@@ -290,25 +326,14 @@ export default function SplitServiceModal({
                     <div className="flex-shrink-0 text-sm font-medium text-gray-500">#{index + 1}</div>
                     
                     <div className="flex-1 grid grid-cols-3 gap-3">
-                      {/* Payer Dropdown */}
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Payer {index === 0 && originalPayer && "(Original)"}
-                        </label>
-                        <select
-                          value={part.payerPartyId || ""}
-                          onChange={(e) => updatePart(index, "payerPartyId", e.target.value)}
-                          disabled={isLoadingParties}
-                          className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        >
-                          <option value="">Select payer...</option>
-                          {parties.map((party) => (
-                            <option key={party.id} value={party.id}>
-                              {party.display_name} ({party.party_type})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {/* Payer Combobox */}
+                      <PayerCombobox
+                        parties={parties}
+                        value={part.payerPartyId || ""}
+                        onChange={(partyId) => updatePart(index, "payerPartyId", partyId)}
+                        disabled={isLoadingParties}
+                        label={`Payer ${index === 0 && originalPayer ? "(Original)" : ""}`}
+                      />
 
                       {/* Client Amount */}
                       <div>
@@ -327,7 +352,7 @@ export default function SplitServiceModal({
                         />
                       </div>
 
-                      {/* Service Amount (auto-calculated, read-only) */}
+                      {/* Service Amount */}
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Service Price (€) (Auto)
@@ -405,11 +430,106 @@ export default function SplitServiceModal({
           onClose={() => setShowAddPayerModal(false)}
           onSuccess={() => {
             setShowAddPayerModal(false);
-            fetchParties(); // Refresh parties list
+            fetchParties();
           }}
         />
       )}
     </>
+  );
+}
+
+// Combobox component for payer selection with search
+function PayerCombobox({
+  parties,
+  value,
+  onChange,
+  disabled,
+  label,
+}: {
+  parties: Party[];
+  value: string;
+  onChange: (partyId: string) => void;
+  disabled?: boolean;
+  label?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const selectedParty = parties.find((p) => p.id === value);
+
+  const filteredParties = parties.filter((p) =>
+    p.display_name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <label className="block text-xs font-medium text-gray-700 mb-1">{label || "Payer"}</label>
+      <div className="relative">
+        <input
+          type="text"
+          value={isOpen ? search : selectedParty?.display_name || ""}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            setIsOpen(true);
+            setSearch("");
+          }}
+          placeholder="Type to search or select..."
+          disabled={disabled}
+          className="w-full rounded border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-100"
+        />
+        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+          <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200 max-h-60 overflow-auto">
+          {filteredParties.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">No payers found</div>
+          ) : (
+            filteredParties.map((party) => (
+              <button
+                key={party.id}
+                type="button"
+                onClick={() => {
+                  onChange(party.id);
+                  setIsOpen(false);
+                  setSearch("");
+                }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                  party.id === value ? "bg-blue-100" : ""
+                } ${party.isFromOrder ? "font-medium" : ""}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span>{party.display_name}</span>
+                  <span className="text-xs text-gray-500">
+                    {party.isFromOrder && "★ "}
+                    {party.party_type}
+                  </span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
