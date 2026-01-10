@@ -338,9 +338,10 @@ export default function OrderServicesBlock({
                         const remainingCount = assignedIds.length - 3;
 
                         return (
+                          <React.Fragment key={service.id}>
                           <tr
-                            key={service.id}
-                            className="transition-colors hover:bg-gray-50"
+                            className="group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer"
+                            onClick={() => setExpandedServiceId(expandedServiceId === service.id ? null : service.id)}
                           >
                             <td className="w-20 px-2 py-1 text-center">
                               <div className="flex items-center justify-center gap-1">
