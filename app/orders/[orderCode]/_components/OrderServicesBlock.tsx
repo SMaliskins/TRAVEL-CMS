@@ -459,57 +459,7 @@ export default function OrderServicesBlock({
                                 </button>
                               </div>
                             </td>
-                            
-                            {/* Actions column - icon buttons on hover */}
-                            <td className="px-2 py-1 text-right">
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-2">
-                                {/* Edit */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditServiceId(service.id);
-                                  }}
-                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                  title="Edit service"
-                                >
-                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                
-                                {/* Split (only if not invoiced) */}
-                                {!service.invoice_id && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      alert(`Split service: ${service.name} (€${service.clientPrice})`);
-                                    }}
-                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                    title="Split into multiple invoices"
-                                  >
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                    </svg>
-                                  </button>
-                                )}
-                                
-                                {/* Delete */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (confirm("Delete service: " + service.name + "?")) {
-                                      alert('Delete functionality coming soon');
-                                    }
-                                  }}
-                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                  title="Delete service"
-                                >
-                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
+
                           </tr>
                           
                           {/* Expanded Details Row */}
