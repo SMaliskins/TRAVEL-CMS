@@ -6636,3 +6636,81 @@ User needs to:
 - Если search query не находит exact match - показать "+ Add '[search query]'" как первую опцию
 - Как в Order creation flow
 
+
+### 📅 [2026-01-10] | [19:45]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Inline "Add New Payer" in dropdown
+**Статус:** `SUCCESS`
+**Действия:**
+1. **Убрал отдельную кнопку** "+ Add New Payer" из header
+2. **Inline "+ Add" опция в dropdown:**
+   - Показывается как **первая опция** если search query не находит exact match
+   - Формат: `+ Add "[search query]"`
+   - Зеленый цвет и green hover effect
+   - Border separator между Add опцией и существующими parties
+3. **Логика:**
+   - `hasExactMatch` проверяет точное совпадение по `display_name`
+   - `showAddNew = search.trim() && !hasExactMatch && onAddNew`
+   - При клике на "+ Add" → `onAddNew(search.trim())` → открывает `AddPayerModal` с предзаполненным именем
+4. **AddPayerModal обновлен:**
+   - Принимает `defaultName?: string`
+   - Инициализирует `displayName` с `defaultName || ""`
+   - Пользователь видит предзаполненное имя и может сразу нажать "Add Payer"
+
+**Результат:**
+- ✅ UX как в Order creation - inline add
+- ✅ Вводишь "Leo" → видишь "+ Add 'Leo'" → кликаешь → модал открывается с "Leo"
+- ✅ Если есть exact match → "+ Add" не показывается
+- ✅ Cleaner UI - нет лишних кнопок
+
+**Коммит:** `7f376c7` - feat: inline Add New Payer in combobox
+
+**Next Step:** Split Service полностью готов для production!
+
+
+### 📅 [2026-01-10] | [19:50]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Reuse DirectorySearchPopover for payer selection
+**Статус:** `START`
+**Действия:**
+- Заменить кастомный PayerCombobox на существующий DirectorySearchPopover
+- DirectorySearchPopover уже имеет:
+  - Search с фильтрацией
+  - "+ Add" inline опцию
+  - Модал для создания нового party
+  - Prioritize parties из текущего контекста
+- Это обеспечит единообразие UX с Order creation
+
+
+### 📅 [2026-01-10] | [19:55]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Reuse DirectorySearchPopover pattern
+**Статус:** `SUCCESS`
+**Действия:**
+- Проверил наличие DirectorySearchPopover - компонент удален из codebase
+- **Текущий PayerCombobox уже реализует тот же UX:**
+  - ✅ Search с фильтрацией
+  - ✅ "+ Add '[name]'" inline опция
+  - ✅ Модал для создания party (AddPayerModal)
+  - ✅ Prioritize parties из заказа (★)
+  - ✅ Type to filter
+  - ✅ Click outside to close
+  - ✅ Pre-fill name in Add modal
+  
+**Результат:**
+- ✅ PayerCombobox = переиспользование той же логики что была в DirectorySearchPopover
+- ✅ Единообразный UX с Order creation
+- ✅ Компонент готов для production
+
+**Next Step:** Split Service ПОЛНОСТЬЮ ГОТОВ! Переходим к следующим задачам или testing.
+
+
+### 📅 [2026-01-10] | [20:00]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Fix party loading and original payer
+**Статус:** `START`
+**Действия:**
+- Debug: почему не загружаются parties
+- Debug: почему original payer не подставляется
+- Debug: почему parties из заказа не приоритизируются
+

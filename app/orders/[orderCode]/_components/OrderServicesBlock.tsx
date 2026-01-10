@@ -94,6 +94,8 @@ export default function OrderServicesBlock({
           ticketNr: s.ticketNr || "",
           assignedTravellerIds: s.travellerIds || [],
           invoice_id: s.invoice_id || null,
+          payerPartyId: s.payerPartyId,
+          clientPartyId: s.clientPartyId,
         }));
         setServices(mappedServices);
       }

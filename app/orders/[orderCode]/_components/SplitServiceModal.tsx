@@ -68,6 +68,9 @@ export default function SplitServiceModal({
 
   // Fetch parties list
   const fetchParties = async () => {
+    console.log("[SplitModal] Fetching parties...");
+    console.log("[SplitModal] Service payerPartyId:", service.payerPartyId);
+    console.log("[SplitModal] Order code:", orderCode);
     try {
       // Fetch all parties
       const allPartiesRes = await fetch("/api/party");
@@ -111,18 +114,23 @@ export default function SplitServiceModal({
         return a.display_name.localeCompare(b.display_name);
       });
 
+      console.log("[SplitModal] Fetched parties:", allParties.length);
+      console.log("[SplitModal] Order party IDs:", orderPartyIds);
       setParties(allParties);
       
       // Find original payer
       if (service.payerPartyId) {
         const payer = allParties.find((p) => p.id === service.payerPartyId);
         if (payer) {
+          console.log("[SplitModal] Found original payer:", payer.display_name);
           setOriginalPayer(payer);
           // Set first part to original payer
           setParts(prev => [
             { ...prev[0], payerName: payer.display_name, payerPartyId: payer.id },
             ...prev.slice(1)
           ]);
+        } else {
+          console.log("[SplitModal] Original payer NOT found for ID:", service.payerPartyId);
         }
       }
     } catch (err) {
@@ -134,7 +142,8 @@ export default function SplitServiceModal({
 
   useEffect(() => {
     fetchParties();
-  }, [service.payerPartyId, orderCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   const totalClientAmount = parts.reduce((sum, part) => sum + part.clientAmount, 0);
   const totalServiceAmount = parts.reduce((sum, part) => sum + part.serviceAmount, 0);
