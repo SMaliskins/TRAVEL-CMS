@@ -636,6 +636,20 @@ export default function OrderServicesBlock({
         />
       )}
 
+      {/* Split Service Modal */}
+      {splitServiceId && (
+        <SplitServiceModal
+          service={services.find(s => s.id === splitServiceId)!}
+          orderCode={orderCode}
+          onClose={() => setSplitServiceId(null)}
+          onSuccess={() => {
+            fetchServices();
+            setSplitServiceId(null);
+            setExpandedServiceId(null);
+          }}
+        />
+      )}
+
       {/* Floating Action Bar */}
       {selectedServiceIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.2s_ease-out]">
