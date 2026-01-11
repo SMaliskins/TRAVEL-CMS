@@ -32,6 +32,8 @@ interface InvoiceListProps {
 
 export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadInvoices = async () => {
@@ -86,6 +88,52 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
         {labels[status]}
       </span>
     );
+  };
+
+
+  const handleViewInvoice = (invoiceId: string) => {
+    setViewingInvoiceId(invoiceId);
+    // TODO: Open view-only modal
+    alert('View invoice modal — implementation in progress');
+  };
+
+  const handleEditInvoice = (invoiceId: string) => {
+    setEditingInvoiceId(invoiceId);
+    // TODO: Open edit modal
+    alert('Edit invoice modal — implementation in progress');
+  };
+
+  const handleExportPDF = async (invoiceId: string) => {
+    try {
+      const invoice = invoices.find(inv => inv.id === invoiceId);
+      if (!invoice) return;
+
+      // TODO: Implement PDF export API endpoint
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`
+      );
+      
+      if (!response.ok) {
+        // Временное решение пока нет API
+        alert('PDF export API not yet implemented. Coming soon!');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoice.invoice_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      alert('✅ PDF exported successfully');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('PDF export feature coming soon!');
+    }
   };
 
   const handleCancelInvoice = async (invoiceId: string) => {
@@ -195,10 +243,21 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
               <div className="flex items-center gap-2 pt-3 border-t">
                 <button
                   className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-                  onClick={() => alert('View/Edit coming soon')}
+                  onClick={() => handleViewInvoice(invoice.id)}
                 >
                   View
                 </button>
+                
+                {/* NEW: Edit button — only for Draft/Sent/Overdue */}
+                {(invoice.status === 'draft' || invoice.status === 'sent' || invoice.status === 'overdue') && (
+                  <button
+                    className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors"
+                    onClick={() => handleEditInvoice(invoice.id)}
+                  >
+                    Edit
+                  </button>
+                )}
+                
                 {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
                   <button
                     className="px-3 py-1.5 text-xs font-medium text-red-700 bg-white border border-red-300 rounded hover:bg-red-50 transition-colors"
@@ -209,7 +268,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
                 )}
                 <button
                   className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors"
-                  onClick={() => alert('Export PDF coming soon')}
+                  onClick={() => handleExportPDF(invoice.id)}
                 >
                   Export PDF
                 </button>

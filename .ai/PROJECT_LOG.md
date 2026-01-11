@@ -8011,3 +8011,47 @@ useEffect(() => {
 - Testing checklist (10 пунктов)
 
 **Next Step:** `Спецификация OD2 полная → Code Writer реализует`
+
+### 📅 [2026-01-11] | [20:30]
+**Агент:** `UI System / Consistency`
+**Задача:** `FN1 — Finance Tab: Add Edit Invoice Feature`
+**Статус:** `SUCCESS`
+**Модель:** `Sonnet 4.5` (Complexity: 🟠 Medium)
+**Действия:**
+- ✅ Открыл браузер → http://localhost:3000/orders/0002-26-sm
+- ✅ Перешёл на Finance tab
+- ✅ Сделал screenshot текущего состояния
+- ✅ Прочитал код `InvoiceList.tsx`
+- ✅ Нашёл проблему: нет отдельной кнопки Edit
+- ✅ Создал спецификацию для Code Writer
+
+**Проблемы текущего дизайна:**
+1. ❌ Нет кнопки **Edit** (только "View/Edit coming soon")
+2. ❌ "View" — placeholder alert
+3. ❌ "Export PDF" — placeholder alert
+4. ✅ "Cancel" — работает
+
+**Решение:**
+- ✅ Добавить кнопку **[Edit]** рядом с [View]
+- ✅ Edit только для Draft/Sent (скрыт для Paid/Cancelled)
+- ✅ Создать `EditInvoiceModal` компонент
+- ✅ Разные права редактирования: Draft (все поля) vs Sent (только Due Date, Notes)
+- ✅ Реализовать Export PDF (download blob)
+- ✅ Реализовать View (view-only modal)
+
+**Спецификация:**
+- Файл: `.ai/tasks/code-writer-finance-invoice-edit-feature.md`
+- Разделы:
+  1. Edit Button Visibility Rules (таблица по статусам)
+  2. Edit Invoice Modal (layout, props, editable fields)
+  3. Handler Functions (View, Edit, Export PDF)
+  4. Testing Checklist (15 пунктов)
+  5. Implementation Order (6 фаз)
+
+**Результат:**
+- Создана полная спецификация FN1
+- Готово для Code Writer
+- Estimated Time: 3-4 hours
+- Priority: High (explicit user request)
+
+**Next Step:** `Code Writer → реализует FN1`
