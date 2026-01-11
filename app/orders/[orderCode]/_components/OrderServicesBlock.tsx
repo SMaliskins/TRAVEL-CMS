@@ -34,6 +34,7 @@ interface Service {
   ticketNr?: string;
   assignedTravellerIds: string[];
   invoice_id?: string | null; // NEW: Invoice lock
+  splitGroupId?: string | null; // NEW: Split group identifier
 }
 
 interface OrderServicesBlockProps {
@@ -96,6 +97,7 @@ export default function OrderServicesBlock({
           invoice_id: s.invoice_id || null,
           payerPartyId: s.payerPartyId,
           clientPartyId: s.clientPartyId,
+          splitGroupId: s.splitGroupId || null,
         }));
         setServices(mappedServices);
       }
@@ -344,6 +346,14 @@ export default function OrderServicesBlock({
                         const visibleIds = assignedIds.slice(0, 3);
                         const remainingCount = assignedIds.length - 3;
 
+                        // Calculate split group info
+                        let splitInfo = null;
+                        if (service.splitGroupId) {
+                          const splitGroupServices = services.filter(s => s.splitGroupId === service.splitGroupId);
+                          const splitIndex = splitGroupServices.findIndex(s => s.id === service.id) + 1;
+                          splitInfo = { index: splitIndex, total: splitGroupServices.length };
+                        }
+
                         return (
                           <React.Fragment key={service.id}>
                           <tr
@@ -395,7 +405,14 @@ export default function OrderServicesBlock({
                               {service.category}
                             </td>
                             <td className="px-2 py-1 text-sm font-medium text-gray-900 leading-tight">
-                              {service.name}
+                              <div className="flex items-center gap-2">
+                                {splitInfo && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-800">
+                                    🔗 {splitInfo.index}/{splitInfo.total}
+                                  </span>
+                                )}
+                                <span>{service.name}</span>
+                              </div>
                             </td>
                             <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
                               {service.supplier}
