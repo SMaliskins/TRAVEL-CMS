@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import AssignedTravellersModal from "./AssignedTravellersModal";
 import SplitServiceModal from "./SplitServiceModal";
 import AddServiceModal, { ServiceData } from "./AddServiceModal";
+import DateRangePicker from "@/components/DateRangePicker";
 
 interface Traveller {
   id: string;
@@ -872,29 +873,20 @@ function EditServiceModal({
           </div>
         </div>
 
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date From</label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date To</label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
           {/* Supplier */}
+
+          {/* Dates */}
+          <div>
+            <DateRangePicker
+              label="Service Dates"
+              from={dateFrom}
+              to={dateTo}
+              onChange={(from, to) => {
+                setDateFrom(from || "");
+                setDateTo(to || "");
+              }}
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
             <input
