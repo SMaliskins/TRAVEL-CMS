@@ -192,7 +192,7 @@ export default function SplitServiceModal({
     }
   }, [originalPayer, parties.length]); // Run when originalPayer is set
 
-  const totalClientAmount = parts.reduce((sum, part) => sum + part.clientAmount, 0);
+  const totalClientAmount = parts.reduce((sum, part) => sum + (parseFloat(part.clientAmount) || 0), 0);
   const totalServiceAmount = parts.reduce((sum, part) => sum + part.serviceAmount, 0);
   const isValidClientTotal = Math.abs(totalClientAmount - service.clientPrice) < 0.01;
   const isValidServiceTotal = Math.abs(totalServiceAmount - service.servicePrice) < 0.01;
@@ -242,7 +242,8 @@ export default function SplitServiceModal({
         newParts[newParts.length - 1].clientAmount = Math.max(0, remainder);
         
         newParts.forEach((part, i) => {
-          const ratio = part.clientAmount / service.clientPrice;
+          const clientAmt = parseFloat(part.clientAmount) || 0;
+          const ratio = clientAmt / service.clientPrice;
           newParts[i].serviceAmount = Math.round(service.servicePrice * ratio * 100) / 100;
         });
         
@@ -441,8 +442,8 @@ const handleSplit = async () => {
                             if (parts.length > 2) {
                               val = parts[0] + '.' + parts.slice(1).join('');
                             }
-                            const num = parseFloat(val) || 0;
-                            updatePart(index, "clientAmount", num);
+                            // Store as string during editing, convert for calculations
+                            updatePart(index, "clientAmount", val);
                           }}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
