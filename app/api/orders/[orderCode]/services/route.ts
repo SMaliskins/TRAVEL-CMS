@@ -136,6 +136,7 @@ export async function GET(
       ticketNr: s.ticket_nr || "",
       travellerIds: travellerMap[s.id] || [],
       invoice_id: s.invoice_id || null,
+      splitGroupId: s.split_group_id || null,
     }));
 
     return NextResponse.json({ services: mappedServices });
