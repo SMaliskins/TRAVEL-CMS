@@ -7761,3 +7761,42 @@ Services List:
 - Service Price, Client Price
 - Res Status, Ref Nr, Ticket Nr
 
+
+### 📅 [2026-01-11] | [00:15]
+**Агент:** `CODE_WRITER`
+**Задача:** Full service edit with all fields
+**Статус:** `SUCCESS` ✅
+
+**Добавлено в Edit Service Modal:**
+
+### Frontend (OrderServicesBlock.tsx):
+- ✅ **Dates:** `dateFrom`, `dateTo` (type="date")
+- ✅ **Supplier:** text input
+- ✅ **Client:** text input
+- ✅ **Payer:** text input
+- ✅ Existing: Category, Name, Prices, Status, Ref Nr, Ticket Nr
+
+### Backend API (PATCH /services/[serviceId]):
+- ✅ Fixed: `service_date_from`, `service_date_to` (было `date_from`)
+- ✅ Added: `supplier_name`, `client_name`, `payer_name`
+- ✅ Existing: service_name, category, prices, status, refs
+
+**Результат:**
+Теперь при double-click на сервис → открывается modal со **ВСЕМИ полями** как при создании!
+
+**Коммит:** `4d6f12c` - add full service edit with all fields
+
+**SCORE: 9/10** - Работает, но пока без combobox для parties (можно добавить позже).
+
+
+### 📅 [2026-01-11] | [00:20]
+**Агент:** `CODE_WRITER`
+**Задача:** Improve Edit Service Modal
+**Статус:** `START`
+
+**TODO:**
+1. Date Range picker (как в Create Order)
+2. Disable Client Price если invoice_id существует
+3. Расширить modal (увеличить ширину)
+4. Combobox для Supplier, Client, Payer с поиском по БД
+
