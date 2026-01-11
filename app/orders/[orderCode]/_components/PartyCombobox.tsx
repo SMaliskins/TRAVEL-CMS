@@ -57,10 +57,9 @@ export default function PartyCombobox({
             setIsOpen(true);
           }}
           onFocus={() => {
+            setSearch(selectedParty?.display_name || "");
             setIsOpen(true);
-            setSearch("");
           }}
-          placeholder={placeholder}
           disabled={disabled}
           className="w-full rounded border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-100"
         />

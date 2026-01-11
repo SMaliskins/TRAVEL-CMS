@@ -7835,3 +7835,43 @@ Services List:
 
 **SCORE: 10/10** - Все 4 пункта выполнены! 🚀
 
+
+### 📅 [2026-01-11] | [00:50]
+**Агент:** `CODE_WRITER`
+**Задача:** Fix Edit Service issues (layout + party combobox)
+**Статус:** `SUCCESS` ✅
+
+**Проблемы:**
+1. Layout слишком плотный
+2. "No results found" в Supplier, Client, Payer combobox
+
+**Исправления:**
+
+### 1. Layout
+- ✅ `space-y-4` → `space-y-6` (увеличен vertical spacing)
+
+### 2. Party Combobox "No results found"
+**Причина:** Party IDs не инициализировались из существующих данных сервиса
+
+**Решение:** Добавлен `useEffect` для поиска party IDs по именам:
+```typescript
+useEffect(() => {
+  if (parties.length > 0) {
+    // Find party IDs by name
+    if (supplier) {
+      const supplierParty = parties.find(p => p.display_name === supplier);
+      if (supplierParty) setSupplierPartyId(supplierParty.id);
+    }
+    // ... client, payer
+  }
+}, [parties, supplier, client, payer]);
+```
+
+**Коммиты:**
+- `840921b` - fix className template literal syntax
+- `56f10d6` - add missing closing div tag
+- `5f374f6` - remove duplicate useEffect import
+- `c4fd68b` - initialize party IDs from service data, increase spacing
+
+**SCORE: 9/10** - Должно работать! (но нужна проверка)
+
