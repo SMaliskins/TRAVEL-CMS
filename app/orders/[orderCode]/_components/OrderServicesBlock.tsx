@@ -948,6 +948,7 @@ function EditServiceModal({
             label="Payer"
             placeholder="Search or select payer..."
           />
+        </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
           <button
             onClick={onClose}
