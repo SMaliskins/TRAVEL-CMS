@@ -733,6 +733,25 @@ function EditServiceModal({
     fetchParties();
   }, []);
 
+  // Initialize party IDs from service
+  useEffect(() => {
+    if (parties.length > 0) {
+      // Find party IDs by name
+      if (supplier) {
+        const supplierParty = parties.find(p => p.display_name === supplier);
+        if (supplierParty) setSupplierPartyId(supplierParty.id);
+      }
+      if (client) {
+        const clientParty = parties.find(p => p.display_name === client);
+        if (clientParty) setClientPartyId(clientParty.id);
+      }
+      if (payer) {
+        const payerParty = parties.find(p => p.display_name === payer);
+        if (payerParty) setPayerPartyId(payerParty.id);
+      }
+    }
+  }, [parties, supplier, client, payer]);
+
   const handleSave = async () => {
     setIsSubmitting(true);
     setError(null);
@@ -806,7 +825,7 @@ function EditServiceModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-6">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
               {error}
