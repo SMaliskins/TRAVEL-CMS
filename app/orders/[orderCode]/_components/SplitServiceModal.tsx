@@ -427,10 +427,23 @@ const handleSplit = async () => {
                           Client Price (€) {index === parts.length - 1 && "(Auto)"}
                         </label>
                         <input
-                          type="number"
-                          step="0.01"
-                          value={part.clientAmount}
-                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
+                          type="text"
+                          inputMode="decimal"
+                          value={part.clientAmount || ''}
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            // Replace comma and Cyrillic 'ю' with period
+                            val = val.replace(/[,ю]/g, '.');
+                            // Remove all non-numeric except first dot
+                            val = val.replace(/[^0-9.]/g, '');
+                            // Keep only first dot
+                            const parts = val.split('.');
+                            if (parts.length > 2) {
+                              val = parts[0] + '.' + parts.slice(1).join('');
+                            }
+                            const num = parseFloat(val) || 0;
+                            updatePart(index, "clientAmount", num);
+                          }}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
                             index === parts.length - 1 ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300'
