@@ -167,7 +167,21 @@ export default function SplitServiceModal({
           console.log("[SplitModal] Available party IDs:", allParties.map(p => p.id));
         }
       } else {
-        console.log("[SplitModal] No payerPartyId in service, cannot set original payer");
+        console.log("[SplitModal] No payerPartyId in service, trying fallback by name");
+        // Fallback: try to find payer by name
+        if (service.payer && service.payer !== "-") {
+          const payerByName = allParties.find((p) => 
+            p.display_name.toLowerCase() === service.payer.toLowerCase()
+          );
+          if (payerByName) {
+            console.log("[SplitModal] Found payer by name:", payerByName.display_name);
+            setOriginalPayer(payerByName);
+          } else {
+            console.log("[SplitModal] Payer not found by name:", service.payer);
+          }
+        } else {
+          console.log("[SplitModal] No payer name available");
+        }
       }
     } catch (err) {
       console.error("Failed to fetch parties:", err);
