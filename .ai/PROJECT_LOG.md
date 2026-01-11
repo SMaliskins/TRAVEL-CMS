@@ -7683,3 +7683,28 @@ Could not find the 'name' column
 
 **Next Step:** Перезагрузи → Split Service → ДОЛЖНО РАБОТАТЬ! 🚀
 
+
+### 📅 [2026-01-10] | [23:32]
+**Агент:** `CODE_WRITER`
+**Задача:** Add duplicate payer validation
+**Статус:** `SUCCESS`
+
+**Проблема:** Пользователь мог выбрать одного и того же payer для нескольких частей split.
+
+**Решение:**
+```typescript
+// Check for duplicate payers
+const payerIds = parts.map(p => p.payerPartyId).filter(Boolean);
+const uniquePayerIds = new Set(payerIds);
+if (payerIds.length !== uniquePayerIds.size) {
+  setError("Each part must have a different payer. Remove duplicate payers.");
+  return;
+}
+```
+
+**Коммит:** `de1723e` - add duplicate payer validation
+
+**Результат:** Теперь при попытке выбрать одного payer дважды → показывается ошибка.
+
+**Next Step:** Визуализация split-сервисов (как показывать их в списке)?
+

@@ -52,6 +52,10 @@ export async function POST(
       );
     }
 
+
+    // Generate a unique split_group_id for all parts
+    const { randomUUID } = await import("crypto");
+    const splitGroupId = randomUUID();
     const newServices = parts.map((part) => {
       // Use provided serviceAmount or calculate proportionally
       let proportionalServicePrice;
@@ -80,6 +84,7 @@ export async function POST(
         payer_name: part.payerName || originalService.payer_name,
         client_party_id: originalService.client_party_id,
         client_name: originalService.client_name,
+        split_group_id: splitGroupId,
         notes: originalService.notes
           ? `${originalService.notes}\n[Split from original service - Payer: ${part.payerName}]`
           : `[Split from original service - Payer: ${part.payerName}]`,
