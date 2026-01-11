@@ -245,6 +245,13 @@ export default function SplitServiceModal({
           const ratio = part.clientAmount / service.clientPrice;
           newParts[i].serviceAmount = Math.round(service.servicePrice * ratio * 100) / 100;
         });
+        
+        // Adjust last part to match exact total
+        const totalService = newParts.reduce((sum, p) => sum + p.serviceAmount, 0);
+        const diff = Math.round((service.servicePrice - totalService) * 100) / 100;
+        if (diff !== 0) {
+          newParts[newParts.length - 1].serviceAmount = Math.round((newParts[newParts.length - 1].serviceAmount + diff) * 100) / 100;
+        }
       }
     } else {
       newParts[index] = { ...newParts[index], [field]: value };
