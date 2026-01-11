@@ -429,7 +429,7 @@ const handleSplit = async () => {
                         <input
                           type="number"
                           step="0.01"
-                          value={part.clientAmount.toFixed(2)}
+                          value={part.clientAmount}
                           onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
