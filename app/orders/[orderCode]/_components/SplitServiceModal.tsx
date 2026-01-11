@@ -243,12 +243,7 @@ export default function SplitServiceModal({
         
         newParts.forEach((part, i) => {
           const ratio = part.clientAmount / service.clientPrice;
-          // First part: round to integer, others: round to 2 decimals
-          if (i === 0) {
-            newParts[i].serviceAmount = Math.round(service.servicePrice * ratio);
-          } else {
-            newParts[i].serviceAmount = Math.round(service.servicePrice * ratio * 100) / 100;
-          }
+          newParts[i].serviceAmount = Math.round(service.servicePrice * ratio * 100) / 100;
         });
       }
     } else {
@@ -260,20 +255,18 @@ export default function SplitServiceModal({
 
     const divideEqually = () => {
     const equalClientAmount = Math.round((service.clientPrice / parts.length) * 100) / 100;
-    // First part: integer, others: 2 decimals
-    const firstServiceAmount = Math.round(service.servicePrice / parts.length); // Integer
-    const equalServiceAmount = Math.round((service.servicePrice / parts.length) * 100) / 100; // 2 decimals
+    const equalServiceAmount = Math.round((service.servicePrice / parts.length) * 100) / 100;
     
     // Calculate remainder for last part
     const totalClientExceptLast = equalClientAmount * (parts.length - 1);
-    const totalServiceExceptLast = firstServiceAmount + (equalServiceAmount * (parts.length - 2));
+    const totalServiceExceptLast = equalServiceAmount * (parts.length - 1);
     const lastClientAmount = Math.round((service.clientPrice - totalClientExceptLast) * 100) / 100;
     const lastServiceAmount = Math.round((service.servicePrice - totalServiceExceptLast) * 100) / 100;
     
     setParts(parts.map((part, idx) => ({
       ...part,
       clientAmount: idx === parts.length - 1 ? lastClientAmount : equalClientAmount,
-      serviceAmount: idx === 0 ? firstServiceAmount : (idx === parts.length - 1 ? lastServiceAmount : equalServiceAmount),
+      serviceAmount: idx === parts.length - 1 ? lastServiceAmount : equalServiceAmount,
     })));
   };
 
@@ -427,9 +420,10 @@ const handleSplit = async () => {
                           Client Price (€) {index === parts.length - 1 && "(Auto)"}
                         </label>
                         <input
-                          type="text" inputMode="decimal"
+                          type="number"
+                          step="0.01"
                           value={part.clientAmount}
-                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value.replace(",", ".")) || 0)}
+                          onChange={(e) => updatePart(index, "clientAmount", parseFloat(e.target.value) || 0)}
                           disabled={index === parts.length - 1}
                           className={`w-full rounded border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
                             index === parts.length - 1 ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300'
@@ -445,7 +439,7 @@ const handleSplit = async () => {
                         <input
                           type="number"
                           step="0.01"
-                          value={index === 0 ? Math.round(part.serviceAmount) : part.serviceAmount.toFixed(2)}
+                          value={part.serviceAmount.toFixed(2)}
                           readOnly
                           className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
                         />

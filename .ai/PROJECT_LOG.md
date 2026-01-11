@@ -7110,3 +7110,33 @@ User needs to:
 
 **Next Step:** Перезагрузи страницу → попробуй ввести "45,5" и кликни "Divide Equally"!
 
+
+### 📅 [2026-01-10] | [22:05]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Round first Service Price to integer
+**Статус:** `SUCCESS`
+**Действия:**
+1. **updatePart function:** First part rounds to integer `Math.round(ratio * servicePrice)`, others to 2 decimals
+2. **divideEqually function:** First part is integer, middle parts are 2 decimals, last part is remainder
+3. **Display:** First part shows integer (e.g., `168`), others show 2 decimals (e.g., `165.38`)
+
+**Результат:**
+- ✅ Первая часть Service Price всегда целое число
+- ✅ Остальные части - до 2 знаков после запятой
+- ✅ При "Divide Equally" первая часть тоже целая
+
+**Коммит:** `a824d0b` - round first Service Price part to integer, others to 2 decimals
+
+**Next Step:** Перезагрузи страницу → попробуй Split и "Divide Equally"!
+
+
+### 📅 [2026-01-10] | [22:10]
+**Агент:** `CODE_WRITER`
+**Задача:** `inv-split-services` - Simplify decimal input (remove complexity)
+**Статус:** `START`
+**Действия:**
+1. Убрать всю логику с округлением первой части до целого
+2. Вернуть обычный `type="number" step="0.01"` для обоих полей
+3. Divide Equally просто делит поровну (без спец-правил)
+4. Формат: `x.xx` (2 знака после точки)
+
