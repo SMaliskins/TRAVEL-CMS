@@ -7634,3 +7634,29 @@ amount: parseFloat(p.clientAmount) || 0,  // Преобразуем в числ�
 
 **Next Step:** Перезагрузи страницу → попробуй Split → должно работать!
 
+
+### 📅 [2026-01-10] | [23:24]
+**Агент:** `CODE_WRITER`
+**Задача:** Fix Split API 500 error (column names)
+**Статус:** `SUCCESS`
+
+**Ошибка:**
+```
+Could not find the 'date_from' column of 'order_services' in the schema cache
+```
+
+**Причина:**
+API использовал неправильные имена колонок:
+- ❌ `date_from`, `date_to`
+- ✅ `service_date_from`, `service_date_to`
+
+**Исправление:**
+```typescript
+service_date_from: originalService.service_date_from,
+service_date_to: originalService.service_date_to,
+```
+
+**Коммит:** `6754159` - fix column names in split API
+
+**Next Step:** Перезагрузи страницу → попробуй Split → должно работать!
+
