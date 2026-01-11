@@ -871,7 +871,7 @@ function EditServiceModal({
                 onChange={(e) => setClientPrice(e.target.value)}
                 disabled={!!service.invoice_id}
                 readOnly={!!service.invoice_id}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm${service.invoice_id ? " bg-gray-100 cursor-not-allowed" : ""}`}
+                className={`w-full rounded border border-gray-300 px-3 py-2 text-sm${service.invoice_id ? " bg-gray-100 cursor-not-allowed" : ""}`}
               />
             </div>
           </div>

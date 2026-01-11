@@ -7800,3 +7800,38 @@ Services List:
 3. Расширить modal (увеличить ширину)
 4. Combobox для Supplier, Client, Payer с поиском по БД
 
+
+### 📅 [2026-01-11] | [00:35]
+**Агент:** `CODE_WRITER`
+**Задача:** Improve Edit Service Modal (4 improvements)
+**Статус:** `SUCCESS - ALL COMPLETED` ✅
+
+## ✅ Реализовано:
+
+### 1. Date Range Picker
+- ✅ Заменены два отдельных `<input type="date">` на `<DateRangePicker>`
+- ✅ Календарь с выбором диапазона как в Create Order
+- ✅ Label: "Service Dates"
+
+### 2. Disable Client Price для выставленных сервисов
+- ✅ Добавлен `disabled={!!service.invoice_id}`
+- ✅ Добавлен `readOnly={!!service.invoice_id}`
+- ✅ Grey background (`bg-gray-100`) когда disabled
+
+### 3. Расширена форма
+- ✅ `max-w-lg` → `max-w-3xl` (с 32rem до 48rem)
+- ✅ Добавлен `max-h-[90vh]` и `overflow-y-auto` для scroll
+
+### 4. PartyCombobox для Supplier, Client, Payer
+- ✅ Создан компонент `PartyCombobox.tsx`
+- ✅ Fetch parties из `/api/party`
+- ✅ Dropdown с поиском по имени
+- ✅ Отправка `supplier_party_id`, `client_party_id`, `payer_party_id` в API
+
+**Коммиты:**
+- `b57acfe` - disable Client Price, widen modal
+- `0929cc1` - replace date inputs with DateRangePicker
+- `5279e10` - add PartyCombobox for Supplier, Client, Payer
+
+**SCORE: 10/10** - Все 4 пункта выполнены! 🚀
+
