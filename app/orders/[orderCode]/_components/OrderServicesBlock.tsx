@@ -303,10 +303,10 @@ export default function OrderServicesBlock({
                   Ticket Nr
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Travellers
+                </th>
                 <th className="px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Actions
-                </th>
-                  Travellers
                 </th>
               </tr>
             </thead>
@@ -324,7 +324,7 @@ export default function OrderServicesBlock({
                   <React.Fragment key={`group-${groupKey}`}>
                     {/* Group header row */}
                     <tr
-                      className="cursor-pointer bg-gray-100 hover:bg-gray-200"
+                      className=" bg-gray-100 hover:bg-gray-200"
                       onClick={() => toggleGroup(groupKey)}
                     >
                       <td className="px-3 py-1.5" colSpan={12}>
@@ -361,7 +361,7 @@ export default function OrderServicesBlock({
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className="group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors"
+                            className="group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors "
                             onDoubleClick={() => setEditServiceId(service.id)}
                           >
                             <td className="w-20 px-2 py-1 text-center">
@@ -374,7 +374,7 @@ export default function OrderServicesBlock({
                                         e.stopPropagation();
                                         window.location.href = `/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`;
                                       }}
-                                      className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
+                                      className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all "
                                       title="View invoice"
                                     >
                                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,15 +394,17 @@ export default function OrderServicesBlock({
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 "
                                     aria-label={`Select ${service.name} for invoice`}
                                     title="Select for invoice"
                                   />
                                 )}
                               </div>
                             </td>
-                            <td
-                              className="px-2 py-1 text-sm text-gray-700 leading-tight"
+                            <td 
+                              className="px-2 py-1 text-sm text-gray-700 leading-tight "
+                              onDoubleClick={() => setEditServiceId(service.id)}
+                              title="Double-click to edit"
                             >
                               {service.category}
                             </td>
@@ -483,6 +485,7 @@ export default function OrderServicesBlock({
                               </div>
                             </td>
 
+
                             {/* Cancel Button (hover effect) */}
                             <td className="px-2 py-1 text-right">
                               <button
@@ -493,19 +496,19 @@ export default function OrderServicesBlock({
                                       const response = await fetch(
                                         `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
                                         {
-                                          method: 'PATCH',
-                                          headers: { 'Content-Type': 'application/json' },
+                                          method: "PATCH",
+                                          headers: { "Content-Type": "application/json" },
                                           body: JSON.stringify({
                                             ...service,
-                                            res_status: 'cancelled'
+                                            res_status: "cancelled"
                                           })
                                         }
                                       );
-                                      if (!response.ok) throw new Error('Failed to cancel service');
+                                      if (!response.ok) throw new Error("Failed to cancel service");
                                       fetchServices(); // Reload
                                     } catch (error) {
-                                      console.error('Error cancelling service:', error);
-                                      alert('Failed to cancel service');
+                                      console.error("Error cancelling service:", error);
+                                      alert("Failed to cancel service");
                                     }
                                   }
                                 }}
@@ -515,9 +518,7 @@ export default function OrderServicesBlock({
                                 🚫
                               </button>
                             </td>
-
                           </tr>
-                          
                           )}
                           </React.Fragment>
                         );
