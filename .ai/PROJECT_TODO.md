@@ -48,9 +48,19 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | OD5 | Orders | Чекбоксы для выбора сервисов + UX improvements | CW→QA | QA | DONE | 10/10 | [09.01 23:35] Invoice Phase 1 complete ✅ |
 | OD6 | Orders | Invoice Creator in Finance tab + live preview | CW→QA | QA | DONE | 10/10 | [09.01 22:25] User confirmed: works perfectly! ✅ |
 | **OD6-FIX** | **Orders** | **Fix: Invoice list не обновляется** | **CW→QA** | **QA** | **DONE** | **10/10** | **[09.01 23:24] QA verified: all fixes work ✅** |
-| **OD7-BUG** | **Orders** | **REGRESSION: Service Edit modal не открывается** | **CW→QA** | **CW** | **TODO** | **🟡 Simple** | **[10.01] Runner created task** |
+| **OD7-BUG** | **Orders** | **REGRESSION: Service Edit modal не открывается** | **CW→QA** | **CW** | **TODO** | **🟢 Micro** | **[10.01] Runner created task** |
+| OD8 | Orders | Fix double-click to edit | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
+| OD9 | Orders | Cancel button вместо Delete (hover effect) | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
+| OD10 | Orders | Убрать Expanded Row | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
+| OD11 | Orders | Edit Service Modal — Компактный layout | CW→QA | CW | TODO | 🟠 Medium | [11.01] From UI Audit |
+| OD12 | Orders | DirectoryCombobox component | CW→QA | CW | TODO | 🟠 Medium | [11.01] From UI Audit |
+| OD13 | Orders | Checklist Panel (Attention Required) | CW→QA | CW | TODO | 🟠 Medium | [11.01] From UI Audit |
+| OD14 | Orders | Payment Section fix (€0 bug + CTA) | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
+| OD15 | Orders | Split Modal — Overview + Tabs | CW→QA | CW | TODO | 🔴 Complex | [11.01] From UI Audit |
 
 **Spec:** `.ai/tasks/order-detail-redesign.md`
+**UI Audit:** `.ai/tasks/ui-order-detail-page-0002-26-sm-audit.md`
+**Services Table Spec:** `.ai/tasks/code-writer-od2-services-table-redesign.md`
 
 **OD6-FIX — COMPLETED ✅:**
 - **Original Defect:** `handleSave()` doesn't call `onSuccess()` → list doesn't refresh

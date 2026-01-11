@@ -1,3 +1,32 @@
+## [2026-01-11 19:30] RUNNER — UI Audit Review + Task Breakdown
+
+**Task:** Review UI System Audit | **Status:** DONE
+**Summary:** Created 9 new tasks from UI Audit findings
+
+**Documents Reviewed:**
+1. `.ai/tasks/ui-order-detail-page-0002-26-sm-audit.md` — 15 проблем, оценка 5.5/10
+2. `.ai/tasks/code-writer-od2-services-table-redesign.md` — полная спецификация
+
+**Tasks Created:**
+
+| Phase | ID | Task | Complexity |
+|-------|----| -----|------------|
+| A | OD7-BUG | Fix Service Edit regression | 🟢 Micro |
+| A | OD8 | Fix double-click to edit | 🟡 Simple |
+| A | OD9 | Cancel button вместо Delete | 🟡 Simple |
+| A | OD10 | Убрать Expanded Row | 🟡 Simple |
+| B | OD11 | Edit Modal — Компактный layout | 🟠 Medium |
+| B | OD12 | DirectoryCombobox component | 🟠 Medium |
+| C | OD13 | Checklist Panel | 🟠 Medium |
+| C | OD14 | Payment Section fix | 🟡 Simple |
+| D | OD15 | Split Modal — Overview + Tabs | 🔴 Complex |
+
+**Priority Order:** OD7 → OD8-10 → OD11-12 → OD13-14 → OD15
+**Estimated Total Time:** 9-12 дней
+**Next:** Code Writer starts with OD7-BUG (regression fix)
+
+---
+
 ## [2026-01-10 13:30] RUNNER — OD7-BUG Task Created (Service Edit Regression)
 
 **Task:** OD7-BUG | **Status:** TODO → READY_FOR_CW
@@ -7875,3 +7904,110 @@ useEffect(() => {
 
 **SCORE: 9/10** - Должно работать! (но нужна проверка)
 
+
+### 📅 [2026-01-11] | [19:15]
+**Агент:** `UI System / Consistency`
+**Задача:** `Order Detail Page 0002/26-SM — UI/UX Audit`
+**Статус:** `SUCCESS`
+**Модель:** `Sonnet 4.5` (Complexity: 🟠 Medium)
+**Действия:**
+- ✅ Прочитал NEW_PROJECT_RULES.md — подтверждаю роль UI System
+- ✅ Открыл http://localhost:3000/orders/0002-26-sm
+- ✅ Сделал full-page screenshot + modal screenshot
+- ✅ Провел детальный анализ layout, UX, client-orientation
+- ✅ Создал отчёт: `.ai/tasks/ui-order-detail-page-0002-26-sm-audit.md`
+
+**Обнаружено:**
+- **7 критических проблем** (Client Impact: HIGH)
+  1. ❌ Client Info Section — хаос информации (нет контактов, дублирование)
+  2. ❌ Services Table — 12 колонок (перегружена, redundant fields)
+  3. ❌ Edit Service Modal — плохой UX (no tabs, scrollable, long dropdowns)
+  4. ❌ Payment Section — все €0 (баг или нет данных), no CTA
+  5. ❌ Map — неэффективное использование пространства (30% экрана)
+  6. ❌ Tabs Navigation — не highlight активную
+  7. ❌ No Breadcrumbs / Back Navigation
+- **7 средних проблем** (Usability Issues)
+  8-14. Grouped rows confusing, actions скрыты, dropdowns не нужны, и др.
+
+**Главный вывод:** Layout НЕ клиенто-ориентированный
+- **Проблема:** Информация разбросана, много дубликатов, перегружена деталями
+- **Решение:** 2-column layout (Services 70% + Client sidebar 30%)
+
+**Результат:**
+- **Общая оценка:** 5.5/10
+- Создан полный отчёт (15 проблем + mockup нового layout + 9 задач)
+- **Рекомендации:**
+  - Phase 1 (2-3 дня): Fix Client Section, Simplify Table, Fix Payment
+  - Phase 2 (3-4 дня): Redesign Modal, Improve Grouping, Tabs Highlight
+  - Phase 3 (4-5 дней): 2-Column Layout, Countdown Color, Linked Services
+
+**Next Step:** `Runner рассматривает отчёт → назначает приоритеты → Code Writer реализует`
+
+### 📅 [2026-01-11] | [19:45]
+**Агент:** `UI System / Consistency`
+**Задача:** `OD2 — Services Table Redesign Specification`
+**Статус:** `SUCCESS`
+**Модель:** `Sonnet 4.5` (Complexity: 🔴 Complex)
+**Действия:**
+- ✅ Уточнил все требования с пользователем (Client/Payer, Ticket Nr, Cancel, Split)
+- ✅ Создал полную спецификацию для Code Writer
+- ✅ Описал новую логику Split modal (Overview + Tabs)
+- ✅ Добавил Checklist Panel в Client Card
+- ✅ Убрал Expanded Row, добавил double-click edit
+- ✅ Изменил Delete → Cancel (серая строка + статус "Cancelled")
+
+**Финальные решения:**
+1. **Колонки:** Оставляем все 12 (ничего не убираем)
+2. **Client/Payer:** Дублировать имя, если одинаковые
+3. **Res Status:** По умолчанию `null` ("Not set")
+4. **Cancel button:** Показывать при hover (🚫 вместо 🗑️)
+5. **Expanded Row:** ❌ Убрать
+6. **Double-click:** Открывает Edit modal
+7. **Checklist Panel:** Автоматическая генерация (Ticket Nr, Payment, etc)
+8. **Split modal (1 service):** Оставить как есть
+9. **Split modal (N services):** Overview tab + Individual tabs
+10. **Issue Invoice:** Откладываем сценарий с разными плательщиками
+
+**Результат:**
+- Создан файл: `.ai/tasks/code-writer-od2-services-table-redesign.md`
+- Полная спецификация (9 разделов + testing checklist)
+- **Estimated Time:** 3-4 дня
+- **Next Step:** `Code Writer реализует → QA тестирует → Runner ревьюит`
+
+### 📅 [2026-01-11] | [20:15]
+**Агент:** `UI System / Consistency`
+**Задача:** `Edit Service Modal — Redesign Specification`
+**Статус:** `SUCCESS`
+**Модель:** `Sonnet 4.5` (Complexity: 🟠 Medium)
+**Действия:**
+- ✅ Проанализировал текущее Edit Service modal (screenshot)
+- ✅ Выявил 5 критических проблем UI/UX
+- ✅ Предложил 3 варианта редизайна (A: Компактный, B: Tabs, C: As-is)
+- ✅ Пользователь выбрал **Вариант A: Компактный layout**
+- ✅ Создал детальную спецификацию для Code Writer
+
+**Проблемы текущего дизайна:**
+1. ❌ Supplier/Client/Payer — длинные пустые dropdown'ы (60% высоты)
+2. ❌ Нет визуальной группировки полей
+3. ❌ Service Dates — непонятный формат
+4. ❌ Нет validation hints
+5. ❌ Modal слишком высокий (нужен scroll)
+
+**Решение (Вариант A):**
+- ✅ Grouped cards (Basic Info, Pricing, Parties, References)
+- ✅ Компактный layout (все на одном экране, no scroll)
+- ✅ DirectoryCombobox вместо длинных dropdown'ов
+- ✅ Auto-calculated margin (€37 / 25%)
+- ✅ Required fields помечены (*)
+- ✅ Smart defaults (Client → Payer)
+- ✅ Visual hints ("Your cost", "Who pays")
+
+**Результат:**
+- Добавлена секция "11. EDIT SERVICE MODAL" в спецификацию
+- Полный React/TypeScript код компонента
+- DirectoryCombobox component (autocomplete)
+- Smart defaults logic
+- Validation rules
+- Testing checklist (10 пунктов)
+
+**Next Step:** `Спецификация OD2 полная → Code Writer реализует`
