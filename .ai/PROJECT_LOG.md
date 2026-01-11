@@ -7660,3 +7660,26 @@ service_date_to: originalService.service_date_to,
 
 **Next Step:** Перезагрузи страницу → попробуй Split → должно работать!
 
+
+### 📅 [2026-01-10] | [23:28]
+**Агент:** `CODE_WRITER`
+**Задача:** Fix ALL column names in split API
+**Статус:** `SUCCESS`
+
+**Ошибки:**
+```
+Could not find the 'name' column
+```
+
+**Исправления (ALL):**
+- ❌ `name` → ✅ `service_name`
+- ❌ `service_provider` → ✅ `supplier_party_id` + `supplier_name`
+- ❌ `reservation_status` → ✅ `res_status`
+- ✅ Added: `client_name`
+- ✅ Added: `payer_name`
+- ✅ Fixed: `service_date_from/to`
+
+**Коммит:** `3c53385` - correct ALL column names
+
+**Next Step:** Перезагрузи → Split Service → ДОЛЖНО РАБОТАТЬ! 🚀
+

@@ -307,6 +307,13 @@ const handleSplit = async () => {
       setError("All parts must have a payer selected");
       return;
     }
+    // Check for duplicate payers
+    const payerIds = parts.map(p => p.payerPartyId).filter(Boolean);
+    const uniquePayerIds = new Set(payerIds);
+    if (payerIds.length !== uniquePayerIds.size) {
+      setError("Each part must have a different payer. Remove duplicate payers.");
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
