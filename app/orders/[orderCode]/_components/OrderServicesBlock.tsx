@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import AssignedTravellersModal from "./AssignedTravellersModal";
 import SplitServiceModal from "./SplitServiceModal";
 import AddServiceModal, { ServiceData } from "./AddServiceModal";
 import DateRangePicker from "@/components/DateRangePicker";
+import PartyCombobox from "./PartyCombobox";
 
 interface Traveller {
   id: string;
@@ -711,6 +713,26 @@ function EditServiceModal({
   const [supplier, setSupplier] = useState(service.supplier || "");
   const [client, setClient] = useState(service.client || "");
   const [payer, setPayer] = useState(service.payer || "");
+  const [parties, setParties] = useState<Array<{ id: string; display_name: string }>>([]);
+  const [supplierPartyId, setSupplierPartyId] = useState<string>("");
+  const [clientPartyId, setClientPartyId] = useState<string>("");
+  const [payerPartyId, setPayerPartyId] = useState<string>("");
+
+  // Fetch parties
+  useEffect(() => {
+    const fetchParties = async () => {
+      try {
+        const response = await fetch("/api/party");
+        if (response.ok) {
+          const data = await response.json();
+          setParties(data.parties || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch parties:", err);
+      }
+    };
+    fetchParties();
+  }, []);
 
   const handleSave = async () => {
     setIsSubmitting(true);
@@ -737,8 +759,11 @@ function EditServiceModal({
           service_date_to: dateTo || null,
           ticket_nr: ticketNr,
           supplier_name: supplier || null,
+          supplier_party_id: supplierPartyId || null,
           client_name: client || null,
+          client_party_id: clientPartyId || null,
           payer_name: payer || null,
+          payer_party_id: payerPartyId || null,
         }),
       });
 
@@ -886,42 +911,43 @@ function EditServiceModal({
                 setDateTo(to || "");
               }}
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
-            <input
-              type="text"
-              value={supplier}
-              onChange={(e) => setSupplier(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              placeholder="Supplier name"
-            />
-          </div>
+
+
+          {/* Supplier */}
+          <PartyCombobox
+            parties={parties}
+            value={supplierPartyId}
+            onChange={(id, name) => {
+              setSupplierPartyId(id);
+              setSupplier(name);
+            }}
+            label="Supplier"
+            placeholder="Search or select supplier..."
+          />
 
           {/* Client */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-            <input
-              type="text"
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              placeholder="Client name"
-            />
-          </div>
+          <PartyCombobox
+            parties={parties}
+            value={clientPartyId}
+            onChange={(id, name) => {
+              setClientPartyId(id);
+              setClient(name);
+            }}
+            label="Client"
+            placeholder="Search or select client..."
+          />
 
           {/* Payer */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
-            <input
-              type="text"
-              value={payer}
-              onChange={(e) => setPayer(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              placeholder="Payer name"
-            />
-          </div>
-
+          <PartyCombobox
+            parties={parties}
+            value={payerPartyId}
+            onChange={(id, name) => {
+              setPayerPartyId(id);
+              setPayer(name);
+            }}
+            label="Payer"
+            placeholder="Search or select payer..."
+          />
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
           <button
             onClick={onClose}
