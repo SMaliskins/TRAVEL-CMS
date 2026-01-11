@@ -7708,3 +7708,56 @@ if (payerIds.length !== uniquePayerIds.size) {
 
 **Next Step:** Визуализация split-сервисов (как показывать их в списке)?
 
+
+### 📅 [2026-01-10] | [23:42]
+**Агент:** `CODE_WRITER`
+**Задача:** Add split services visualization
+**Статус:** `SUCCESS - FULLY COMPLETED` ✅
+
+**Реализовано:**
+
+### 1. Database Schema
+- Добавлена колонка `split_group_id UUID` в `order_services`
+- Создан индекс для производительности
+- Миграция: `migrations/add_split_group_id.sql`
+
+### 2. Backend API
+- Split API генерирует UUID для группы: `const splitGroupId = randomUUID();`
+- Все части split получают одинаковый `split_group_id`
+- GET services API возвращает `splitGroupId`
+
+### 3. Frontend UI
+- Добавлен интерфейс: `splitGroupId?: string | null`
+- Расчёт split info (индекс и total)
+- **Визуальный индикатор:** 🔗 badge "1/3", "2/3", "3/3"
+- Цвет: purple-100 фон, purple-800 текст
+
+**Пример визуализации:**
+```
+Services List:
+┌─────────────────────────────────────┐
+│ 🔗 1/3  Riga-Dubai  │ Antons  │ €222 │
+│ 🔗 2/3  Riga-Dubai  │ Smith   │ €222 │
+│ 🔗 3/3  Riga-Dubai  │ Johnson │ €111 │
+└─────────────────────────────────────┘
+```
+
+**Коммиты:**
+- `0ee9de8` - add split_group_id to split API and migration
+- `df31630` - add splitGroupId to GET services API response
+- `6a00d32` - add split group visual indicator (🔗 badge)
+
+**SCORE: 10/10** - Полностью рабочая визуализация split-сервисов! 🚀
+
+
+### 📅 [2026-01-11] | [00:00]
+**Агент:** `CODE_WRITER`
+**Задача:** Implement full service edit with all fields
+**Статус:** `START`
+
+**Цель:** Добавить редактирование ВСЕХ полей сервиса (как при создании):
+- Category, Service Name, Dates
+- Supplier, Client, Payer (с combobox)
+- Service Price, Client Price
+- Res Status, Ref Nr, Ticket Nr
+

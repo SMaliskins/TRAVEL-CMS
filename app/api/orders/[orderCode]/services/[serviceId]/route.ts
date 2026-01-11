@@ -43,8 +43,8 @@ export async function PATCH(
     if (body.client_name !== undefined) updates.client_name = body.client_name;
     if (body.payer_party_id !== undefined) updates.payer_party_id = body.payer_party_id;
     if (body.payer_name !== undefined) updates.payer_name = body.payer_name;
-    if (body.date_from !== undefined) updates.date_from = body.date_from;
-    if (body.date_to !== undefined) updates.date_to = body.date_to;
+    if (body.service_date_from !== undefined) updates.service_date_from = body.service_date_from;
+    if (body.service_date_to !== undefined) updates.service_date_to = body.service_date_to;
 
     updates.updated_at = new Date().toISOString();
 

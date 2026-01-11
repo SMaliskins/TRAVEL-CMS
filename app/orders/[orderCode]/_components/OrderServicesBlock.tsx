@@ -705,6 +705,11 @@ function EditServiceModal({
   const [resStatus, setResStatus] = useState(service.resStatus);
   const [refNr, setRefNr] = useState(service.refNr || "");
   const [ticketNr, setTicketNr] = useState(service.ticketNr || "");
+  const [dateFrom, setDateFrom] = useState(service.dateFrom || "");
+  const [dateTo, setDateTo] = useState(service.dateTo || "");
+  const [supplier, setSupplier] = useState(service.supplier || "");
+  const [client, setClient] = useState(service.client || "");
+  const [payer, setPayer] = useState(service.payer || "");
 
   const handleSave = async () => {
     setIsSubmitting(true);
@@ -727,7 +732,12 @@ function EditServiceModal({
           client_price: parseFloat(clientPrice) || 0,
           res_status: resStatus,
           ref_nr: refNr,
+          service_date_from: dateFrom || null,
+          service_date_to: dateTo || null,
           ticket_nr: ticketNr,
+          supplier_name: supplier || null,
+          client_name: client || null,
+          payer_name: payer || null,
         }),
       });
 
@@ -741,6 +751,11 @@ function EditServiceModal({
           resStatus,
           refNr,
           ticketNr,
+          dateFrom,
+          dateTo,
+          supplier,
+          client,
+          payer,
         });
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -854,6 +869,64 @@ function EditServiceModal({
             </div>
           </div>
         </div>
+
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Supplier */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+            <input
+              type="text"
+              value={supplier}
+              onChange={(e) => setSupplier(e.target.value)}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Supplier name"
+            />
+          </div>
+
+          {/* Client */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+            <input
+              type="text"
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Client name"
+            />
+          </div>
+
+          {/* Payer */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
+            <input
+              type="text"
+              value={payer}
+              onChange={(e) => setPayer(e.target.value)}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Payer name"
+            />
+          </div>
 
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
           <button
