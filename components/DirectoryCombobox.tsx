@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
 
 interface DirectoryItem {
   id: string;
@@ -36,7 +35,7 @@ export default function DirectoryCombobox({
   const [loading, setLoading] = useState(false);
 
   // Fetch directory on mount
-  useState(() => {
+  useEffect(() => {
     const fetchDirectory = async () => {
       setLoading(true);
       try {
@@ -89,7 +88,7 @@ export default function DirectoryCombobox({
         <span className="truncate">
           {selectedItem ? selectedItem.name : placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" />
+        <svg className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
       </button>
 
       {open && (
@@ -148,7 +147,7 @@ export default function DirectoryCombobox({
                       }}
                       className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2"
                     >
-                      <Check
+                      <svg
                         className={`h-4 w-4 flex-shrink-0 ${
                           value === item.id ? 'opacity-100' : 'opacity-0'
                         }`}

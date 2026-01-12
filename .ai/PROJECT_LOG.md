@@ -8241,3 +8241,264 @@ useEffect(() => {
 
 **Next Task:** OD13 — Checklist Panel (Attention Required) 🟠 Medium
 
+
+### 📅 [2026-01-11] | [23:30]
+**Агент:** `Code Writer`
+**Задача:** `OD13 — Checklist Panel (Attention Required)`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5` (Complexity: 🟠 Medium)
+
+**Действия:**
+- ✅ Создал новый компонент `ChecklistPanel.tsx`
+- ✅ Добавил в `OrderClientSection.tsx` (правый sidebar)
+- ✅ Mock data: 2 checklist items (Ticket Nr, Payment pending)
+- ✅ Клик на checkbox toggles resolved state
+- ✅ Line-through styling для resolved items
+- ✅ Amber design (⚠️ icon + amber-50/200)
+
+**Изменённые файлы:**
+1. `app/orders/[orderCode]/_components/ChecklistPanel.tsx` (NEW)
+   - Standalone component с mock data
+   - State management для toggle
+2. `app/orders/[orderCode]/_components/OrderClientSection.tsx`
+   - Import ChecklistPanel
+   - Added before TripMap
+
+**Результат:**
+✅ **Checklist Panel работает!**
+✅ **Modern UI** — amber styling, clear visual hierarchy
+✅ **Interactive** — checkboxes toggleable, line-through effect
+⏳ **TODO:** Auto-generation logic (parse order services)
+
+**Коммит:** `a844e8d` - feat(orders): OD13 - Checklist Panel (mock data)
+**Branch:** `feature/x`
+
+**Next Tasks:** 
+- OD11 — Edit Service Modal (🟠 Medium)
+- OD12 — DirectoryCombobox (🟠 Medium)
+- OD15 — Split Modal (🔴 Complex)
+
+---
+
+## ✅ **ИТОГОВЫЙ ОТЧЁТ ЗА СЕГОДНЯ (11.01.2026):**
+
+**Выполнено:** 6 из 8 задач (75%)
+- ✅ OD8 — Double-click edit service
+- ✅ OD9 — Cancel button (hover effect)
+- ✅ OD10 — Remove Expanded Row
+- ✅ OD13 — Checklist Panel (mock data)
+- ✅ OD14 — Payment Section empty state
+- ✅ FN1 Phase 1 — Edit Invoice button
+
+**Осталось:** 3 задачи (Medium-Complex)
+- ⏳ OD11 — Edit Service Modal (🟠 Medium)
+- ⏳ OD12 — DirectoryCombobox (🟠 Medium)
+- ⏳ OD15 — Split Modal (🔴 Complex)
+
+**Estimated Remaining Time:** 6-10 hours
+
+**Total Commits Today:** 5
+- f5eaece — OD10 (Remove Expanded Row)
+- 68c6848 — OD9 (Cancel button)
+- 7d61eae — OD14 (Payment Section)
+- a844e8d — OD13 (Checklist Panel)
+- (FN1 Phase 1 commit earlier today)
+
+**Branch:** `feature/x` — все коммиты в одной ветке
+
+**Status:** Ready for user review! 🚀
+
+
+### 📅 [2026-01-12] | [00:15]
+**Агент:** `Code Writer`
+**Задача:** `OD13 — Checklist Panel improvements`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5`
+
+**User Request:**
+> "должна быть ссылка где внести инфо и он автоматом должен убирать решенные задачи"
+
+**Действия:**
+- ✅ Добавил "Add" button для каждого checklist item
+- ✅ Реализовал auto-hide для resolved items (filter)
+- ✅ Счётчик показывает количество активных задач: "(2)" → "(1)"
+- ✅ `actionLink` prop + `handleActionClick` (scroll to section)
+- ✅ Весь панель исчезает когда все tasks resolved
+
+**Изменённые файлы:**
+1. `app/orders/[orderCode]/_components/ChecklistPanel.tsx`
+   - Added `actionLink?: string` to interface
+   - `activeItems = items.filter(item => !item.resolved)`
+   - "Add" button с `onClick={handleActionClick}`
+   - Counter в header: `({activeItems.length})`
+
+**Результат:**
+✅ **Perfect UX!** — кликнули checkbox → item исчез автоматически
+✅ **Action buttons** — "Add" links для каждого item
+✅ **Smart hiding** — panel disappears when all items done
+✅ **Live counter** — updates instantly on checkbox toggle
+
+**Коммит:** `bbf2316` - feat(orders): OD13 improvements - Add links + auto-hide resolved
+**Branch:** `feature/x`
+
+**Next:** OD11, OD12, OD15 (remaining 3 tasks)
+
+
+### 📅 [2026-01-12] | [00:30]
+**Агент:** `Code Writer`
+**Задача:** `OD13 — Checklist Panel final improvements`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5`
+
+**User Request:**
+> "add слишком далеко. лучше линк строку с переходом в нужное место и для каждой проблеммы своя строка"
+
+**Действия:**
+- ✅ Убрал отдельную кнопку "Add"
+- ✅ Превратил всю строку в кликабельную ссылку (`<a>` tag)
+- ✅ Hover effect: amber background → blue text + arrow →
+- ✅ Checkbox stopPropagation (не триггерит navigation)
+- ✅ Smooth scroll to target section on click
+
+**Изменённые файлы:**
+1. `app/orders/[orderCode]/_components/ChecklistPanel.tsx`
+   - Replaced `<div>` with `<a href={actionLink}>`
+   - Added `group-hover:text-blue-600` for text
+   - Arrow `→` shows on hover with `opacity-0 group-hover:opacity-100`
+   - Checkbox `onClick` + `onChange` с `stopPropagation()`
+
+**Результат:**
+✅ **Perfect UX!** — вся строка кликабельная, меньше кликов
+✅ **Visual feedback** — hover меняет цвет текста на синий + показывает →
+✅ **Separate actions** — checkbox для resolve, строка для navigation
+✅ **Clean design** — компактно, интуитивно понятно
+
+**Коммит:** `a582913` - feat(orders): OD13 final - Clickable rows
+**Branch:** `feature/x`
+
+**Next:** OD11, OD12, OD15 (remaining 3 tasks)
+
+
+### 📅 [2026-01-12] | [00:45]
+**Агент:** `Code Writer`
+**Задача:** `OD13 — Checklist Panel ultra-clean version`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5`
+
+**User Request:**
+> "не нужен checkbox на issue и не надо ссылку справа ставить. просто клик на надпись и она должна переносить на проблемное поле"
+
+**Действия:**
+- ✅ Удалил все checkboxes
+- ✅ Удалил стрелку → справа
+- ✅ Оставил только простые кликабельные ссылки
+- ✅ Hover: amber background + blue text
+- ✅ Smooth scroll to target section
+
+**Изменённые файлы:**
+1. `app/orders/[orderCode]/_components/ChecklistPanel.tsx`
+   - Убрали `resolved` state management (не нужно)
+   - Убрали checkbox input
+   - Убрали стрелку в конце строки
+   - Простой `<a>` tag с hover эффектом
+
+**Результат:**
+✅ **Ultra-clean design!** — минимум элементов, максимум UX
+✅ **Simple interaction** — клик на текст → scroll to section
+✅ **Visual feedback** — hover меняет background + text color
+✅ **No clutter** — чистый, компактный, интуитивный
+
+**Коммит:** `b476127` - feat(orders): OD13 ultra-clean
+**Branch:** `feature/x`
+
+**Итого завершено сегодня:**
+- ✅ OD8-OD10 (Services Table)
+- ✅ OD13 (Checklist Panel)
+- ✅ OD14 (Payment Section)
+
+**Remaining:** OD11, OD12, OD15
+
+
+### 📅 [2026-01-12] | [01:00]
+**Агент:** `Code Writer`
+**Задача:** `OD12 — DirectoryCombobox component`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5` (Complexity: 🟠 Medium)
+
+**Действия:**
+- ✅ Создал компонент `DirectoryCombobox.tsx`
+- ✅ Autocomplete с type-to-search functionality
+- ✅ Fetches data from `/api/directory`
+- ✅ Filter by role (supplier/client)
+- ✅ `allowEmpty` option для optional fields
+- ✅ Show email + name в dropdown
+- ✅ Checkmark для selected item
+- ✅ Backdrop + z-index management
+
+**Изменённые файлы:**
+1. `components/DirectoryCombobox.tsx` (NEW, 176 lines)
+   - useState для open/search/data management
+   - useMemo для filtered items
+   - Custom dropdown с backdrop overlay
+   - Search input с autoFocus
+
+**Результат:**
+✅ **Component готов!** — будет использоваться в OD11 (Edit Service Modal)
+✅ **Type-to-search** — быстрый поиск по имени и email
+✅ **Role filtering** — можно фильтровать supplier/client
+✅ **Clean UX** — checkmark, hover effects, truncation
+
+**Коммит:** `d2274e4` - feat(components): OD12 - Create DirectoryCombobox
+**Branch:** `feature/x`
+
+**Next:** OD11 (Edit Service Modal — Complex), OD15 (Split Modal — Very Complex)
+
+
+### 📅 [2026-01-12] | [01:15]
+**Агент:** `Code Writer`
+**Задача:** `Session Summary — OD8-OD14 Completed`
+**Статус:** `IN_PROGRESS ⏳`
+**Модель:** `Sonnet 4.5`
+**Token Usage:** 90k / 200k (45%)
+
+**✅ ЗАВЕРШЕНО В ЭТОЙ СЕССИИ:**
+
+1. **OD8** — Double-click to edit service ✅
+2. **OD9** — Cancel button (hover effect) ✅
+3. **OD10** — Remove Expanded Row ✅
+4. **OD13** — Checklist Panel (ultra-clean) ✅
+5. **OD14** — Payment Section empty state ✅
+6. **OD12** — DirectoryCombobox component ✅
+
+**⏳ В ПРОЦЕССЕ:**
+
+7. **OD11** — Edit Service Modal (🔴 Complex)
+   - Specification прочитана
+   - Текущий код найден (OrderServicesBlock.tsx, строка 645-946)
+   - DirectoryCombobox готов для интеграции
+   - **Осталось:** Создать новый компактный layout с grouped cards
+
+**⏳ ОЖИДАЕТ:**
+
+8. **OD15** — Split Modal (🔴 Very Complex)
+
+---
+
+### **Рекомендации для следующей сессии:**
+
+**OD11 Implementation Plan:**
+1. Создать `app/orders/[orderCode]/_components/EditServiceModal.tsx` (новый файл)
+2. Импортировать `DirectoryCombobox` вместо `PartyCombobox`
+3. Добавить grouped cards:
+   - Basic Info (Category, Status, Name, Dates)
+   - Pricing (Service Price, Client Price, auto-calculated Margin)
+   - Parties (Supplier, Client, Payer)
+   - References (Ref Nr, Ticket Nr)
+4. Заменить import в `OrderServicesBlock.tsx`
+
+**Complexity Estimate:** 
+- OD11: ~300 lines new code, 2-3 hours
+- OD15: ~500 lines new code, 4-5 hours
+
+**Total Progress:** 6/8 tasks (75%)
+
