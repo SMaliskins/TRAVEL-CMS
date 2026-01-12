@@ -305,6 +305,9 @@ export default function OrderServicesBlock({
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Travellers
                 </th>
+                <th className="px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -480,6 +483,41 @@ export default function OrderServicesBlock({
                                   +
                                 </button>
                               </div>
+                            </td>
+
+                            {/* Cancel Button (hover effect) */}
+                            <td className="px-2 py-1 text-right">
+                              {service.res_status !== "cancelled" && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Cancel service: ${service.name}?`)) {
+                                      try {
+                                        const response = await fetch(
+                                          `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
+                                          {
+                                            method: "PATCH",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({
+                                              ...service,
+                                              res_status: "cancelled"
+                                            })
+                                          }
+                                        );
+                                        if (!response.ok) throw new Error("Failed to cancel service");
+                                        fetchServices();
+                                      } catch (error) {
+                                        console.error("Error cancelling service:", error);
+                                        alert("Failed to cancel service");
+                                      }
+                                    }
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
+                                  title="Cancel Service"
+                                >
+                                  🚫
+                                </button>
+                              )}
                             </td>
                           </tr>
                           </React.Fragment>
