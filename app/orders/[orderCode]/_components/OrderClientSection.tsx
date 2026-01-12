@@ -8,6 +8,7 @@ import PartySelect from "@/components/PartySelect";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import { getCityByName, countryCodeToFlag, CITIES } from "@/lib/data/cities";
+import ChecklistPanel from "./ChecklistPanel";
 
 // Dynamic import TripMap to avoid SSR issues with Leaflet
 const TripMap = dynamic(() => import("@/components/TripMap"), {
@@ -722,6 +723,11 @@ export default function OrderClientSection({
       </div>
 
         {/* Right: Square Map */}
+            {/* Checklist Panel */}
+            <div className="mb-4">
+              <ChecklistPanel />
+            </div>
+
         {allCitiesForMap.length > 0 && (
           <div className="relative z-0">
             <div className="w-full h-[300px] rounded-xl overflow-hidden border border-gray-200/60 shadow-sm">

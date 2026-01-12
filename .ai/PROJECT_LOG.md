@@ -8163,3 +8163,81 @@ useEffect(() => {
 - OD9-10 нужно доделать (исправить синтаксическую ошибку)
 - OD11-15 реализовать согласно спецификации
 
+
+### 📅 [2026-01-11] | [22:30]
+**Агент:** `Code Writer`
+**Задача:** `OD8-OD10 — Services Table UI Improvements`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5` (Complexity: 🟡 Simple)
+
+**Действия:**
+- ✅ **OD8**: Double-click to edit service (уже был реализован ранее)
+- ✅ **OD9**: Cancel button с hover effect
+  - Добавил кнопку 🚫 в Actions колонку
+  - Opacity animation (видна только на hover)
+  - Confirm dialog перед отменой
+  - PATCH API для обновления res_status
+  - Добавил Actions column header
+- ✅ **OD10**: Убрал Expanded Row
+  - Удалил 77 строк кода (весь Expanded Row block)
+  - Удалил `expandedServiceId` state
+  - Изменил `onClick` на `onDoubleClick` для всех service rows
+  - Убрал `cursor-pointer` class
+
+**Изменённые файлы:**
+1. `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+   - Удалено: Expanded Row (77 lines)
+   - Добавлено: Cancel button с hover (35 lines)
+   - Изменено: onClick → onDoubleClick
+   - Добавлено: Actions column header
+
+**Результат:**
+✅ **Cleaner UI** — Expanded Row убран, table более компактная
+✅ **Hover effects** — Cancel button появляется на hover
+✅ **Double-click edit** — Быстрое редактирование сервиса
+✅ **No build errors** — Все синтаксические ошибки исправлены
+
+**Коммиты:**
+- `f5eaece` - feat(orders): OD10 - Remove Expanded Row + double-click edit
+- `68c6848` - feat(orders): OD9 - Add Cancel button with hover effect
+
+**Branch:** `feature/x`
+
+**Next Steps:**
+- ⏳ OD11 — Edit Service Modal redesign (🟠 Medium)
+- ⏳ OD12 — DirectoryCombobox component (🟠 Medium)
+- ⏳ OD13 — Checklist Panel (🟠 Medium)
+- ⏳ OD14 — Payment Section fix (🟡 Simple)
+- ⏳ OD15 — Split Modal (🔴 Complex)
+
+**Estimated Remaining Time:** 6-10 hours (для OD11-OD15)
+
+
+### 📅 [2026-01-11] | [23:00]
+**Агент:** `Code Writer`
+**Задача:** `OD14 — Payment Section fix (€0 bug + CTA)`
+**Статус:** `SUCCESS ✅`
+**Модель:** `Sonnet 4.5` (Complexity: 🟡 Simple)
+
+**Действия:**
+- ✅ Нашёл Payment Section в `components/TripMap.tsx`
+- ✅ Добавил conditional rendering для empty state
+- ✅ Показывает ⚠️ + "No financial data yet" когда `amountToPay === 0 && amountPaid === 0`
+- ✅ Добавил "Add Payment" CTA button (placeholder alert)
+- ✅ Сохранил существующий UI для случая когда есть данные
+
+**Изменённые файлы:**
+1. `components/TripMap.tsx` (строки 393-461)
+   - Добавлено: Empty state с условным рендерингом
+   - Добавлено: CTA button "Add Payment"
+
+**Результат:**
+✅ **€0 bug fixed** — пользователь видит четкое сообщение вместо бесполезных нулей
+✅ **Better UX** — CTA button для добавления платежных данных
+✅ **No breaking changes** — существующий функционал сохранён
+
+**Коммит:** `7d61eae` - feat(orders): OD14 - Payment Section empty state + CTA
+**Branch:** `feature/x`
+
+**Next Task:** OD13 — Checklist Panel (Attention Required) 🟠 Medium
+
