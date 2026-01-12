@@ -392,6 +392,22 @@ export default function TripMap({
 
       {/* Payment status */}
       <div className="bg-gray-50 rounded-lg p-4">
+        {amountToPay === 0 && amountPaid === 0 ? (
+          /* Empty state */
+          <div className="text-center py-6">
+            <div className="flex items-center justify-center mb-3">
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">No financial data yet</p>
+            <button
+              onClick={() => alert('Add Payment functionality coming soon')}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Add Payment
+            </button>
+          </div>
+        ) : (
+          <>
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-medium text-gray-700">Payment Status</span>
           <span className="text-sm text-gray-500">
@@ -440,6 +456,8 @@ export default function TripMap({
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
