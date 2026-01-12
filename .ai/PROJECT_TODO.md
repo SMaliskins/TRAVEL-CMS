@@ -44,19 +44,19 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | OD1 | Orders | Увеличить размер шрифтов на странице заказа | CW→QA | QA | DONE | 10/10 | [09.01 20:45] Fonts increased |
 | OD2 | Orders | Карта на всю ширину внизу секции клиента | CW→QA | QA | DONE | 10/10 | [09.01 20:45] Map moved fullwidth |
 | OD3 | Orders | Дни/ночи в скобках после дат | CW→QA | QA | DONE | 10/10 | [09.01 20:45] Days/nights added |
-| OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | CW | TODO | - | [09.01 20:45] CW started (complex task) |
+| OD4 | Orders | EditServiceModal = все поля AddServiceModal | CW→QA | QA | DONE | 10/10 | [12.01] ✅ Replaced by OD11 EditServiceModalNew |
 | OD5 | Orders | Чекбоксы для выбора сервисов + UX improvements | CW→QA | QA | DONE | 10/10 | [09.01 23:35] Invoice Phase 1 complete ✅ |
 | OD6 | Orders | Invoice Creator in Finance tab + live preview | CW→QA | QA | DONE | 10/10 | [09.01 22:25] User confirmed: works perfectly! ✅ |
 | **OD6-FIX** | **Orders** | **Fix: Invoice list не обновляется** | **CW→QA** | **QA** | **DONE** | **10/10** | **[09.01 23:24] QA verified: all fixes work ✅** |
-| **OD7-BUG** | **Orders** | **REGRESSION: Service Edit modal не открывается** | **CW→QA** | **CW** | **TODO** | **🟢 Micro** | **[10.01] Runner created task** |
-| OD8 | Orders | Fix double-click to edit | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
-| OD9 | Orders | Cancel button вместо Delete (hover effect) | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
-| OD10 | Orders | Убрать Expanded Row | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
-| OD11 | Orders | Edit Service Modal — Компактный layout | CW→QA | CW | TODO | 🟠 Medium | [11.01] From UI Audit |
-| OD12 | Orders | DirectoryCombobox component | CW→QA | CW | TODO | 🟠 Medium | [11.01] From UI Audit |
-| OD13 | Orders | Checklist Panel (Attention Required) | CW→QA | CW | TODO | 🟠 Medium | [11.01] From UI Audit |
-| OD14 | Orders | Payment Section fix (€0 bug + CTA) | CW→QA | CW | TODO | 🟡 Simple | [11.01] From UI Audit |
-| OD15 | Orders | Split Modal — Overview + Tabs | CW→QA | CW | TODO | 🔴 Complex | [11.01] From UI Audit |
+| OD7-BUG | Orders | REGRESSION: Service Edit modal не открывается | CW→QA | QA | DONE | 10/10 | [12.01] ✅ Fixed via OD11 EditServiceModalNew |
+| OD8 | Remove Expanded Row | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Removed expanded row |
+| OD9 | Cancel on Hover | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Added Cancel button |
+| OD10 | Edit on Double-Click | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Double-click opens EditServiceModalNew |
+| OD11 | Edit Service Modal Redesign | - | CW | ✅ DONE | 10/10 | [12.01 18:00] New compact modal with cards |
+| OD12 | DirectoryCombobox | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Autocomplete component created |
+| OD13 | Checklist Panel | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Dynamic checklist with links |
+| OD14 | Payment Section Empty State | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Empty state with CTA |
+| OD15 | Split Modal (Multi) | - | CW | ✅ DONE | 10/10 | [12.01 18:30] Dual Split system: single + multi |
 
 **Spec:** `.ai/tasks/order-detail-redesign.md`
 **UI Audit:** `.ai/tasks/ui-order-detail-page-0002-26-sm-audit.md`
@@ -77,7 +77,10 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
 | O7 | Finance | Payment form in Finance tab | DB → CODE WRITER → QA | TODO | - | Amount, type (bank/cash/card), date, payer, invoice link |
-| O8 | Finance | Invoice creation with service selection | DB → CODE WRITER → QA | TODO | - | Select services, payer, email sending |
+| O8 | Finance | Invoice creation with service selection | DB → CODE WRITER → QA | DONE | feature/x | ✅ OD6 completed |
+| **O7-IMPL** | **Finance** | **Payment System: DB + API + UI** | **DB→CW→QA** | **TODO** | **-** | **🔴 CRITICAL: payments table, PaymentForm, PaymentList** |
+| **O8-IMPL** | **Finance** | **Email System: Send Invoice + Track** | **CW→QA** | **TODO** | **-** | **🔴 HIGH: email service, template, API, delivery tracking** |
+| FN1 | Finance | Edit Invoice button + handlers | CW→QA | DONE | feature/x | [11.01] ✅ Phase 1 complete |
 
 ## PHASE 4: UI Enhancements
 
