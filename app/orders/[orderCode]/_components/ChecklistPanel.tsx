@@ -31,7 +31,8 @@ export default function ChecklistPanel() {
     ));
   };
 
-  const handleActionClick = (link: string) => {
+  const handleActionClick = (link: string, e: React.MouseEvent) => {
+    e.preventDefault();
     // Scroll to the relevant section
     const element = document.querySelector(link);
     if (element) {
@@ -54,31 +55,32 @@ export default function ChecklistPanel() {
         </span>
       </h3>
       
-      <div className="space-y-2">
+      <div className="space-y-1">
         {activeItems.map((item) => (
-          <div key={item.id} className="flex items-start gap-2 text-xs">
+          <a
+            key={item.id}
+            href={item.actionLink || '#'}
+            onClick={(e) => item.actionLink && handleActionClick(item.actionLink, e)}
+            className="flex items-center gap-2 text-xs px-2 py-1.5 rounded hover:bg-amber-100 transition-colors group cursor-pointer"
+          >
             <input 
               type="checkbox" 
               checked={item.resolved}
-              onChange={() => toggleItem(item.id)}
-              className="mt-0.5 rounded cursor-pointer"
+              onChange={(e) => {
+                e.stopPropagation();
+                toggleItem(item.id);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded cursor-pointer flex-shrink-0"
               id={`checklist-${item.id}`}
             />
-            <label 
-              htmlFor={`checklist-${item.id}`}
-              className="flex-1 text-gray-700 cursor-pointer"
-            >
+            <span className="flex-1 text-gray-700 group-hover:text-blue-600 transition-colors">
               {item.message}
-            </label>
-            {item.actionLink && (
-              <button
-                onClick={() => handleActionClick(item.actionLink!)}
-                className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-              >
-                Add
-              </button>
-            )}
-          </div>
+            </span>
+            <span className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs">
+              →
+            </span>
+          </a>
         ))}
       </div>
     </div>
