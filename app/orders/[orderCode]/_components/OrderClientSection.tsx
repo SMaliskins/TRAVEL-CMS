@@ -725,7 +725,7 @@ export default function OrderClientSection({
         {/* Right: Square Map */}
             {/* Checklist Panel */}
             <div className="mb-4">
-              <ChecklistPanel />
+              <ChecklistPanel orderCode={orderCode} />
             </div>
 
         {allCitiesForMap.length > 0 && (

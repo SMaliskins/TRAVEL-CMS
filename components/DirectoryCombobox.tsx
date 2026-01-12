@@ -51,7 +51,7 @@ export default function DirectoryCombobox({
       }
     };
     fetchDirectory();
-  });
+  }, []);
 
   const filteredItems = useMemo(() => {
     let items = directoryItems || [];

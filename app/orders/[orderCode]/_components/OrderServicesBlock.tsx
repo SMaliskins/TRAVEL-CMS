@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import AssignedTravellersModal from "./AssignedTravellersModal";
-import SplitServiceModal from "./SplitServiceModal";
 import AddServiceModal, { ServiceData } from "./AddServiceModal";
 import DateRangePicker from "@/components/DateRangePicker";
 import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
+import SplitServiceModal from "./SplitModalMulti";
 
 interface Traveller {
   id: string;
@@ -61,8 +61,8 @@ export default function OrderServicesBlock({
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
-  const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
 
   // Fetch services from API
   const fetchServices = useCallback(async () => {
@@ -486,6 +486,21 @@ export default function OrderServicesBlock({
                               </div>
                             </td>
 
+
+                            {/* Split Button (always visible) */}
+                            <td className="px-2 py-1 text-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedServiceIds([service.id]);
+                                  setSplitMultiModalOpen(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors text-sm"
+                                title="Split Service"
+                              >
+                                ✂️
+                              </button>
+                            </td>
                             {/* Cancel Button (hover effect) */}
                             <td className="px-2 py-1 text-right">
                               {service.res_status !== "cancelled" && (
@@ -567,16 +582,16 @@ export default function OrderServicesBlock({
         />
       )}
 
-      {/* Split Service Modal */}
-      {splitServiceId && (
+      {/* Split Multi Modal */}
+      {splitMultiModalOpen && (
         <SplitServiceModal
-          service={services.find(s => s.id === splitServiceId)!}
+          services={services.filter(s => selectedServiceIds.includes(s.id))}
           orderCode={orderCode}
-          onClose={() => setSplitServiceId(null)}
-          onSuccess={() => {
+          onClose={() => setSplitMultiModalOpen(false)}
+          onServicesUpdated={(updated) => {
             fetchServices();
-            setSplitServiceId(null);
-            setExpandedServiceId(null);
+            setSplitMultiModalOpen(false);
+            setSelectedServiceIds([]);
           }}
         />
       )}
@@ -626,6 +641,17 @@ export default function OrderServicesBlock({
               className="px-4 py-2 bg-white text-black font-medium rounded hover:bg-gray-100 transition-colors"
             >
               Issue Invoice
+            </button>
+            <button
+              onClick={() => {
+                const selectedServicesData = services.filter(s => selectedServiceIds.includes(s.id));
+                if (selectedServicesData.length > 0) {
+                  setSplitMultiModalOpen(true);
+                }
+              }}
+              className="px-4 py-2 bg-amber-500 text-white font-medium rounded hover:bg-amber-600 transition-colors ml-2"
+            >
+              ✂️ Split ({selectedServiceIds.length})
             </button>
             <button
               onClick={() => setSelectedServiceIds([])}
