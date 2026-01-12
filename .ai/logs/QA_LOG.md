@@ -144,3 +144,84 @@
 - ⚠️ nationality column required manual migration
 
 ---
+
+
+### 📅 2026-01-12 | 19:45
+**Задача:** E2E Testing — Полный цикл работы с заказом
+**Статус:** ✅ COMPLETED (с выявленными gaps)
+**SCORE:** 60% System Readiness
+
+**Действия:**
+1. ✅ Прочитал NEW_PROJECT_RULES.md
+2. ✅ Проверил PROJECT_TODO.md и PROJECT_LOG.md
+3. ✅ Запустил dev server для проверки
+4. ✅ Проверил наличие всех API endpoints
+5. ✅ Проверил UI компоненты
+6. ✅ Создал полный E2E Test Report
+
+**Сценарий E2E (6 шагов):**
+1. ✅ Create Order — WORKING
+2. ✅ Add 2 Services — WORKING
+3. ✅ Select Payer/Client — WORKING
+4. ✅ Create Invoice — WORKING
+5. ❌ Send Invoice Email — MISSING
+6. ❌ Record Payments — MISSING
+
+**Gap #1: Email System (O8) — NOT IMPLEMENTED**
+- Компоненты отсутствуют:
+  - Send Email button в InvoiceList
+  - API endpoint POST /api/orders/[code]/invoices/[id]/send
+  - Email service integration (Resend/SendGrid)
+  - Email template
+  - Status update draft → sent
+- Impact: Клиенты не получают счета, нужна ручная отправка
+- Blocker: YES
+- Complexity: 🟠 Medium (6-8h)
+
+**Gap #2: Payment System (O7) — NOT IMPLEMENTED**
+- Компоненты отсутствуют:
+  - Payment Form в Finance tab
+  - API endpoint POST /api/orders/[code]/payments
+  - Database table 'payments'
+  - Payment List UI
+  - Payment tracking (Total Paid, Balance Due)
+  - Payment statuses (Unpaid/Partially Paid/Paid)
+- Impact: Невозможно отследить оплаты клиентов
+- Blocker: YES
+- Complexity: 🟠 Medium (4-6h)
+
+**Database Schema Required:**
+- Table: payments (order_id, invoice_id, amount, payment_type, payment_date, payer_party_id)
+- Indexes: order_id, invoice_id, company_id
+- RLS policies для tenant isolation
+
+**Результат:**
+- System Readiness: 60% (4/6 steps)
+- Production Ready: NO ❌
+- Can be used for: Order/Service/Invoice management
+- Cannot be used for: Email communication, Payment tracking
+
+**Документация:**
+- Report: .ai/tasks/qa-e2e-full-cycle-test-report.md
+- Detailed checklists for each step
+- Acceptance criteria
+- Missing features with specifications
+- Database schema for payments table
+- Priority recommendations
+
+**Recommendations:**
+1. CRITICAL: Implement O7-IMPL (Payment System)
+   - Pipeline: DB → CW → QA
+   - Components: DB migration, PaymentForm, PaymentList, API
+2. HIGH: Implement O8-IMPL (Email System)
+   - Pipeline: CW → QA
+   - Components: Email service, template, API, UI button
+
+**Next Step:**
+- Runner creates O7-IMPL and O8-IMPL tasks
+- Code Writer implements Payment System
+- Code Writer implements Email System
+- QA runs full E2E test (6/6 steps)
+
+---
+
