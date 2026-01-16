@@ -499,7 +499,7 @@ export default function OrderServicesBlock({
                                 className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors text-sm"
                                 title="Split Service"
                               >
-                                ✂️
+                                🔗
                               </button>
                             </td>
                             {/* Cancel Button (hover effect) */}
@@ -665,7 +665,7 @@ export default function OrderServicesBlock({
               }}
               className="px-4 py-2 bg-amber-500 text-white font-medium rounded hover:bg-amber-600 transition-colors ml-2"
             >
-              ✂️ Split ({selectedServiceIds.length})
+              🔗 Split ({selectedServiceIds.length})
             </button>
             <button
               onClick={() => setSelectedServiceIds([])}

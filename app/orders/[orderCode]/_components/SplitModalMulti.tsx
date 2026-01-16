@@ -152,7 +152,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-2xl font-semibold">
-            ✂️ Split Selected Services ({services.length})
+            🔗 Split Selected Services ({services.length})
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
