@@ -395,9 +395,15 @@ export default function OrderServicesBlock({
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors relative ${
+                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
                               service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
                             }`}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              console.log('🔍 DoubleClick triggered on row! Service ID:', service.id);
+                              setEditServiceId(service.id);
+                            }}
+                            title="Double-click to edit"
                           >
                             <td className="w-20 px-2 py-1 text-center relative">
                               {/* Connector icon between split group rows */}
@@ -445,13 +451,7 @@ export default function OrderServicesBlock({
                               </div>
                             </td>
                             <td 
-                              className="px-2 py-1 text-sm text-gray-700 leading-tight cursor-pointer"
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                console.log('🔍 DoubleClick triggered on Category! Service ID:', service.id);
-                                setEditServiceId(service.id);
-                              }}
-                              title="Double-click to edit"
+                              className="px-2 py-1 text-sm text-gray-700 leading-tight"
                             >
                               {service.category}
                             </td>
