@@ -502,6 +502,55 @@ export default function OrderServicesBlock({
                                 🔗
                               </button>
                             </td>
+                            {/* Duplicate Button */}
+                            <td className="px-2 py-1 text-center">
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Duplicate service: ${service.name}?`)) {
+                                    try {
+                                      const { data: { session } } = await supabase.auth.getSession();
+                                      const response = await fetch(
+                                        `/api/orders/${encodeURIComponent(orderCode)}/services`,
+                                        {
+                                          method: "POST",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                                          },
+                                          body: JSON.stringify({
+                                            service_name: service.name,
+                                            category: service.category,
+                                            service_price: service.servicePrice,
+                                            client_price: service.clientPrice,
+                                            res_status: service.resStatus,
+                                            ref_nr: service.refNr,
+                                            ticket_nr: service.ticketNr,
+                                            service_date_from: service.dateFrom,
+                                            service_date_to: service.dateTo,
+                                            supplier_party_id: service.supplier_party_id,
+                                            supplier_name: service.supplier,
+                                            client_party_id: service.client_party_id,
+                                            client_name: service.client,
+                                            payer_party_id: service.payer_party_id,
+                                            payer_name: service.payer,
+                                          })
+                                        }
+                                      );
+                                      if (!response.ok) throw new Error("Failed to duplicate service");
+                                      fetchServices();
+                                    } catch (error) {
+                                      console.error("Error duplicating service:", error);
+                                      alert("Failed to duplicate service");
+                                    }
+                                  }
+                                }}
+                                className="text-purple-600 hover:text-purple-800 p-1 rounded hover:bg-purple-50 transition-colors text-sm"
+                                title="Duplicate Service"
+                              >
+                                📋
+                              </button>
+                            </td>
                             {/* Cancel Button (hover effect) */}
                             <td className="px-2 py-1 text-right">
                               {service.resStatus !== "cancelled" && (

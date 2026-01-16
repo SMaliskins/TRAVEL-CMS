@@ -9387,3 +9387,15 @@ CREATE POLICY payments_tenant_isolation ON payments
 
 ---
 
+
+### 📅 [2026-01-16] | [22:50]
+**Агент:** `CODE_WRITER`
+**Задача:** Add Duplicate button to service Actions
+**Статус:** `START`
+**Complexity:** 🟢 Micro
+**Действия:**
+- Прочитал NEW_PROJECT_RULES.md ✅
+- Задача: добавить кнопку Duplicate в Actions сервиса
+- Найду файл с Actions кнопками
+
+**Next Step:** Найти компонент и добавить кнопку
