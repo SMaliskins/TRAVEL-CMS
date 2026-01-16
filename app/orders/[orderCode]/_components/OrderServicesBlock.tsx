@@ -163,6 +163,31 @@ export default function OrderServicesBlock({
       default:
         return "bg-gray-100 text-gray-800";
     }
+
+  // Generate consistent color for split group
+  const getSplitGroupColor = (splitGroupId: string) => {
+    // Hash the splitGroupId to get a number
+    let hash = 0;
+    for (let i = 0; i < splitGroupId.length; i++) {
+      hash = splitGroupId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Define color palette (8 distinct colors)
+    const colors = [
+      { border: 'border-l-green-500', bg: 'bg-green-100', text: 'text-green-800' },
+      { border: 'border-l-blue-500', bg: 'bg-blue-100', text: 'text-blue-800' },
+      { border: 'border-l-purple-500', bg: 'bg-purple-100', text: 'text-purple-800' },
+      { border: 'border-l-pink-500', bg: 'bg-pink-100', text: 'text-pink-800' },
+      { border: 'border-l-orange-500', bg: 'bg-orange-100', text: 'text-orange-800' },
+      { border: 'border-l-teal-500', bg: 'bg-teal-100', text: 'text-teal-800' },
+      { border: 'border-l-indigo-500', bg: 'bg-indigo-100', text: 'text-indigo-800' },
+      { border: 'border-l-rose-500', bg: 'bg-rose-100', text: 'text-rose-800' },
+    ];
+    
+    // Pick color based on hash
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  };
   };
 
   const formatDateDDMMYYYY = (dateString: string) => {
