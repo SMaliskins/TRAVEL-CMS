@@ -386,13 +386,28 @@ export default function OrderServicesBlock({
                           splitInfo = { index: splitIndex, total: splitGroupServices.length };
                         }
 
+                        // Calculate color and connector for split groups
+                        const splitGroupColor = service.splitGroupId ? getSplitGroupColor(service.splitGroupId) : null;
+
+
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors ${service.splitGroupId ? "border-l-4 border-l-green-500" : ""}`}
-                            onDoubleClick={() => setEditServiceId(service.id)}
+                          <tr
+                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
+                              service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
+                            }`}
+                            onClick={() => setExpandedServiceId(expandedServiceId === service.id ? null : service.id)}
                           >
-                            <td className="w-20 px-2 py-1 text-center">
+                            <td className="w-20 px-2 py-1 text-center relative">
+                              {/* Connector icon between split group rows */}
+                              {splitInfo && splitInfo.index > 1 && splitGroupColor && (
+                                <div className="absolute -left-3 -top-3 z-20">
+                                  <div className="flex items-center justify-center w-5 h-5 bg-white rounded-full shadow-md border-2" style={{ borderColor: splitGroupColor.border.includes('green') ? '#22c55e' : splitGroupColor.border.includes('blue') ? '#3b82f6' : splitGroupColor.border.includes('purple') ? '#a855f7' : splitGroupColor.border.includes('pink') ? '#ec4899' : splitGroupColor.border.includes('orange') ? '#f97316' : splitGroupColor.border.includes('teal') ? '#14b8a6' : splitGroupColor.border.includes('indigo') ? '#6366f1' : '#f43f5e' }}>
+                                    <span style={{ fontSize: '10px' }}>🔗</span>
+                                  </div>
+                                </div>
+                              )}
                               <div className="flex items-center justify-center gap-1">
                                 {service.invoice_id ? (
                                   <div className="flex items-center justify-center">
@@ -439,8 +454,7 @@ export default function OrderServicesBlock({
                             <td className="px-2 py-1 text-sm font-medium text-gray-900 leading-tight">
                               <div className="flex items-center gap-2">
                                 {splitInfo && (
-                                  <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-800">
-                                    🔗 {splitInfo.index}/{splitInfo.total}
+                                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
                                   </span>
                                 )}
                                 <span>{service.name}</span>
