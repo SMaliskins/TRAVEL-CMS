@@ -29,6 +29,7 @@ interface Service {
   supplier: string;
   client: string;
   payer: string;
+  supplierPartyId?: string;
   payerPartyId?: string;
   clientPartyId?: string;
   servicePrice: number;
@@ -93,6 +94,9 @@ export default function OrderServicesBlock({
           supplier: s.supplierName || "-",
           client: s.clientName || "-",
           payer: s.payerName || "-",
+          supplierPartyId: s.supplierPartyId,
+          payerPartyId: s.payerPartyId,
+          clientPartyId: s.clientPartyId,
           servicePrice: s.servicePrice || 0,
           clientPrice: s.clientPrice || 0,
           resStatus: s.resStatus || "booked",
@@ -100,8 +104,6 @@ export default function OrderServicesBlock({
           ticketNr: s.ticketNr || "",
           assignedTravellerIds: s.travellerIds || [],
           invoice_id: s.invoice_id || null,
-          payerPartyId: s.payerPartyId,
-          clientPartyId: s.clientPartyId,
           splitGroupId: s.splitGroupId || null,
         }));
         setServices(mappedServices);
@@ -445,7 +447,10 @@ export default function OrderServicesBlock({
                             </td>
                             <td 
                               className="px-2 py-1 text-sm text-gray-700 leading-tight cursor-pointer"
-                              onDoubleClick={() => setEditServiceId(service.id)}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                setEditServiceId(service.id);
+                              }}
                               title="Double-click to edit"
                             >
                               {service.category}
