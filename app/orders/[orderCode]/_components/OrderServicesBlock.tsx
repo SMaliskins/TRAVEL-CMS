@@ -364,7 +364,7 @@ export default function OrderServicesBlock({
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className="group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors "
+                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors ${service.splitGroupId ? "border-l-4 border-l-green-500" : ""}`}
                             onDoubleClick={() => setEditServiceId(service.id)}
                           >
                             <td className="w-20 px-2 py-1 text-center">
