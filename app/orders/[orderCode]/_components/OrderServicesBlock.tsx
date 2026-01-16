@@ -188,8 +188,6 @@ export default function OrderServicesBlock({
     const index = Math.abs(hash) % colors.length;
     return colors[index];
   };
-  };
-
   const formatDateDDMMYYYY = (dateString: string) => {
     try {
       const date = new Date(dateString + "T00:00:00");
