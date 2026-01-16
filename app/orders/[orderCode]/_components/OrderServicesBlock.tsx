@@ -393,7 +393,6 @@ export default function OrderServicesBlock({
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                          <tr
                             className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
                               service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
                             }`}
