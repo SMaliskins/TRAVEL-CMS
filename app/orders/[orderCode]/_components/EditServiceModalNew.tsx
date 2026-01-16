@@ -66,6 +66,9 @@ export default function EditServiceModalNew({
     return (margin / formData.service_price) * 100;
   }, [margin, formData.service_price]);
 
+  // ESC key handler
+  useEscapeKey(onClose);
+
   // Handle client change (auto-fill payer if empty)
   const handleClientChange = (clientId: string | null) => {
     setFormData((prev) => ({
@@ -76,9 +79,6 @@ export default function EditServiceModalNew({
   };
 
 
-  // ESC key handler
-  useEscapeKey(onClose);
-  const handleSave = async () => {
     setIsSubmitting(true);
     setError(null);
 

@@ -9257,3 +9257,35 @@ CREATE POLICY payments_tenant_isolation ON payments
 - Файлы для изменения: все модальные компоненты
 
 **Next Step:** Найти все модалы и добавить ESC handler
+
+### 📅 [2026-01-16] | [22:25]
+**Агент:** `CODE_WRITER`
+**Задача:** Add ESC key handler to close modals
+**Статус:** `SUCCESS` ✅
+**Действия:**
+- ✅ Создал универсальный хук `useEscapeKey` в `lib/hooks/useEscapeKey.ts`
+- ✅ Добавил ESC handler в 6 модальных окон:
+  1. EditServiceModalNew.tsx
+  2. AddServiceModal.tsx
+  3. SplitServiceModal.tsx
+  4. SplitModalMulti.tsx
+  5. AssignedTravellersModal.tsx
+  6. ConfirmModal.tsx
+- ✅ Коммит: `4e776fe` - feat: add ESC key handler to close all modals
+
+**Результат:**
+- Теперь все модальные окна закрываются при нажатии ESC
+- Хук универсальный: `useEscapeKey(onClose, enabled)`
+- Для ConfirmModal: срабатывает только когда `isOpen === true`
+
+**Next Step:** Пользователь тестирует ESC во всех модалах
+
+### 📅 [2026-01-16] | [22:30]
+**Агент:** `CODE_WRITER`
+**Задача:** FIX: Internal Server Error after ESC handler
+**Статус:** `START`
+**Действия:**
+- Ошибка: Internal Server Error после добавления ESC handlers
+- Проверяю консоль и логи
+
+**Next Step:** Найти причину ошибки

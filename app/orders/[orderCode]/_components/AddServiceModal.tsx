@@ -143,6 +143,9 @@ export default function AddServiceModal({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultClientId, defaultClientName]);
+
+  // ESC key handler
+  useEscapeKey(onClose);
   
   // Client management functions
   const addClient = () => {
@@ -156,9 +159,6 @@ export default function AddServiceModal({
   };
   
 
-  // ESC key handler
-  useEscapeKey(onClose);
-  const removeClient = (index: number) => {
     if (clients.length <= 1) return; // Keep at least one client
     setClients(clients.filter((_, i) => i !== index));
   };
