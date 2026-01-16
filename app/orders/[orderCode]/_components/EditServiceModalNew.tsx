@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PartySelect from '@/components/PartySelect';
+import DateRangePicker from '@/components/DateRangePicker';
+import FlightItineraryInput, { FlightSegment } from '@/components/FlightItineraryInput';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 
 interface Service {
@@ -19,9 +21,22 @@ interface Service {
   supplier?: string | null;
   client?: string | null;
   payer?: string | null;
-  supplier_party_id?: string | null;
+  supplierPartyId?: string | null;
   client_party_id?: string | null;
   payer_party_id?: string | null;
+  // Hotel-specific
+  hotelName?: string;
+  hotelAddress?: string;
+  hotelPhone?: string;
+  hotelEmail?: string;
+  // Transfer-specific
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  pickupTime?: string;
+  estimatedDuration?: string;
+  linkedFlightId?: string;
+  // Flight-specific
+  flightSegments?: FlightSegment[];
 }
 
 interface EditServiceModalProps {
@@ -30,6 +45,26 @@ interface EditServiceModalProps {
   onClose: () => void;
   onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
 }
+
+const SERVICE_CATEGORIES = [
+  "Flight",
+  "Hotel",
+  "Transfer",
+  "Tour",
+  "Insurance",
+  "Visa",
+  "Rent a Car",
+  "Cruise",
+  "Other",
+];
+
+const RES_STATUS_OPTIONS = [
+  { value: "booked", label: "Booked" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "changed", label: "Changed" },
+  { value: "rejected", label: "Rejected" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 export default function EditServiceModalNew({
   service,
@@ -40,50 +75,125 @@ export default function EditServiceModalNew({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: service.name,
-    category: service.category,
-    service_price: service.servicePrice,
-    client_price: service.clientPrice,
-    res_status: service.resStatus || '',
-    ref_nr: service.refNr || '',
-    ticket_nr: service.ticketNr || '',
-    date_from: service.dateFrom || '',
-    date_to: service.dateTo || '',
-    supplier_id: service.supplier_party_id || null,
-    client_id: service.client_party_id || null,
-    payer_id: service.payer_party_id || null,
-  });
-
-  // Auto-calculated margin
-  const margin = useMemo(() => {
-    return formData.client_price - formData.service_price;
-  }, [formData.service_price, formData.client_price]);
-
-  const marginPercent = useMemo(() => {
-    if (formData.service_price === 0) return 0;
-    return (margin / formData.service_price) * 100;
-  }, [margin, formData.service_price]);
+  // Form state - initialized from service
+  const [category, setCategory] = useState(service.category);
+  const [serviceName, setServiceName] = useState(service.name);
+  const [dateFrom, setDateFrom] = useState<string | undefined>(service.dateFrom || undefined);
+  const [dateTo, setDateTo] = useState<string | undefined>(service.dateTo || undefined);
+  const [supplierPartyId, setSupplierPartyId] = useState<string | null>(service.supplierPartyId || null);
+  const [supplierName, setSupplierName] = useState(service.supplier || "");
+  
+  // Client (single for now, matching service structure)
+  interface ClientEntry {
+    id: string | null;
+    name: string;
+  }
+  const [clients, setClients] = useState<ClientEntry[]>([
+    { id: service.client_party_id || null, name: service.client || "" }
+  ]);
+  
+  const [payerPartyId, setPayerPartyId] = useState<string | null>(service.payer_party_id || null);
+  const [payerName, setPayerName] = useState(service.payer || "");
+  const [servicePrice, setServicePrice] = useState(String(service.servicePrice || 0));
+  const [clientPrice, setClientPrice] = useState(String(service.clientPrice || 0));
+  const [resStatus, setResStatus] = useState(service.resStatus || "booked");
+  const [refNr, setRefNr] = useState(service.refNr || "");
+  const [ticketNr, setTicketNr] = useState(service.ticketNr || "");
+  
+  // Hotel-specific fields
+  const [hotelName, setHotelName] = useState(service.hotelName || "");
+  const [hotelAddress, setHotelAddress] = useState(service.hotelAddress || "");
+  const [hotelPhone, setHotelPhone] = useState(service.hotelPhone || "");
+  const [hotelEmail, setHotelEmail] = useState(service.hotelEmail || "");
+  
+  // Transfer-specific fields
+  const [pickupLocation, setPickupLocation] = useState(service.pickupLocation || "");
+  const [dropoffLocation, setDropoffLocation] = useState(service.dropoffLocation || "");
+  const [pickupTime, setPickupTime] = useState(service.pickupTime || "");
+  const [estimatedDuration, setEstimatedDuration] = useState(service.estimatedDuration || "");
+  const [linkedFlightId, setLinkedFlightId] = useState<string | null>(service.linkedFlightId || null);
+  
+  // Flight-specific fields
+  const [flightSegments, setFlightSegments] = useState<FlightSegment[]>(service.flightSegments || []);
 
   // ESC key handler
   useEscapeKey(onClose);
-
-  // Handle client change (auto-fill payer if empty)
-  const handleClientChange = (clientId: string | null) => {
-    setFormData((prev) => ({
-      ...prev,
-      client_id: clientId,
-      payer_id: prev.payer_id || clientId, // Auto-fill payer
-    }));
+  
+  // Client management functions
+  const addClient = () => {
+    setClients([...clients, { id: null, name: "" }]);
+  };
+  
+  const updateClient = (index: number, id: string | null, name: string) => {
+    const updated = [...clients];
+    updated[index] = { id, name };
+    setClients(updated);
+  };
+  
+  const removeClient = (index: number) => {
+    if (clients.length <= 1) return;
+    setClients(clients.filter((_, i) => i !== index));
   };
 
+  // Determine which fields to show based on category
+  const showTicketNr = category === "Flight";
+  const showHotelFields = category === "Hotel";
+  const showTransferFields = category === "Transfer";
+  const showFlightItinerary = category === "Flight";
+
   const handleSave = async () => {
+    if (!serviceName.trim()) {
+      setError("Service name is required");
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      const primaryClient = clients.find(c => c.id) || clients[0];
+
+      const payload: Record<string, unknown> = {
+        category,
+        service_name: serviceName.trim(),
+        service_date_from: dateFrom || null,
+        service_date_to: dateTo || dateFrom || null,
+        supplier_party_id: supplierPartyId,
+        supplier_name: supplierName,
+        client_party_id: primaryClient?.id || null,
+        client_name: primaryClient?.name || "",
+        payer_party_id: payerPartyId,
+        payer_name: payerName,
+        service_price: parseFloat(servicePrice) || 0,
+        client_price: parseFloat(clientPrice) || 0,
+        res_status: resStatus || "booked",
+        ref_nr: refNr || null,
+        ticket_nr: showTicketNr ? ticketNr : null,
+      };
+
+      // Add hotel-specific fields
+      if (showHotelFields) {
+        payload.hotel_name = hotelName;
+        payload.hotel_address = hotelAddress;
+        payload.hotel_phone = hotelPhone;
+        payload.hotel_email = hotelEmail;
+      }
+
+      // Add transfer-specific fields
+      if (showTransferFields) {
+        payload.pickup_location = pickupLocation;
+        payload.dropoff_location = dropoffLocation;
+        payload.pickup_time = pickupTime;
+        payload.estimated_duration = estimatedDuration;
+        payload.linked_flight_id = linkedFlightId;
+      }
+
+      // Add flight-specific fields
+      if (showFlightItinerary && flightSegments.length > 0) {
+        payload.flight_segments = flightSegments;
+      }
 
       const response = await fetch(
         `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
@@ -96,35 +206,22 @@ export default function EditServiceModalNew({
               : {}),
           },
           credentials: 'include',
-          body: JSON.stringify({
-            service_name: formData.name,
-            category: formData.category,
-            service_price: formData.service_price,
-            client_price: formData.client_price,
-            res_status: formData.res_status || null,
-            ref_nr: formData.ref_nr || null,
-            service_date_from: formData.date_from || null,
-            service_date_to: formData.date_to || null,
-            ticket_nr: formData.ticket_nr || null,
-            supplier_party_id: formData.supplier_id,
-            client_party_id: formData.client_id,
-            payer_party_id: formData.payer_id,
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
       if (response.ok) {
         onServiceUpdated({
           id: service.id,
-          name: formData.name,
-          category: formData.category,
-          servicePrice: formData.service_price,
-          clientPrice: formData.client_price,
-          resStatus: formData.res_status || null,
-          refNr: formData.ref_nr,
-          ticketNr: formData.ticket_nr,
-          dateFrom: formData.date_from,
-          dateTo: formData.date_to,
+          name: serviceName,
+          category,
+          servicePrice: parseFloat(servicePrice) || 0,
+          clientPrice: parseFloat(clientPrice) || 0,
+          resStatus,
+          refNr,
+          ticketNr,
+          dateFrom,
+          dateTo,
         });
         onClose();
       } else {
@@ -141,321 +238,355 @@ export default function EditServiceModalNew({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white z-10">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-xl">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Edit Service</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1 text-gray-400 hover:text-gray-600"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
               {error}
             </div>
           )}
 
-          {/* Basic Info Card */}
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              Basic Info
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Category */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                >
-                  <option value="">Select category</option>
-                  <option value="Flight">🛫 Flight</option>
-                  <option value="Hotel">🏨 Hotel</option>
-                  <option value="Transfer">🚗 Transfer</option>
-                  <option value="Tour">🗺️ Tour</option>
-                  <option value="Insurance">🛡️ Insurance</option>
-                  <option value="Visa">📄 Visa</option>
-                  <option value="Rent a Car">🚙 Rent a Car</option>
-                  <option value="Cruise">🚢 Cruise</option>
-                  <option value="Other">📦 Other</option>
-                </select>
-              </div>
-
-              {/* Status */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
-                <select
-                  value={formData.res_status}
-                  onChange={(e) =>
-                    setFormData({ ...formData, res_status: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="">Not set</option>
-                  <option value="booked">✅ Booked</option>
-                  <option value="confirmed">✅ Confirmed</option>
-                  <option value="changed">🟡 Changed</option>
-                  <option value="rejected">🔴 Rejected</option>
-                  <option value="cancelled">🚫 Cancelled</option>
-                </select>
-              </div>
+          {/* Row 1: Category + Name */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Category <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+              >
+                {SERVICE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
-
-            {/* Name */}
-            <div className="mt-3">
-              <label className="block text-sm font-medium mb-1">
-                Name <span className="text-red-500">*</span>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Service Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                required
+                value={serviceName}
+                onChange={(e) => setServiceName(e.target.value)}
+                placeholder="Service description..."
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
               />
-            </div>
-
-            {/* Service Dates */}
-            <div className="mt-3">
-              <label className="block text-sm font-medium mb-1">
-                Service Dates
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="date"
-                  value={formData.date_from}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date_from: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-                <input
-                  type="date"
-                  value={formData.date_to}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date_to: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
             </div>
           </div>
 
-          {/* Pricing Card */}
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              Pricing
-            </h3>
+          {/* Row 2: Dates with range calendar picker */}
+          <DateRangePicker
+            label="Service Dates"
+            from={dateFrom}
+            to={dateTo}
+            onChange={(from, to) => {
+              setDateFrom(from);
+              setDateTo(to);
+            }}
+          />
 
-            <div className="grid grid-cols-3 gap-4 items-end">
-              {/* Service Price */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Service Price (€) <span className="text-red-500">*</span>
+          {/* Row 3: Supplier */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+            <PartySelect
+              value={supplierPartyId}
+              onChange={(id, name) => {
+                setSupplierPartyId(id);
+                setSupplierName(name);
+              }}
+              roleFilter="supplier"
+            />
+          </div>
+
+          {/* Row 4: Clients + Payer */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Client{clients.length > 1 ? "s" : ""}
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.service_price}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      service_price: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Your cost</p>
+                <button
+                  type="button"
+                  onClick={addClient}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add
+                </button>
               </div>
-
-              {/* Client Price */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Client Price (€) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.client_price}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      client_price: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Client pays</p>
+              <div className="space-y-2">
+                {clients.map((client, index) => (
+                  <div key={index} className="flex gap-2">
+                    <div className="flex-1">
+                      <PartySelect
+                        value={client.id}
+                        onChange={(id, name) => updateClient(index, id, name)}
+                        roleFilter="client"
+                        initialDisplayName={client.name}
+                      />
+                    </div>
+                    {clients.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeClient(index)}
+                        className="px-2 text-red-500 hover:text-red-700"
+                        title="Remove client"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
+              <PartySelect
+                value={payerPartyId}
+                onChange={(id, name) => {
+                  setPayerPartyId(id);
+                  setPayerName(name);
+                }}
+                roleFilter="client"
+                initialDisplayName={payerName}
+              />
+            </div>
+          </div>
 
-              {/* Margin (auto-calculated) */}
+          {/* Row 5: Prices */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Service Price (€)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={servicePrice}
+                onChange={(e) => setServicePrice(e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Price (€)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={clientPrice}
+                onChange={(e) => setClientPrice(e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Row 6: Status + References */}
+          <div className={`grid gap-4 ${showTicketNr ? "grid-cols-3" : "grid-cols-2"}`}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Res Status</label>
+              <select
+                value={resStatus}
+                onChange={(e) => setResStatus(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+              >
+                {RES_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ref Nr</label>
+              <input
+                type="text"
+                value={refNr}
+                onChange={(e) => setRefNr(e.target.value)}
+                placeholder="Booking reference"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+              />
+            </div>
+            {showTicketNr && (
               <div>
-                <label className="block text-sm font-medium mb-1">Margin</label>
-                <div className="px-3 py-2 bg-white border rounded-lg h-[42px] flex items-center">
-                  <span
-                    className={`font-semibold ${
-                      margin > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
-                    €{margin.toFixed(2)}
-                  </span>
-                  <span className="text-xs text-gray-500 ml-2">
-                    ({marginPercent.toFixed(1)}%)
-                  </span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ticket Nr</label>
+                <input
+                  type="text"
+                  value={ticketNr}
+                  onChange={(e) => setTicketNr(e.target.value)}
+                  placeholder="e.g., 555-1234567890"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Hotel-specific fields */}
+          {showHotelFields && (
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Hotel Details</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hotel Name</label>
+                  <input
+                    type="text"
+                    value={hotelName}
+                    onChange={(e) => setHotelName(e.target.value)}
+                    placeholder="e.g., Grand Hotel Rome"
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <input
+                    type="text"
+                    value={hotelAddress}
+                    onChange={(e) => setHotelAddress(e.target.value)}
+                    placeholder="Hotel address"
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={hotelPhone}
+                      onChange={(e) => setHotelPhone(e.target.value)}
+                      placeholder="+39 06 1234567"
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={hotelEmail}
+                      onChange={(e) => setHotelEmail(e.target.value)}
+                      placeholder="hotel@example.com"
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Parties Card */}
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              Parties
-            </h3>
+          {/* Flight-specific fields - Itinerary */}
+          {showFlightItinerary && (
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Flight Itinerary</h3>
+              <FlightItineraryInput
+                segments={flightSegments}
+                onSegmentsChange={setFlightSegments}
+              />
+            </div>
+          )}
 
-            <div className="grid grid-cols-3 gap-4">
-              {/* Supplier */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Supplier
-                </label>
-                <PartySelect
-                  roleFilter="supplier"
-                  value={formData.supplier_id}
-                  onChange={(id, name) =>
-                    setFormData({ ...formData, supplier_id: id })
-                  }
-                  
-                />
-                <p className="text-xs text-gray-500 mt-1">Optional</p>
-              </div>
-
-              {/* Client */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Client <span className="text-red-500">*</span>
-                </label>
-                <PartySelect
-                  roleFilter="client"
-                  value={formData.client_id}
-                  onChange={handleClientChange}
-                  
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Who travels</p>
-              </div>
-
-              {/* Payer */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Payer <span className="text-red-500">*</span>
-                </label>
-                <PartySelect
-                  value={formData.payer_id}
-                  onChange={(id, name) =>
-                    setFormData({ ...formData, payer_id: id })
-                  }
-                  
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Who pays</p>
+          {/* Transfer-specific fields */}
+          {showTransferFields && (
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Transfer Itinerary</h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Location</label>
+                    <input
+                      type="text"
+                      value={pickupLocation}
+                      onChange={(e) => setPickupLocation(e.target.value)}
+                      placeholder="e.g., FCO Airport Terminal 3"
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dropoff Location</label>
+                    <input
+                      type="text"
+                      value={dropoffLocation}
+                      onChange={(e) => setDropoffLocation(e.target.value)}
+                      placeholder="e.g., Grand Hotel Rome"
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Time</label>
+                    <input
+                      type="time"
+                      value={pickupTime}
+                      onChange={(e) => setPickupTime(e.target.value)}
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Est. Duration</label>
+                    <input
+                      type="text"
+                      value={estimatedDuration}
+                      onChange={(e) => setEstimatedDuration(e.target.value)}
+                      placeholder="e.g., 45 min"
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Link to Flight</label>
+                    <select
+                      value={linkedFlightId || ""}
+                      onChange={(e) => setLinkedFlightId(e.target.value || null)}
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
+                    >
+                      <option value="">No linked flight</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-800">
+                    💡 <strong>Airport Transfer Tips:</strong><br />
+                    • Arrival: Schedule pickup +15 min after landing time<br />
+                    • Departure: Schedule to arrive at airport 2h 10min before flight
+                  </p>
+                </div>
               </div>
             </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 disabled:opacity-50"
+            >
+              {isSubmitting ? "Saving..." : "Save Changes"}
+            </button>
           </div>
-
-          {/* References Card */}
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              References
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Ref Nr */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Ref Nr</label>
-                <input
-                  type="text"
-                  value={formData.ref_nr}
-                  onChange={(e) =>
-                    setFormData({ ...formData, ref_nr: e.target.value })
-                  }
-                  
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-                <p className="text-xs text-gray-500 mt-1">Booking reference</p>
-              </div>
-
-              {/* Ticket Nr */}
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Ticket Nr
-                </label>
-                <input
-                  type="text"
-                  value={formData.ticket_nr}
-                  onChange={(e) =>
-                    setFormData({ ...formData, ticket_nr: e.target.value })
-                  }
-                  
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-                <p className="text-xs text-gray-500 mt-1">For flights/tours</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t sticky bottom-0 bg-white">
-          <button
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {isSubmitting ? 'Saving...' : 'Save Service'}
-          </button>
         </div>
       </div>
     </div>

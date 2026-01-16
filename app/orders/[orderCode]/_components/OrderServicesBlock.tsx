@@ -9,6 +9,7 @@ import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
 import SplitServiceModal from "./SplitServiceModal";
 import SplitModalMulti from "./SplitModalMulti";
+import { FlightSegment } from "@/components/FlightItineraryInput";
 
 interface Traveller {
   id: string;
@@ -32,14 +33,30 @@ interface Service {
   supplierPartyId?: string;
   payerPartyId?: string;
   clientPartyId?: string;
+  supplier_party_id?: string;
+  client_party_id?: string;
+  payer_party_id?: string;
   servicePrice: number;
   clientPrice: number;
   resStatus: "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr?: string;
   ticketNr?: string;
   assignedTravellerIds: string[];
-  invoice_id?: string | null; // NEW: Invoice lock
-  splitGroupId?: string | null; // NEW: Split group identifier
+  invoice_id?: string | null;
+  splitGroupId?: string | null;
+  // Hotel-specific
+  hotelName?: string;
+  hotelAddress?: string;
+  hotelPhone?: string;
+  hotelEmail?: string;
+  // Transfer-specific
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  pickupTime?: string;
+  estimatedDuration?: string;
+  linkedFlightId?: string;
+  // Flight-specific
+  flightSegments?: FlightSegment[];
 }
 
 interface OrderServicesBlockProps {
