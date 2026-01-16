@@ -42,7 +42,7 @@ export default function DirectoryCombobox({
         const response = await fetch('/api/directory');
         if (response.ok) {
           const data = await response.json();
-          setDirectoryItems(data);
+          setDirectoryItems(data.data || data);
         }
       } catch (error) {
         console.error('Failed to fetch directory:', error);
@@ -66,7 +66,7 @@ export default function DirectoryCombobox({
       const searchLower = search.toLowerCase();
       items = items.filter(
         (item) =>
-          item.name.toLowerCase().includes(searchLower) ||
+          item.name?.toLowerCase().includes(searchLower) ||
           item.email?.toLowerCase().includes(searchLower)
       );
     }
