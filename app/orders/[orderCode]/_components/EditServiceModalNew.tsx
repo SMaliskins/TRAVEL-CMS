@@ -78,7 +78,7 @@ export default function EditServiceModalNew({
     }));
   };
 
-
+  const handleSave = async () => {
     setIsSubmitting(true);
     setError(null);
 

@@ -158,7 +158,7 @@ export default function AddServiceModal({
     setClients(updated);
   };
   
-
+  const removeClient = (index: number) => {
     if (clients.length <= 1) return; // Keep at least one client
     setClients(clients.filter((_, i) => i !== index));
   };
