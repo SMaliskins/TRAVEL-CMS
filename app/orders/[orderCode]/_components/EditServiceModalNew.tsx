@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import DirectoryCombobox from '@/components/DirectoryCombobox';
+import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 
 interface Service {
   id: string;
@@ -74,6 +75,9 @@ export default function EditServiceModalNew({
     }));
   };
 
+
+  // ESC key handler
+  useEscapeKey(onClose);
   const handleSave = async () => {
     setIsSubmitting(true);
     setError(null);

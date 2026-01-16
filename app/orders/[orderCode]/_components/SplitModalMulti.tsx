@@ -1,8 +1,23 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Service } from '@/lib/types/order';
+import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+interface Service {
 
+  id: string;
+  name: string;
+  category: string;
+  servicePrice: number;
+  clientPrice: number;
+  payer: string;
+  payerPartyId?: string;
+  client: string;
+  clientName?: string;
+  payerName?: string;
+  supplierName?: string;
+  serviceName?: string;
+  clientPartyId?: string;
+}
 interface SplitModalMultiProps {
   services: Service[];
   orderCode: string;
@@ -23,6 +38,9 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
   const [activeTab, setActiveTab] = useState('overview');
   const [splitConfigs, setSplitConfigs] = useState<Record<string, SplitConfig>>({});
   const [saving, setSaving] = useState(false);
+
+  // ESC key handler
+  useEscapeKey(onClose);
   
   const getCategoryIcon = (category: string) => {
     const icons: Record<string, string> = {

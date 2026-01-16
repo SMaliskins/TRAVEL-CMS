@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 
 interface Service {
   id: string;
@@ -15,6 +16,10 @@ interface Service {
   dateTo?: string;
   payerPartyId?: string;
   clientPartyId?: string;
+  payer?: string;
+  client?: string;
+  clientName?: string;
+  payerName?: string;
 }
 
 interface Party {
@@ -82,6 +87,9 @@ export default function SplitServiceModal({
   ]);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ESC key handler
+  useEscapeKey(onClose);
 
   // Fetch parties list
   const fetchParties = async () => {
@@ -171,7 +179,7 @@ export default function SplitServiceModal({
         // Fallback: try to find payer by name
         if (service.payer && service.payer !== "-") {
           const payerByName = allParties.find((p) => 
-            p.display_name.toLowerCase() === service.payer.toLowerCase()
+            p.display_name.toLowerCase() === service.payer?.toLowerCase()
           );
           if (payerByName) {
             console.log("[SplitModal] Found payer by name:", payerByName.display_name);
@@ -206,8 +214,8 @@ export default function SplitServiceModal({
     }
   }, [originalPayer, parties.length]); // Run when originalPayer is set
 
-  const totalClientAmount = parts.reduce((sum, part) => sum + (parseFloat(part.clientAmount) || 0), 0);
-  const totalServiceAmount = parts.reduce((sum, part) => sum + part.serviceAmount, 0);
+  const totalClientAmount = parts.reduce((sum, part) => sum + (parseFloat(String(part.clientAmount)) || 0), 0);
+  const totalServiceAmount = parts.reduce((sum, part) => sum + (parseFloat(String(part.serviceAmount)) || 0), 0);
   const isValidClientTotal = Math.abs(totalClientAmount - service.clientPrice) < 0.01;
   const isValidServiceTotal = Math.abs(totalServiceAmount - service.servicePrice) < 0.01;
   const hasEmptyPayers = parts.some((part) => !part.payerPartyId);
@@ -245,7 +253,7 @@ export default function SplitServiceModal({
     } else if (field === "clientAmount") {
       newParts[index] = {
         ...newParts[index],
-        clientAmount: value,
+        clientAmount: parseFloat(value) || 0,
       };
       
       if (index !== parts.length - 1) {
@@ -256,7 +264,7 @@ export default function SplitServiceModal({
         newParts[newParts.length - 1].clientAmount = Math.max(0, remainder);
         
         newParts.forEach((part, i) => {
-          const clientAmt = parseFloat(part.clientAmount) || 0;
+          const clientAmt = part.clientAmount || 0;
           const ratio = clientAmt / service.clientPrice;
           newParts[i].serviceAmount = Math.round(service.servicePrice * ratio * 100) / 100;
         });
@@ -294,12 +302,12 @@ export default function SplitServiceModal({
 
 const handleSplit = async () => {
     if (!isValidClientTotal) {
-      setError(`Total client amount (€${totalClientAmount.toFixed(2)}) must equal original (€${service.clientPrice.toFixed(2)})`);
+      setError(`Total client amount (€${Number(totalClientAmount).toFixed(2)}) must equal original (€${service.clientPrice.toFixed(2)})`);
       return;
     }
 
     if (!isValidServiceTotal) {
-      setError(`Total service amount (€${totalServiceAmount.toFixed(2)}) must equal original (€${service.servicePrice.toFixed(2)})`);
+      setError(`Total service amount (€${Number(totalServiceAmount).toFixed(2)}) must equal original (€${service.servicePrice.toFixed(2)})`);
       return;
     }
 
@@ -505,13 +513,13 @@ const handleSplit = async () => {
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-gray-700">Total Client Price:</span>
                 <span className={`text-lg font-semibold ${isValidClientTotal ? "text-green-600" : "text-red-600"}`}>
-                  €{totalClientAmount.toFixed(2)}
+                  €{Number(totalClientAmount).toFixed(2)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-gray-700">Total Service Price:</span>
                 <span className={`text-lg font-semibold ${isValidServiceTotal ? "text-green-600" : "text-red-600"}`}>
-                  €{totalServiceAmount.toFixed(2)}
+                  €{Number(totalServiceAmount).toFixed(2)}
                 </span>
               </div>
               {(!isValidClientTotal || !isValidServiceTotal) && (

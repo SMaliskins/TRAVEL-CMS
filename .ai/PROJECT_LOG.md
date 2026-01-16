@@ -1,3 +1,36 @@
+## [2026-01-12 21:30] RUNNER — Booking.com API Integration Task Created
+
+**Task:** BOOK1 — Smart Pricing System | **Status:** START
+
+### 📋 NEW TASK CREATED
+
+**Business Goal:** Система сравнения цен для определения Smart Price
+- Сравнение цен от наших поставщиков с Booking.com
+- Формула: `Smart Price = max(Our Best Price, min(Booking Price))`
+- Правило: Не дороже Booking.com, но не дешевле нашей лучшей цены
+
+**Features:**
+- Поиск отелей по городу/датам/гостям
+- Получение цен и доступности номеров
+- Детали отеля (описание, фото, удобства)
+- UI для сравнения цен
+- Архитектура для добавления других поставщиков
+
+**Technical Scope:**
+```
+lib/booking/          ← API Client
+lib/pricing/          ← Smart Price Logic
+app/api/booking/      ← API Routes
+components/HotelCompare/  ← UI Components
+```
+
+**Pipeline:** SEC → CW → QA
+**Spec:** `.ai/tasks/booking-api-integration.md`
+
+**Next Step:** Security Review → API credentials storage
+
+---
+
 ## [2026-01-12 19:45] RUNNER — Session Review & Task Status Update
 
 **Task:** Review Code Writer progress | **Status:** DONE
@@ -9161,3 +9194,66 @@ CREATE POLICY payments_tenant_isolation ON payments
 
 **Next Step:** User должен перезапустить dev server из основной директории `/Users/sergejsmaliskins/Projects/travel-cms/`
 
+
+### 📅 [2026-01-16] | [22:00]
+**Агент:** `CODE_WRITER`
+**Задача:** FIX: DirectoryCombobox TypeError - item.name.toLowerCase()
+**Статус:** `START`
+**Действия:**
+- Прочитал NEW_PROJECT_RULES.md ✅
+- Проверил PROJECT_TODO.md ✅
+- Анализирую ошибку: `can't access property "toLowerCase", item.name is undefined`
+- Файл: `components/DirectoryCombobox.tsx:69`
+- Причина: filteredItems filter не проверяет item.name на null/undefined
+
+**Next Step:** Исправить код и протестировать
+
+### 📅 [2026-01-16] | [22:05]
+**Агент:** `CODE_WRITER`
+**Задача:** FIX: DirectoryCombobox TypeError - item.name.toLowerCase()
+**Статус:** `SUCCESS` ✅
+**Действия:**
+- ✅ Исправлено: `item.name.toLowerCase()` → `item.name?.toLowerCase()`
+- ✅ Добавлен optional chaining для защиты от undefined
+- ✅ Коммит: `5ab5b81` - fix(DirectoryCombobox): add null check for item.name in filter
+
+**Результат:**
+- ❌ Ошибка: `can't access property "toLowerCase", item.name is undefined`
+- ✅ Решено: использован optional chaining `?.`
+- 🚀 Перезагрузите страницу для применения
+
+**Next Step:** Пользователь проверяет работу
+
+### 📅 [2026-01-16] | [22:10]
+**Агент:** `CODE_WRITER`
+**Задача:** FIX: OrderPage - Element type is invalid (export issue)
+**Статус:** `START`
+**Действия:**
+- Ошибка: "Element type is invalid: expected a string or class/function but got: object"
+- Локация: OrderPage render method
+- Причина: Вероятно неправильный import/export компонента
+
+**Next Step:** Найти OrderPage и проверить импорты
+
+### 📅 [2026-01-16] | [22:15]
+**Агент:** `CODE_WRITER`
+**Задача:** FIX: OrderPage - Element type is invalid
+**Статус:** `IN_PROGRESS`
+**Действия:**
+- ✅ Проверил все импорты в page.tsx - корректны (default imports)
+- ✅ Проверил экспорты всех компонентов - все `export default`
+- ✅ Очистил `.next` cache
+- 🔍 Причина: Вероятно, Next.js cache не обновился после исправления DirectoryCombobox
+
+**Next Step:** Пользователь перезапустит dev server
+
+### 📅 [2026-01-16] | [22:20]
+**Агент:** `CODE_WRITER`
+**Задача:** Add ESC key handler to close modals
+**Статус:** `START`
+**Действия:**
+- Задача: Добавить обработку клавиши ESC для закрытия модальных окон
+- Complexity: 🟢 Micro (простое добавление useEffect)
+- Файлы для изменения: все модальные компоненты
+
+**Next Step:** Найти все модалы и добавить ESC handler

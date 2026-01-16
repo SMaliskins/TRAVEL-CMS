@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 
 interface Traveller {
   id: string;
@@ -102,6 +103,9 @@ export default function AssignedTravellersModal({
   const [suggestedMode, setSuggestedMode] = useState<"none" | "last" | "second" | "frequent">("none");
   const [suggestedTravellers, setSuggestedTravellers] = useState<Traveller[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // ESC key handler
+  useEscapeKey(onClose);
 
   const assignedTravellerIds = service.assignedTravellerIds;
 

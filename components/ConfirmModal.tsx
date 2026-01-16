@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -21,6 +22,9 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  // ESC key handler
+  useEscapeKey(onCancel, isOpen);
+
   if (!isOpen) return null;
 
   return (
@@ -46,7 +50,3 @@ export default function ConfirmModal({
     </div>
   );
 }
-
-
-
-

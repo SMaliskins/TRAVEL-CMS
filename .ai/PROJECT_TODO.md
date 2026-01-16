@@ -123,6 +123,22 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | UI13 | Directory | Glassmorphism for Statistics Panel | UI → CODE WRITER → QA | TODO | - | UI Proposal #25 - backdrop-blur effect |
 | UI14 | Directory | Form State Persistence (localStorage draft) | UI → CODE WRITER → QA | TODO | - | UI Proposal #30 - save form state on close |
 
+## PHASE 5.5: External Integrations (ACTIVE)
+
+| ID | Area | Task | Pipeline | Current | Status | SCORE | Last Action |
+|----|------|------|----------|---------|--------|-------|-------------|
+| BOOK1 | Integrations | Booking.com API — Smart Pricing System | SEC→CW→QA | SEC | TODO | - | [12.01 21:30] Spec created |
+
+**Spec:** `.ai/tasks/booking-api-integration.md`
+
+**Scope:**
+- `lib/booking/` — API Client (client.ts, types.ts, config.ts)
+- `lib/pricing/smartPrice.ts` — Smart Price calculation
+- `app/api/booking/` — API routes (search, hotel, compare)
+- `components/HotelCompare/` — UI components
+
+---
+
 ## PHASE 6: Roles
 
 | ID | Area | Task | Owner | Status | Branch | Notes |

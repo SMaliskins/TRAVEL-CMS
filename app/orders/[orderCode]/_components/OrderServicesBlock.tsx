@@ -7,7 +7,8 @@ import AddServiceModal, { ServiceData } from "./AddServiceModal";
 import DateRangePicker from "@/components/DateRangePicker";
 import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
-import SplitServiceModal from "./SplitModalMulti";
+import SplitServiceModal from "./SplitServiceModal";
+import SplitModalMulti from "./SplitModalMulti";
 
 interface Traveller {
   id: string;
@@ -63,6 +64,7 @@ export default function OrderServicesBlock({
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
+  const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
 
   // Fetch services from API
   const fetchServices = useCallback(async () => {
@@ -492,8 +494,7 @@ export default function OrderServicesBlock({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedServiceIds([service.id]);
-                                  setSplitMultiModalOpen(true);
+                                  setSplitServiceId(service.id);
                                 }}
                                 className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors text-sm"
                                 title="Split Service"
@@ -503,7 +504,7 @@ export default function OrderServicesBlock({
                             </td>
                             {/* Cancel Button (hover effect) */}
                             <td className="px-2 py-1 text-right">
-                              {service.res_status !== "cancelled" && (
+                              {service.resStatus !== "cancelled" && (
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
@@ -576,15 +577,28 @@ export default function OrderServicesBlock({
           orderCode={orderCode}
           onClose={() => setEditServiceId(null)}
           onServiceUpdated={(updated) => {
-            setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
+            setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
             setEditServiceId(null);
           }}
         />
       )}
 
+
+      {/* Split Service Modal (Single) */}
+      {splitServiceId && (
+        <SplitServiceModal
+          service={services.find(s => s.id === splitServiceId)!}
+          orderCode={orderCode}
+          onClose={() => setSplitServiceId(null)}
+          onSuccess={() => {
+            fetchServices();
+            setSplitServiceId(null);
+          }}
+        />
+      )}
       {/* Split Multi Modal */}
       {splitMultiModalOpen && (
-        <SplitServiceModal
+        <SplitModalMulti
           services={services.filter(s => selectedServiceIds.includes(s.id))}
           orderCode={orderCode}
           onClose={() => setSplitMultiModalOpen(false)}

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import FlightItineraryInput, { FlightSegment } from "@/components/FlightItineraryInput";
+import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -48,6 +49,11 @@ export interface ServiceData {
   linkedFlightId?: string;
   // Flight-specific
   flightSegments?: FlightSegment[];
+  // Split-specific
+  isSplit?: boolean;
+  splitGroupId?: string | null;
+  splitIndex?: number | null;
+  splitTotal?: number | null;
 }
 
 const SERVICE_CATEGORIES = [
@@ -149,6 +155,9 @@ export default function AddServiceModal({
     setClients(updated);
   };
   
+
+  // ESC key handler
+  useEscapeKey(onClose);
   const removeClient = (index: number) => {
     if (clients.length <= 1) return; // Keep at least one client
     setClients(clients.filter((_, i) => i !== index));
