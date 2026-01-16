@@ -395,10 +395,9 @@ export default function OrderServicesBlock({
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
+                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors relative ${
                               service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
                             }`}
-                            onClick={() => setExpandedServiceId(expandedServiceId === service.id ? null : service.id)}
                           >
                             <td className="w-20 px-2 py-1 text-center relative">
                               {/* Connector icon between split group rows */}
