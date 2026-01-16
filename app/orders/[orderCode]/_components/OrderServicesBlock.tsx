@@ -59,6 +59,7 @@ export default function OrderServicesBlock({
   const [services, setServices] = useState<Service[]>([]);
   const [modalServiceId, setModalServiceId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
