@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import DirectoryCombobox from '@/components/DirectoryCombobox';
+import PartySelect from '@/components/PartySelect';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 
 interface Service {
@@ -240,7 +240,7 @@ export default function EditServiceModalNew({
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                placeholder="e.g. RIX-DXB-RIX"
+                
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 required
               />
@@ -294,7 +294,7 @@ export default function EditServiceModalNew({
                       service_price: parseFloat(e.target.value) || 0,
                     })
                   }
-                  placeholder="0.00"
+                  
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   required
                 />
@@ -316,7 +316,7 @@ export default function EditServiceModalNew({
                       client_price: parseFloat(e.target.value) || 0,
                     })
                   }
-                  placeholder="0.00"
+                  
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   required
                 />
@@ -354,14 +354,13 @@ export default function EditServiceModalNew({
                 <label className="block text-sm font-medium mb-1">
                   Supplier
                 </label>
-                <DirectoryCombobox
+                <PartySelect
+                  roleFilter="supplier"
                   value={formData.supplier_id}
-                  onChange={(value) =>
-                    setFormData({ ...formData, supplier_id: value })
+                  onChange={(id, name) =>
+                    setFormData({ ...formData, supplier_id: id })
                   }
-                  placeholder="Type to search..."
-                  filter={(item) => item.roles.includes('supplier')}
-                  allowEmpty
+                  
                 />
                 <p className="text-xs text-gray-500 mt-1">Optional</p>
               </div>
@@ -371,11 +370,11 @@ export default function EditServiceModalNew({
                 <label className="block text-sm font-medium mb-1">
                   Client <span className="text-red-500">*</span>
                 </label>
-                <DirectoryCombobox
+                <PartySelect
+                  roleFilter="client"
                   value={formData.client_id}
                   onChange={handleClientChange}
-                  placeholder="Select client"
-                  filter={(item) => item.roles.includes('client')}
+                  
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">Who travels</p>
@@ -386,12 +385,12 @@ export default function EditServiceModalNew({
                 <label className="block text-sm font-medium mb-1">
                   Payer <span className="text-red-500">*</span>
                 </label>
-                <DirectoryCombobox
+                <PartySelect
                   value={formData.payer_id}
-                  onChange={(value) =>
-                    setFormData({ ...formData, payer_id: value })
+                  onChange={(id, name) =>
+                    setFormData({ ...formData, payer_id: id })
                   }
-                  placeholder="Select payer"
+                  
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">Who pays</p>
@@ -415,7 +414,7 @@ export default function EditServiceModalNew({
                   onChange={(e) =>
                     setFormData({ ...formData, ref_nr: e.target.value })
                   }
-                  placeholder="e.g. ABC123"
+                  
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">Booking reference</p>
@@ -432,7 +431,7 @@ export default function EditServiceModalNew({
                   onChange={(e) =>
                     setFormData({ ...formData, ticket_nr: e.target.value })
                   }
-                  placeholder="e.g. 1234567890123"
+                  
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">For flights/tours</p>
