@@ -9399,3 +9399,36 @@ CREATE POLICY payments_tenant_isolation ON payments
 - Найду файл с Actions кнопками
 
 **Next Step:** Найти компонент и добавить кнопку
+
+### 📅 [2026-01-16] | [22:55]
+**Агент:** `CODE_WRITER`
+**Задача:** Add Duplicate service button in Actions
+**Статус:** `SUCCESS` ✅
+**Complexity:** 🟢 Micro
+**Действия:**
+- ✅ Прочитал NEW_PROJECT_RULES.md
+- ✅ Добавил кнопку 📋 Duplicate в Actions (между Split и Cancel)
+- ✅ Функция дублирует сервис через POST /api/orders/[orderCode]/services
+- ✅ Копирует все поля: name, category, prices, dates, parties
+- ✅ Коммит: `ed1e5ef` - feat: add Duplicate service button in Actions
+
+**Результат:**
+- Кнопка 📋 с фиолетовым цветом (отличается от других)
+- Hover effect: purple-50 background
+- Confirmation dialog перед дублированием
+- Автообновление списка после дублирования
+
+**Директория:** `/Users/sergejsmaliskins/Projects/travel-cms`
+**Ветка:** `feature/x`
+
+**Next Step:** Пользователь тестирует дублирование сервиса
+
+### 📅 [2026-01-16] | [23:00]
+**Агент:** `CODE_WRITER`
+**Задача:** FIX: Failed to duplicate service error
+**Статус:** `START`
+**Действия:**
+- Ошибка: "Failed to duplicate service" на строке 540
+- Проверяю что пошло не так
+
+**Next Step:** Проверить код и API response
