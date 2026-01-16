@@ -163,6 +163,7 @@ export default function OrderServicesBlock({
       default:
         return "bg-gray-100 text-gray-800";
     }
+  };
 
   // Generate consistent color for split group
   const getSplitGroupColor = (splitGroupId: string) => {
