@@ -448,6 +448,7 @@ export default function OrderServicesBlock({
                               className="px-2 py-1 text-sm text-gray-700 leading-tight cursor-pointer"
                               onDoubleClick={(e) => {
                                 e.stopPropagation();
+                                console.log('🔍 DoubleClick triggered on Category! Service ID:', service.id);
                                 setEditServiceId(service.id);
                               }}
                               title="Double-click to edit"
@@ -663,15 +664,18 @@ export default function OrderServicesBlock({
 
       {/* Edit Service Modal - simple inline editor */}
       {editServiceId && (
-        <EditServiceModalNew
-          service={services.find(s => s.id === editServiceId)!}
-          orderCode={orderCode}
-          onClose={() => setEditServiceId(null)}
-          onServiceUpdated={(updated) => {
-            setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
-            setEditServiceId(null);
-          }}
-        />
+        <>
+          {console.log('🔍 Rendering EditServiceModalNew for service:', editServiceId)}
+          <EditServiceModalNew
+            service={services.find(s => s.id === editServiceId)!}
+            orderCode={orderCode}
+            onClose={() => setEditServiceId(null)}
+            onServiceUpdated={(updated) => {
+              setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
+              setEditServiceId(null);
+            }}
+          />
+        </>
       )}
 
 
