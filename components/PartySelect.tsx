@@ -287,10 +287,10 @@ export default function PartySelect({
 
   // Sync inputValue when initialDisplayName changes
   useEffect(() => {
-    if (initialDisplayName && !inputValue) {
+    if (initialDisplayName) {
       setInputValue(initialDisplayName);
     }
-  }, [initialDisplayName, inputValue]);
+  }, [initialDisplayName]);
 
   // Load selected party on mount (only if no initialDisplayName provided)
   useEffect(() => {
