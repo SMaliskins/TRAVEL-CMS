@@ -320,6 +320,40 @@ components/HotelCompare/  ← UI Components
 
 ---
 
+## [2026-01-12 20:00] RUNNER — USR1-4: User Management System Specification
+
+**Task:** Create User Management specification | **Status:** DONE
+
+**User Request:**
+> "нужно добавить для роли Supervisor - возможность добавления users в систему с правами доступов: агент, бухгалтер, директор, supervisor"
+
+**Tasks Created:**
+
+| ID | Task | Complexity |
+|----|------|------------|
+| **USR1** | User Management: Supervisor adds users | 🔴 Complex |
+| USR2 | Roles: Agent, Accountant, Director, Supervisor | 🟠 Medium |
+| USR3 | User invite flow (email + temp password) | 🟡 Simple |
+| USR4 | User profile & password change | 🟡 Simple |
+
+**Specification Created:** `.ai/tasks/user-management-system.md`
+
+**Contents:**
+1. Role Hierarchy (4 levels)
+2. Permission Matrix (30+ permissions)
+3. Database Schema (user_profiles, RLS policies)
+4. API Endpoints (CRUD)
+5. UI Components (UserList, AddUserModal, EditUserModal)
+6. Security Considerations
+7. Implementation Phases (5 phases, 12h total)
+8. Testing Checklist
+
+**Pipeline:** DB → Security → Code Writer → QA
+
+**Next Step:** DB Specialist creates migration `user_management.sql`
+
+---
+
 ## [2026-01-12 19:45] RUNNER — Session Review & Task Status Update
 
 **Task:** Review Code Writer progress | **Status:** DONE

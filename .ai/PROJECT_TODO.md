@@ -143,11 +143,24 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 ---
 
-## PHASE 6: Roles
+## PHASE 6: Roles & User Management
 
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
 | O13 | System | Accountant role with financial reports | DB → SECURITY → CODE WRITER → QA | TODO | - | New role, report access |
+| **USR1** | **System** | **User Management: Supervisor adds users** | **DB→SEC→CW→QA** | **TODO** | **-** | **🔴 CRITICAL: users table, roles, permissions UI** |
+| USR2 | System | Roles: Agent, Accountant, Director, Supervisor | DB→SEC→CW→QA | TODO | - | Role-based access control |
+| USR3 | System | User invite flow (email + temp password) | CW→QA | TODO | - | Email service integration |
+| USR4 | System | User profile & password change | CW→QA | TODO | - | Self-service |
+
+**Spec:** `.ai/tasks/user-management-system.md`
+
+**USR1-4 Scope:**
+- **Roles:** Agent (basic), Accountant (finance), Director (all read), Supervisor (full admin)
+- **DB:** `user_profiles` table with role field, RLS policies
+- **UI:** `/settings/users` — list, add, edit, deactivate users
+- **Security:** RLS policies per role, Supervisor-only access to user management
+- **Email:** Welcome email with temp password
 
 ---
 
