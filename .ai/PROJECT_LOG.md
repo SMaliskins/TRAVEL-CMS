@@ -320,6 +320,44 @@ components/HotelCompare/  ← UI Components
 
 ---
 
+## [2026-01-12 20:30] RUNNER/DB — USR2: Roles System Migration
+
+**Task:** Create roles migration | **Status:** IN_PROGRESS
+
+**Created:** `migrations/001_roles_system.sql`
+
+**Tables:**
+- `roles` — 5 default roles (Subagent → Supervisor)
+- `role_permissions` — permissions per role
+
+**Default Roles:**
+
+| Name | Level | Scope | Color |
+|------|-------|-------|-------|
+| subagent | 1 | own | gray |
+| agent | 2 | all | blue |
+| accountant | 3 | all | green |
+| director | 4 | all | purple |
+| supervisor | 5 | all | red |
+
+**Permissions (28 total):**
+- orders: view, create, edit, delete
+- services: view, create, edit, delete, price.view, margin.view
+- invoices: view, create, edit, send
+- payments: view, create, edit
+- reports: view, export
+- directory: view, create, edit, delete
+- users: view, create, edit, delete
+- settings: company, system
+
+**Helper Functions:**
+- `get_user_role_level(user_id)` — returns role level (1-5)
+- `has_permission(user_id, permission)` — check permission
+
+**Next Step:** Run migration in Supabase → Create API /api/roles
+
+---
+
 ## [2026-01-12 20:15] RUNNER — USR1-6: User Management + SaaS Model (v2)
 
 **Task:** Update specification for SaaS model | **Status:** DONE
