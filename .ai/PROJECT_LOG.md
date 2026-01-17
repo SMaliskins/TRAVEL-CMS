@@ -77,16 +77,25 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
-## [2026-01-17 17:30] CODE WRITER — AUTH1: Logout Implementation
+## [2026-01-17 17:30] CODE WRITER + QA — AUTH1: Logout Implementation
 
-**Task:** AUTH1 | **Status:** START
-**Agent:** Code Writer
+**Task:** AUTH1 | **Status:** SUCCESS ✅
+**Agent:** Code Writer → QA
 **Complexity:** 🟡 Simple
 
-**План:**
-1. Добавить import supabase + useRouter в TopBar.tsx
-2. Реализовать handleLogout с signOut() + redirect /login
-3. Протестировать как QA
+**Изменения:**
+- `components/TopBar.tsx`:
+  - Добавлен import `supabase` + `useRouter`
+  - Добавлен state `isLoggingOut`
+  - Реализован `handleLogout()` с `supabase.auth.signOut()` + redirect `/login`
+  - Кнопка Logout показывает "Logging out..." во время процесса
+
+**QA Verification:**
+- ✅ TypeScript: без ошибок
+- ✅ Linter: без ошибок
+- ✅ Все критерии выполнены
+
+**SCORE:** 10/10
 
 ---
 
@@ -10553,3 +10562,39 @@ serviceName → service_name
 - При открытии письма — задержка 0.5-2 сек (чтение с IMAP)
 
 **Next Step:** Runner для ревью и утверждения
+
+### 📅 [2026-01-17] | [17:00]
+**Агент:** `CODE WRITER`
+**Задача:** O-INV-COUNT (Fix invoiced services count)
+**Статус:** SUCCESS → QA
+**Действия:**
+
+**Проблема от пользователя:**
+- На странице `/orders` показывает "3/19 services invoiced"
+- Считаются ВСЕ сервисы, включая cancelled
+- Пользователь указал: "не должен считать cancelled services"
+
+**Root Cause:**
+- В `app/api/orders/route.ts` (строки 155-156):
+  ```typescript
+  const totalServices = services.length; // ❌
+  const invoicedServices = services.filter((s: any) => s.invoice_id).length; // ❌
+  ```
+- Не было фильтрации по `res_status !== 'cancelled'`
+
+**Решение:**
+```typescript
+const totalServices = services.filter((s: any) => s.res_status !== 'cancelled').length; // ✅
+const invoicedServices = services.filter((s: any) => s.invoice_id && s.res_status !== 'cancelled').length; // ✅
+```
+
+**Изменения:**
+- `app/api/orders/route.ts`: добавлена фильтрация `res_status !== 'cancelled'`
+
+**Commit:** `3a87293` - fix(orders): Exclude cancelled services from invoiced count
+
+**Тестирование:**
+- ⏳ Пользователь должен проверить: перезагрузить `/orders` → Order 0005/26-SM должен показывать корректный count (без cancelled)
+
+**Next Step:** Пользователь тестирует (перезагрузить страницу!)
+
