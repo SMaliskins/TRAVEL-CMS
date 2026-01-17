@@ -158,31 +158,43 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If search provided and no results from display_name, try searching in party_person
+    // If search provided and no results from display_name, try searching in party_person and party_company
     if (search && (!parties || parties.length === 0)) {
+      const searchLower = search.toLowerCase();
+      
       // Search in party_person by first_name or last_name
       const { data: personMatches } = await supabaseAdmin
         .from("party_person")
         .select("party_id")
         .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`)
         .limit(limit);
+      
+      // Search in party_company by company_name
+      const { data: companyMatches } = await supabaseAdmin
+        .from("party_company")
+        .select("party_id")
+        .ilike("company_name", `%${search}%`)
+        .limit(limit);
 
-      if (personMatches && personMatches.length > 0) {
-        const matchedIds = personMatches.map((p: { party_id: string }) => p.party_id);
-        
+      const matchedIds = [
+        ...(personMatches || []).map((p: { party_id: string }) => p.party_id),
+        ...(companyMatches || []).map((c: { party_id: string }) => c.party_id),
+      ];
+
+      if (matchedIds.length > 0) {
         // Fetch parties by these IDs
-        let personQuery = supabaseAdmin
+        let fallbackQuery = supabaseAdmin
           .from("party")
           .select("*", { count: "exact" })
           .in("id", matchedIds);
         
         if (userCompanyId) {
-          personQuery = personQuery.eq("company_id", userCompanyId);
+          fallbackQuery = fallbackQuery.eq("company_id", userCompanyId);
         }
         
-        const { data: personParties, count: personCount } = await personQuery;
-        parties = personParties || [];
-        count = personCount || 0;
+        const { data: fallbackParties, count: fallbackCount } = await fallbackQuery;
+        parties = fallbackParties || [];
+        count = fallbackCount || 0;
       }
     }
 
