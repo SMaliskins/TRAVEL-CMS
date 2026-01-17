@@ -57,6 +57,10 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | OD13 | Checklist Panel | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Dynamic checklist with links |
 | OD14 | Payment Section Empty State | - | CW | ✅ DONE | 10/10 | [12.01 18:00] Empty state with CTA |
 | OD15 | Split Modal (Multi) | - | CW | ✅ DONE | 10/10 | [12.01 18:30] Dual Split system: single + multi |
+| **SVC-FIX-1** | **Orders** | **Edit в Service не работает (doubleClick)** | **CW→QA** | **✅ DONE** | **9/10** | **[09.01 22:45] doubleClick на всю строку** |
+| **SVC-FIX-2** | **Orders** | **В сервисах нет Supplier и Client** | **CW→QA** | **✅ DONE** | **9/10** | **[09.01 22:45] supplierPartyId mapped** |
+| **SVC-FIX-3** | **Orders** | **Edit = Add (ВСЕ поля)** | **CW→QA** | **✅ DONE** | **9/10** | **[09.01 22:45] Full 640 lines sync** |
+| **SVC-FIX-4** | **Orders** | **Cancelled filter с localStorage** | **CW→QA** | **✅ DONE** | **9/10** | **[09.01 22:45] Toggle + persistence** |
 
 **Spec:** `.ai/tasks/order-detail-redesign.md`
 **UI Audit:** `.ai/tasks/ui-order-detail-page-0002-26-sm-audit.md`

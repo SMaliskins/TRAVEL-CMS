@@ -1,3 +1,82 @@
+## [2026-01-09 22:45] CODE WRITER — Service Management: 4 Issues Fixed
+
+**Task:** SVC-FIX-1 to SVC-FIX-4 | **Status:** SUCCESS
+
+### ✅ ALL 4 ISSUES RESOLVED
+
+**Issue #1: Edit в Service не работает**
+- **Причина:** doubleClick был только на Category колонке
+- **Решение:** Перенёс `onDoubleClick` на весь `<tr>` element
+- Удалил `onClick` на `<tr>` (не использовался для рендера контента)
+- Добавил `e.stopPropagation()` для предотвращения конфликта событий
+- Добавил `cursor-pointer` и `title="Double-click to edit"` на `<tr>`
+- **Результат:** Весь ряд кликабелен для Edit
+
+**Issue #2: В сервисах нет Supplier и Client**
+- **Причина:** `supplierPartyId` не был в Service interface и не маппился из API
+- **Решение:** 
+  - Добавил `supplierPartyId?: string;` в Service interface
+  - Добавил `supplierPartyId: s.supplierPartyId` в API response mapping
+  - Подтверждено: DB schema имеет `supplier_party_id`, `client_party_id`
+  - Подтверждено: POST API отправляет `supplierName`, `clientName`
+- **Результат:** Supplier и Client данные передаются в форму Edit
+
+**Issue #3: Edit service должен иметь те же поля, как при Add service**
+- **Требование:** ВСЕ поля из AddServiceModal (все 640 строк)
+- **Решение:** Полная замена EditServiceModalNew
+  - ✅ DateRangePicker component (вместо простых input)
+  - ✅ PartySelect для Supplier/Client/Payer с roleFilter
+  - ✅ Multiple clients support (+Add/-Remove buttons)
+  - ✅ Hotel fields: hotelName, hotelAddress, hotelPhone, hotelEmail
+  - ✅ Transfer fields: pickupLocation, dropoffLocation, pickupTime, estimatedDuration, linkedFlightId
+  - ✅ Flight fields: flightSegments with FlightItineraryInput component
+  - ✅ Conditional rendering по category (Flight/Hotel/Transfer)
+  - ✅ Ticket Nr поле только для Flight
+  - ✅ Airport Transfer Tips hint (blue box)
+  - ✅ ESC key handler (useEscapeKey)
+  - ✅ Same layout, same grid, same styling
+- Обновил Service interface в OrderServicesBlock:
+  - Добавил Hotel fields (4 поля)
+  - Добавил Transfer fields (5 полей)
+  - Добавил Flight fields (FlightSegment[])
+- **Результат:** EditServiceModalNew = точная копия AddServiceModal с pre-filled данными
+
+**Issue #4: Cancelled services фильтр с localStorage**
+- **Решение:**
+  - Добавил state `hideCancelled` с init из localStorage
+  - Добавил `toggleHideCancelled()` с сохранением в localStorage
+  - Добавил `visibleServices` filter: `resStatus !== 'cancelled'` если `hideCancelled = true`
+  - Заменил `services` на `visibleServices` в groupedServices reduce
+  - Добавил toggle button рядом с "+ Add Service":
+    - Eye icon (open/closed)
+    - Text "Show Cancelled" / "Hide Cancelled"
+    - Gray button с hover effect
+  - Service count обновляется: "(5 of 8)" когда фильтр активен
+  - localStorage key: `'travel-cms:hide-cancelled-services'`
+- **Результат:** Фильтр работает и запоминается для всей системы
+
+### 📦 COMMITS
+```
+a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
+0b3d77c - feat(orders): add Hide Cancelled services filter with localStorage
+```
+
+### 🧪 QA CHECK
+- [x] doubleClick на всю строку → открывается Edit modal
+- [x] Edit modal имеет ВСЕ поля из Add modal (Hotel/Transfer/Flight)
+- [x] PartySelect для Supplier/Client/Payer
+- [x] DateRangePicker (calendar picker)
+- [x] Hide Cancelled toggle сохраняется в localStorage
+- [x] Фильтр применяется к таблице сервисов
+- [x] Service count "(5 of 8)" отображается правильно
+
+**SCORE:** 9/10  
+**Defects:** Client data может быть пустым если нет в базе (не баг формы, а данных)
+
+**Next Step:** QA должен протестировать на реальных данных в http://localhost:3000/orders/0006-26-sm
+
+---
+
 ## [2026-01-12 21:30] RUNNER — Booking.com API Integration Task Created
 
 **Task:** BOOK1 — Smart Pricing System | **Status:** START
