@@ -22,8 +22,8 @@ interface Service {
   client?: string | null;
   payer?: string | null;
   supplierPartyId?: string | null;
-  client_party_id?: string | null;
-  payer_party_id?: string | null;
+  clientPartyId?: string | null;
+  payerPartyId?: string | null;
   // Hotel-specific
   hotelName?: string;
   hotelAddress?: string;
@@ -89,10 +89,10 @@ export default function EditServiceModalNew({
     name: string;
   }
   const [clients, setClients] = useState<ClientEntry[]>([
-    { id: service.client_party_id || null, name: service.client || "" }
+    { id: service.clientPartyId || null, name: service.client || "" }
   ]);
   
-  const [payerPartyId, setPayerPartyId] = useState<string | null>(service.payer_party_id || null);
+  const [payerPartyId, setPayerPartyId] = useState<string | null>(service.payerPartyId || null);
   const [payerName, setPayerName] = useState(service.payer || "");
   const [servicePrice, setServicePrice] = useState(String(service.servicePrice || 0));
   const [clientPrice, setClientPrice] = useState(String(service.clientPrice || 0));
@@ -162,9 +162,9 @@ export default function EditServiceModalNew({
         service_date_to: dateTo || dateFrom || null,
         supplier_party_id: supplierPartyId,
         supplier_name: supplierName,
-        client_party_id: primaryClient?.id || null,
+        clientPartyId: primaryClient?.id || null,
         client_name: primaryClient?.name || "",
-        payer_party_id: payerPartyId,
+        payerPartyId: payerPartyId,
         payer_name: payerName,
         service_price: parseFloat(servicePrice) || 0,
         client_price: parseFloat(clientPrice) || 0,

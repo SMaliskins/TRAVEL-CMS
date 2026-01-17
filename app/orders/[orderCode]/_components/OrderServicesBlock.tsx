@@ -64,6 +64,8 @@ interface OrderServicesBlockProps {
   // Default client from order for auto-fill in AddServiceModal
   defaultClientId?: string | null;
   defaultClientName?: string;
+  orderDateFrom?: string | null;
+  orderDateTo?: string | null;
   onIssueInvoice?: (services: any[]) => void;
 }
 
@@ -71,6 +73,8 @@ export default function OrderServicesBlock({
   orderCode,
   defaultClientId,
   defaultClientName,
+  orderDateFrom,
+  orderDateTo,
   onIssueInvoice,
 }: OrderServicesBlockProps) {
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
@@ -713,6 +717,8 @@ export default function OrderServicesBlock({
 
       {showAddModal && (
         <AddServiceModal
+          orderDateFrom={orderDateFrom}
+          orderDateTo={orderDateTo}
           orderCode={orderCode}
           defaultClientId={defaultClientId}
           defaultClientName={defaultClientName}

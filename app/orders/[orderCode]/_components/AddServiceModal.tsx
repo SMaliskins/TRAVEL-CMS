@@ -12,6 +12,8 @@ interface AddServiceModalProps {
   // Default client from order
   defaultClientId?: string | null;
   defaultClientName?: string;
+  orderDateFrom?: string | null;
+  orderDateTo?: string | null;
   onClose: () => void;
   onServiceAdded: (service: ServiceData) => void;
 }
@@ -80,6 +82,8 @@ export default function AddServiceModal({
   orderCode,
   defaultClientId,
   defaultClientName,
+  orderDateFrom,
+  orderDateTo,
   onClose, 
   onServiceAdded 
 }: AddServiceModalProps) {
@@ -89,8 +93,8 @@ export default function AddServiceModal({
   // Form state
   const [category, setCategory] = useState("Flight");
   const [serviceName, setServiceName] = useState("");
-  const [dateFrom, setDateFrom] = useState<string | undefined>(undefined);
-  const [dateTo, setDateTo] = useState<string | undefined>(undefined);
+  const [dateFrom, setDateFrom] = useState<string | undefined>(orderDateFrom || undefined);
+  const [dateTo, setDateTo] = useState<string | undefined>(orderDateTo || undefined);
   const [supplierPartyId, setSupplierPartyId] = useState<string | null>(null);
   const [supplierName, setSupplierName] = useState("");
   

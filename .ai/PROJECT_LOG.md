@@ -9902,3 +9902,63 @@ CREATE POLICY payments_tenant_isolation ON payments
 
 ---
 
+
+### 📅 [2026-01-17] | [16:25]
+**Агент:** `DB Specialist`
+**Задача:** O-SRV-1, O-SRV-2, O-SRV-3
+**Статус:** START → ANALYSIS COMPLETE
+**Действия:**
+- Прочитан NEW_PROJECT_RULES.md ✅
+- Проанализирована схема БД `order_services`
+- Проверены API endpoints `/api/orders/[orderCode]/services`
+- Проверены компоненты: `AddServiceModal.tsx`, `EditServiceModalNew.tsx`, `OrderServicesBlock.tsx`
+
+**Найдено:**
+
+1. **O-SRV-1 (Edit Service Supplier не подтягивается)**:
+   - API GET возвращает: `supplierPartyId`, `supplierName` (camelCase) ✅
+   - `EditServiceModalNew` инициализирует: `service.supplierPartyId` ✅
+   - `PartySelect` получает правильное значение ✅
+   - **Проблема:** возможно не инициализируется `supplierName` для `initialDisplayName`
+
+2. **O-SRV-2 (Client не сохраняется)**:
+   - `AddServiceModal` отправляет: `clientPartyId`, `clientName` (camelCase) ✅
+   - API POST принимает: `body.clientPartyId`, `body.clientName` ✅
+   - API маппит: `client_party_id`, `client_name` (snake_case) для БД ✅
+   - **Проблема НЕ НАЙДЕНА в AddService** — нужна проверка QA
+
+   - `EditServiceModalNew` отправляет: `client_party_id`, `client_name` (snake_case) ❌
+   - API PATCH ожидает: camelCase или обрабатывает snake_case?
+   - **Проблема:** несоответствие формата в EditService
+
+3. **O-SRV-3 (Service Dates from Order)**:
+   - `AddServiceModal` получает: `orderCode`, `defaultClientId`, `defaultClientName`
+   - **Отсутствуют:** `orderDateFrom`, `orderDateTo`
+   - Нужно передать даты из Order в `AddServiceModal` и установить как default
+
+**DB Verification:**
+- Схема `order_services` содержит:
+  - `supplier_party_id UUID` ✅
+  - `supplier_name TEXT` ✅
+  - `client_party_id UUID` ✅
+  - `client_name TEXT` ✅
+  - `payer_party_id UUID` ✅
+  - `payer_name TEXT` ✅
+  - `service_date_from DATE` ✅
+  - `service_date_to DATE` ✅
+
+**Маппинг API → DB (подтвержден):**
+```
+clientPartyId → client_party_id
+clientName → client_name
+supplierPartyId → supplier_party_id
+supplierName → supplier_name
+payerPartyId → payer_party_id
+payerName → payer_name
+dateFrom → service_date_from
+dateTo → service_date_to
+serviceName → service_name
+```
+
+**Next Step:** `CODE WRITER` — fix EditServiceModalNew payload + add Order dates to AddServiceModal
+

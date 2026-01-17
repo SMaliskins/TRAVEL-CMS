@@ -246,6 +246,8 @@ export default function OrderPage({
                 orderCode={orderCode}
                 defaultClientId={order.client_party_id}
                 defaultClientName={order.client_display_name || undefined}
+                orderDateFrom={order.date_from}
+                orderDateTo={order.date_to}
                 onIssueInvoice={(services) => {
                   setInvoiceServices(services);
                   setShowInvoiceCreator(true);
