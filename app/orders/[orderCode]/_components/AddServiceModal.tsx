@@ -388,10 +388,11 @@ export default function AddServiceModal({
                   <div key={index} className="flex gap-2">
                     <div className="flex-1">
                       <PartySelect
+                        key={`client-${client.id || index}`}
                         value={client.id}
                         onChange={(id, name) => updateClient(index, id, name)}
                         // roleFilter="client" - removed to allow any party
-                        initialDisplayName={index === 0 ? defaultClientName : undefined}
+                        initialDisplayName={client.name || (index === 0 ? defaultClientName : "")}
                       />
                     </div>
                     {clients.length > 1 && (
@@ -413,13 +414,14 @@ export default function AddServiceModal({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
               <PartySelect
+                key={`payer-${payerPartyId || 'empty'}`}
                 value={payerPartyId}
                 onChange={(id, name) => {
                   setPayerPartyId(id);
                   setPayerName(name);
                 }}
                 // roleFilter="client" - removed to allow any party
-                initialDisplayName={defaultClientName}
+                initialDisplayName={payerName}
               />
             </div>
           </div>

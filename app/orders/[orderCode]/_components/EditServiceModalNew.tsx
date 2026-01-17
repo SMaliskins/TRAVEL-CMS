@@ -335,6 +335,7 @@ export default function EditServiceModalNew({
                   <div key={index} className="flex gap-2">
                     <div className="flex-1">
                       <PartySelect
+                        key={`client-${client.id || index}`}
                         value={client.id}
                         onChange={(id, name) => updateClient(index, id, name)}
                         // roleFilter="client" - removed to allow any party
@@ -360,6 +361,7 @@ export default function EditServiceModalNew({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
               <PartySelect
+                key={`payer-${payerPartyId || 'empty'}`}
                 value={payerPartyId}
                 onChange={(id, name) => {
                   setPayerPartyId(id);
