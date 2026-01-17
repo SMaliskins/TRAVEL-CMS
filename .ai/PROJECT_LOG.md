@@ -320,6 +320,51 @@ components/HotelCompare/  ← UI Components
 
 ---
 
+## [2026-01-12 20:15] RUNNER — USR1-6: User Management + SaaS Model (v2)
+
+**Task:** Update specification for SaaS model | **Status:** DONE
+
+**User Updates:**
+1. Added **Subagent** role (scope: own orders only)
+2. Changed **Agent** scope to "All" (not "Own")
+3. Roles will be extensible (stored in DB, not enum)
+4. **Feature Modules** with pricing (invoicing, reports, booking_api, etc.)
+5. **Subscription Plans** for commercial SaaS (Free/Pro/Business/Enterprise)
+
+**New Tasks Added:**
+
+| ID | Task | Complexity |
+|----|------|------------|
+| USR5 | Feature Modules (SaaS) | 🟠 Medium |
+| USR6 | Subscription Plans (SaaS) | 🟠 Medium |
+
+**Updated Permission Matrix:**
+
+| Role | Level | Scope |
+|------|-------|-------|
+| Subagent | 1 | Own |
+| Agent | 2 | All |
+| Accountant | 3 | All |
+| Director | 4 | All |
+| Supervisor | 5 | All |
+
+**Database Tables (SaaS Ready):**
+- `roles` — dynamic, extensible roles
+- `role_permissions` — permissions per role
+- `user_profiles` — users with role_id
+- `user_permissions` — per-user overrides
+- `features` — feature modules with pricing
+- `subscription_plans` — Free/Pro/Business/Enterprise
+- `plan_features` — which features in which plan
+- `company_subscriptions` — company's current plan
+- `company_features` — additional features purchased
+
+**Estimated Time:** 20-24 hours (increased from 12h)
+
+**Spec Updated:** `.ai/tasks/user-management-system.md`
+
+---
+
 ## [2026-01-12 20:00] RUNNER — USR1-4: User Management System Specification
 
 **Task:** Create User Management specification | **Status:** DONE

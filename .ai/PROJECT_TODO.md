@@ -149,18 +149,20 @@ Current tasks and their status. Agents update relevant rows when starting, block
 |----|------|------|-------|--------|--------|-------|
 | O13 | System | Accountant role with financial reports | DB → SECURITY → CODE WRITER → QA | TODO | - | New role, report access |
 | **USR1** | **System** | **User Management: Supervisor adds users** | **DB→SEC→CW→QA** | **TODO** | **-** | **🔴 CRITICAL: users table, roles, permissions UI** |
-| USR2 | System | Roles: Agent, Accountant, Director, Supervisor | DB→SEC→CW→QA | TODO | - | Role-based access control |
+| USR2 | System | Dynamic Roles (Subagent, Agent, Accountant, Director, Supervisor) | DB→CW→QA | TODO | - | Roles stored in DB, extensible |
 | USR3 | System | User invite flow (email + temp password) | CW→QA | TODO | - | Email service integration |
 | USR4 | System | User profile & password change | CW→QA | TODO | - | Self-service |
+| **USR5** | **System** | **Feature Modules (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Features table, company_features** |
+| **USR6** | **System** | **Subscription Plans (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Plans, billing, Stripe ready** |
 
 **Spec:** `.ai/tasks/user-management-system.md`
 
-**USR1-4 Scope:**
-- **Roles:** Agent (basic), Accountant (finance), Director (all read), Supervisor (full admin)
-- **DB:** `user_profiles` table with role field, RLS policies
-- **UI:** `/settings/users` — list, add, edit, deactivate users
+**USR1-6 Scope (SaaS Ready):**
+- **Roles:** Subagent (own), Agent (all), Accountant (finance), Director (all+settings), Supervisor (admin)
+- **DB:** `roles`, `user_profiles`, `features`, `subscription_plans`, `company_subscriptions`
+- **UI:** `/settings/users`, `/settings/billing`
 - **Security:** RLS policies per role, Supervisor-only access to user management
-- **Email:** Welcome email with temp password
+- **SaaS:** Feature modules with pricing, subscription plans (Free/Pro/Business/Enterprise)
 
 ---
 

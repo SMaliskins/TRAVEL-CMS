@@ -1,69 +1,102 @@
 # 👥 USER MANAGEMENT SYSTEM — Specification
 
 **Date:** 2026-01-12  
+**Updated:** 2026-01-12 (SaaS Model)  
 **Agent:** Runner (Architect)  
 **Priority:** 🔴 CRITICAL  
 **Complexity:** 🔴 Complex  
-**Estimated Time:** 8-12 hours  
+**Estimated Time:** 16-20 hours  
 
 ---
 
 ## 📋 OVERVIEW
 
-Supervisor должен иметь возможность:
-1. Добавлять новых пользователей в систему
-2. Назначать роли (Agent, Accountant, Director, Supervisor)
-3. Управлять правами доступа
-4. Деактивировать пользователей
+### Core Features:
+1. **User Management** — Supervisor добавляет пользователей
+2. **Dynamic Roles** — Роли хранятся в БД (можно добавлять новые)
+3. **Feature Modules** — Модули функционала с ценами
+4. **Subscriptions** — Подписки для коммерческой продажи (SaaS)
+
+### Готовность к SaaS:
+- Каждая компания = отдельный tenant
+- Модульная система (включаешь нужные features)
+- Биллинг по подписке (monthly/yearly)
 
 ---
 
 ## 🎭 ROLES & PERMISSIONS
 
-### Role Hierarchy
+### Current Roles (extensible)
 
-```
-Supervisor (Level 4)
-    ↓
-Director (Level 3)
-    ↓
-Accountant (Level 2)
-    ↓
-Agent (Level 1)
-```
+| Role | Level | Scope | Description |
+|------|-------|-------|-------------|
+| **Supervisor** | 5 | All | Полный доступ + управление users |
+| **Director** | 4 | All | Все данные, настройки компании |
+| **Accountant** | 3 | All | Финансы, отчёты, платежи |
+| **Agent** | 2 | All | Все заказы (основной сотрудник) |
+| **Subagent** | 1 | Own | Только свои заказы (партнёр) |
 
 ### Permission Matrix
 
-| Permission | Agent | Accountant | Director | Supervisor |
-|------------|-------|------------|----------|------------|
+| Permission | Subagent | Agent | Accountant | Director | Supervisor |
+|------------|:--------:|:-----:|:----------:|:--------:|:----------:|
 | **Orders** |
-| View orders | ✅ Own | ✅ All | ✅ All | ✅ All |
-| Create order | ✅ | ✅ | ✅ | ✅ |
-| Edit order | ✅ Own | ✅ All | ✅ All | ✅ All |
-| Delete order | ❌ | ❌ | ✅ | ✅ |
+| View orders | Own | All | All | All | All |
+| Create order | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Edit order | Own | All | All | All | All |
+| Delete order | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **Services** |
-| Add services | ✅ Own | ✅ All | ✅ All | ✅ All |
-| Edit services | ✅ Own | ✅ All | ✅ All | ✅ All |
-| See Service Price | ❌ | ✅ | ✅ | ✅ |
-| See Margin | ❌ | ✅ | ✅ | ✅ |
+| Add services | Own | All | All | All | All |
+| Edit services | Own | All | All | All | All |
+| See Service Price | Own | ✅ | ✅ | ✅ | ✅ |
+| See Margin | Own | ✅ | ✅ | ✅ | ✅ |
 | **Finance** |
-| View invoices | ✅ Own | ✅ All | ✅ All | ✅ All |
-| Create invoice | ✅ | ✅ | ✅ | ✅ |
-| Record payment | ❌ | ✅ | ✅ | ✅ |
-| Financial reports | ❌ | ✅ | ✅ | ✅ |
+| View invoices | Own | All | All | All | All |
+| Create invoice | Own | ✅ | ✅ | ✅ | ✅ |
+| Record payment | Own | ✅ | ✅ | ✅ | ✅ |
+| Financial reports | ❌ | ❌ | ✅ | ✅ | ✅ |
 | **Directory** |
-| View contacts | ✅ All | ✅ All | ✅ All | ✅ All |
-| Add contacts | ✅ | ✅ | ✅ | ✅ |
-| Edit contacts | ✅ | ✅ | ✅ | ✅ |
-| Delete contacts | ❌ | ❌ | ✅ | ✅ |
+| View contacts | All | All | All | All | All |
+| Add contacts | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Edit contacts | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Delete contacts | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **Users** |
-| View users | ❌ | ❌ | ✅ Read | ✅ All |
-| Add users | ❌ | ❌ | ❌ | ✅ |
-| Edit users | ❌ | ❌ | ❌ | ✅ |
-| Deactivate users | ❌ | ❌ | ❌ | ✅ |
+| View users | ❌ | ❌ | ❌ | ✅ Read | ✅ All |
+| Manage users | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Settings** |
-| Company settings | ❌ | ❌ | ✅ | ✅ |
-| System settings | ❌ | ❌ | ❌ | ✅ |
+| Company settings | ❌ | ❌ | ❌ | ✅ | ✅ |
+| System settings | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+> **Note:** "Own" = только заказы, созданные этим пользователем или назначенные ему
+
+---
+
+## 💰 FEATURE MODULES & SUBSCRIPTIONS (SaaS)
+
+### Feature Modules (примеры)
+
+| Module | Description | Price/mo | Included In |
+|--------|-------------|----------|-------------|
+| `orders` | Управление заказами | €0 | All plans |
+| `services` | Добавление сервисов | €0 | All plans |
+| `invoicing` | Выставление счетов | €10 | Pro+ |
+| `payments` | Учёт платежей | €10 | Pro+ |
+| `reports` | Финансовые отчёты | €15 | Business+ |
+| `booking_api` | Booking.com интеграция | €25 | Business+ |
+| `email_tracking` | Отслеживание email | €5 | Pro+ |
+| `multi_users` | >3 пользователей | €5/user | Pro+ |
+| `api_access` | REST API доступ | €50 | Enterprise |
+| `white_label` | Свой домен/брендинг | €100 | Enterprise |
+
+### Subscription Plans
+
+| Plan | Price/mo | Users | Features |
+|------|----------|-------|----------|
+| **Free** | €0 | 1 | orders, services, directory |
+| **Starter** | €19 | 3 | Free + invoicing |
+| **Pro** | €49 | 10 | Starter + payments, reports, email |
+| **Business** | €99 | 25 | Pro + booking_api, priority support |
+| **Enterprise** | Custom | ∞ | All + api_access, white_label, SLA |
 
 ---
 
@@ -72,14 +105,46 @@ Agent (Level 1)
 ### Migration: `migrations/user_management.sql`
 
 ```sql
--- User roles enum
-CREATE TYPE user_role AS ENUM ('agent', 'accountant', 'director', 'supervisor');
+-- ============================================
+-- PART 1: ROLES (Dynamic, extensible)
+-- ============================================
 
--- Extend auth.users with role (or use separate table)
+CREATE TABLE public.roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,           -- 'agent', 'supervisor', etc.
+  display_name TEXT NOT NULL,          -- 'Агент', 'Супервайзер'
+  level INTEGER NOT NULL DEFAULT 1,    -- Hierarchy level (1-5)
+  scope TEXT NOT NULL DEFAULT 'all',   -- 'own' | 'all'
+  description TEXT,
+  is_system BOOLEAN DEFAULT false,     -- Cannot be deleted
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Default roles
+INSERT INTO roles (name, display_name, level, scope, is_system) VALUES
+  ('subagent', 'Субагент', 1, 'own', true),
+  ('agent', 'Агент', 2, 'all', true),
+  ('accountant', 'Бухгалтер', 3, 'all', true),
+  ('director', 'Директор', 4, 'all', true),
+  ('supervisor', 'Супервайзер', 5, 'all', true);
+
+-- Role permissions
+CREATE TABLE public.role_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission TEXT NOT NULL,            -- 'orders.view', 'users.manage'
+  scope TEXT DEFAULT 'all',            -- Override: 'own' | 'all'
+  UNIQUE(role_id, permission)
+);
+
+-- ============================================
+-- PART 2: USERS
+-- ============================================
+
 CREATE TABLE public.user_profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   company_id UUID NOT NULL REFERENCES companies(id),
-  role user_role NOT NULL DEFAULT 'agent',
+  role_id UUID NOT NULL REFERENCES roles(id),
   first_name TEXT,
   last_name TEXT,
   phone TEXT,
@@ -88,59 +153,166 @@ CREATE TABLE public.user_profiles (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id),
+  last_login_at TIMESTAMPTZ,
   UNIQUE(id, company_id)
 );
 
--- Permissions table (optional, for granular control)
+-- User-specific permission overrides (optional)
 CREATE TABLE public.user_permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   permission TEXT NOT NULL,
-  granted BOOLEAN DEFAULT true,
+  granted BOOLEAN DEFAULT true,        -- true = allow, false = deny
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, permission)
 );
 
--- Indexes
+-- ============================================
+-- PART 3: FEATURE MODULES
+-- ============================================
+
+CREATE TABLE public.features (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,           -- 'invoicing', 'booking_api'
+  name TEXT NOT NULL,                  -- 'Выставление счетов'
+  description TEXT,
+  price_monthly NUMERIC(10,2) DEFAULT 0,
+  price_yearly NUMERIC(10,2) DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Default features
+INSERT INTO features (code, name, price_monthly) VALUES
+  ('orders', 'Управление заказами', 0),
+  ('services', 'Сервисы', 0),
+  ('directory', 'Справочник', 0),
+  ('invoicing', 'Счета', 10),
+  ('payments', 'Платежи', 10),
+  ('reports', 'Отчёты', 15),
+  ('booking_api', 'Booking.com API', 25),
+  ('email_tracking', 'Email tracking', 5),
+  ('multi_users', 'Доп. пользователи', 5),
+  ('api_access', 'REST API', 50),
+  ('white_label', 'White Label', 100);
+
+-- ============================================
+-- PART 4: SUBSCRIPTIONS
+-- ============================================
+
+CREATE TABLE public.subscription_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,           -- 'free', 'pro', 'business'
+  name TEXT NOT NULL,
+  price_monthly NUMERIC(10,2) NOT NULL,
+  price_yearly NUMERIC(10,2),
+  max_users INTEGER,                   -- NULL = unlimited
+  is_active BOOLEAN DEFAULT true,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Plan includes features
+CREATE TABLE public.plan_features (
+  plan_id UUID NOT NULL REFERENCES subscription_plans(id) ON DELETE CASCADE,
+  feature_id UUID NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+  PRIMARY KEY (plan_id, feature_id)
+);
+
+-- Company subscriptions
+CREATE TABLE public.company_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES companies(id),
+  plan_id UUID NOT NULL REFERENCES subscription_plans(id),
+  status TEXT NOT NULL DEFAULT 'active', -- 'active', 'cancelled', 'past_due'
+  billing_cycle TEXT DEFAULT 'monthly',  -- 'monthly', 'yearly'
+  current_period_start TIMESTAMPTZ,
+  current_period_end TIMESTAMPTZ,
+  cancel_at_period_end BOOLEAN DEFAULT false,
+  stripe_subscription_id TEXT,           -- For Stripe integration
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Additional features purchased separately
+CREATE TABLE public.company_features (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES companies(id),
+  feature_id UUID NOT NULL REFERENCES features(id),
+  quantity INTEGER DEFAULT 1,            -- For per-unit features (extra users)
+  starts_at TIMESTAMPTZ DEFAULT NOW(),
+  ends_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, feature_id)
+);
+
+-- ============================================
+-- PART 5: INDEXES
+-- ============================================
+
 CREATE INDEX idx_user_profiles_company ON user_profiles(company_id);
-CREATE INDEX idx_user_profiles_role ON user_profiles(role);
+CREATE INDEX idx_user_profiles_role ON user_profiles(role_id);
 CREATE INDEX idx_user_profiles_active ON user_profiles(is_active) WHERE is_active = true;
+CREATE INDEX idx_company_subscriptions_company ON company_subscriptions(company_id);
+CREATE INDEX idx_company_subscriptions_status ON company_subscriptions(status);
 
--- RLS Policies
+-- ============================================
+-- PART 6: RLS POLICIES
+-- ============================================
+
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE features ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_subscriptions ENABLE ROW LEVEL SECURITY;
 
--- Supervisors can see all users in their company
-CREATE POLICY "Supervisors can manage users" ON user_profiles
+-- Supervisors can manage users in their company
+CREATE POLICY "Supervisors manage users" ON user_profiles
   FOR ALL
   USING (
     company_id = (SELECT company_id FROM user_profiles WHERE id = auth.uid())
     AND EXISTS (
-      SELECT 1 FROM user_profiles 
-      WHERE id = auth.uid() AND role = 'supervisor'
+      SELECT 1 FROM user_profiles up
+      JOIN roles r ON up.role_id = r.id
+      WHERE up.id = auth.uid() AND r.name = 'supervisor'
     )
   );
 
--- Directors can view users (read-only)
-CREATE POLICY "Directors can view users" ON user_profiles
+-- Directors can view users
+CREATE POLICY "Directors view users" ON user_profiles
   FOR SELECT
   USING (
     company_id = (SELECT company_id FROM user_profiles WHERE id = auth.uid())
     AND EXISTS (
-      SELECT 1 FROM user_profiles 
-      WHERE id = auth.uid() AND role IN ('director', 'supervisor')
+      SELECT 1 FROM user_profiles up
+      JOIN roles r ON up.role_id = r.id
+      WHERE up.id = auth.uid() AND r.level >= 4
     )
   );
 
--- Users can view own profile
-CREATE POLICY "Users can view own profile" ON user_profiles
-  FOR SELECT
-  USING (id = auth.uid());
-
--- Users can update own profile (limited fields)
-CREATE POLICY "Users can update own profile" ON user_profiles
-  FOR UPDATE
+-- Users can view/update own profile
+CREATE POLICY "Own profile access" ON user_profiles
+  FOR ALL
   USING (id = auth.uid())
   WITH CHECK (id = auth.uid());
+
+-- Roles are readable by all
+CREATE POLICY "Roles readable" ON roles FOR SELECT USING (true);
+
+-- Features are readable by all
+CREATE POLICY "Features readable" ON features FOR SELECT USING (true);
+
+-- Subscriptions visible to directors+
+CREATE POLICY "Subscriptions visible" ON company_subscriptions
+  FOR SELECT
+  USING (
+    company_id = (SELECT company_id FROM user_profiles WHERE id = auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM user_profiles up
+      JOIN roles r ON up.role_id = r.id
+      WHERE up.id = auth.uid() AND r.level >= 4
+    )
+  );
 ```
 
 ---
@@ -361,36 +533,116 @@ migrations/
 
 ## 📊 IMPLEMENTATION PHASES
 
-### Phase 1: Database (2h) — DB Specialist
-- [ ] Create migration file
+### Phase 1: Database (4h) — DB Specialist
+- [ ] Create migration: roles, user_profiles, permissions
+- [ ] Create migration: features, subscriptions
 - [ ] Add RLS policies
+- [ ] Insert default roles & features
 - [ ] Test policies manually
 
-### Phase 2: API (3h) — Code Writer
+### Phase 2: Auth Helpers (2h) — Code Writer
+- [ ] `lib/auth/roles.ts` — role helpers
+- [ ] `lib/auth/permissions.ts` — permission checking
+- [ ] `lib/auth/features.ts` — feature access checking
+- [ ] `lib/auth/getCurrentUser.ts` — get user with role
+
+### Phase 3: Users API (3h) — Code Writer
 - [ ] GET /api/users
 - [ ] POST /api/users
 - [ ] PATCH /api/users/:id
-- [ ] DELETE /api/users/:id
+- [ ] DELETE /api/users/:id (soft delete)
+- [ ] GET /api/roles
 
-### Phase 3: UI (4h) — Code Writer
+### Phase 4: Users UI (4h) — Code Writer
 - [ ] UserList component
 - [ ] AddUserModal
 - [ ] EditUserModal
+- [ ] RoleBadge component
 - [ ] /settings/users page
-- [ ] Navigation link for Supervisor
+- [ ] Navigation for Supervisor
 
-### Phase 4: Security Review (1h) — Security
+### Phase 5: Features/Subscriptions API (3h) — Code Writer
+- [ ] GET /api/features
+- [ ] GET /api/subscription
+- [ ] POST /api/subscription (change plan)
+- [ ] Feature access middleware
+
+### Phase 6: Billing UI (2h) — Code Writer (Future)
+- [ ] /settings/billing page
+- [ ] Plan comparison
+- [ ] Stripe integration (placeholder)
+
+### Phase 7: Security Review (1h) — Security
 - [ ] Audit RLS policies
 - [ ] Check API authorization
-- [ ] Test edge cases
+- [ ] Test edge cases (supervisor self-delete, etc.)
 
-### Phase 5: QA (2h) — QA
+### Phase 8: QA (2h) — QA
 - [ ] Full testing checklist
-- [ ] Cross-browser testing
-- [ ] Mobile responsiveness
+- [ ] Role-based access testing
+- [ ] Feature toggle testing
+
+---
+
+## 📁 UPDATED FILE STRUCTURE
+
+```
+app/
+├── settings/
+│   ├── users/
+│   │   └── page.tsx           # Users list (Supervisor only)
+│   ├── billing/
+│   │   └── page.tsx           # Subscription management
+│   └── roles/
+│       └── page.tsx           # Roles management (Future)
+├── api/
+│   ├── users/
+│   │   ├── route.ts           # GET, POST
+│   │   └── [userId]/
+│   │       └── route.ts       # GET, PATCH, DELETE
+│   ├── roles/
+│   │   └── route.ts           # GET roles list
+│   ├── features/
+│   │   └── route.ts           # GET features, check access
+│   └── subscription/
+│       └── route.ts           # GET, POST (change plan)
+
+components/
+└── users/
+    ├── UserList.tsx
+    ├── AddUserModal.tsx
+    ├── EditUserModal.tsx
+    ├── RoleBadge.tsx
+    └── RoleSelect.tsx
+
+lib/
+├── auth/
+│   ├── roles.ts               # Role constants & helpers
+│   ├── permissions.ts         # hasPermission(user, 'orders.delete')
+│   ├── features.ts            # hasFeature(company, 'booking_api')
+│   └── getCurrentUser.ts      # Get user with role & permissions
+└── billing/
+    └── stripe.ts              # Stripe integration (future)
+
+migrations/
+├── user_management.sql        # Roles, users, permissions
+└── features_subscriptions.sql # Features, plans, billing
+```
+
+---
+
+## 🔮 FUTURE CONSIDERATIONS
+
+1. **Stripe Integration** — для автоматического биллинга
+2. **Role Builder** — UI для создания custom roles
+3. **Permission Granularity** — per-field permissions
+4. **Usage Limits** — лимиты по заказам, сервисам
+5. **Audit Log** — кто что изменил и когда
+6. **2FA** — двухфакторная аутентификация для Supervisor
 
 ---
 
 **Created by:** Runner (Architect)  
-**Status:** ✅ SPECIFICATION COMPLETE  
+**Status:** ✅ SPECIFICATION COMPLETE (v2 — SaaS Ready)  
+**Estimated Time:** 20-24 hours  
 **Next Step:** DB Specialist creates migration
