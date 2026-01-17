@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     // Get all services for these orders with their invoice status
     const { data: servicesData } = await supabaseAdmin
       .from("order_services")
-      .select("order_id, invoice_id")
+      .select("order_id, invoice_id, res_status")
       .eq("company_id", companyId)
       .in("order_id", orderIds);
     

@@ -77,6 +77,32 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 18:00] CODE WRITER — O-INV-COUNT: Fix cancelled filter
+
+**Task:** O-INV-COUNT | **Status:** SUCCESS ✅
+**Agent:** Code Writer
+**Complexity:** 🟢 Micro
+
+**Проблема:** 
+- Показывает "3/19 services invoiced" вместо корректного count
+- Фильтр `res_status !== 'cancelled'` не работал
+
+**Root Cause:**
+- В `app/api/orders/route.ts` строка 114:
+  ```typescript
+  .select("order_id, invoice_id")  // ❌ res_status НЕ выбирался!
+  ```
+- `s.res_status` был undefined → фильтр не работал
+
+**Fix:**
+```typescript
+.select("order_id, invoice_id, res_status")  // ✅ Добавлен res_status
+```
+
+**Результат:** Теперь cancelled services исключаются из count
+
+---
+
 ## [2026-01-17 17:45] CODE WRITER + QA — AUTH2: Protected Routes
 
 **Task:** AUTH2 | **Status:** SUCCESS ✅
