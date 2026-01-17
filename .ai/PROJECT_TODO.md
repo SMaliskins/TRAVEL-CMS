@@ -155,6 +155,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | **USR5** | **System** | **Feature Modules (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Features table, company_features** |
 | **USR6** | **System** | **Subscription Plans (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Plans, billing, Stripe ready** |
 | **AUTH1** | **Auth** | **Logout functionality** | **CW→QA** | **DONE** | **10/10** | **[17.01] ✅ supabase.signOut() + redirect /login** |
+| **AUTH2** | **Auth** | **Protected Routes (require login)** | **CW→QA** | **DONE** | **10/10** | **[17.01] ✅ AuthGuard + session check** |
 
 **Spec:** `.ai/tasks/user-management-system.md`
 

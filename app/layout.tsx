@@ -32,9 +32,7 @@ export default function RootLayout({
       >
         <LayoutClientWrapper>
           <ClientLayout>
-            <main id="main-content-wrapper" className="min-h-screen pt-14 transition-all duration-200">
-              {children}
-            </main>
+            {children}
           </ClientLayout>
         </LayoutClientWrapper>
       </body>

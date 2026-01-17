@@ -77,6 +77,39 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 17:45] CODE WRITER + QA — AUTH2: Protected Routes
+
+**Task:** AUTH2 | **Status:** SUCCESS ✅
+**Agent:** Code Writer → QA
+**Complexity:** 🟠 Medium
+
+**Требование:** Ни одна страница не должна работать без login
+
+**Изменения:**
+- `components/AuthGuard.tsx` — CREATED
+  - Проверяет `supabase.auth.getSession()`
+  - Редирект на `/login` если нет сессии
+  - Редирект на `/dashboard` если залогинен на `/login`
+  - `onAuthStateChange` listener для SIGNED_OUT/SIGNED_IN
+  - Loading spinner во время проверки
+- `components/ClientLayout.tsx` — UPDATED
+  - Обёрнут в `AuthGuard`
+  - Скрывает Sidebar/TopBar на `/login`
+- `app/layout.tsx` — UPDATED
+  - Убран main wrapper (перенесён в ClientLayout)
+- `app/layout-client-wrapper.tsx` — UPDATED
+  - Добавлена проверка skipLayout для `/login`
+
+**QA:** SCORE 10/10
+
+**Логика:**
+1. Открытие любой страницы → AuthGuard проверяет сессию
+2. Нет сессии → редирект на /login
+3. Есть сессия на /login → редирект на /dashboard
+4. Logout → SIGNED_OUT event → редирект на /login
+
+---
+
 ## [2026-01-17 17:30] CODE WRITER + QA — AUTH1: Logout Implementation
 
 **Task:** AUTH1 | **Status:** SUCCESS ✅
@@ -10597,4 +10630,39 @@ const invoicedServices = services.filter((s: any) => s.invoice_id && s.res_statu
 - ⏳ Пользователь должен проверить: перезагрузить `/orders` → Order 0005/26-SM должен показывать корректный count (без cancelled)
 
 **Next Step:** Пользователь тестирует (перезагрузить страницу!)
+
+
+### 📅 [2026-01-17] | [17:10]
+**Агент:** `QA / Troubleshooting`
+**Задача:** O-INV-COUNT (Verify fix)
+**Статус:** DEV SERVER RESTART REQUIRED
+**Действия:**
+
+**Проблема:**
+- Пользователь сообщил: "shows 3/19. do you commit in correct way?"
+- Код закоммичен в `/Users/sergejsmaliskins/Projects/travel-cms` ✅
+- Коммит `3a87293` в ветке `feature/x` ✅
+
+**Root Cause:**
+- Dev server (PID 65831) запущен **вчера** (Fri Jan 16 18:53:03)
+- Коммит сделан **сегодня** (Sat Jan 17 22:25:31)
+- **Next.js API routes кэшируются** и не перезагружаются автоматически!
+- Dev server не видит изменения в `app/api/orders/route.ts`
+
+**Решение:**
+- Удалил `.next/` кэш
+- Убил dev server (PID 65831)
+- **ТРЕБУЕТСЯ:** Пользователь должен перезапустить `npm run dev`
+
+**Команда для пользователя:**
+```bash
+cd /Users/sergejsmaliskins/Projects/travel-cms
+npm run dev
+```
+
+**После перезапуска:**
+- Открыть http://localhost:3000/orders
+- Проверить Order 0005/26-SM — count должен измениться (без cancelled)
+
+**Next Step:** Пользователь перезапускает dev server
 
