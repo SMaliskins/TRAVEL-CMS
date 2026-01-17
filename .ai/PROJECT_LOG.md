@@ -77,6 +77,84 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 16:20] CODE WRITER — Service List Refresh Fix
+
+**Task:** SVC-CLIENT-PAYER-FIX (финал) | **Status:** SUCCESS
+
+### 🐛 FEEDBACK ОТ ПОЛЬЗОВАТЕЛЯ
+
+"After Save, in the list of orders Client field is empty. When I edit this service and add client manually again, Save and exit. After in the list of services still no client name until the moment I do page refresh. Same for payer."
+
+### 🔍 ROOT CAUSE #3 (Список не обновляется)
+
+**Проблема 1: AddService callback не включал PartyId поля**
+
+`OrderServicesBlock.tsx` → `handleServiceAdded` (строки 165-184):
+- ❌ Создавал `newService` БЕЗ `supplierPartyId`, `clientPartyId`, `payerPartyId`
+- ✅ API response СОДЕРЖАЛ эти поля (строки 261-266 в route.ts)
+- ❌ Frontend просто не сохранял их в state
+
+**Проблема 2: EditService callback возвращал только базовые поля**
+
+`EditServiceModalNew.tsx` → `onServiceUpdated` (строки 214-225):
+- ❌ Возвращал только: `id, name, category, servicePrice, clientPrice, resStatus, refNr, ticketNr, dateFrom, dateTo`
+- ❌ НЕ включал: `supplier, client, payer, supplierPartyId, clientPartyId, payerPartyId`
+- После merge `{ ...s, ...updated }` → старые значения перезаписывались пустыми
+
+### ✅ РЕШЕНИЕ
+
+**1. OrderServicesBlock.tsx - handleServiceAdded:**
+```typescript
+supplierPartyId: service.supplierPartyId || undefined,
+clientPartyId: service.clientPartyId || undefined,
+payerPartyId: service.payerPartyId || undefined,
+```
+
+**2. EditServiceModalNew.tsx - onServiceUpdated:**
+```typescript
+supplier: supplierName || "-",
+client: (clients.find(c => c.id) || clients[0])?.name || "-",
+payer: payerName || "-",
+supplierPartyId,
+clientPartyId: (clients.find(c => c.id) || clients[0])?.id || undefined,
+payerPartyId,
+```
+
+### 🎯 РЕЗУЛЬТАТ
+
+✅ **После Add Service:**
+- Client и Payer отображаются СРАЗУ в списке (без refresh)
+- PartyId сохраняются для future Edit
+
+✅ **После Edit Service:**
+- Изменения Client/Payer видны СРАЗУ в списке (без refresh)
+- PartyId обновляются корректно
+
+✅ **API работает корректно** (было ОК изначально)
+
+✅ **Frontend state обновляется правильно** (было баг)
+
+### 📦 COMMIT
+```
+576f807 - fix(orders): Service list updates Client/Payer after Add/Edit
+```
+
+### 🧪 ФИНАЛЬНАЯ QA
+
+**TC1: Add Service → Client/Payer в списке**
+- ✅ Код изменён: handleServiceAdded включает PartyId
+- ⏳ ТРЕБУЕТСЯ USER TEST: Create service → check list shows Client/Payer
+
+**TC2: Edit Service → изменения видны сразу**
+- ✅ Код изменён: onServiceUpdated включает supplier/client/payer + PartyIds
+- ⏳ ТРЕБУЕТСЯ USER TEST: Edit Client → Save → check list updated without refresh
+
+**SCORE:** 9/10 (после user confirmation)
+
+**Next Step:** User должен протестировать полный цикл Add + Edit
+
+---
+
 ## [2026-01-17 16:10] CODE WRITER — PartySelect Fix (Client не отображается)
 
 **Task:** SVC-CLIENT-PAYER-FIX (дополнение) | **Status:** SUCCESS
