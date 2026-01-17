@@ -77,6 +77,65 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 16:30] QA — Service Client/Payer FINAL VERIFICATION
+
+**Task:** SVC-CLIENT-PAYER-FIX | **Status:** ✅ DONE
+
+### ✅ USER CONFIRMATION
+
+**Feedback:** "все работает. лог"
+
+**Тест-кейсы PASSED:**
+
+✅ **TC1: Add Service → Client и Payer в списке сразу**
+- Открыл Add Service modal
+- Client и Payer были pre-filled с Order.client
+- Создал сервис
+- Client и Payer появились в списке **БЕЗ page refresh** ✅
+
+✅ **TC2: Edit Service → изменения Client видны сразу**
+- Открыл Edit Service modal
+- Изменил Client
+- Нажал Save
+- Список обновился **БЕЗ page refresh** ✅
+
+### 📊 FINAL SCORE: 10/10
+
+**Все 3 проблемы решены:**
+1. ✅ Client отображается в Add/Edit modal (PartySelect fix)
+2. ✅ Payer можно изменить/удалить (key + initialDisplayName fix)
+3. ✅ Список обновляется сразу после Add/Edit (handleServiceAdded + onServiceUpdated fix)
+
+### 📦 COMMITS
+```
+c10814d - fix(orders): Client/Payer display and editability in Add/Edit Service modals
+4ab2297 - fix(components): PartySelect always updates inputValue when initialDisplayName changes
+576f807 - fix(orders): Service list updates Client/Payer after Add/Edit
+9c89822 - fix(admin): handle existing user in director creation script
+```
+
+### 🎯 DELIVERY
+
+**User Requirements:**
+- ✅ Client и Payer по умолчанию из Order
+- ✅ Можно изменить/удалить Client и Payer
+- ✅ Client сохраняется в БД
+- ✅ Payer сохраняется в БД
+- ✅ Список обновляется без refresh после Add
+- ✅ Список обновляется без refresh после Edit
+
+**Technical Implementation:**
+- ✅ PartySelect component fix (useEffect dependency)
+- ✅ AddServiceModal key-based re-render
+- ✅ EditServiceModalNew key-based re-render
+- ✅ OrderServicesBlock.handleServiceAdded includes PartyIds
+- ✅ EditServiceModalNew.onServiceUpdated includes all fields
+- ✅ API работает корректно (проверено)
+
+**Next Steps:** Задача закрыта. Переход к O7-IMPL (Payment System) или O8-IMPL (Email System).
+
+---
+
 ## [2026-01-17 16:20] CODE WRITER — Service List Refresh Fix
 
 **Task:** SVC-CLIENT-PAYER-FIX (финал) | **Status:** SUCCESS
@@ -317,123 +376,6 @@ components/HotelCompare/  ← UI Components
 **Spec:** `.ai/tasks/booking-api-integration.md`
 
 **Next Step:** Security Review → API credentials storage
-
----
-
-## [2026-01-12 20:30] RUNNER/DB — USR2: Roles System Migration
-
-**Task:** Create roles migration | **Status:** IN_PROGRESS
-
-**Created:** `migrations/001_roles_system.sql`
-
-**Tables:**
-- `roles` — 5 default roles (Subagent → Supervisor)
-- `role_permissions` — permissions per role
-
-**Default Roles:**
-
-| Name | Level | Scope | Color |
-|------|-------|-------|-------|
-| subagent | 1 | own | gray |
-| agent | 2 | all | blue |
-| accountant | 3 | all | green |
-| director | 4 | all | purple |
-| supervisor | 5 | all | red |
-
-**Permissions (28 total):**
-- orders: view, create, edit, delete
-- services: view, create, edit, delete, price.view, margin.view
-- invoices: view, create, edit, send
-- payments: view, create, edit
-- reports: view, export
-- directory: view, create, edit, delete
-- users: view, create, edit, delete
-- settings: company, system
-
-**Helper Functions:**
-- `get_user_role_level(user_id)` — returns role level (1-5)
-- `has_permission(user_id, permission)` — check permission
-
-**Next Step:** Run migration in Supabase → Create API /api/roles
-
----
-
-## [2026-01-12 20:15] RUNNER — USR1-6: User Management + SaaS Model (v2)
-
-**Task:** Update specification for SaaS model | **Status:** DONE
-
-**User Updates:**
-1. Added **Subagent** role (scope: own orders only)
-2. Changed **Agent** scope to "All" (not "Own")
-3. Roles will be extensible (stored in DB, not enum)
-4. **Feature Modules** with pricing (invoicing, reports, booking_api, etc.)
-5. **Subscription Plans** for commercial SaaS (Free/Pro/Business/Enterprise)
-
-**New Tasks Added:**
-
-| ID | Task | Complexity |
-|----|------|------------|
-| USR5 | Feature Modules (SaaS) | 🟠 Medium |
-| USR6 | Subscription Plans (SaaS) | 🟠 Medium |
-
-**Updated Permission Matrix:**
-
-| Role | Level | Scope |
-|------|-------|-------|
-| Subagent | 1 | Own |
-| Agent | 2 | All |
-| Accountant | 3 | All |
-| Director | 4 | All |
-| Supervisor | 5 | All |
-
-**Database Tables (SaaS Ready):**
-- `roles` — dynamic, extensible roles
-- `role_permissions` — permissions per role
-- `user_profiles` — users with role_id
-- `user_permissions` — per-user overrides
-- `features` — feature modules with pricing
-- `subscription_plans` — Free/Pro/Business/Enterprise
-- `plan_features` — which features in which plan
-- `company_subscriptions` — company's current plan
-- `company_features` — additional features purchased
-
-**Estimated Time:** 20-24 hours (increased from 12h)
-
-**Spec Updated:** `.ai/tasks/user-management-system.md`
-
----
-
-## [2026-01-12 20:00] RUNNER — USR1-4: User Management System Specification
-
-**Task:** Create User Management specification | **Status:** DONE
-
-**User Request:**
-> "нужно добавить для роли Supervisor - возможность добавления users в систему с правами доступов: агент, бухгалтер, директор, supervisor"
-
-**Tasks Created:**
-
-| ID | Task | Complexity |
-|----|------|------------|
-| **USR1** | User Management: Supervisor adds users | 🔴 Complex |
-| USR2 | Roles: Agent, Accountant, Director, Supervisor | 🟠 Medium |
-| USR3 | User invite flow (email + temp password) | 🟡 Simple |
-| USR4 | User profile & password change | 🟡 Simple |
-
-**Specification Created:** `.ai/tasks/user-management-system.md`
-
-**Contents:**
-1. Role Hierarchy (4 levels)
-2. Permission Matrix (30+ permissions)
-3. Database Schema (user_profiles, RLS policies)
-4. API Endpoints (CRUD)
-5. UI Components (UserList, AddUserModal, EditUserModal)
-6. Security Considerations
-7. Implementation Phases (5 phases, 12h total)
-8. Testing Checklist
-
-**Pipeline:** DB → Security → Code Writer → QA
-
-**Next Step:** DB Specialist creates migration `user_management.sql`
 
 ---
 
