@@ -390,7 +390,7 @@ export default function AddServiceModal({
                       <PartySelect
                         value={client.id}
                         onChange={(id, name) => updateClient(index, id, name)}
-                        roleFilter="client"
+                        // roleFilter="client" - removed to allow any party
                         initialDisplayName={index === 0 ? defaultClientName : undefined}
                       />
                     </div>
@@ -418,7 +418,7 @@ export default function AddServiceModal({
                   setPayerPartyId(id);
                   setPayerName(name);
                 }}
-                roleFilter="client"
+                // roleFilter="client" - removed to allow any party
                 initialDisplayName={defaultClientName}
               />
             </div>
