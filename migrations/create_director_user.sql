@@ -36,43 +36,55 @@ BEGIN
             RAISE NOTICE 'Could not update constraint (may not exist): %', SQLERRM;
     END;
     
-    -- 3. Create user in auth.users (Supabase Auth)
-    INSERT INTO auth.users (
-        id,
-        instance_id,
-        aud,
-        role,
-        email,
-        encrypted_password,
-        email_confirmed_at,
-        created_at,
-        updated_at,
-        confirmation_token,
-        recovery_token,
-        email_change_token_new,
-        email_change
-    ) VALUES (
-        gen_random_uuid(),
-        '00000000-0000-0000-0000-000000000000',
-        'authenticated',
-        'authenticated',
-        'vera.laskova@gtr.lv',
-        crypt('Gull26rix!', gen_salt('bf')),  -- Password hashed with bcrypt
-        now(),
-        now(),
-        now(),
-        '',
-        '',
-        '',
-        ''
-    )
-    ON CONFLICT (email) DO UPDATE
-    SET 
-        encrypted_password = crypt('Gull26rix!', gen_salt('bf')),
-        updated_at = now()
-    RETURNING id INTO v_user_id;
+    -- 3. Check if user exists, if not create
+    SELECT id INTO v_user_id 
+    FROM auth.users 
+    WHERE email = 'vera.laskova@gtr.lv';
     
-    RAISE NOTICE 'Created/Updated user: % (ID: %)', 'vera.laskova@gtr.lv', v_user_id;
+    IF v_user_id IS NULL THEN
+        -- Create new user
+        INSERT INTO auth.users (
+            id,
+            instance_id,
+            aud,
+            role,
+            email,
+            encrypted_password,
+            email_confirmed_at,
+            created_at,
+            updated_at,
+            confirmation_token,
+            recovery_token,
+            email_change_token_new,
+            email_change
+        ) VALUES (
+            gen_random_uuid(),
+            '00000000-0000-0000-0000-000000000000',
+            'authenticated',
+            'authenticated',
+            'vera.laskova@gtr.lv',
+            crypt('Gull26rix!', gen_salt('bf')),  -- Password hashed with bcrypt
+            now(),
+            now(),
+            now(),
+            '',
+            '',
+            '',
+            ''
+        )
+        RETURNING id INTO v_user_id;
+        
+        RAISE NOTICE 'Created new user: % (ID: %)', 'vera.laskova@gtr.lv', v_user_id;
+    ELSE
+        -- Update existing user password
+        UPDATE auth.users
+        SET 
+            encrypted_password = crypt('Gull26rix!', gen_salt('bf')),
+            updated_at = now()
+        WHERE id = v_user_id;
+        
+        RAISE NOTICE 'Updated existing user: % (ID: %)', 'vera.laskova@gtr.lv', v_user_id;
+    END IF;
     
     -- 4. Create profile with director role
     INSERT INTO public.profiles (
