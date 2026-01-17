@@ -31,15 +31,15 @@
 | Role | Level | Scope | Description |
 |------|-------|-------|-------------|
 | **Supervisor** | 5 | All | Полный доступ + управление users |
-| **Director** | 4 | All | Все данные, настройки компании |
-| **Accountant** | 3 | All | Финансы, отчёты, платежи |
+| **Manager** | 4 | All | Все данные, настройки компании |
+| **Finance** | 3 | All | Финансы, отчёты, платежи |
 | **Agent** | 2 | All | Все заказы (основной сотрудник) |
 | **Subagent** | 1 | Own | Только свои заказы (партнёр) |
 
 ### Permission Matrix
 
-| Permission | Subagent | Agent | Accountant | Director | Supervisor |
-|------------|:--------:|:-----:|:----------:|:--------:|:----------:|
+| Permission | Subagent | Agent | Finance | Manager | Supervisor |
+|------------|:--------:|:-----:|:-------:|:-------:|:----------:|
 | **Orders** |
 | View orders | Own | All | All | All | All |
 | Create order | ✅ | ✅ | ✅ | ✅ | ✅ |

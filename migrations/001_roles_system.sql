@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS public.roles (
 INSERT INTO public.roles (name, display_name, display_name_en, level, scope, color, is_system, description) VALUES
   ('subagent', 'Субагент', 'Subagent', 1, 'own', '#9CA3AF', true, 'Партнёр, видит только свои заказы'),
   ('agent', 'Агент', 'Agent', 2, 'all', '#3B82F6', true, 'Основной сотрудник, все заказы'),
-  ('accountant', 'Бухгалтер', 'Accountant', 3, 'all', '#10B981', true, 'Финансы, платежи, отчёты'),
-  ('director', 'Директор', 'Director', 4, 'all', '#8B5CF6', true, 'Все данные + настройки компании'),
+  ('finance', 'Финансы', 'Finance', 3, 'all', '#10B981', true, 'Финансы, платежи, отчёты'),
+  ('manager', 'Менеджер', 'Manager', 4, 'all', '#8B5CF6', true, 'Все данные + настройки компании'),
   ('supervisor', 'Супервайзер', 'Supervisor', 5, 'all', '#EF4444', true, 'Полный доступ + управление пользователями')
 ON CONFLICT (name) DO UPDATE SET
   display_name = EXCLUDED.display_name,
@@ -82,9 +82,9 @@ FROM unnest(ARRAY[
 ]) AS permission
 ON CONFLICT (role_id, permission) DO NOTHING;
 
--- DIRECTOR permissions (all except users.manage and settings.system)
+-- MANAGER permissions (all except users.manage and settings.system)
 INSERT INTO public.role_permissions (role_id, permission, scope)
-SELECT get_role_id('director'), permission, 'all'
+SELECT get_role_id('manager'), permission, 'all'
 FROM unnest(ARRAY[
   'orders.view', 'orders.create', 'orders.edit', 'orders.delete',
   'services.view', 'services.create', 'services.edit', 'services.delete',
@@ -98,9 +98,9 @@ FROM unnest(ARRAY[
 ]) AS permission
 ON CONFLICT (role_id, permission) DO NOTHING;
 
--- ACCOUNTANT permissions (finance focus)
+-- FINANCE permissions (finance focus)
 INSERT INTO public.role_permissions (role_id, permission, scope)
-SELECT get_role_id('accountant'), permission, 'all'
+SELECT get_role_id('finance'), permission, 'all'
 FROM unnest(ARRAY[
   'orders.view', 'orders.create', 'orders.edit',
   'services.view', 'services.create', 'services.edit',

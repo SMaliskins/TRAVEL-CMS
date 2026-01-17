@@ -158,7 +158,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 **Spec:** `.ai/tasks/user-management-system.md`
 
 **USR1-6 Scope (SaaS Ready):**
-- **Roles:** Subagent (own), Agent (all), Accountant (finance), Director (all+settings), Supervisor (admin)
+- **Roles:** Subagent (own), Agent (all), Finance (финансы), Manager (all+settings), Supervisor (admin)
 - **DB:** `roles`, `user_profiles`, `features`, `subscription_plans`, `company_subscriptions`
 - **UI:** `/settings/users`, `/settings/billing`
 - **Security:** RLS policies per role, Supervisor-only access to user management

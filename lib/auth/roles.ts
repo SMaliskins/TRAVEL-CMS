@@ -6,8 +6,8 @@
 export const ROLES = {
   SUBAGENT: "subagent",
   AGENT: "agent",
-  ACCOUNTANT: "accountant",
-  DIRECTOR: "director",
+  FINANCE: "finance",
+  MANAGER: "manager",
   SUPERVISOR: "supervisor",
 } as const;
 
@@ -17,8 +17,8 @@ export type RoleName = (typeof ROLES)[keyof typeof ROLES];
 export const ROLE_LEVELS: Record<RoleName, number> = {
   subagent: 1,
   agent: 2,
-  accountant: 3,
-  director: 4,
+  finance: 3,
+  manager: 4,
   supervisor: 5,
 };
 
@@ -26,8 +26,8 @@ export const ROLE_LEVELS: Record<RoleName, number> = {
 export const ROLE_DISPLAY_NAMES: Record<RoleName, string> = {
   subagent: "Субагент",
   agent: "Агент",
-  accountant: "Бухгалтер",
-  director: "Директор",
+  finance: "Финансы",
+  manager: "Менеджер",
   supervisor: "Супервайзер",
 };
 
@@ -35,8 +35,8 @@ export const ROLE_DISPLAY_NAMES: Record<RoleName, string> = {
 export const ROLE_COLORS: Record<RoleName, string> = {
   subagent: "bg-gray-100 text-gray-700",
   agent: "bg-blue-100 text-blue-700",
-  accountant: "bg-green-100 text-green-700",
-  director: "bg-purple-100 text-purple-700",
+  finance: "bg-green-100 text-green-700",
+  manager: "bg-purple-100 text-purple-700",
   supervisor: "bg-red-100 text-red-700",
 };
 
@@ -44,8 +44,8 @@ export const ROLE_COLORS: Record<RoleName, string> = {
 export const ROLE_HEX_COLORS: Record<RoleName, string> = {
   subagent: "#9CA3AF",
   agent: "#3B82F6",
-  accountant: "#10B981",
-  director: "#8B5CF6",
+  finance: "#10B981",
+  manager: "#8B5CF6",
   supervisor: "#EF4444",
 };
 
@@ -97,7 +97,7 @@ export function canManageUsers(role: RoleName | string): boolean {
  */
 export function canViewReports(role: RoleName | string): boolean {
   const level = ROLE_LEVELS[role as RoleName] || 0;
-  return level >= ROLE_LEVELS.accountant;
+  return level >= ROLE_LEVELS.finance;
 }
 
 /**
@@ -105,7 +105,7 @@ export function canViewReports(role: RoleName | string): boolean {
  */
 export function canDeleteOrders(role: RoleName | string): boolean {
   const level = ROLE_LEVELS[role as RoleName] || 0;
-  return level >= ROLE_LEVELS.director;
+  return level >= ROLE_LEVELS.manager;
 }
 
 /**
