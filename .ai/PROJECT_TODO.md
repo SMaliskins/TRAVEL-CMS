@@ -148,7 +148,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
 | O13 | System | Accountant role with financial reports | DB → SECURITY → CODE WRITER → QA | TODO | - | New role, report access |
-| **USR2** | **System** | **Dynamic Roles (5 roles + permissions)** | **DB→CW→QA** | **IN_PROGRESS** | **feature/x** | **🟢 Migration created: 001_roles_system.sql** |
+| **USR2** | **System** | **Dynamic Roles (5 roles + permissions)** | **DB→CW→QA** | **DB** | **DONE** | **10/10** | **[17.01] ✅ Migration executed in Supabase** |
 | USR1 | System | User Management: Supervisor adds users | DB→SEC→CW→QA | TODO | - | 🔴 CRITICAL: Depends on USR2 |
 | USR3 | System | User invite flow (email + temp password) | CW→QA | TODO | - | Email service integration |
 | USR4 | System | User profile & password change | CW→QA | TODO | - | Self-service |

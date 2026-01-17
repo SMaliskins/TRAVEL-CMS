@@ -77,6 +77,28 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 17:00] DB SPECIALIST — USR2: Roles System Migration
+
+**Task:** USR2 | **Status:** SUCCESS ✅
+**Agent:** DB Specialist
+**Complexity:** 🔴 Complex
+
+**Действия:**
+1. ✅ Создал миграцию `migrations/001_roles_system.sql`
+2. ✅ Таблицы: `roles`, `role_permissions`
+3. ✅ 5 ролей: subagent, agent, finance, manager, supervisor
+4. ✅ 28 permissions с scope (own/all)
+5. ✅ Пользователь выполнил миграцию в Supabase — SUCCESS
+6. ✅ Исправил ошибку: убрал функции, зависящие от `user_profiles`
+
+**Результат:**
+- Таблица `roles` создана с 5 записями
+- Таблица `role_permissions` создана с permissions
+
+**Next Step:** USR1 — создать `user_profiles` таблицу
+
+---
+
 ## [2026-01-17 16:30] QA — Service Client/Payer FINAL VERIFICATION
 
 **Task:** SVC-CLIENT-PAYER-FIX | **Status:** ✅ DONE
