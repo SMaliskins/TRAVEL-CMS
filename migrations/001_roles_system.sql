@@ -181,28 +181,8 @@ CREATE POLICY "Service role manages role permissions" ON public.role_permissions
 -- ============================================
 -- PART 7: HELPER FUNCTIONS
 -- ============================================
-
--- Get user's role level
-CREATE OR REPLACE FUNCTION public.get_user_role_level(user_id UUID)
-RETURNS INTEGER AS $$
-  SELECT COALESCE(r.level, 0)
-  FROM auth.users u
-  LEFT JOIN public.user_profiles up ON u.id = up.id
-  LEFT JOIN public.roles r ON up.role_id = r.id
-  WHERE u.id = user_id;
-$$ LANGUAGE SQL SECURITY DEFINER;
-
--- Check if user has permission
-CREATE OR REPLACE FUNCTION public.has_permission(user_id UUID, required_permission TEXT)
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.user_profiles up
-    JOIN public.role_permissions rp ON up.role_id = rp.role_id
-    WHERE up.id = user_id
-      AND rp.permission = required_permission
-  );
-$$ LANGUAGE SQL SECURITY DEFINER;
+-- NOTE: Functions that depend on user_profiles are in 002_user_profiles.sql
+-- They will be created after user_profiles table exists
 
 -- ============================================
 -- DONE

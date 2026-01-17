@@ -152,8 +152,8 @@ export async function GET(request: NextRequest) {
       const services = (servicesData || []).filter((s: any) => s.order_id === orderId);
       const invoices = (invoicesData || []).filter((i: any) => i.order_id === orderId);
       
-      const totalServices = services.length;
-      const invoicedServices = services.filter((s: any) => s.invoice_id).length;
+      const totalServices = services.filter((s: any) => s.res_status !== 'cancelled').length;
+      const invoicedServices = services.filter((s: any) => s.invoice_id && s.res_status !== 'cancelled').length;
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
       

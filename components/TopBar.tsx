@@ -1,18 +1,40 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useClock } from "@/hooks/useClock";
+import { supabase } from "@/lib/supabaseClient";
 import TopBarProgress from "./TopBarProgress";
 import TopBarSearch from "./TopBarSearch";
 
 export default function TopBar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
   
   const { prefs, isMounted: prefsMounted } = useUserPreferences();
   const now = useClock();
+
+  // Handle logout
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    setIsDropdownOpen(false);
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Logout error:", error);
+      }
+      // Redirect to login page
+      router.push("/login");
+    } catch (err) {
+      console.error("Logout failed:", err);
+      setIsLoggingOut(false);
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -168,17 +190,14 @@ export default function TopBar() {
                   >
                     Settings
                   </a>
-                  <a
-                    href="#"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log("Logout");
-                      setIsDropdownOpen(false);
-                    }}
+                  <button
+                    type="button"
+                    disabled={isLoggingOut}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    onClick={handleLogout}
                   >
-                    Logout
-                  </a>
+                    {isLoggingOut ? "Logging out..." : "Logout"}
+                  </button>
                 </div>
               </div>
             )}

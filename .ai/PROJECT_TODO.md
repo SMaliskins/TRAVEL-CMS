@@ -154,6 +154,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | USR4 | System | User profile & password change | CW→QA | TODO | - | Self-service |
 | **USR5** | **System** | **Feature Modules (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Features table, company_features** |
 | **USR6** | **System** | **Subscription Plans (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Plans, billing, Stripe ready** |
+| **AUTH1** | **Auth** | **Logout functionality** | **CW→QA** | **IN_PROGRESS** | **-** | **[17.01] CW implementing** |
 
 **Spec:** `.ai/tasks/user-management-system.md`
 

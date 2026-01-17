@@ -77,6 +77,41 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 17:30] CODE WRITER — AUTH1: Logout Implementation
+
+**Task:** AUTH1 | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟡 Simple
+
+**План:**
+1. Добавить import supabase + useRouter в TopBar.tsx
+2. Реализовать handleLogout с signOut() + redirect /login
+3. Протестировать как QA
+
+---
+
+## [2026-01-17 17:15] DB SPECIALIST — USR1: User Profiles Migration
+
+**Task:** USR1 | **Status:** SUCCESS ✅
+**Agent:** DB Specialist
+**Complexity:** 🔴 Complex
+
+**Действия:**
+1. ✅ Создал таблицу `user_profiles`
+2. ✅ Связь с `auth.users` и `roles`
+3. ✅ RLS политики (own profile, supervisors manage)
+4. ✅ Helper functions: `get_user_role_level()`, `has_permission()`
+5. ✅ Пользователь выполнил миграцию — SUCCESS
+
+**Результат:**
+- Таблица `user_profiles` создана
+- RLS политики активны
+- Helper functions готовы
+
+**Next Step:** Добавить текущего пользователя как Supervisor
+
+---
+
 ## [2026-01-17 17:00] DB SPECIALIST — USR2: Roles System Migration
 
 **Task:** USR2 | **Status:** SUCCESS ✅
