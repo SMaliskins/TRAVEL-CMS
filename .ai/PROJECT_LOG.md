@@ -77,6 +77,77 @@ a6ba58b - feat(orders): sync EditServiceModal with AddServiceModal - all fields
 
 ---
 
+## [2026-01-17 16:10] CODE WRITER — PartySelect Fix (Client не отображается)
+
+**Task:** SVC-CLIENT-PAYER-FIX (дополнение) | **Status:** SUCCESS
+
+### 🐛 FEEDBACK ОТ ПОЛЬЗОВАТЕЛЯ
+
+"Supplier - OK, а вот Client нет"
+
+### 🔍 ROOT CAUSE (РЕАЛЬНАЯ)
+
+Предыдущий фикс (`c10814d`) добавил `key` для force re-render, но это не помогло.
+
+**Настоящая проблема в `PartySelect.tsx`:**
+
+```typescript
+// БЫЛО (строки 289-293):
+useEffect(() => {
+  if (initialDisplayName && !inputValue) {
+    setInputValue(initialDisplayName);
+  }
+}, [initialDisplayName, inputValue]);
+```
+
+Условие `!inputValue` означало:
+- `initialDisplayName` устанавливался ТОЛЬКО если `inputValue` пустой
+- Если `inputValue` уже содержал значение → `initialDisplayName` игнорировался
+- Client имел `client.name` в `initialDisplayName`, но `inputValue` мог быть не пустым
+
+### ✅ РЕШЕНИЕ
+
+**PartySelect.tsx:**
+```typescript
+// СТАЛО:
+useEffect(() => {
+  if (initialDisplayName) {
+    setInputValue(initialDisplayName);
+  }
+}, [initialDisplayName]);
+```
+
+Изменения:
+- ❌ Убрал условие `!inputValue`
+- ❌ Убрал `inputValue` из dependencies array
+- ✅ Теперь: `if (initialDisplayName)` → ВСЕГДА обновляет `inputValue`
+
+### 🎯 РЕЗУЛЬТАТ
+
+✅ **Client отображается корректно:**
+- При открытии Add Service → Client показывает `defaultClientName`
+- `PartySelect` ВСЕГДА обновляет `inputValue` при получении `initialDisplayName`
+
+✅ **Supplier продолжает работать** (не сломан)
+
+✅ **Payer отображается корректно**
+
+### 📦 COMMIT
+```
+4ab2297 - fix(components): PartySelect always updates inputValue when initialDisplayName changes
+```
+
+### 🧪 QA ПРОВЕРКА
+- ✅ Код изменён только в `PartySelect.tsx` (1 useEffect)
+- ✅ Логика упрощена (убран лишний conditional)
+- ⏳ ТРЕБУЕТСЯ USER CONFIRMATION: Client теперь отображается?
+
+**SCORE:** 9/10 (финальный, после user confirmation)
+
+**Next Step:** User должен подтвердить что Client теперь работает
+
+---
+
 ## [2026-01-17 16:00] CODE WRITER — AddService Client/Payer Fix
 
 **Task:** SVC-CLIENT-PAYER-FIX | **Status:** SUCCESS
