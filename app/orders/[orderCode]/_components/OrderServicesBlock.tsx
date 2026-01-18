@@ -308,7 +308,7 @@ export default function OrderServicesBlock({
     setDuplicateConfirmService(null);
     
     console.log('[Duplicate] Confirmed, duplicating...', {
-      payerPartyId: service.payer_party_id,
+      payerPartyId: service.payerPartyId,
       payerName: service.payer
     });
     
@@ -332,11 +332,11 @@ export default function OrderServicesBlock({
             ticketNr: service.ticketNr,
             dateFrom: service.dateFrom,
             dateTo: service.dateTo,
-            supplierPartyId: service.supplier_party_id,
+            supplierPartyId: service.supplierPartyId,
             supplierName: service.supplier,
-            clientPartyId: service.client_party_id,
+            clientPartyId: service.clientPartyId,
             clientName: service.client,
-            payerPartyId: service.payer_party_id,
+            payerPartyId: service.payerPartyId,
             payerName: service.payer,
           })
         }
