@@ -94,13 +94,23 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     
     // Fetch statistics when client role is active in edit mode
     useEffect(() => {
+      console.log('[DirectoryForm] Stats useEffect triggered', {
+        mode,
+        recordId: record?.id,
+        roles,
+        hasClientRole: roles.includes("client")
+      });
+      
       const fetchStats = async () => {
         if (mode === "edit" && record?.id && roles.includes("client")) {
+          console.log('[DirectoryForm] Fetching stats for:', record.id);
           setStatsLoading(true);
           try {
             const response = await fetch(`/api/directory/${record.id}/stats`);
+            console.log('[DirectoryForm] Stats API response:', response.status);
             if (response.ok) {
               const data = await response.json();
+              console.log('[DirectoryForm] Stats data received:', data);
               setStats(data);
             } else {
               console.error("Failed to fetch stats:", response.statusText);
@@ -111,6 +121,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
             setStatsLoading(false);
           }
         } else {
+          console.log('[DirectoryForm] Not fetching stats - condition not met');
           setStats(null);
         }
       };
