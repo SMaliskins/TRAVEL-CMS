@@ -120,8 +120,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       }
     }, [mode, record?.id, roles]);
 
+    // Fetch stats on component mount and whenever record changes (each time card opens)
     useEffect(() => {
-      console.log('[DirectoryForm] Stats useEffect triggered', {
+      console.log('[DirectoryForm] Stats useEffect triggered - component mounted/record changed', {
         mode,
         recordId: record?.id,
         roles,
@@ -129,7 +130,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       });
       
       fetchStats();
-    }, [fetchStats]);
+    }, [fetchStats, record]);
     
     // Auto-refresh stats when switching to Statistics tab
     useEffect(() => {
