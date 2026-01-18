@@ -90,6 +90,7 @@ export default function OrderServicesBlock({
   const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
   const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
   const [duplicateConfirmService, setDuplicateConfirmService] = useState<Service | null>(null);
+  const [cancelConfirmService, setCancelConfirmService] = useState<Service | null>(null);
   
   // Cancelled filter with localStorage persistence
   const [hideCancelled, setHideCancelled] = useState(() => {
@@ -347,6 +348,33 @@ export default function OrderServicesBlock({
     } catch (error) {
       console.error("Error duplicating service:", error);
       alert("Failed to duplicate service");
+    }
+  };
+
+  // Handle cancel service confirmation
+  const handleCancelConfirm = async () => {
+    if (!cancelConfirmService) return;
+    
+    const service = cancelConfirmService;
+    setCancelConfirmService(null);
+    
+    try {
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...service,
+            res_status: "cancelled"
+          })
+        }
+      );
+      if (!response.ok) throw new Error("Failed to cancel service");
+      fetchServices();
+    } catch (error) {
+      console.error("Error cancelling service:", error);
+      alert("Failed to cancel service");
     }
   };
 
@@ -696,28 +724,9 @@ export default function OrderServicesBlock({
                             <td className="px-2 py-1 text-right">
                               {service.resStatus !== "cancelled" && (
                                 <button
-                                  onClick={async (e) => {
+                                  onClick={(e) => {
                                     e.stopPropagation();
-                                    if (confirm(`Cancel service: ${service.name}?`)) {
-                                      try {
-                                        const response = await fetch(
-                                          `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
-                                          {
-                                            method: "PATCH",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({
-                                              ...service,
-                                              res_status: "cancelled"
-                                            })
-                                          }
-                                        );
-                                        if (!response.ok) throw new Error("Failed to cancel service");
-                                        fetchServices();
-                                      } catch (error) {
-                                        console.error("Error cancelling service:", error);
-                                        alert("Failed to cancel service");
-                                      }
-                                    }
+                                    setCancelConfirmService(service);
                                   }}
                                   className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
                                   title="Cancel Service"
@@ -884,6 +893,17 @@ export default function OrderServicesBlock({
         message={`Create a copy of "${duplicateConfirmService?.name}"?`}
         confirmText="Duplicate"
         cancelText="Cancel"
+      />
+      
+      {/* Cancel Service Confirmation Modal */}
+      <ConfirmModal
+        isOpen={cancelConfirmService !== null}
+        onCancel={() => setCancelConfirmService(null)}
+        onConfirm={handleCancelConfirm}
+        title="Cancel Service"
+        message={`Cancel service "${cancelConfirmService?.name}"?`}
+        confirmText="Cancel Service"
+        cancelText="Keep"
       />
     </>
   );
