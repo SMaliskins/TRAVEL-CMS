@@ -94,6 +94,32 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     }, [saveSuccess, dirtyFields]);
     
     // Fetch statistics when client role is active in edit mode
+    const fetchStats = React.useCallback(async () => {
+      if (mode === "edit" && record?.id && roles.includes("client")) {
+        console.log('[DirectoryForm] Fetching stats for:', record.id);
+        setStatsLoading(true);
+        try {
+          // Add cache buster to force fresh data
+          const response = await fetch(`/api/directory/${record.id}/stats?t=${Date.now()}`);
+          console.log('[DirectoryForm] Stats API response:', response.status);
+          if (response.ok) {
+            const data = await response.json();
+            console.log('[DirectoryForm] Stats data received:', data);
+            setStats(data);
+          } else {
+            console.error("Failed to fetch stats:", response.statusText);
+          }
+        } catch (error) {
+          console.error("Error fetching stats:", error);
+        } finally {
+          setStatsLoading(false);
+        }
+      } else {
+        console.log('[DirectoryForm] Not fetching stats - condition not met');
+        setStats(null);
+      }
+    }, [mode, record?.id, roles]);
+
     useEffect(() => {
       console.log('[DirectoryForm] Stats useEffect triggered', {
         mode,
@@ -102,33 +128,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         hasClientRole: roles.includes("client")
       });
       
-      const fetchStats = async () => {
-        if (mode === "edit" && record?.id && roles.includes("client")) {
-          console.log('[DirectoryForm] Fetching stats for:', record.id);
-          setStatsLoading(true);
-          try {
-            const response = await fetch(`/api/directory/${record.id}/stats`);
-            console.log('[DirectoryForm] Stats API response:', response.status);
-            if (response.ok) {
-              const data = await response.json();
-              console.log('[DirectoryForm] Stats data received:', data);
-              setStats(data);
-            } else {
-              console.error("Failed to fetch stats:", response.statusText);
-            }
-          } catch (error) {
-            console.error("Error fetching stats:", error);
-          } finally {
-            setStatsLoading(false);
-          }
-        } else {
-          console.log('[DirectoryForm] Not fetching stats - condition not met');
-          setStats(null);
-        }
-      };
-
       fetchStats();
-    }, [mode, record?.id, roles]);
+    }, [fetchStats]);
 
     // Client type selection (for Client role only)
     // Initialize from record.type if available, to preserve Type when adding Client role
@@ -959,7 +960,22 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
           {/* Right: Statistics with Tabs (2/3 width) - Always visible */}
           <div className="lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5">
-              <h2 className="mb-4 md:mb-5 text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
+              <div className="flex items-center justify-between mb-4 md:mb-5">
+                <h2 className="text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
+                {roles.includes("client") && !statsLoading && (
+                  <button
+                    type="button"
+                    onClick={fetchStats}
+                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
+                    title="Refresh statistics"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+                )}
+              </div>
               <div className="space-y-3 md:space-y-4">
                 {/* Tabs - modern style with switching */}
                 <div className="border-b border-gray-200/60">
@@ -1025,10 +1041,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             
                             {/* Tooltip with breakdown */}
                             {stats.totalSpentBreakdown && stats.totalSpentBreakdown.length > 0 && (
-                              <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px]">
+                              <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] max-w-[280px]">
                                 <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg p-3">
                                   <div className="font-semibold mb-2 border-b border-gray-700 pb-2">Breakdown by Order:</div>
-                                  <div className="space-y-1.5">
+                                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
                                     {stats.totalSpentBreakdown.map((item) => (
                                       <div key={item.orderCode} className="flex justify-between items-center gap-3">
                                         <a 
