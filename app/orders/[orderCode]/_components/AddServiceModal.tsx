@@ -87,6 +87,13 @@ export default function AddServiceModal({
   onClose, 
   onServiceAdded 
 }: AddServiceModalProps) {
+  console.log('🚀 AddServiceModal mounted with:', {
+    defaultClientId,
+    defaultClientName,
+    orderDateFrom,
+    orderDateTo,
+  });
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,11 +110,13 @@ export default function AddServiceModal({
     id: string | null;
     name: string;
   }
-  const [clients, setClients] = useState<ClientEntry[]>(
-    defaultClientId && defaultClientName 
-      ? [{ id: defaultClientId, name: defaultClientName }]
-      : [{ id: null, name: "" }]
-  );
+  const [clients, setClients] = useState<ClientEntry[]>(() => {
+    if (defaultClientId && defaultClientName) {
+      console.log('🔧 Initializing clients with default:', { id: defaultClientId, name: defaultClientName });
+      return [{ id: defaultClientId, name: defaultClientName }];
+    }
+    return [{ id: null, name: "" }];
+  });
   
   const [payerPartyId, setPayerPartyId] = useState<string | null>(defaultClientId || null);
   const [payerName, setPayerName] = useState(defaultClientName || "");
