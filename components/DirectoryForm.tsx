@@ -41,6 +41,16 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Active tab state for Statistics section
     const [activeTab, setActiveTab] = useState<"statistics" | "clientScore">("statistics");
     
+    // Statistics state
+    const [stats, setStats] = useState<{
+      ordersCount: number;
+      totalSpent: number;
+      debt: number;
+      lastTrip: string | null;
+      nextTrip: string | null;
+    } | null>(null);
+    const [statsLoading, setStatsLoading] = useState(false);
+    
     // Ripple effects for tab buttons
     const statisticsTabRipple = useRipple({ color: 'rgba(0, 0, 0, 0.1)' });
     const clientScoreTabRipple = useRipple({ color: 'rgba(0, 0, 0, 0.1)' });
@@ -71,6 +81,32 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         return () => clearTimeout(timer);
       }
     }, [saveSuccess, dirtyFields]);
+    
+    // Fetch statistics when client role is active in edit mode
+    useEffect(() => {
+      const fetchStats = async () => {
+        if (mode === "edit" && record?.id && roles.includes("client")) {
+          setStatsLoading(true);
+          try {
+            const response = await fetch(`/api/directory/${record.id}/stats`);
+            if (response.ok) {
+              const data = await response.json();
+              setStats(data);
+            } else {
+              console.error("Failed to fetch stats:", response.statusText);
+            }
+          } catch (error) {
+            console.error("Error fetching stats:", error);
+          } finally {
+            setStatsLoading(false);
+          }
+        } else {
+          setStats(null);
+        }
+      };
+
+      fetchStats();
+    }, [mode, record?.id, roles]);
     
     // Determine base type from record or default to person
     const getBaseType = (): DirectoryType => {
@@ -959,28 +995,46 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                 {activeTab === "statistics" && (
                   <div className="pt-4">
                     {roles.includes("client") ? (
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center min-h-[1.5rem]">
-                          <span className="text-sm text-gray-600 truncate">Total Spent</span>
-                          <span className="text-sm font-medium text-gray-900 truncate ml-2">€0</span>
+                      statsLoading ? (
+                        <div className="flex items-center justify-center min-h-[6rem]">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                         </div>
-                        <div className="flex justify-between items-center min-h-[1.5rem]">
-                          <span className="text-sm text-gray-600 truncate">Orders</span>
-                          <span className="text-sm font-medium text-gray-900 truncate ml-2">0</span>
+                      ) : stats ? (
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center min-h-[1.5rem]">
+                            <span className="text-sm text-gray-600 truncate">Orders</span>
+                            <span className="text-sm font-medium text-gray-900 truncate ml-2">{stats.ordersCount}</span>
+                          </div>
+                          <div className="flex justify-between items-center min-h-[1.5rem]">
+                            <span className="text-sm text-gray-600 truncate">Total Spent</span>
+                            <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                              €{stats.totalSpent.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center min-h-[1.5rem]">
+                            <span className="text-sm text-gray-600 truncate">Debt</span>
+                            <span className={`text-sm font-medium truncate ml-2 ${stats.debt > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                              €{stats.debt.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center min-h-[1.5rem]">
+                            <span className="text-sm text-gray-600 truncate">Last Trip</span>
+                            <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                              {stats.lastTrip ? new Date(stats.lastTrip).toLocaleDateString("lv-LV") : "-"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center min-h-[1.5rem]">
+                            <span className="text-sm text-gray-600 truncate">Next Trip</span>
+                            <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                              {stats.nextTrip ? new Date(stats.nextTrip).toLocaleDateString("lv-LV") : "-"}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex justify-between items-center min-h-[1.5rem]">
-                          <span className="text-sm text-gray-600 truncate">Last Trip</span>
-                          <span className="text-sm font-medium text-gray-900 truncate ml-2">-</span>
+                      ) : (
+                        <div className="text-sm text-gray-500 italic min-h-[6rem] flex items-center">
+                          No statistics available
                         </div>
-                        <div className="flex justify-between items-center min-h-[1.5rem]">
-                          <span className="text-sm text-gray-600 truncate">Next Trip</span>
-                          <span className="text-sm font-medium text-gray-900 truncate ml-2">-</span>
-                        </div>
-                        <div className="flex justify-between items-center min-h-[1.5rem]">
-                          <span className="text-sm text-gray-600 truncate">Debt</span>
-                          <span className="text-sm font-medium text-gray-900 truncate ml-2">€0</span>
-                        </div>
-                      </div>
+                      )
                     ) : (
                       <div className="text-sm text-gray-500 italic min-h-[6rem] flex items-center">
                         Select "Client" role to view statistics
