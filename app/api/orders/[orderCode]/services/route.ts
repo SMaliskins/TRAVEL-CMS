@@ -180,6 +180,14 @@ export async function POST(
       return NextResponse.json({ error: "Service name is required" }, { status: 400 });
     }
 
+    // Debug logging for party IDs
+    console.log("[Services POST] Request body party IDs:", {
+      supplierPartyId: body.supplierPartyId,
+      clientPartyId: body.clientPartyId,
+      payerPartyId: body.payerPartyId,
+      payerName: body.payerName,
+    });
+
     // Build insert payload using confirmed mapping
     const serviceData: Record<string, unknown> = {
       company_id: companyId,
@@ -206,6 +214,13 @@ export async function POST(
       .insert(serviceData)
       .select()
       .single();
+
+    console.log("[Services POST] Insert result:", {
+      success: !error,
+      serviceId: service?.id,
+      payerPartyIdSaved: service?.payer_party_id,
+      error: error?.message,
+    });
 
     if (error) {
       console.error("Create service error:", error);
