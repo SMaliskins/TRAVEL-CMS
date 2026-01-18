@@ -111,9 +111,13 @@ export default function AddServiceModal({
     name: string;
   }
   const [clients, setClients] = useState<ClientEntry[]>(() => {
-    if (defaultClientId && defaultClientName) {
-      console.log('🔧 Initializing clients with default:', { id: defaultClientId, name: defaultClientName });
-      return [{ id: defaultClientId, name: defaultClientName }];
+    // Initialize with default client from Order
+    if (defaultClientName) {
+      console.log('🔧 Initializing clients with default:', { 
+        id: defaultClientId || null, 
+        name: defaultClientName 
+      });
+      return [{ id: defaultClientId || null, name: defaultClientName }];
     }
     return [{ id: null, name: "" }];
   });
@@ -144,13 +148,15 @@ export default function AddServiceModal({
 
   // Auto-fill clients/payer when defaultClient changes
   useEffect(() => {
-    if (defaultClientId && defaultClientName) {
+    if (defaultClientName) {
       // Only set default if no clients selected yet
-      if (clients.length === 1 && !clients[0].id) {
-        setClients([{ id: defaultClientId, name: defaultClientName }]);
+      if (clients.length === 1 && !clients[0].id && !clients[0].name) {
+        console.log('🔄 useEffect: Setting clients to default');
+        setClients([{ id: defaultClientId || null, name: defaultClientName }]);
       }
-      if (!payerPartyId) {
-        setPayerPartyId(defaultClientId);
+      if (!payerPartyId && !payerName) {
+        console.log('🔄 useEffect: Setting payer to default');
+        setPayerPartyId(defaultClientId || null);
         setPayerName(defaultClientName);
       }
     }
