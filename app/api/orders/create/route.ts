@@ -173,6 +173,9 @@ export async function POST(request: NextRequest) {
 
     // Add optional fields if they have values
     // These columns may not exist in all deployments
+    if (body.clientPartyId) {
+      payload.client_party_id = body.clientPartyId;
+    }
     if (clientDisplayName) {
       payload.client_display_name = clientDisplayName;
     }
