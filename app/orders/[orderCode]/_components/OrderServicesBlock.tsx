@@ -630,8 +630,13 @@ export default function OrderServicesBlock({
                             <td className="px-2 py-1 text-center">
                               <button
                                 onClick={async (e) => {
+                                  console.log('[Duplicate] Button clicked', service);
                                   e.stopPropagation();
                                   if (confirm(`Duplicate service: ${service.name}?`)) {
+                                    console.log('[Duplicate] Confirmed, duplicating...', {
+                                      payerPartyId: service.payer_party_id,
+                                      payerName: service.payer
+                                    });
                                     try {
                                       const { data: { session } } = await supabase.auth.getSession();
                                       const response = await fetch(
@@ -662,6 +667,7 @@ export default function OrderServicesBlock({
                                         }
                                       );
                                       if (!response.ok) throw new Error("Failed to duplicate service");
+                                      console.log('[Duplicate] Success!');
                                       fetchServices();
                                     } catch (error) {
                                       console.error("Error duplicating service:", error);
