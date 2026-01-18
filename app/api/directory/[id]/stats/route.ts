@@ -42,7 +42,7 @@ export async function GET(
     // 2. Total Spent (sum of client_price where party is payer)
     const { data: totalSpentData, error: totalSpentError } = await supabaseAdmin
       .from("order_services")
-      .select("client_price")
+      .select("client_price, order_id")
       .eq("payer_party_id", partyId);
 
     if (totalSpentError) {
@@ -53,11 +53,32 @@ export async function GET(
       );
     }
 
-    const totalSpent = totalSpentData?.reduce(
-      (sum, s) => sum + (s.client_price || 0),
-      0
-    ) || 0;
-    console.log(`[Stats API] Total spent: ${totalSpent}`);
+    // Calculate total spent and breakdown by order
+    const spentByOrder = new Map<string, number>();
+    totalSpentData?.forEach((s) => {
+      const current = spentByOrder.get(s.order_id) || 0;
+      spentByOrder.set(s.order_id, current + (s.client_price || 0));
+    });
+
+    const totalSpent = Array.from(spentByOrder.values()).reduce((sum, val) => sum + val, 0);
+    
+    // Get order codes for the orders
+    const orderIdsForSpent = Array.from(spentByOrder.keys());
+    let orderBreakdown: Array<{ orderCode: string; amount: number }> = [];
+    
+    if (orderIdsForSpent.length > 0) {
+      const { data: ordersForSpent } = await supabaseAdmin
+        .from("orders")
+        .select("id, order_code")
+        .in("id", orderIdsForSpent);
+      
+      orderBreakdown = ordersForSpent?.map((o) => ({
+        orderCode: o.order_code,
+        amount: spentByOrder.get(o.id) || 0
+      })) || [];
+    }
+    
+    console.log(`[Stats API] Total spent: ${totalSpent}`, orderBreakdown);
 
     // 3. Debt (sum of amount_debt from orders where party is payer in at least one service)
     const { data: payerOrdersData, error: payerOrdersError } = await supabaseAdmin
@@ -137,6 +158,7 @@ export async function GET(
     const stats = {
       ordersCount,
       totalSpent,
+      totalSpentBreakdown: orderBreakdown,
       debt,
       lastTrip,
       nextTrip,

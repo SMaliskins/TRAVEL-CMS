@@ -45,6 +45,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [stats, setStats] = useState<{
       ordersCount: number;
       totalSpent: number;
+      totalSpentBreakdown?: Array<{ orderCode: string; amount: number }>;
       debt: number;
       lastTrip: string | null;
       nextTrip: string | null;
@@ -1016,11 +1017,42 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             <span className="text-sm text-gray-600 truncate">Orders</span>
                             <span className="text-sm font-medium text-gray-900 truncate ml-2">{stats.ordersCount}</span>
                           </div>
-                          <div className="flex justify-between items-center min-h-[1.5rem]">
+                          <div className="flex justify-between items-center min-h-[1.5rem] group relative">
                             <span className="text-sm text-gray-600 truncate">Total Spent</span>
-                            <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                            <span className="text-sm font-medium text-gray-900 truncate ml-2 cursor-help">
                               €{stats.totalSpent.toFixed(2)}
                             </span>
+                            
+                            {/* Tooltip with breakdown */}
+                            {stats.totalSpentBreakdown && stats.totalSpentBreakdown.length > 0 && (
+                              <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px]">
+                                <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg p-3">
+                                  <div className="font-semibold mb-2 border-b border-gray-700 pb-2">Breakdown by Order:</div>
+                                  <div className="space-y-1.5">
+                                    {stats.totalSpentBreakdown.map((item) => (
+                                      <div key={item.orderCode} className="flex justify-between items-center gap-3">
+                                        <a 
+                                          href={`/orders/${item.orderCode}`}
+                                          className="text-blue-300 hover:text-blue-200 underline font-mono text-xs"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {item.orderCode}
+                                        </a>
+                                        <span className="font-medium whitespace-nowrap">€{item.amount.toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="mt-2 pt-2 border-t border-gray-700 flex justify-between font-semibold">
+                                    <span>Total:</span>
+                                    <span>€{stats.totalSpent.toFixed(2)}</span>
+                                  </div>
+                                  {/* Arrow pointer */}
+                                  <div className="absolute left-1/2 top-full -translate-x-1/2 -mt-px">
+                                    <div className="border-8 border-transparent border-t-gray-900"></div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="flex justify-between items-center min-h-[1.5rem]">
                             <span className="text-sm text-gray-600 truncate">Debt</span>
