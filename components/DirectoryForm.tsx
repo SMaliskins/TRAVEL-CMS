@@ -69,6 +69,16 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       setDirtyFields(prev => new Set(prev).add(fieldName));
     };
     
+    // Determine base type from record or default to person
+    const getBaseType = (): DirectoryType => {
+      if (record?.type) return record.type;
+      // If client role is selected and has clientType preference, use it
+      return "person";
+    };
+
+    const [baseType, setBaseType] = useState<DirectoryType>(getBaseType());
+    const [roles, setRoles] = useState<DirectoryRole[]>(record?.roles || []);
+    
     // Handle save success - mark all dirty fields as saved temporarily
     useEffect(() => {
       if (saveSuccess && dirtyFields.size > 0) {
@@ -107,16 +117,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
       fetchStats();
     }, [mode, record?.id, roles]);
-    
-    // Determine base type from record or default to person
-    const getBaseType = (): DirectoryType => {
-      if (record?.type) return record.type;
-      // If client role is selected and has clientType preference, use it
-      return "person";
-    };
-
-    const [baseType, setBaseType] = useState<DirectoryType>(getBaseType());
-    const [roles, setRoles] = useState<DirectoryRole[]>(record?.roles || []);
 
     // Client type selection (for Client role only)
     // Initialize from record.type if available, to preserve Type when adding Client role
