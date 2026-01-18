@@ -163,6 +163,14 @@ export default function OrderServicesBlock({
 
   // Handle new service added
   const handleServiceAdded = (service: ServiceData) => {
+    console.log('🔍 handleServiceAdded received:', {
+      id: service.id,
+      clientPartyId: service.clientPartyId,
+      clientName: service.clientName,
+      payerPartyId: service.payerPartyId,
+      payerName: service.payerName,
+    });
+    
     const newService: Service = {
       id: service.id,
       dateFrom: service.dateFrom || "",
@@ -183,6 +191,13 @@ export default function OrderServicesBlock({
       ticketNr: service.ticketNr || "",
       assignedTravellerIds: service.travellerIds || [],
     };
+    
+    console.log('✅ newService created:', {
+      id: newService.id,
+      client: newService.client,
+      clientPartyId: newService.clientPartyId,
+    });
+    
     setServices(prev => [...prev, newService]);
   };
 

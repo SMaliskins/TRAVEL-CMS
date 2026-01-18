@@ -268,8 +268,19 @@ export default function AddServiceModal({
         body: JSON.stringify(payload),
       });
 
+      console.log('📤 AddService payload:', {
+        clientPartyId: payload.clientPartyId,
+        clientName: payload.clientName,
+        clients: payload.clients,
+        primaryClient,
+      });
+
       if (response.ok) {
         const data = await response.json();
+        console.log('📥 AddService response:', {
+          clientPartyId: data.service.clientPartyId,
+          clientName: data.service.clientName,
+        });
         onServiceAdded(data.service);
         onClose();
       } else {
