@@ -39,11 +39,12 @@ export async function GET(
     const ordersCount = uniqueOrderIds.length;
     console.log(`[Stats API] Found ${ordersCount} orders for client`);
 
-    // 2. Total Spent (sum of client_price where party is payer)
+    // 2. Total Spent (sum of client_price where party is payer, excluding cancelled)
     const { data: totalSpentData, error: totalSpentError } = await supabaseAdmin
       .from("order_services")
-      .select("client_price, order_id")
-      .eq("payer_party_id", partyId);
+      .select("client_price, order_id, res_status")
+      .eq("payer_party_id", partyId)
+      .neq("res_status", "cancelled");
 
     if (totalSpentError) {
       console.error("[Stats API] Total spent error:", totalSpentError);
@@ -53,7 +54,7 @@ export async function GET(
       );
     }
 
-    // Calculate total spent and breakdown by order
+    // Calculate total spent and breakdown by order (excluding cancelled)
     const spentByOrder = new Map<string, number>();
     totalSpentData?.forEach((s) => {
       const current = spentByOrder.get(s.order_id) || 0;
