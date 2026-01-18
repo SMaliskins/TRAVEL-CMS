@@ -629,14 +629,23 @@ export default function OrderServicesBlock({
                             {/* Duplicate Button */}
                             <td className="px-2 py-1 text-center">
                               <button
-                                onClick={async (e) => {
+                                onClick={(e) => {
                                   console.log('[Duplicate] Button clicked', service);
                                   e.stopPropagation();
-                                  if (confirm(`Duplicate service: ${service.name}?`)) {
-                                    console.log('[Duplicate] Confirmed, duplicating...', {
-                                      payerPartyId: service.payer_party_id,
-                                      payerName: service.payer
-                                    });
+                                  
+                                  // Show confirm BEFORE async to avoid browser blocking
+                                  if (!confirm(`Duplicate service: ${service.name}?`)) {
+                                    console.log('[Duplicate] Cancelled by user');
+                                    return;
+                                  }
+                                  
+                                  console.log('[Duplicate] Confirmed, duplicating...', {
+                                    payerPartyId: service.payer_party_id,
+                                    payerName: service.payer
+                                  });
+                                  
+                                  // Now do async operation
+                                  (async () => {
                                     try {
                                       const { data: { session } } = await supabase.auth.getSession();
                                       const response = await fetch(
@@ -673,7 +682,7 @@ export default function OrderServicesBlock({
                                       console.error("Error duplicating service:", error);
                                       alert("Failed to duplicate service");
                                     }
-                                  }
+                                  })();
                                 }}
                                 className="text-purple-600 hover:text-purple-800 p-1 rounded hover:bg-purple-50 transition-colors text-sm"
                                 title="Duplicate Service"
