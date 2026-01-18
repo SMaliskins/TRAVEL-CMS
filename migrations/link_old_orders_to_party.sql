@@ -10,28 +10,43 @@ WITH matched_parties AS (
     o.id as order_id,
     o.client_display_name,
     p.id as party_id,
-    p.display_name as party_display_name
+    p.display_name as party_display_name,
+    ROW_NUMBER() OVER (PARTITION BY o.id ORDER BY 
+      CASE 
+        WHEN p.display_name = o.client_display_name THEN 1
+        ELSE 2
+      END
+    ) as match_rank
   FROM orders o
-  CROSS JOIN party p
+  LEFT JOIN party p ON (
+    -- Match 1: Exact display_name match
+    p.display_name = o.client_display_name
+    OR
+    -- Match 2: Match on person first_name + last_name
+    EXISTS (
+      SELECT 1 FROM party_person pp
+      WHERE pp.party_id = p.id
+      AND CONCAT(pp.first_name, ' ', pp.last_name) = o.client_display_name
+    )
+    OR
+    -- Match 3: Match on company name
+    EXISTS (
+      SELECT 1 FROM party_company pc
+      WHERE pc.party_id = p.id
+      AND pc.company_name = o.client_display_name
+    )
+  )
   WHERE o.client_party_id IS NULL
     AND o.client_display_name IS NOT NULL
-    AND (
-      -- Exact match on display_name
-      p.display_name = o.client_display_name
-      OR
-      -- Match on concatenated first_name + last_name (for person records)
-      CONCAT(p.first_name, ' ', p.last_name) = o.client_display_name
-      OR
-      -- Match on company name
-      p.name = o.client_display_name
-    )
+    AND p.id IS NOT NULL
     -- Ensure client role exists
     AND 'client' = ANY(p.roles)
 )
 UPDATE orders o
 SET client_party_id = mp.party_id
 FROM matched_parties mp
-WHERE o.id = mp.order_id;
+WHERE o.id = mp.order_id
+  AND mp.match_rank = 1;
 
 -- Report: How many orders were updated
 SELECT 
