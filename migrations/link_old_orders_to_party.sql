@@ -39,8 +39,11 @@ WITH matched_parties AS (
   WHERE o.client_party_id IS NULL
     AND o.client_display_name IS NOT NULL
     AND p.id IS NOT NULL
-    -- Ensure client role exists
-    AND 'client' = ANY(p.roles)
+    -- Ensure client role exists (check in client_party table)
+    AND EXISTS (
+      SELECT 1 FROM client_party cp
+      WHERE cp.party_id = p.id
+    )
 )
 UPDATE orders o
 SET client_party_id = mp.party_id
