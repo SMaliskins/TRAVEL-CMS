@@ -9,6 +9,7 @@ import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
 import SplitServiceModal from "./SplitServiceModal";
 import SplitModalMulti from "./SplitModalMulti";
+import ConfirmModal from "@/components/ConfirmModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 
 interface Traveller {
@@ -88,6 +89,7 @@ export default function OrderServicesBlock({
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
   const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
+  const [duplicateConfirmService, setDuplicateConfirmService] = useState<Service | null>(null);
   
   // Cancelled filter with localStorage persistence
   const [hideCancelled, setHideCancelled] = useState(() => {
@@ -297,6 +299,56 @@ export default function OrderServicesBlock({
     const bDate = new Date(bYear, bMonth - 1, bDay);
     return aDate.getTime() - bDate.getTime();
   });
+
+  // Handle duplicate service confirmation
+  const handleDuplicateConfirm = async () => {
+    if (!duplicateConfirmService) return;
+    
+    const service = duplicateConfirmService;
+    setDuplicateConfirmService(null);
+    
+    console.log('[Duplicate] Confirmed, duplicating...', {
+      payerPartyId: service.payer_party_id,
+      payerName: service.payer
+    });
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/services`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({
+            serviceName: service.name,
+            category: service.category,
+            servicePrice: service.servicePrice,
+            clientPrice: service.clientPrice,
+            resStatus: service.resStatus,
+            refNr: service.refNr,
+            ticketNr: service.ticketNr,
+            dateFrom: service.dateFrom,
+            dateTo: service.dateTo,
+            supplierPartyId: service.supplier_party_id,
+            supplierName: service.supplier,
+            clientPartyId: service.client_party_id,
+            clientName: service.client,
+            payerPartyId: service.payer_party_id,
+            payerName: service.payer,
+          })
+        }
+      );
+      if (!response.ok) throw new Error("Failed to duplicate service");
+      console.log('[Duplicate] Success!');
+      fetchServices();
+    } catch (error) {
+      console.error("Error duplicating service:", error);
+      alert("Failed to duplicate service");
+    }
+  };
 
   // Initialize expandedGroups - all groups expanded by default
   useEffect(() => {
@@ -632,57 +684,7 @@ export default function OrderServicesBlock({
                                 onClick={(e) => {
                                   console.log('[Duplicate] Button clicked', service);
                                   e.stopPropagation();
-                                  
-                                  // Show confirm BEFORE async to avoid browser blocking
-                                  if (!confirm(`Duplicate service: ${service.name}?`)) {
-                                    console.log('[Duplicate] Cancelled by user');
-                                    return;
-                                  }
-                                  
-                                  console.log('[Duplicate] Confirmed, duplicating...', {
-                                    payerPartyId: service.payer_party_id,
-                                    payerName: service.payer
-                                  });
-                                  
-                                  // Now do async operation
-                                  (async () => {
-                                    try {
-                                      const { data: { session } } = await supabase.auth.getSession();
-                                      const response = await fetch(
-                                        `/api/orders/${encodeURIComponent(orderCode)}/services`,
-                                        {
-                                          method: "POST",
-                                          headers: {
-                                            "Content-Type": "application/json",
-                                            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-                                          },
-                                          body: JSON.stringify({
-                                            serviceName: service.name,
-                                            category: service.category,
-                                            servicePrice: service.servicePrice,
-                                            clientPrice: service.clientPrice,
-                                            resStatus: service.resStatus,
-                                            refNr: service.refNr,
-                                            ticketNr: service.ticketNr,
-                                            dateFrom: service.dateFrom,
-                                            dateTo: service.dateTo,
-                                            supplierPartyId: service.supplier_party_id,
-                                            supplierName: service.supplier,
-                                            clientPartyId: service.client_party_id,
-                                            clientName: service.client,
-                                            payerPartyId: service.payer_party_id,
-                                            payerName: service.payer,
-                                          })
-                                        }
-                                      );
-                                      if (!response.ok) throw new Error("Failed to duplicate service");
-                                      console.log('[Duplicate] Success!');
-                                      fetchServices();
-                                    } catch (error) {
-                                      console.error("Error duplicating service:", error);
-                                      alert("Failed to duplicate service");
-                                    }
-                                  })();
+                                  setDuplicateConfirmService(service);
                                 }}
                                 className="text-purple-600 hover:text-purple-800 p-1 rounded hover:bg-purple-50 transition-colors text-sm"
                                 title="Duplicate Service"
@@ -872,6 +874,17 @@ export default function OrderServicesBlock({
           </div>
         </div>
       )}
+      
+      {/* Duplicate Service Confirmation Modal */}
+      <ConfirmModal
+        isOpen={duplicateConfirmService !== null}
+        onCancel={() => setDuplicateConfirmService(null)}
+        onConfirm={handleDuplicateConfirm}
+        title="Duplicate Service"
+        message={`Create a copy of "${duplicateConfirmService?.name}"?`}
+        confirmText="Duplicate"
+        cancelText="Cancel"
+      />
     </>
   );
 }
