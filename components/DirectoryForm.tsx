@@ -130,6 +130,25 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       
       fetchStats();
     }, [fetchStats]);
+    
+    // Auto-refresh stats when switching to Statistics tab
+    useEffect(() => {
+      if (activeTab === "statistics" && roles.includes("client") && mode === "edit" && record?.id) {
+        fetchStats();
+      }
+    }, [activeTab, fetchStats, roles, mode, record?.id]);
+    
+    // Auto-refresh stats when page becomes visible (user returns to tab)
+    useEffect(() => {
+      const handleVisibilityChange = () => {
+        if (!document.hidden && activeTab === "statistics" && roles.includes("client")) {
+          fetchStats();
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [activeTab, roles, fetchStats]);
 
     // Client type selection (for Client role only)
     // Initialize from record.type if available, to preserve Type when adding Client role
@@ -960,22 +979,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
           {/* Right: Statistics with Tabs (2/3 width) - Always visible */}
           <div className="lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5">
-              <div className="flex items-center justify-between mb-4 md:mb-5">
-                <h2 className="text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
-                {roles.includes("client") && !statsLoading && (
-                  <button
-                    type="button"
-                    onClick={fetchStats}
-                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
-                    title="Refresh statistics"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Refresh
-                  </button>
-                )}
-              </div>
+              <h2 className="mb-4 md:mb-5 text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
               <div className="space-y-3 md:space-y-4">
                 {/* Tabs - modern style with switching */}
                 <div className="border-b border-gray-200/60">
