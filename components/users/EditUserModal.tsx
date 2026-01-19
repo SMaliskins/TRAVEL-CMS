@@ -6,6 +6,7 @@ import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { getRoleDisplayName } from "@/lib/auth/roles";
 import RoleBadge from "./RoleBadge";
+import RolePermissionsModal from "./RolePermissionsModal";
 
 interface Role {
   id: string;
@@ -48,6 +49,7 @@ export default function EditUserModal({
   const [isActive, setIsActive] = useState(user.is_active);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPermissions, setShowPermissions] = useState(false);
 
   useEscapeKey(onClose, true);
   const { prefs } = useUserPreferences();
@@ -203,9 +205,21 @@ export default function EditUserModal({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Role
-              </label>
+              <div className="mb-1 flex items-center gap-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Role
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowPermissions(true)}
+                  className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  title="View role permissions"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+              </div>
               <select
                 value={roleId}
                 onChange={(e) => setRoleId(e.target.value)}
@@ -301,6 +315,10 @@ export default function EditUserModal({
           </div>
         </form>
       </div>
+
+      {showPermissions && (
+        <RolePermissionsModal onClose={() => setShowPermissions(false)} />
+      )}
     </div>
   );
 }
