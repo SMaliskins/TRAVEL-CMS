@@ -9,6 +9,12 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can upload avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Public read access to avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete avatars" ON storage.objects;
+
 -- Allow authenticated users to upload avatars
 CREATE POLICY "Users can upload avatars"
 ON storage.objects FOR INSERT
