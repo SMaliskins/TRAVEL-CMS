@@ -10924,3 +10924,78 @@ npm run dev
 
 **Next Step:** Пользователь перезапускает dev server
 
+
+---
+
+### 📅 [2026-01-19] | [Runner Session Start]
+**Агент:** `RUNNER (Architect)`
+**Задачи:** USR1, USR4
+**Статус:** START
+
+**Анализ:**
+- USR2 (Dynamic Roles) — ✅ DONE, роли в БД готовы
+- AUTH1, AUTH2 — ✅ DONE, logout и protected routes работают
+- USR1 и USR4 разблокированы
+
+**Действия:**
+1. Создана спецификация USR1: `.ai/tasks/usr1-user-management-ui.md`
+   - API: /api/users (GET, POST)
+   - API: /api/users/[userId] (GET, PATCH, DELETE)
+   - UI: /settings/users page
+   - Components: UserList, AddUserModal, EditUserModal, RoleBadge
+
+2. Создана спецификация USR4: `.ai/tasks/usr4-user-profile.md`
+   - API: /api/profile (GET, PATCH)
+   - API: /api/profile/password (POST)
+   - UI: /settings/profile page
+
+3. Обновлён PROJECT_TODO.md:
+   - USR1: IN_PROGRESS, Pipeline: CW→QA
+   - USR4: IN_PROGRESS, Pipeline: CW→QA
+
+**Pipeline:**
+- USR1: CW→QA (🔴 CRITICAL — основной функционал)
+- USR4: CW→QA (🟡 Medium — self-service)
+
+**Next Step:** Code Writer берёт USR1 + USR4
+
+
+---
+
+### 📅 [2026-01-19] | [Code Writer Session]
+**Агент:** `CODE WRITER`
+**Задачи:** USR1, USR4
+**Статус:** SUCCESS → QA
+
+**Реализовано:**
+
+**USR1 — User Management:**
+- ✅ `app/api/users/route.ts` — GET (список), POST (создание с temp password)
+- ✅ `app/api/users/[userId]/route.ts` — GET, PATCH, DELETE
+- ✅ `components/users/UserList.tsx` — таблица пользователей
+- ✅ `components/users/AddUserModal.tsx` — создание + показ temp password
+- ✅ `components/users/EditUserModal.tsx` — редактирование role/status
+- ✅ `app/settings/users/page.tsx` — страница User Management
+
+**USR4 — User Profile:**
+- ✅ `app/api/profile/route.ts` — GET, PATCH профиля
+- ✅ `app/api/profile/password/route.ts` — POST смена пароля
+- ✅ `app/settings/profile/page.tsx` — страница профиля
+
+**Navigation:**
+- ✅ TopBar dropdown обновлён: My Profile, Settings, User Management
+
+**Security:**
+- Supervisor: полный доступ к User Management
+- Manager: read-only доступ к списку
+- Agent/Finance: доступ запрещён (403)
+- Self-protection: нельзя деактивировать себя, понизить свою роль, удалить последнего Supervisor
+
+**Файлы:**
+- 4 новых API routes
+- 3 новых компонента
+- 2 новые страницы
+- 1 обновлённый компонент (TopBar)
+
+**Next Step:** QA тестирование
+

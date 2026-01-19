@@ -174,14 +174,11 @@ export default function TopBar() {
               >
                 <div className="py-1">
                   <a
-                    href="#"
+                    href="/settings/profile"
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setIsDropdownOpen(false);
-                    }}
+                    onClick={() => setIsDropdownOpen(false)}
                   >
-                    Profile
+                    My Profile
                   </a>
                   <a
                     href="/settings"
@@ -189,6 +186,13 @@ export default function TopBar() {
                     onClick={() => setIsDropdownOpen(false)}
                   >
                     Settings
+                  </a>
+                  <a
+                    href="/settings/users"
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setIsDropdownOpen(false)}
+                  >
+                    User Management
                   </a>
                   <button
                     type="button"
