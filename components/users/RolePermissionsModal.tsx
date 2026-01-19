@@ -10,6 +10,8 @@ interface RolePermissionsModalProps {
 
 // Permission matrix
 const PERMISSIONS = [
+  { key: "directory.view", label: { en: "View clients (directory)", ru: "Просмотр клиентов (справочник)" } },
+  { key: "directory.manage", label: { en: "Manage directory", ru: "Управление справочником" } },
   { key: "orders.view", label: { en: "View orders", ru: "Просмотр заказов" } },
   { key: "orders.create", label: { en: "Create orders", ru: "Создание заказов" } },
   { key: "orders.edit", label: { en: "Edit orders", ru: "Редактирование заказов" } },
@@ -18,7 +20,6 @@ const PERMISSIONS = [
   { key: "invoices.create", label: { en: "Create invoices", ru: "Создание счетов" } },
   { key: "payments.record", label: { en: "Record payments", ru: "Учёт платежей" } },
   { key: "reports.view", label: { en: "View reports", ru: "Просмотр отчётов" } },
-  { key: "directory.manage", label: { en: "Manage directory", ru: "Управление справочником" } },
   { key: "users.view", label: { en: "View users", ru: "Просмотр пользователей" } },
   { key: "users.manage", label: { en: "Manage users", ru: "Управление пользователями" } },
   { key: "settings.company", label: { en: "Company settings", ru: "Настройки компании" } },
@@ -27,6 +28,8 @@ const PERMISSIONS = [
 // Role permissions (true = allowed, "own" = only own data, false = denied)
 const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
   subagent: {
+    "directory.view": "own",
+    "directory.manage": "own",
     "orders.view": "own",
     "orders.create": true,
     "orders.edit": "own",
@@ -35,12 +38,13 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "invoices.create": "own",
     "payments.record": "own",
     "reports.view": false,
-    "directory.manage": true,
     "users.view": false,
     "users.manage": false,
     "settings.company": false,
   },
   agent: {
+    "directory.view": true,
+    "directory.manage": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -49,12 +53,13 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "invoices.create": true,
     "payments.record": true,
     "reports.view": false,
-    "directory.manage": true,
     "users.view": false,
     "users.manage": false,
     "settings.company": false,
   },
   finance: {
+    "directory.view": true,
+    "directory.manage": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -63,12 +68,13 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "invoices.create": true,
     "payments.record": true,
     "reports.view": true,
-    "directory.manage": true,
     "users.view": false,
     "users.manage": false,
     "settings.company": false,
   },
   manager: {
+    "directory.view": true,
+    "directory.manage": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -77,12 +83,13 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "invoices.create": true,
     "payments.record": true,
     "reports.view": true,
-    "directory.manage": true,
     "users.view": true,
     "users.manage": false,
     "settings.company": true,
   },
   supervisor: {
+    "directory.view": true,
+    "directory.manage": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -91,7 +98,6 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "invoices.create": true,
     "payments.record": true,
     "reports.view": true,
-    "directory.manage": true,
     "users.view": true,
     "users.manage": true,
     "settings.company": true,

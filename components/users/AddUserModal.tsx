@@ -44,8 +44,7 @@ export default function AddUserModal({
   useEscapeKey(onClose, true);
   const { prefs } = useUserPreferences();
 
-  // Filter out subagent for simplicity (can be added later if needed)
-  const availableRoles = roles.filter((r) => r.name !== "subagent");
+  const availableRoles = roles;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

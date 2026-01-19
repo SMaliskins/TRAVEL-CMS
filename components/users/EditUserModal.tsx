@@ -56,8 +56,7 @@ export default function EditUserModal({
 
   const isSelf = user.id === currentUserId;
 
-  // Filter out subagent for simplicity
-  const availableRoles = roles.filter((r) => r.name !== "subagent");
+  const availableRoles = roles;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
