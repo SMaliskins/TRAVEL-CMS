@@ -251,11 +251,11 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
     >
       <div
         className={`
-          group flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px]
+          group flex items-center gap-2 px-3 py-2 text-[13px]
           cursor-pointer select-none transition-all duration-200 ease-out
           ${isActive
-            ? "bg-white text-gray-900 shadow-sm ring-1 ring-black/5"
-            : "text-gray-500 hover:text-gray-700 hover:bg-white/60"
+            ? "bg-white text-gray-900 rounded-t-lg -mb-px relative z-10 border-t border-l border-r border-gray-200"
+            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 rounded-t-lg"
           }
         `}
         onClick={onSelect}
@@ -264,17 +264,17 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
         <span className={`w-2 h-2 rounded-full ${dotColor} ${isActive ? "" : "opacity-50"}`} />
         
         {/* Title */}
-        <span className={`truncate max-w-[100px] ${isActive ? "font-medium" : ""}`}>
+        <span className={`truncate max-w-[120px] ${isActive ? "font-medium" : ""}`}>
           {tab.title}
         </span>
         
         {/* Close button */}
         <button
           className={`
-            rounded-md p-0.5 transition-all duration-150
+            rounded p-0.5 transition-all duration-150 ml-1
             ${isActive
               ? "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-              : "opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              : "opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 hover:bg-gray-200"
             }
           `}
           onClick={(e) => {
@@ -305,7 +305,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="sticky top-14 z-40 flex items-center gap-1 bg-gray-100/80 backdrop-blur-sm px-3 py-2 border-b border-gray-200/50 overflow-x-auto">
+    <div className="sticky top-14 z-40 flex items-end gap-0.5 bg-gray-100 px-3 pt-2 border-b border-gray-200 overflow-x-auto">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}
