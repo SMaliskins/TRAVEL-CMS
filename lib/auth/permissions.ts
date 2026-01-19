@@ -156,3 +156,191 @@ export const PERMISSION_LABELS: Record<string, string> = {
 export function getPermissionLabel(permission: string): string {
   return PERMISSION_LABELS[permission] || permission;
 }
+
+/**
+ * Role-Permission Matrix
+ * Defines what each role can do and with what scope
+ */
+export const ROLE_PERMISSIONS: Record<string, Record<string, "all" | "own" | "commission" | false>> = {
+  supervisor: {
+    "reports.view": "all",
+    "reports.export": "all",
+    "orders.view": "all",
+    "orders.create": "all",
+    "orders.edit": "all",
+    "orders.delete": "all",
+    "services.view": "all",
+    "services.create": "all",
+    "services.edit": "all",
+    "services.delete": "all",
+    "services.price.view": "all",
+    "services.margin.view": "all",
+    "invoices.view": "all",
+    "invoices.create": "all",
+    "invoices.edit": "all",
+    "invoices.send": "all",
+    "payments.view": "all",
+    "payments.create": "all",
+    "payments.edit": "all",
+    "directory.view": "all",
+    "directory.create": "all",
+    "directory.edit": "all",
+    "directory.delete": "all",
+    "users.view": "all",
+    "users.create": "all",
+    "users.edit": "all",
+    "users.delete": "all",
+    "settings.company": "all",
+    "settings.system": "all",
+  },
+  manager: {
+    "reports.view": "all",
+    "reports.export": "all",
+    "orders.view": "all",
+    "orders.create": "all",
+    "orders.edit": "all",
+    "orders.delete": "all",
+    "services.view": "all",
+    "services.create": "all",
+    "services.edit": "all",
+    "services.delete": "all",
+    "services.price.view": "all",
+    "services.margin.view": "all",
+    "invoices.view": "all",
+    "invoices.create": "all",
+    "invoices.edit": "all",
+    "invoices.send": "all",
+    "payments.view": "all",
+    "payments.create": "all",
+    "payments.edit": "all",
+    "directory.view": "all",
+    "directory.create": "all",
+    "directory.edit": "all",
+    "directory.delete": "all",
+    "users.view": false,
+    "users.create": false,
+    "users.edit": false,
+    "users.delete": false,
+    "settings.company": false,
+    "settings.system": false,
+  },
+  finance: {
+    "reports.view": "all",
+    "reports.export": "all",
+    "orders.view": "all",
+    "orders.create": false,
+    "orders.edit": false,
+    "orders.delete": false,
+    "services.view": "all",
+    "services.create": false,
+    "services.edit": false,
+    "services.delete": false,
+    "services.price.view": "all",
+    "services.margin.view": "all",
+    "invoices.view": "all",
+    "invoices.create": "all",
+    "invoices.edit": "all",
+    "invoices.send": "all",
+    "payments.view": "all",
+    "payments.create": "all",
+    "payments.edit": "all",
+    "directory.view": "all",
+    "directory.create": false,
+    "directory.edit": false,
+    "directory.delete": false,
+    "users.view": false,
+    "users.create": false,
+    "users.edit": false,
+    "users.delete": false,
+    "settings.company": false,
+    "settings.system": false,
+  },
+  agent: {
+    "reports.view": "own",
+    "reports.export": false,
+    "orders.view": "all",
+    "orders.create": "all",
+    "orders.edit": "own",
+    "orders.delete": false,
+    "services.view": "all",
+    "services.create": "all",
+    "services.edit": "own",
+    "services.delete": "own",
+    "services.price.view": false,
+    "services.margin.view": false,
+    "invoices.view": "own",
+    "invoices.create": false,
+    "invoices.edit": false,
+    "invoices.send": false,
+    "payments.view": "own",
+    "payments.create": false,
+    "payments.edit": false,
+    "directory.view": "all",
+    "directory.create": "all",
+    "directory.edit": "own",
+    "directory.delete": false,
+    "users.view": false,
+    "users.create": false,
+    "users.edit": false,
+    "users.delete": false,
+    "settings.company": false,
+    "settings.system": false,
+  },
+  subagent: {
+    "reports.view": "commission",
+    "reports.export": false,
+    "orders.view": "own",
+    "orders.create": "own",
+    "orders.edit": "own",
+    "orders.delete": false,
+    "services.view": "own",
+    "services.create": "own",
+    "services.edit": "own",
+    "services.delete": false,
+    "services.price.view": false,
+    "services.margin.view": false,
+    "invoices.view": false,
+    "invoices.create": false,
+    "invoices.edit": false,
+    "invoices.send": false,
+    "payments.view": false,
+    "payments.create": false,
+    "payments.edit": false,
+    "directory.view": "own",
+    "directory.create": "own",
+    "directory.edit": "own",
+    "directory.delete": false,
+    "users.view": false,
+    "users.create": false,
+    "users.edit": false,
+    "users.delete": false,
+    "settings.company": false,
+    "settings.system": false,
+  },
+};
+
+/**
+ * Get permission scope for a role
+ */
+export function getRolePermission(
+  role: string,
+  permission: string
+): "all" | "own" | "commission" | false {
+  const rolePerms = ROLE_PERMISSIONS[role];
+  if (!rolePerms) return false;
+  return rolePerms[permission] ?? false;
+}
+
+/**
+ * Check if role has permission (any scope)
+ */
+export function roleHasPermission(role: string, permission: string): boolean {
+  return getRolePermission(role, permission) !== false;
+}
+
+/**
+ * Check if role can access all records (not just own)
+ */
+export function roleCanAccessAll(role: string, permission: string): boolean {
+  return getRolePermission(role, permission) === "all";
+}
