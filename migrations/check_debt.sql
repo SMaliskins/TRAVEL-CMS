@@ -3,7 +3,6 @@
 SELECT 
   o.order_code,
   o.amount_debt,
-  o.amount_price,
   o.amount_paid,
   COUNT(DISTINCT os.id) as services_count
 FROM orders o
@@ -13,7 +12,7 @@ WHERE o.id IN (
   FROM order_services
   WHERE payer_party_id = '8a2712aa-7702-4bff-b399-7977c30999a5'
 )
-GROUP BY o.order_code, o.amount_debt, o.amount_price, o.amount_paid
+GROUP BY o.order_code, o.amount_debt, o.amount_paid
 ORDER BY o.order_code;
 
 -- Total debt

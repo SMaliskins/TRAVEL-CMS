@@ -81,7 +81,8 @@ export async function GET(
     
     console.log(`[Stats API] Total spent: ${totalSpent}`, orderBreakdown);
 
-    // 3. Debt (sum of amount_debt from orders where party is payer in at least one service)
+    // 3. Debt (calculated as Turnover - Amount Paid)
+    // Get amount_paid for orders where party is payer
     const { data: payerOrdersData, error: payerOrdersError } = await supabaseAdmin
       .from("order_services")
       .select("order_id")
@@ -97,20 +98,23 @@ export async function GET(
 
     const payerOrderIds = [...new Set(payerOrdersData?.map((s) => s.order_id) || [])];
 
-    let debt = 0;
+    let amountPaid = 0;
     if (payerOrderIds.length > 0) {
-      const { data: debtData, error: debtError } = await supabaseAdmin
+      const { data: paidData, error: paidError } = await supabaseAdmin
         .from("orders")
-        .select("amount_debt")
+        .select("amount_paid")
         .in("id", payerOrderIds);
 
-      if (debtError) {
-        console.error("[Stats API] Debt error:", debtError);
+      if (paidError) {
+        console.error("[Stats API] Amount paid error:", paidError);
       } else {
-        debt = debtData?.reduce((sum, o) => sum + (o.amount_debt || 0), 0) || 0;
+        amountPaid = paidData?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
       }
     }
-    console.log(`[Stats API] Debt: ${debt}`);
+    
+    // Calculate debt as Turnover minus what has been paid
+    const debt = totalSpent - amountPaid;
+    console.log(`[Stats API] Debt: ${debt} (Turnover: ${totalSpent} - Paid: ${amountPaid})`);
 
     // 4. Last Trip (most recent past date_to where party is client)
     let lastTrip = null;
