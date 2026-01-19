@@ -14,8 +14,8 @@ const PERMISSION_GROUPS = [
     group: { en: "Contacts", ru: "Контакты" },
     permissions: [
       { key: "contacts.view", label: { en: "View", ru: "Просмотр" } },
-      { key: "contacts.create", label: { en: "Create", ru: "Создание" } },
-      { key: "contacts.edit", label: { en: "Edit", ru: "Редактирование" } },
+      { key: "contacts.edit", label: { en: "Create / Edit", ru: "Создание / Редактирование" } },
+      { key: "contacts.delete", label: { en: "Delete", ru: "Удаление" } },
     ],
   },
   {
@@ -57,8 +57,8 @@ const PERMISSION_GROUPS = [
 const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">> = {
   subagent: {
     "contacts.view": "own",
-    "contacts.create": true,
     "contacts.edit": "own",
+    "contacts.delete": false,
     "orders.view": "own",
     "orders.create": true,
     "orders.edit": "own",
@@ -75,8 +75,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
   },
   agent: {
     "contacts.view": true,
-    "contacts.create": true,
     "contacts.edit": true,
+    "contacts.delete": false,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -93,8 +93,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
   },
   finance: {
     "contacts.view": true,
-    "contacts.create": false,
     "contacts.edit": false,
+    "contacts.delete": false,
     "orders.view": true,
     "orders.create": false,
     "orders.edit": false,
@@ -111,8 +111,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
   },
   manager: {
     "contacts.view": true,
-    "contacts.create": true,
     "contacts.edit": true,
+    "contacts.delete": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -129,8 +129,8 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
   },
   supervisor: {
     "contacts.view": true,
-    "contacts.create": true,
     "contacts.edit": true,
+    "contacts.delete": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
