@@ -305,7 +305,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="sticky top-14 z-40 flex items-end gap-0.5 bg-gray-100 px-3 pt-2 border-b border-gray-200 overflow-x-auto">
+    <div className="sticky top-14 z-30 flex items-end gap-0.5 bg-gray-100 px-3 pt-2 border-b border-gray-200 overflow-x-auto">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}
