@@ -18,12 +18,15 @@ interface OrderPreviewData {
 // Cache for order previews
 const previewCache = new Map<string, OrderPreviewData>();
 
-// Fetch order preview data
-async function fetchOrderPreview(orderCode: string): Promise<OrderPreviewData | null> {
+// Fetch order preview data (accepts slug, converts to order_code for API)
+async function fetchOrderPreview(orderSlug: string): Promise<OrderPreviewData | null> {
   // Check cache first
-  if (previewCache.has(orderCode)) {
-    return previewCache.get(orderCode)!;
+  if (previewCache.has(orderSlug)) {
+    return previewCache.get(orderSlug)!;
   }
+  
+  // Convert slug to order_code format for API (0008-26-sm -> 0008/26-SM)
+  const orderCode = slugToOrderCode(orderSlug);
   
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -52,8 +55,8 @@ async function fetchOrderPreview(orderCode: string): Promise<OrderPreviewData | 
       destinations: order.countries_cities || "—",
     };
     
-    // Cache it
-    previewCache.set(orderCode, preview);
+    // Cache it by slug
+    previewCache.set(orderSlug, preview);
     
     return preview;
   } catch (e) {
