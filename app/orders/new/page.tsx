@@ -131,7 +131,7 @@ function NewOrderForm() {
 
     if (checkInDate && returnDate) {
       if (new Date(checkInDate) > new Date(returnDate)) {
-        errors.dateRange = "Check-in date must be before return date";
+        errors.dateRange = "Start date must be before end date";
       }
     }
 
@@ -381,13 +381,13 @@ function NewOrderForm() {
                 </div>
               )}
 
-              {/* Check-in / Return dates */}
+              {/* Travel dates */}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Check-in / Return
+                  Travel dates
                 </label>
                 <DateRangePicker
-                  label="Check-in / Return"
+                  label="Travel dates"
                   from={checkInDate}
                   to={returnDate}
                   onChange={(from, to) => {
