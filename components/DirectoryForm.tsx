@@ -1039,7 +1039,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             <span className="text-sm font-medium text-gray-900 truncate ml-2">{stats.ordersCount}</span>
                           </div>
                           <div className="flex justify-between items-center min-h-[1.5rem] group relative">
-                            <span className="text-sm text-gray-600 truncate">Total Spent</span>
+                            <span className="text-sm text-gray-600 truncate">Turnover</span>
                             <span className="text-sm font-medium text-gray-900 truncate ml-2 cursor-help">
                               €{stats.totalSpent.toFixed(2)}
                             </span>
