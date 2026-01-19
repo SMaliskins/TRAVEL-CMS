@@ -108,12 +108,28 @@ export async function GET(request: NextRequest) {
     // Get invoice statistics for all orders
     const orderIds = (orders || []).map((o: any) => o.id);
     
-    // Get all services for these orders with their invoice status
+    // Get all services for these orders with their invoice status and pricing
     const { data: servicesData } = await supabaseAdmin
       .from("order_services")
-      .select("order_id, invoice_id, res_status")
+      .select("order_id, invoice_id, res_status, client_price, service_price")
       .eq("company_id", companyId)
       .in("order_id", orderIds);
+    
+    // Get manager profiles for owner names
+    const managerIds = [...new Set((orders || []).map((o: any) => o.manager_user_id).filter(Boolean))];
+    const { data: managerProfiles } = managerIds.length > 0
+      ? await supabaseAdmin
+          .from("user_profiles")
+          .select("user_id, first_name, last_name")
+          .in("user_id", managerIds)
+      : { data: [] };
+    
+    // Build manager name lookup
+    const managerNames = new Map<string, string>();
+    (managerProfiles || []).forEach((p: any) => {
+      const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown";
+      managerNames.set(p.user_id, name);
+    });
     
     
     // Get all invoices for these orders with their payment status
@@ -148,14 +164,29 @@ export async function GET(request: NextRequest) {
       console.log('Sample invoice:', invoicesData[0]);
     }
     
-        orderIds.forEach((orderId: string) => {
+    // Build service stats (amount, profit) and invoice stats per order
+    const serviceStats = new Map<string, { amount: number; profit: number }>();
+    
+    orderIds.forEach((orderId: string) => {
       const services = (servicesData || []).filter((s: any) => s.order_id === orderId);
       const invoices = (invoicesData || []).filter((i: any) => i.order_id === orderId);
       
-      const totalServices = services.filter((s: any) => s.res_status !== 'cancelled').length;
-      const invoicedServices = services.filter((s: any) => s.invoice_id && s.res_status !== 'cancelled').length;
+      // Only count non-cancelled services
+      const activeServices = services.filter((s: any) => s.res_status !== 'cancelled');
+      const totalServices = activeServices.length;
+      const invoicedServices = activeServices.filter((s: any) => s.invoice_id).length;
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
+      
+      // Calculate amount (sum of client_price) and profit (client_price - service_price)
+      const amount = activeServices.reduce((sum: number, s: any) => sum + (Number(s.client_price) || 0), 0);
+      const profit = activeServices.reduce((sum: number, s: any) => {
+        const clientPrice = Number(s.client_price) || 0;
+        const servicePrice = Number(s.service_price) || 0;
+        return sum + (clientPrice - servicePrice);
+      }, 0);
+      
+      serviceStats.set(orderId, { amount, profit });
       
       // Check if all invoices are fully paid (status = 'paid')
       const allInvoicesPaid = invoices.length > 0 && invoices.every((inv: any) => 
@@ -174,35 +205,46 @@ export async function GET(request: NextRequest) {
 
     // Transform to frontend format
     // Handle both old schema (without client_display_name) and new schema
-    const transformedOrders = (orders || []).map((order: Record<string, unknown>) => ({
-      orderId: order.order_code || order.order_number || `#${order.id}`,
-      client: (order.client_display_name as string) || "—",
-      countriesCities: (order.countries_cities as string) || "",
-      datesFrom: (order.date_from as string) || "",
-      datesTo: (order.date_to as string) || "",
-      amount: Number(order.amount_total) || 0,
-      paid: Number(order.amount_paid) || 0,
-      debt: Number(order.amount_debt) || 0,
-      profit: Number(order.profit_estimated) || 0,
-      status: order.status || "Draft",
-      type: order.order_type || "TA",
-      owner: "",
-      access: "Owner",
-      updated: ((order.updated_at as string) || "").split("T")[0] || "",
-      createdAt: ((order.created_at as string) || "").split("T")[0] || "",
-      // Invoice statistics
-      ...(() => {
-        const stats = invoiceStats.get(order.id as string);
-        return {
-          totalServices: stats?.totalServices || 0,
-          invoicedServices: stats?.invoicedServices || 0,
-          hasInvoice: stats?.hasInvoice || false,
-          allServicesInvoiced: stats?.allServicesInvoiced || false,
-          totalInvoices: stats?.totalInvoices || 0,
-          allInvoicesPaid: stats?.allInvoicesPaid || false,
-        };
-      })(),
-    }));
+    const transformedOrders = (orders || []).map((order: Record<string, unknown>) => {
+      const orderId = order.id as string;
+      const svcStats = serviceStats.get(orderId);
+      const invStats = invoiceStats.get(orderId);
+      
+      // Amount and profit from services, fallback to order fields if no services
+      const amount = svcStats?.amount || Number(order.amount_total) || 0;
+      const profit = svcStats?.profit || Number(order.profit_estimated) || 0;
+      const paid = Number(order.amount_paid) || 0;
+      const debt = amount - paid; // Calculate debt as amount - paid
+      
+      // Owner from manager profiles
+      const managerId = order.manager_user_id as string;
+      const owner = managerId ? (managerNames.get(managerId) || "") : "";
+      
+      return {
+        orderId: order.order_code || order.order_number || `#${orderId}`,
+        client: (order.client_display_name as string) || "—",
+        countriesCities: (order.countries_cities as string) || "",
+        datesFrom: (order.date_from as string) || "",
+        datesTo: (order.date_to as string) || "",
+        amount,
+        paid,
+        debt,
+        profit,
+        status: order.status || "Draft",
+        type: order.order_type || "TA",
+        owner,
+        access: "Owner",
+        updated: ((order.updated_at as string) || "").split("T")[0] || "",
+        createdAt: ((order.created_at as string) || "").split("T")[0] || "",
+        // Invoice statistics
+        totalServices: invStats?.totalServices || 0,
+        invoicedServices: invStats?.invoicedServices || 0,
+        hasInvoice: invStats?.hasInvoice || false,
+        allServicesInvoiced: invStats?.allServicesInvoiced || false,
+        totalInvoices: invStats?.totalInvoices || 0,
+        allInvoicesPaid: invStats?.allInvoicesPaid || false,
+      };
+    });
 
     return NextResponse.json({ orders: transformedOrders });
   } catch (error: unknown) {

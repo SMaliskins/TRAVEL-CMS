@@ -7,6 +7,7 @@ import ordersSearchStore from "@/lib/stores/ordersSearchStore";
 import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useTabs } from "@/contexts/TabsContext";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -166,11 +167,9 @@ function buildOrdersTree(orders: OrderRow[]): OrderTree {
       sortedDays.forEach((dayKey) => {
         const orders = dayMap.get(dayKey)!;
 
-        // Sort orders by updatedAt DESC
+        // Sort orders by order_code DESC (e.g. 0015/26-SM > 0014/26-SM)
         const sortedOrders = [...orders].sort((a, b) => {
-          const aDate = new Date(a.updated);
-          const bDate = new Date(b.updated);
-          return bDate.getTime() - aDate.getTime();
+          return b.orderId.localeCompare(a.orderId);
         });
 
         const date = new Date(dayKey);
@@ -248,52 +247,38 @@ function getCountryFlag(countryName: string): string | null {
   }
 }
 
-// Format countries/cities string with flags
+// Format countries/cities string with flags: "🇬🇷 Thessaloniki; 🇮🇹 Rome"
 function formatCountriesWithFlags(countriesCities: string): string {
   if (!countriesCities) return countriesCities;
 
   // Remove "origin:" and "return:" prefixes, only show destinations
   // Format: "origin:Riga, Latvia|Sharm El Sheikh, Egypt|return:Vilnius, Lithuania"
-  // We want only: "Sharm El Sheikh, Egypt"
+  // We want only destinations: "Sharm El Sheikh, Egypt"
   
   const parts = countriesCities.split('|').map(p => p.trim());
   const destinations = parts.filter(p => !p.startsWith('origin:') && !p.startsWith('return:'));
   
-  // If no explicit destinations, try to extract from the full string
-  if (destinations.length === 0) {
-    // Fallback: show everything without origin/return prefixes
-    return parts
-      .map(p => p.replace(/^(origin|return):/i, '').trim())
-      .filter(p => p.length > 0)
-      .map(p => {
-        // Try to add country flag
-        const countryMatch = p.match(/,\s*([^,|]+)$/);
-        if (countryMatch) {
-          const country = countryMatch[1].trim();
-          const flag = getCountryFlag(country);
-          if (flag) {
-            return p.replace(country, `${flag} ${country}`);
-          }
-        }
-        return p;
-      })
-      .join(', ');
-  }
+  // If no explicit destinations, use all parts without prefixes
+  const items = destinations.length > 0 
+    ? destinations 
+    : parts.map(p => p.replace(/^(origin|return):/i, '').trim()).filter(p => p.length > 0);
   
-  // Format destinations with flags
-  return destinations
-    .map(dest => {
-      const countryMatch = dest.match(/,\s*([^,|]+)$/);
+  // Format: flag + city (without country name)
+  return items
+    .map(item => {
+      // Parse "City, Country" format
+      const countryMatch = item.match(/^(.+),\s*([^,]+)$/);
       if (countryMatch) {
-        const country = countryMatch[1].trim();
+        const city = countryMatch[1].trim();
+        const country = countryMatch[2].trim();
         const flag = getCountryFlag(country);
-        if (flag) {
-          return dest.replace(country, `${flag} ${country}`);
-        }
+        // Return flag + city only (no country name)
+        return flag ? `${flag} ${city}` : city;
       }
-      return dest;
+      // No comma - just return as is
+      return item;
     })
-    .join(', ');
+    .join('; ');
 }
 
 const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; dot: string } => {
@@ -354,6 +339,7 @@ function getGroupKey(type: "year" | "month" | "day", key: string): string {
 
 export default function OrdersPage() {
   const router = useRouter();
+  const { openTab } = useTabs();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -531,15 +517,18 @@ export default function OrdersPage() {
     return null;
   };
 
-  // Handle click to navigate to order (changed from double-click to single-click)
+  // Handle click to navigate to order - opens in tab
   const handleOrderClick = (orderCode: string) => {
-    router.push(`/orders/${orderCodeToSlug(orderCode)}`);
+    const path = `/orders/${orderCodeToSlug(orderCode)}`;
+    // Format title: "0015/26-SM" -> "Order 0015/26-SM"
+    const title = `Order ${orderCode}`;
+    openTab(path, title, "order");
   };
 
   // Handle keyboard navigation (Enter key)
   const handleOrderKeyDown = (e: React.KeyboardEvent, orderCode: string) => {
     if (e.key === "Enter") {
-      router.push(`/orders/${orderCodeToSlug(orderCode)}`);
+      handleOrderClick(orderCode);
     }
   };
 
@@ -577,8 +566,11 @@ export default function OrdersPage() {
             <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
             <button
               onClick={() => router.push("/orders/new")}
-              className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
               New Order
             </button>
           </div>
@@ -611,7 +603,7 @@ export default function OrdersPage() {
           </div>
           <button
             onClick={() => router.push("/orders/new")}
-            className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             New Order
           </button>
@@ -629,7 +621,7 @@ export default function OrdersPage() {
             <p className="text-gray-500 mb-6">Get started by creating your first order</p>
             <button
               onClick={() => router.push("/orders/new")}
-              className="inline-flex items-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -686,9 +678,6 @@ export default function OrdersPage() {
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Owner
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Updated
                 </th>
               </tr>
             </thead>
@@ -897,9 +886,6 @@ export default function OrdersPage() {
                                       </td>
                                       <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700" title={`Owner: ${order.owner}`}>
                                         {order.owner}
-                                      </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
-                                        {formatDate(order.updated)}
                                       </td>
                                     </tr>
                                   );

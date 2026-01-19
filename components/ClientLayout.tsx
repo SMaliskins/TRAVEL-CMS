@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import TabBar from "./TabBar";
 import AuthGuard from "./AuthGuard";
 
 // Pages that should not show sidebar/topbar
@@ -26,9 +27,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <>
           <Sidebar />
           <TopBar />
-          <main id="main-content-wrapper" className="min-h-screen pl-[72px] pt-14 transition-all duration-200">
-            {children}
-          </main>
+          <div id="main-content-wrapper" className="min-h-screen pl-[72px] pt-14 transition-all duration-200">
+            <TabBar />
+            <main>
+              {children}
+            </main>
+          </div>
         </>
       )}
     </AuthGuard>
