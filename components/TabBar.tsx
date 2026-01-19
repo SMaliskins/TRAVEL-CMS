@@ -249,8 +249,8 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
           group flex items-center gap-2 px-3 py-2 text-[13px]
           cursor-pointer select-none transition-all duration-200 ease-out rounded-t-lg
           ${isActive
-            ? "bg-white text-gray-900 relative z-10 border-t border-l border-r border-gray-200 pb-3 -mb-[2px]"
-            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 mb-0"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
           }
         `}
         onClick={onSelect}
@@ -300,7 +300,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="sticky top-14 z-30 flex items-end gap-0.5 bg-gray-100 px-3 pt-2 border-b border-gray-200 overflow-x-auto">
+    <div className="sticky top-14 z-30 flex items-end gap-0.5 bg-gray-100 px-3 pt-2 overflow-x-auto">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}
