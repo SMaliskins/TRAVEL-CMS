@@ -98,7 +98,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { firstName, lastName, phone } = body;
+    const { firstName, lastName, phone, avatar_url } = body;
 
     // Build update object
     const updateData: Record<string, unknown> = {
@@ -108,6 +108,7 @@ export async function PATCH(request: NextRequest) {
     if (firstName !== undefined) updateData.first_name = firstName;
     if (lastName !== undefined) updateData.last_name = lastName;
     if (phone !== undefined) updateData.phone = phone || null;
+    if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
 
     // Update profile
     const { data: updated, error } = await supabaseAdmin
