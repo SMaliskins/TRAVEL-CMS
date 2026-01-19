@@ -18,16 +18,13 @@ function applyLayoutStyles(mode: string, skipLayout: boolean) {
 
   // Don't apply sidebar margins on login page
   if (skipLayout) {
-    mainWrapper.style.marginLeft = "0";
     mainWrapper.style.paddingLeft = "0";
     return;
   }
 
   if (mode === "expanded") {
-    mainWrapper.style.marginLeft = `${EXPANDED_WIDTH}px`;
-    mainWrapper.style.paddingLeft = "0";
+    mainWrapper.style.paddingLeft = `${EXPANDED_WIDTH}px`;
   } else {
-    mainWrapper.style.marginLeft = "0";
     mainWrapper.style.paddingLeft = `${RAIL_WIDTH}px`;
   }
 }

@@ -26,7 +26,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <>
           <Sidebar />
           <TopBar />
-          <main id="main-content-wrapper" className="min-h-screen pt-14 transition-all duration-200">
+          <main id="main-content-wrapper" className="min-h-screen pl-[72px] pt-14 transition-all duration-200">
             {children}
           </main>
         </>
