@@ -125,8 +125,16 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
     
     // Find tab matching current path
     const matchingTab = tabs.find(t => t.path === pathname);
-    if (matchingTab && matchingTab.id !== activeTabId) {
-      setActiveTabId(matchingTab.id);
+    if (matchingTab) {
+      // Activate matching tab
+      if (matchingTab.id !== activeTabId) {
+        setActiveTabId(matchingTab.id);
+      }
+    } else {
+      // No matching tab - deactivate all tabs
+      if (activeTabId !== null) {
+        setActiveTabId(null);
+      }
     }
   }, [pathname, tabs, activeTabId, isInitialized]);
 
