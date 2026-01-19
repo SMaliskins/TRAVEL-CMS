@@ -289,8 +289,8 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
         </button>
       </div>
       
-      {/* Order Preview on hover */}
-      {showPreview && tab.type === "order" && orderSlug && (
+      {/* Order Preview on hover - only for inactive tabs */}
+      {showPreview && !isActive && tab.type === "order" && orderSlug && (
         <OrderPreview orderSlug={orderSlug} anchorRect={anchorRect} />
       )}
     </div>
