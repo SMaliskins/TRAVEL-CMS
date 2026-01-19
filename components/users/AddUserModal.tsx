@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 
 interface Role {
@@ -47,9 +48,19 @@ export default function AddUserModal({
     setIsSubmitting(true);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError("Session expired. Please refresh the page.");
+        setIsSubmitting(false);
+        return;
+      }
+
       const response = await fetch("/api/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           email,
           firstName,

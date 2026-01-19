@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import UserList from "@/components/users/UserList";
 import AddUserModal from "@/components/users/AddUserModal";
 
@@ -44,11 +45,21 @@ export default function UsersPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const headers = {
+        Authorization: `Bearer ${session.access_token}`,
+      };
+
       // Fetch profile, users, and roles in parallel
       const [profileRes, usersRes, rolesRes] = await Promise.all([
-        fetch("/api/profile"),
-        fetch("/api/users"),
-        fetch("/api/roles"),
+        fetch("/api/profile", { headers }),
+        fetch("/api/users", { headers }),
+        fetch("/api/roles", { headers }),
       ]);
 
       // Check profile access
