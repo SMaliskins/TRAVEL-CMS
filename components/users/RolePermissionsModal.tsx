@@ -8,6 +8,30 @@ interface RolePermissionsModalProps {
   onClose: () => void;
 }
 
+// Role descriptions for tooltips
+const ROLE_DESCRIPTIONS: Record<string, { en: string; ru: string }> = {
+  subagent: {
+    en: "External partner with limited access to own clients only",
+    ru: "Внешний партнёр с доступом только к своим клиентам",
+  },
+  agent: {
+    en: "Travel consultant handling bookings and client service",
+    ru: "Консультант по бронированию и работе с клиентами",
+  },
+  finance: {
+    en: "Accountant for payments and reports, no order editing",
+    ru: "Бухгалтер: платежи и отчёты, без редактирования заказов",
+  },
+  manager: {
+    en: "Team lead with full operations access",
+    ru: "Руководитель отдела с полным доступом к операциям",
+  },
+  supervisor: {
+    en: "Administrator with full system access including users",
+    ru: "Администратор с полным доступом, включая управление пользователями",
+  },
+};
+
 // Permission groups
 const PERMISSION_GROUPS = [
   {
@@ -209,7 +233,11 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
                     {lang === "ru" ? "Разрешение" : "Permission"}
                   </th>
                   {ROLES.map((role) => (
-                    <th key={role} className="px-2 pb-3 text-center font-medium text-gray-900">
+                    <th
+                      key={role}
+                      className="px-2 pb-3 text-center font-medium text-gray-900 cursor-help"
+                      title={ROLE_DESCRIPTIONS[role]?.[lang]}
+                    >
                       {getRoleDisplayName(role, prefs.language)}
                     </th>
                   ))}
