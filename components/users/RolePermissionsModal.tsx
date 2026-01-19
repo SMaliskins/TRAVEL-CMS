@@ -181,27 +181,39 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
   const renderPermission = (value: boolean | "own" | "view") => {
     if (value === true) {
       return (
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-green-600">
+        <span
+          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-green-100 text-green-600"
+          title={lang === "ru" ? "Полный доступ" : "Full access"}
+        >
           ✓
         </span>
       );
     }
     if (value === "own") {
       return (
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold">
+        <span
+          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold"
+          title={lang === "ru" ? "Только свои данные" : "Own data only"}
+        >
           Own
         </span>
       );
     }
     if (value === "view") {
       return (
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold">
+        <span
+          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold"
+          title={lang === "ru" ? "Только просмотр" : "View only"}
+        >
           View
         </span>
       );
     }
     return (
-      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+      <span
+        className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-gray-100 text-gray-400"
+        title={lang === "ru" ? "Нет доступа" : "No access"}
+      >
         –
       </span>
     );
