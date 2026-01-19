@@ -240,23 +240,22 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
         </div>
       )}
       <div className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white shadow-xl">
-        <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {lang === "ru" ? "Права ролей" : "Role Permissions"}
-          </h3>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="p-6">
-          {/* Legend at top */}
-          <div className="mb-4 flex items-center gap-4 text-xs text-gray-500">
+        <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {lang === "ru" ? "Права ролей" : "Role Permissions"}
+            </h3>
+            <button
+              onClick={onClose}
+              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Legend - sticky */}
+          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-green-100 text-green-600 text-[10px]">✓</span>
               <span>{lang === "ru" ? "Разрешено" : "Allowed"}</span>
@@ -270,6 +269,9 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
               <span>{lang === "ru" ? "Запрещено" : "Denied"}</span>
             </div>
           </div>
+        </div>
+
+        <div className="p-6">
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
