@@ -61,7 +61,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "orders.edit": true,
     "orders.delete": false,
     "services.manage": true,
-    "invoices.create": true,
+    "invoices.create": false,
     "payments.record": true,
     "reports.view": true,
     "users.view": false,
