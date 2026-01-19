@@ -24,8 +24,8 @@ const PERMISSIONS = [
   { key: "settings.company", label: { en: "Company settings", ru: "Настройки компании" } },
 ];
 
-// Role permissions (true = allowed, "own" = only own data, false = denied)
-const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
+// Role permissions (true = allowed, "own" = only own data, "view" = view only, false = denied)
+const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">> = {
   subagent: {
     "contacts": "own",
     "orders.view": "own",
@@ -55,10 +55,10 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "settings.company": false,
   },
   finance: {
-    "contacts": true,
+    "contacts": "view",
     "orders.view": true,
-    "orders.create": true,
-    "orders.edit": true,
+    "orders.create": false,
+    "orders.edit": false,
     "orders.delete": false,
     "services.manage": false,
     "invoices.create": false,
@@ -105,7 +105,7 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
   const { prefs } = useUserPreferences();
   const lang = prefs.language === "ru" ? "ru" : "en";
 
-  const renderPermission = (value: boolean | "own") => {
+  const renderPermission = (value: boolean | "own" | "view") => {
     if (value === true) {
       return (
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-green-600">
@@ -117,6 +117,13 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
       return (
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold">
           Own
+        </span>
+      );
+    }
+    if (value === "view") {
+      return (
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold">
+          View
         </span>
       );
     }
@@ -187,6 +194,10 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[8px] font-bold">Own</span>
               <span>{lang === "ru" ? "Только свои" : "Own data only"}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[8px] font-bold">View</span>
+              <span>{lang === "ru" ? "Только просмотр" : "View only"}</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-400">–</span>
