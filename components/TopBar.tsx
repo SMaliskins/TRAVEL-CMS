@@ -7,16 +7,57 @@ import { useClock } from "@/hooks/useClock";
 import { supabase } from "@/lib/supabaseClient";
 import TopBarProgress from "./TopBarProgress";
 import TopBarSearch from "./TopBarSearch";
+import Image from "next/image";
+
+interface UserProfile {
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+}
 
 export default function TopBar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
   
   const { prefs, isMounted: prefsMounted } = useUserPreferences();
   const now = useClock();
+
+  // Load user profile
+  useEffect(() => {
+    async function loadProfile() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      try {
+        const res = await fetch("/api/profile", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProfile({
+            first_name: data.first_name || "",
+            last_name: data.last_name || "",
+            avatar_url: data.avatar_url || null,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+      }
+    }
+    loadProfile();
+  }, []);
+
+  // Get initials from name
+  const getInitials = () => {
+    if (!profile) return "?";
+    const first = profile.first_name?.[0] || "";
+    const last = profile.last_name?.[0] || "";
+    return (first + last).toUpperCase() || "?";
+  };
 
   // Handle logout
   const handleLogout = async () => {
@@ -161,9 +202,19 @@ export default function TopBar() {
               ref={avatarRef}
               type="button"
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-300"
+              className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-300"
             >
-              SM
+              {profile?.avatar_url ? (
+                <Image
+                  src={profile.avatar_url}
+                  alt="Avatar"
+                  width={36}
+                  height={36}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                getInitials()
+              )}
             </button>
 
             {/* Dropdown menu */}

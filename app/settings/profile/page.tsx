@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 import RoleBadge from "@/components/users/RoleBadge";
 
@@ -47,6 +48,11 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Avatar upload
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -78,11 +84,81 @@ export default function ProfilePage() {
       setFirstName(data.first_name || "");
       setLastName(data.last_name || "");
       setPhone(data.phone || "");
+      setAvatarUrl(data.avatar_url || null);
     } catch (err) {
       console.error("Error fetching profile:", err);
       setError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image must be less than 2MB");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      // Upload to Supabase Storage
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${profile?.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Update profile with avatar URL
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ avatar_url: publicUrl }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update avatar");
+      }
+
+      setAvatarUrl(publicUrl);
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+    } catch (err) {
+      console.error("Avatar upload error:", err);
+      setError(err instanceof Error ? err.message : "Failed to upload avatar");
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -217,10 +293,46 @@ export default function ProfilePage() {
         {/* Profile Info Card */}
         <div className="mb-6 rounded-lg bg-white p-6 shadow-sm">
           <div className="flex items-start gap-4">
-            {/* Avatar */}
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-200 text-xl font-medium text-gray-700">
-              {firstName?.[0]?.toUpperCase() || ""}
-              {lastName?.[0]?.toUpperCase() || ""}
+            {/* Avatar with upload */}
+            <div className="relative">
+              <div
+                className="flex h-16 w-16 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-gray-200 text-xl font-medium text-gray-700 hover:ring-2 hover:ring-blue-400"
+                onClick={() => fileInputRef.current?.click()}
+                title="Click to change avatar"
+              >
+                {isUploadingAvatar ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                ) : avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt="Avatar"
+                    width={64}
+                    height={64}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <>
+                    {firstName?.[0]?.toUpperCase() || ""}
+                    {lastName?.[0]?.toUpperCase() || ""}
+                  </>
+                )}
+              </div>
+              {/* Edit icon overlay */}
+              <div
+                className="absolute bottom-0 right-0 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
             </div>
 
             {/* Info */}
