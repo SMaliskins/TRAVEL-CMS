@@ -10,7 +10,9 @@ interface RolePermissionsModalProps {
 
 // Permission matrix
 const PERMISSIONS = [
-  { key: "contacts", label: { en: "Contacts", ru: "Контакты" } },
+  { key: "contacts.view", label: { en: "View contacts", ru: "Просмотр контактов" } },
+  { key: "contacts.create", label: { en: "Create contacts", ru: "Создание контактов" } },
+  { key: "contacts.edit", label: { en: "Edit contacts", ru: "Редактирование контактов" } },
   { key: "orders.view", label: { en: "View orders", ru: "Просмотр заказов" } },
   { key: "orders.create", label: { en: "Create orders", ru: "Создание заказов" } },
   { key: "orders.edit", label: { en: "Edit orders", ru: "Редактирование заказов" } },
@@ -27,7 +29,9 @@ const PERMISSIONS = [
 // Role permissions (true = allowed, "own" = only own data, "view" = view only, false = denied)
 const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">> = {
   subagent: {
-    "contacts": "own",
+    "contacts.view": "own",
+    "contacts.create": true,
+    "contacts.edit": "own",
     "orders.view": "own",
     "orders.create": true,
     "orders.edit": "own",
@@ -41,7 +45,9 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
     "settings.company": false,
   },
   agent: {
-    "contacts": true,
+    "contacts.view": true,
+    "contacts.create": true,
+    "contacts.edit": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -55,7 +61,9 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
     "settings.company": false,
   },
   finance: {
-    "contacts": "view",
+    "contacts.view": true,
+    "contacts.create": false,
+    "contacts.edit": false,
     "orders.view": true,
     "orders.create": false,
     "orders.edit": false,
@@ -69,7 +77,9 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
     "settings.company": false,
   },
   manager: {
-    "contacts": true,
+    "contacts.view": true,
+    "contacts.create": true,
+    "contacts.edit": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -83,7 +93,9 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">>
     "settings.company": true,
   },
   supervisor: {
-    "contacts": true,
+    "contacts.view": true,
+    "contacts.create": true,
+    "contacts.edit": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
