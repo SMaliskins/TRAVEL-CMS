@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { getRoleDisplayName } from "@/lib/auth/roles";
@@ -178,45 +179,66 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
   const { prefs } = useUserPreferences();
   const lang = prefs.language === "ru" ? "ru" : "en";
 
-  const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }) => (
-    <span className="group relative inline-flex cursor-help">
-      {children}
-      <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-        {text}
-      </span>
-    </span>
-  );
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  const showTooltip = (e: React.MouseEvent, text: string) => {
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setTooltip({ text, x: rect.left + rect.width / 2, y: rect.top - 8 });
+  };
+
+  const hideTooltip = () => setTooltip(null);
 
   const renderPermission = (value: boolean | "own") => {
+    const tooltipText = value === true
+      ? (lang === "ru" ? "Полный доступ" : "Full access")
+      : value === "own"
+        ? (lang === "ru" ? "Только свои данные" : "Own data only")
+        : (lang === "ru" ? "Нет доступа" : "No access");
+
     if (value === true) {
       return (
-        <Tooltip text={lang === "ru" ? "Полный доступ" : "Full access"}>
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-green-600">
-            ✓
-          </span>
-        </Tooltip>
+        <span
+          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-green-100 text-green-600"
+          onMouseEnter={(e) => showTooltip(e, tooltipText)}
+          onMouseLeave={hideTooltip}
+        >
+          ✓
+        </span>
       );
     }
     if (value === "own") {
       return (
-        <Tooltip text={lang === "ru" ? "Только свои данные" : "Own data only"}>
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold">
-            Own
-          </span>
-        </Tooltip>
+        <span
+          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold"
+          onMouseEnter={(e) => showTooltip(e, tooltipText)}
+          onMouseLeave={hideTooltip}
+        >
+          Own
+        </span>
       );
     }
     return (
-      <Tooltip text={lang === "ru" ? "Нет доступа" : "No access"}>
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-400">
-          –
-        </span>
-      </Tooltip>
+      <span
+        className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-gray-100 text-gray-400"
+        onMouseEnter={(e) => showTooltip(e, tooltipText)}
+        onMouseLeave={hideTooltip}
+      >
+        –
+      </span>
     );
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      {/* Floating tooltip */}
+      {tooltip && (
+        <div
+          className="pointer-events-none fixed z-[100] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white shadow-lg"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          {tooltip.text}
+        </div>
+      )}
       <div className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white shadow-xl">
         <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
           <h3 className="text-lg font-semibold text-gray-900">
@@ -247,11 +269,13 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
                     >
                       <div className="flex items-center justify-center gap-1">
                         <span>{getRoleDisplayName(role, prefs.language)}</span>
-                        <Tooltip text={ROLE_DESCRIPTIONS[role]?.[lang] || ""}>
-                          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500">
-                            ?
-                          </span>
-                        </Tooltip>
+                        <span
+                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500"
+                          onMouseEnter={(e) => showTooltip(e, ROLE_DESCRIPTIONS[role]?.[lang] || "")}
+                          onMouseLeave={hideTooltip}
+                        >
+                          ?
+                        </span>
                       </div>
                     </th>
                   ))}
