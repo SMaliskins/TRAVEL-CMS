@@ -8,24 +8,49 @@ interface RolePermissionsModalProps {
   onClose: () => void;
 }
 
-// Permission matrix
-const PERMISSIONS = [
-  { key: "contacts.view", label: { en: "View contacts", ru: "Просмотр контактов" } },
-  { key: "contacts.create", label: { en: "Create contacts", ru: "Создание контактов" } },
-  { key: "contacts.edit", label: { en: "Edit contacts", ru: "Редактирование контактов" } },
-  { key: "orders.view", label: { en: "View orders", ru: "Просмотр заказов" } },
-  { key: "orders.create", label: { en: "Create orders", ru: "Создание заказов" } },
-  { key: "orders.edit", label: { en: "Edit orders", ru: "Редактирование заказов" } },
-  { key: "orders.delete", label: { en: "Delete orders", ru: "Удаление заказов" } },
-  { key: "services.manage", label: { en: "Manage services", ru: "Управление сервисами" } },
-  { key: "invoices.view", label: { en: "View invoices", ru: "Просмотр счетов" } },
-  { key: "invoices.create", label: { en: "Create invoices", ru: "Создание счетов" } },
-  { key: "invoices.edit", label: { en: "Edit invoices", ru: "Редактирование счетов" } },
-  { key: "payments.record", label: { en: "Record payments", ru: "Учёт платежей" } },
-  { key: "reports.view", label: { en: "View reports", ru: "Просмотр отчётов" } },
-  { key: "users.view", label: { en: "View users", ru: "Просмотр пользователей" } },
-  { key: "users.manage", label: { en: "Manage users", ru: "Управление пользователями" } },
-  { key: "settings.company", label: { en: "Company settings", ru: "Настройки компании" } },
+// Permission groups
+const PERMISSION_GROUPS = [
+  {
+    group: { en: "Contacts", ru: "Контакты" },
+    permissions: [
+      { key: "contacts.view", label: { en: "View", ru: "Просмотр" } },
+      { key: "contacts.create", label: { en: "Create", ru: "Создание" } },
+      { key: "contacts.edit", label: { en: "Edit", ru: "Редактирование" } },
+    ],
+  },
+  {
+    group: { en: "Orders", ru: "Заказы" },
+    permissions: [
+      { key: "orders.view", label: { en: "View", ru: "Просмотр" } },
+      { key: "orders.create", label: { en: "Create", ru: "Создание" } },
+      { key: "orders.edit", label: { en: "Edit", ru: "Редактирование" } },
+      { key: "orders.delete", label: { en: "Delete", ru: "Удаление" } },
+      { key: "services.manage", label: { en: "Manage services", ru: "Управление сервисами" } },
+    ],
+  },
+  {
+    group: { en: "Invoices", ru: "Счета" },
+    permissions: [
+      { key: "invoices.view", label: { en: "View", ru: "Просмотр" } },
+      { key: "invoices.create", label: { en: "Create", ru: "Создание" } },
+      { key: "invoices.edit", label: { en: "Edit", ru: "Редактирование" } },
+    ],
+  },
+  {
+    group: { en: "Finance", ru: "Финансы" },
+    permissions: [
+      { key: "payments.record", label: { en: "Record payments", ru: "Учёт платежей" } },
+      { key: "reports.view", label: { en: "View reports", ru: "Просмотр отчётов" } },
+    ],
+  },
+  {
+    group: { en: "Administration", ru: "Администрирование" },
+    permissions: [
+      { key: "users.view", label: { en: "View users", ru: "Просмотр пользователей" } },
+      { key: "users.manage", label: { en: "Manage users", ru: "Управление пользователями" } },
+      { key: "settings.company", label: { en: "Company settings", ru: "Настройки компании" } },
+    ],
+  },
 ];
 
 // Role permissions (true = allowed, "own" = only own data, "view" = view only, false = denied)
@@ -191,20 +216,34 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
                 </tr>
               </thead>
               <tbody>
-                {PERMISSIONS.map((perm, idx) => (
-                  <tr
-                    key={perm.key}
-                    className={idx % 2 === 0 ? "bg-gray-50" : ""}
-                  >
-                    <td className="py-2 pr-4 text-gray-700">
-                      {perm.label[lang]}
-                    </td>
-                    {ROLES.map((role) => (
-                      <td key={role} className="px-2 py-2 text-center">
-                        {renderPermission(ROLE_PERMISSIONS[role][perm.key])}
+                {PERMISSION_GROUPS.map((group) => (
+                  <>
+                    {/* Group header */}
+                    <tr key={`group-${group.group.en}`} className="bg-gray-100">
+                      <td
+                        colSpan={ROLES.length + 1}
+                        className="py-2 pr-4 text-xs font-semibold uppercase tracking-wide text-gray-600"
+                      >
+                        {group.group[lang]}
                       </td>
+                    </tr>
+                    {/* Group permissions */}
+                    {group.permissions.map((perm, idx) => (
+                      <tr
+                        key={perm.key}
+                        className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                      >
+                        <td className="py-2 pl-4 pr-4 text-gray-700">
+                          {perm.label[lang]}
+                        </td>
+                        {ROLES.map((role) => (
+                          <td key={role} className="px-2 py-2 text-center">
+                            {renderPermission(ROLE_PERMISSIONS[role][perm.key])}
+                          </td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
+                  </>
                 ))}
               </tbody>
             </table>
