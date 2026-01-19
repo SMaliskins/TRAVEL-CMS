@@ -3,58 +3,185 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTabs, Tab } from "@/contexts/TabsContext";
+import { supabase } from "@/lib/supabaseClient";
 
-// Tooltip rendered via portal
-function TabTooltip({ tab, anchorRect }: { tab: Tab; anchorRect: DOMRect | null }) {
+interface OrderPreviewData {
+  client: string;
+  dates: string;
+  status: string;
+  amount: number;
+  services: number;
+  destinations: string;
+}
+
+// Cache for order previews
+const previewCache = new Map<string, OrderPreviewData>();
+
+// Fetch order preview data
+async function fetchOrderPreview(orderCode: string): Promise<OrderPreviewData | null> {
+  // Check cache first
+  if (previewCache.has(orderCode)) {
+    return previewCache.get(orderCode)!;
+  }
+  
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+      headers: session?.access_token 
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {},
+      credentials: "include",
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const order = data.order;
+    
+    if (!order) return null;
+    
+    const preview: OrderPreviewData = {
+      client: order.client_display_name || order.clientDisplayName || "—",
+      dates: order.date_from && order.date_to 
+        ? `${formatDate(order.date_from)} - ${formatDate(order.date_to)}`
+        : "—",
+      status: order.status || "Draft",
+      amount: order.amount_total || 0,
+      services: data.services?.length || 0,
+      destinations: order.countries_cities || "—",
+    };
+    
+    // Cache it
+    previewCache.set(orderCode, preview);
+    
+    return preview;
+  } catch (e) {
+    console.error("Failed to fetch order preview:", e);
+    return null;
+  }
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1).toString().padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+function formatCurrency(amount: number): string {
+  return `€${amount.toLocaleString()}`;
+}
+
+// Status badge colors
+function getStatusColor(status: string): string {
+  switch (status) {
+    case "Active": return "bg-green-100 text-green-700";
+    case "Completed": return "bg-blue-100 text-blue-700";
+    case "Cancelled": return "bg-red-100 text-red-700";
+    case "On hold": return "bg-yellow-100 text-yellow-700";
+    default: return "bg-gray-100 text-gray-700";
+  }
+}
+
+// Order Preview Tooltip
+function OrderPreview({ orderCode, anchorRect }: { orderCode: string; anchorRect: DOMRect | null }) {
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<OrderPreviewData | null>(null);
   
   useEffect(() => {
     setMounted(true);
   }, []);
   
+  useEffect(() => {
+    if (!mounted) return;
+    
+    // Delay fetch to avoid unnecessary requests on quick hover
+    const timer = setTimeout(async () => {
+      const preview = await fetchOrderPreview(orderCode);
+      setData(preview);
+      setLoading(false);
+    }, 200);
+    
+    return () => clearTimeout(timer);
+  }, [mounted, orderCode]);
+  
   if (!mounted || !anchorRect) return null;
   
-  const tooltipContent = (
+  const content = (
     <div 
-      className="fixed z-[99999] rounded-xl bg-white/95 backdrop-blur-sm border border-gray-200 px-3 py-2.5 text-xs shadow-xl pointer-events-none"
+      className="fixed z-[99999] w-72 rounded-xl bg-white border border-gray-200 shadow-2xl pointer-events-none overflow-hidden"
       style={{
-        left: anchorRect.left + anchorRect.width / 2,
+        left: Math.min(anchorRect.left, window.innerWidth - 300),
         top: anchorRect.bottom + 8,
-        transform: "translateX(-50%)",
       }}
     >
-      {/* Order number */}
-      <div className="font-semibold text-gray-900">{tab.title}</div>
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
+        <div className="text-white font-semibold">{orderCode}</div>
+      </div>
       
-      {/* Client name */}
-      {tab.subtitle && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-gray-600">
-          <svg className="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          {tab.subtitle}
-        </div>
-      )}
-      
-      {/* Dates */}
-      {tab.dates && (
-        <div className="mt-1 flex items-center gap-1.5 text-gray-500">
-          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {tab.dates}
-        </div>
-      )}
+      {/* Content */}
+      <div className="p-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : data ? (
+          <div className="space-y-3">
+            {/* Client */}
+            <div className="flex items-start gap-2">
+              <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="text-sm text-gray-800 font-medium">{data.client}</span>
+            </div>
+            
+            {/* Dates */}
+            <div className="flex items-start gap-2">
+              <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="text-sm text-gray-600">{data.dates}</span>
+            </div>
+            
+            {/* Destinations */}
+            {data.destinations !== "—" && (
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-sm text-gray-600 line-clamp-2">{data.destinations}</span>
+              </div>
+            )}
+            
+            {/* Footer row */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(data.status)}`}>
+                {data.status}
+              </span>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-gray-500">{data.services} services</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(data.amount)}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-gray-500 text-sm">
+            Unable to load preview
+          </div>
+        )}
+      </div>
       
       {/* Arrow */}
       <div 
-        className="absolute w-2.5 h-2.5 bg-white border-l border-t border-gray-200 rotate-45"
-        style={{ left: "50%", top: -5, transform: "translateX(-50%)" }}
+        className="absolute w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45"
+        style={{ left: 24, top: -6 }}
       />
     </div>
   );
   
-  return createPortal(tooltipContent, document.body);
+  return createPortal(content, document.body);
 }
 
 interface TabItemProps {
@@ -66,20 +193,39 @@ interface TabItemProps {
 
 function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const tabRef = useRef<HTMLDivElement>(null);
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const handleMouseEnter = () => {
     setIsHovered(true);
     if (tabRef.current) {
       setAnchorRect(tabRef.current.getBoundingClientRect());
     }
+    
+    // Show preview after delay
+    if (tab.type === "order") {
+      hoverTimerRef.current = setTimeout(() => {
+        setShowPreview(true);
+      }, 400);
+    }
   };
   
   const handleMouseLeave = () => {
     setIsHovered(false);
+    setShowPreview(false);
     setAnchorRect(null);
+    
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+    }
   };
+
+  // Extract order code from path
+  const orderCode = tab.type === "order" 
+    ? tab.path.replace("/orders/", "").replace(/-/g, "/").replace(/\/([^/]+)$/, "-$1")
+    : "";
 
   // Color dot based on type
   const dotColor = {
@@ -136,9 +282,9 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
         </button>
       </div>
       
-      {/* Tooltip for order tabs */}
-      {isHovered && tab.type === "order" && (tab.subtitle || tab.dates) && (
-        <TabTooltip tab={tab} anchorRect={anchorRect} />
+      {/* Order Preview on hover */}
+      {showPreview && tab.type === "order" && (
+        <OrderPreview orderCode={tab.title} anchorRect={anchorRect} />
       )}
     </div>
   );
