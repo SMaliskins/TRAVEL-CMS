@@ -72,34 +72,40 @@ function NewOrderForm() {
   // Validation errors
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  // Get current user info on mount (from profile)
+  // Get current user info on mount (from profile API)
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const { data } = await supabase.auth.getUser();
-        if (data?.user) {
-          // Load profile from database for real name
-          const { data: profile } = await supabase
-            .from("user_profiles")
-            .select("first_name, last_name")
-            .eq("id", data.user.id)
-            .single();
-          
+        const { data: authData } = await supabase.auth.getSession();
+        if (!authData?.session) return;
+        
+        // Load profile via API (bypasses RLS issues)
+        const response = await fetch("/api/profile", {
+          headers: {
+            Authorization: `Bearer ${authData.session.access_token}`,
+          },
+        });
+        
+        if (response.ok) {
+          const profile = await response.json();
           if (profile?.first_name && profile?.last_name) {
             const fullName = `${profile.first_name} ${profile.last_name}`;
             const initials = (profile.first_name[0] + profile.last_name[0]).toUpperCase();
             setOwnerFullName(fullName);
             setOwnerAgent(initials);
-          } else {
-            // Fallback to auth metadata
-            const { fullName, initials } = getUserFullName(data.user);
-            setOwnerFullName(fullName);
-            setOwnerAgent(initials);
+            return;
           }
+        }
+        
+        // Fallback to auth metadata
+        const { data } = await supabase.auth.getUser();
+        if (data?.user) {
+          const { fullName, initials } = getUserFullName(data.user);
+          setOwnerFullName(fullName);
+          setOwnerAgent(initials);
         }
       } catch (error) {
         console.error("Failed to get user:", error);
-        // Keep defaults
       }
     };
     fetchUser();
