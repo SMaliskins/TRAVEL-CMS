@@ -293,7 +293,7 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
 }
 
 export default function TabBar() {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useTabs();
+  const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs } = useTabs();
 
   if (tabs.length === 0) {
     return null;
@@ -310,6 +310,19 @@ export default function TabBar() {
           onClose={() => closeTab(tab.id)}
         />
       ))}
+      
+      {/* Close All button */}
+      {tabs.length > 1 && (
+        <button
+          onClick={closeAllTabs}
+          className="ml-2 mb-1 px-2 py-1 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
+          title="Close all tabs"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

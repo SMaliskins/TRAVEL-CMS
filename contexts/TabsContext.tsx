@@ -18,6 +18,7 @@ interface TabsContextType {
   activeTabId: string | null;
   openTab: (path: string, title: string, type?: Tab["type"], extra?: { subtitle?: string; dates?: string }) => void;
   closeTab: (id: string) => void;
+  closeAllTabs: () => void;
   setActiveTab: (id: string) => void;
   isTabOpen: (path: string) => boolean;
 }
@@ -199,6 +200,12 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [tabs, activeTabId, router]);
 
+  const closeAllTabs = useCallback(() => {
+    setTabs([]);
+    setActiveTabId(null);
+    router.push("/orders");
+  }, [router]);
+
   const handleSetActiveTab = useCallback((id: string) => {
     const tab = tabs.find(t => t.id === id);
     if (tab) {
@@ -214,6 +221,7 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
         activeTabId,
         openTab,
         closeTab,
+        closeAllTabs,
         setActiveTab: handleSetActiveTab,
         isTabOpen,
       }}
