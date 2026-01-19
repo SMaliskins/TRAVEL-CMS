@@ -77,8 +77,8 @@ const PERMISSION_GROUPS = [
   },
 ];
 
-// Role permissions (true = allowed, "own" = only own data, "view" = view only, false = denied)
-const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "view">> = {
+// Role permissions (true = allowed, "own" = only own data, false = denied)
+const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
   subagent: {
     "contacts.view": "own",
     "contacts.edit": "own",
@@ -178,7 +178,7 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
   const { prefs } = useUserPreferences();
   const lang = prefs.language === "ru" ? "ru" : "en";
 
-  const renderPermission = (value: boolean | "own" | "view") => {
+  const renderPermission = (value: boolean | "own") => {
     if (value === true) {
       return (
         <span
@@ -196,16 +196,6 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
           title={lang === "ru" ? "Только свои данные" : "Own data only"}
         >
           Own
-        </span>
-      );
-    }
-    if (value === "view") {
-      return (
-        <span
-          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold"
-          title={lang === "ru" ? "Только просмотр" : "View only"}
-        >
-          View
         </span>
       );
     }
@@ -304,10 +294,6 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[8px] font-bold">Own</span>
               <span>{lang === "ru" ? "Только свои" : "Own data only"}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[8px] font-bold">View</span>
-              <span>{lang === "ru" ? "Только просмотр" : "View only"}</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-400">–</span>
