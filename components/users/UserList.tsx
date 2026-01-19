@@ -19,6 +19,7 @@ interface User {
   first_name: string;
   last_name: string;
   phone: string | null;
+  avatar_url: string | null;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
@@ -124,9 +125,19 @@ export default function UserList({
                 >
                   <td className="whitespace-nowrap px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-700">
-                        {user.first_name?.[0]?.toUpperCase() || ""}
-                        {user.last_name?.[0]?.toUpperCase() || ""}
+                      <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700">
+                        {user.avatar_url ? (
+                          <img
+                            src={user.avatar_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <>
+                            {user.first_name?.[0]?.toUpperCase() || ""}
+                            {user.last_name?.[0]?.toUpperCase() || ""}
+                          </>
+                        )}
                       </div>
                       <div>
                         <div className="font-medium text-gray-900">

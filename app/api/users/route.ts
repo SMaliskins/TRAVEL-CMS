@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
         first_name,
         last_name,
         phone,
+        avatar_url,
         is_active,
         created_at,
         last_login_at,
@@ -262,6 +263,7 @@ export async function POST(request: NextRequest) {
         first_name,
         last_name,
         phone,
+        avatar_url,
         is_active,
         created_at,
         role:roles(id, name, display_name, level, color)
