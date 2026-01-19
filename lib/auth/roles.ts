@@ -22,13 +22,29 @@ export const ROLE_LEVELS: Record<RoleName, number> = {
   supervisor: 5,
 };
 
-// Role display names
-export const ROLE_DISPLAY_NAMES: Record<RoleName, string> = {
-  subagent: "Субагент",
-  agent: "Агент",
-  finance: "Финансы",
-  manager: "Менеджер",
-  supervisor: "Супервайзер",
+// Role display names (localized)
+export const ROLE_DISPLAY_NAMES: Record<string, Record<RoleName, string>> = {
+  en: {
+    subagent: "Subagent",
+    agent: "Agent",
+    finance: "Finance",
+    manager: "Manager",
+    supervisor: "Supervisor",
+  },
+  ru: {
+    subagent: "Субагент",
+    agent: "Агент",
+    finance: "Финансы",
+    manager: "Менеджер",
+    supervisor: "Супервайзер",
+  },
+  lv: {
+    subagent: "Subagents",
+    agent: "Aģents",
+    finance: "Finanses",
+    manager: "Vadītājs",
+    supervisor: "Supervizors",
+  },
 };
 
 // Role colors (Tailwind classes)
@@ -74,8 +90,9 @@ export function hasMinimumRole(
 /**
  * Get role display name
  */
-export function getRoleDisplayName(role: RoleName | string): string {
-  return ROLE_DISPLAY_NAMES[role as RoleName] || role;
+export function getRoleDisplayName(role: RoleName | string, language: string = "en"): string {
+  const langNames = ROLE_DISPLAY_NAMES[language] || ROLE_DISPLAY_NAMES.en;
+  return langNames[role as RoleName] || role;
 }
 
 /**

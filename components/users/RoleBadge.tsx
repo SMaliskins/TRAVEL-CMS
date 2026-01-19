@@ -1,6 +1,7 @@
 "use client";
 
 import { getRoleDisplayName, getRoleColorClasses, RoleName } from "@/lib/auth/roles";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 
 interface RoleBadgeProps {
   role: RoleName | string;
@@ -11,8 +12,8 @@ interface RoleBadgeProps {
 const ROLE_LEVELS: Record<string, number> = {
   subagent: 1,
   agent: 2,
-  accountant: 3,
-  director: 4,
+  finance: 3,
+  manager: 4,
   supervisor: 5,
 };
 
@@ -21,7 +22,8 @@ export default function RoleBadge({
   size = "md",
   showLevel = false 
 }: RoleBadgeProps) {
-  const displayName = getRoleDisplayName(role);
+  const { prefs } = useUserPreferences();
+  const displayName = getRoleDisplayName(role, prefs.language);
   const colorClasses = getRoleColorClasses(role);
   const level = ROLE_LEVELS[role] || 0;
   
