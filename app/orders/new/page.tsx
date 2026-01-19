@@ -381,13 +381,10 @@ function NewOrderForm() {
                 </div>
               )}
 
-              {/* Travel dates */}
+              {/* Service dates */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Travel dates
-                </label>
                 <DateRangePicker
-                  label="Travel dates"
+                  label="Service dates"
                   from={checkInDate}
                   to={returnDate}
                   onChange={(from, to) => {
