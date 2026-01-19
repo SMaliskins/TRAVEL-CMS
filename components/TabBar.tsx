@@ -122,7 +122,7 @@ export default function TabBar() {
             
             {/* Tooltip on hover - always show for orders */}
             {isHovered && tab.type === "order" && (
-              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl">
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl pointer-events-none">
                 <div className="font-semibold text-blue-300">{tab.title}</div>
                 {tab.subtitle && (
                   <div className="mt-1 text-gray-200">{tab.subtitle}</div>
