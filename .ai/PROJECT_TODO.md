@@ -149,9 +149,9 @@ Current tasks and their status. Agents update relevant rows when starting, block
 |----|------|------|-------|--------|--------|-------|
 | O13 | System | Accountant role with financial reports | DB → SECURITY → CODE WRITER → QA | TODO | - | New role, report access |
 | **USR2** | **System** | **Dynamic Roles (5 roles + permissions)** | **DB→CW→QA** | **DB** | **DONE** | **10/10** | **[17.01] ✅ Migration executed in Supabase** |
-| **USR1** | **System** | **User Management: Supervisor adds users** | **CW→QA** | **READY_FOR_QA** | **feature/x** | **🔴 [19.01] ✅ API + UI implemented** |
+| **USR1** | **System** | **User Management: Supervisor adds users** | **CW→QA** | **DONE** | **10/10** | **[19.01] ✅ API + UI + Avatar + Role Permissions modal** |
 | USR3 | System | User invite flow (email + temp password) | CW→QA | TODO | - | Email service integration |
-| **USR4** | **System** | **User profile & password change** | **CW→QA** | **READY_FOR_QA** | **feature/x** | **🟡 [19.01] ✅ Profile + Password change implemented** |
+| **USR4** | **System** | **User profile & password change** | **CW→QA** | **DONE** | **10/10** | **[19.01] ✅ Profile + Password + Avatar upload** |
 | **USR5** | **System** | **Feature Modules (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Features table, company_features** |
 | **USR6** | **System** | **Subscription Plans (SaaS)** | **DB→CW→QA** | **TODO** | **-** | **🟠 Plans, billing, Stripe ready** |
 | **AUTH1** | **Auth** | **Logout functionality** | **CW→QA** | **DONE** | **10/10** | **[17.01] ✅ supabase.signOut() + redirect /login** |
