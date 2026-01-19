@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useTabs, Tab } from "@/contexts/TabsContext";
 
 // Color scheme for different tab types
@@ -61,9 +62,124 @@ function TabIcon({ type, isActive }: { type: Tab["type"]; isActive: boolean }) {
   }
 }
 
+// Tooltip rendered via portal
+function TabTooltip({ tab, anchorRect }: { tab: Tab; anchorRect: DOMRect | null }) {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted || !anchorRect) return null;
+  
+  const tooltipContent = (
+    <div 
+      className="fixed z-[99999] whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2.5 text-xs text-white shadow-2xl pointer-events-none"
+      style={{
+        left: anchorRect.right + 8,
+        top: anchorRect.top + anchorRect.height / 2,
+        transform: "translateY(-50%)",
+      }}
+    >
+      <div className="font-semibold text-blue-300">{tab.title}</div>
+      {tab.subtitle && (
+        <div className="mt-1 text-gray-200">{tab.subtitle}</div>
+      )}
+      {tab.dates && (
+        <div className="mt-0.5 text-gray-400">{tab.dates}</div>
+      )}
+      {!tab.subtitle && !tab.dates && (
+        <div className="mt-1 text-gray-400">Order details</div>
+      )}
+      {/* Arrow pointing left */}
+      <div 
+        className="absolute w-2 h-2 bg-gray-900 rotate-45"
+        style={{ left: -4, top: "50%", transform: "translateY(-50%)" }}
+      />
+    </div>
+  );
+  
+  return createPortal(tooltipContent, document.body);
+}
+
+interface TabItemProps {
+  tab: Tab;
+  isActive: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}
+
+function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const tabRef = useRef<HTMLDivElement>(null);
+  const colors = TAB_COLORS[tab.type] || TAB_COLORS.page;
+  
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    if (tabRef.current) {
+      setAnchorRect(tabRef.current.getBoundingClientRect());
+    }
+  };
+  
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setAnchorRect(null);
+  };
+  
+  return (
+    <div
+      ref={tabRef}
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div
+        className={`
+          group flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium
+          cursor-pointer select-none transition-all duration-150
+          border
+          ${isActive
+            ? `${colors.active} border-current shadow-sm`
+            : `${colors.inactive} border-transparent`
+          }
+        `}
+        onClick={onSelect}
+      >
+        <TabIcon type={tab.type} isActive={isActive} />
+        <span className="truncate max-w-[100px]">{tab.title}</span>
+        
+        {/* Close button */}
+        <button
+          className={`
+            ml-0.5 rounded p-0.5 transition-all flex-shrink-0
+            ${isActive
+              ? "opacity-60 hover:opacity-100 hover:bg-black/10"
+              : "opacity-0 group-hover:opacity-60 hover:opacity-100 hover:bg-black/10"
+            }
+          `}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          title="Close tab"
+        >
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      
+      {/* Tooltip for order tabs */}
+      {isHovered && tab.type === "order" && (
+        <TabTooltip tab={tab} anchorRect={anchorRect} />
+      )}
+    </div>
+  );
+}
+
 export default function TabBar() {
   const { tabs, activeTabId, setActiveTab, closeTab } = useTabs();
-  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
 
   // Don't render if no tabs
   if (tabs.length === 0) {
@@ -72,74 +188,15 @@ export default function TabBar() {
 
   return (
     <div className="flex items-center gap-0.5 border-b border-gray-200 bg-white px-2 py-1 overflow-x-auto">
-      {tabs.map((tab, index) => {
-        const isActive = tab.id === activeTabId;
-        const isHovered = hoveredTabId === tab.id;
-        const colors = TAB_COLORS[tab.type] || TAB_COLORS.page;
-        
-        return (
-          <div
-            key={tab.id}
-            className="relative"
-            onMouseEnter={() => setHoveredTabId(tab.id)}
-            onMouseLeave={() => setHoveredTabId(null)}
-          >
-            <div
-              className={`
-                group flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium
-                cursor-pointer select-none transition-all duration-150
-                border
-                ${isActive
-                  ? `${colors.active} border-current shadow-sm`
-                  : `${colors.inactive} border-transparent`
-                }
-              `}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <TabIcon type={tab.type} isActive={isActive} />
-              <span className="truncate max-w-[100px]">{tab.title}</span>
-              
-              {/* Close button */}
-              <button
-                className={`
-                  ml-0.5 rounded p-0.5 transition-all flex-shrink-0
-                  ${isActive
-                    ? "opacity-60 hover:opacity-100 hover:bg-black/10"
-                    : "opacity-0 group-hover:opacity-60 hover:opacity-100 hover:bg-black/10"
-                  }
-                `}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(tab.id);
-                }}
-                title="Close tab"
-              >
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            {/* Tooltip on hover - always show for orders */}
-            {isHovered && tab.type === "order" && (
-              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-xl pointer-events-none">
-                <div className="font-semibold text-blue-300">{tab.title}</div>
-                {tab.subtitle && (
-                  <div className="mt-1 text-gray-200">{tab.subtitle}</div>
-                )}
-                {tab.dates && (
-                  <div className="mt-0.5 text-gray-400">{tab.dates}</div>
-                )}
-                {!tab.subtitle && !tab.dates && (
-                  <div className="mt-1 text-gray-400">Order details</div>
-                )}
-                {/* Arrow */}
-                <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-2 h-2 bg-gray-900 rotate-45" />
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {tabs.map((tab) => (
+        <TabItem
+          key={tab.id}
+          tab={tab}
+          isActive={tab.id === activeTabId}
+          onSelect={() => setActiveTab(tab.id)}
+          onClose={() => closeTab(tab.id)}
+        />
+      ))}
     </div>
   );
 }
