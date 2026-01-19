@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { getRoleDisplayName } from "@/lib/auth/roles";
 
 interface Role {
   id: string;
@@ -38,6 +40,7 @@ export default function AddUserModal({
   const [copied, setCopied] = useState(false);
 
   useEscapeKey(onClose, true);
+  const { prefs } = useUserPreferences();
 
   // Filter out subagent for simplicity (can be added later if needed)
   const availableRoles = roles.filter((r) => r.name !== "subagent");
@@ -254,7 +257,7 @@ export default function AddUserModal({
                 <option value="">Select role...</option>
                 {availableRoles.map((role) => (
                   <option key={role.id} value={role.id}>
-                    {role.display_name} ({role.display_name_en || role.name})
+                    {getRoleDisplayName(role.name, prefs.language)}
                   </option>
                 ))}
               </select>

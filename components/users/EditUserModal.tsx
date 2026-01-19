@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { getRoleDisplayName } from "@/lib/auth/roles";
 import RoleBadge from "./RoleBadge";
 
 interface Role {
@@ -48,6 +50,7 @@ export default function EditUserModal({
   const [error, setError] = useState<string | null>(null);
 
   useEscapeKey(onClose, true);
+  const { prefs } = useUserPreferences();
 
   const isSelf = user.id === currentUserId;
 
@@ -211,7 +214,7 @@ export default function EditUserModal({
               >
                 {availableRoles.map((role) => (
                   <option key={role.id} value={role.id}>
-                    {role.display_name} ({role.display_name_en || role.name})
+                    {getRoleDisplayName(role.name, prefs.language)}
                   </option>
                 ))}
               </select>
