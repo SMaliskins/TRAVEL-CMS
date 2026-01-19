@@ -115,20 +115,22 @@ export async function GET(request: NextRequest) {
       .eq("company_id", companyId)
       .in("order_id", orderIds);
     
-    // Get manager profiles for owner names
-    const managerIds = [...new Set((orders || []).map((o: any) => o.manager_user_id).filter(Boolean))];
-    const { data: managerProfiles } = managerIds.length > 0
+    // Get owner profiles for owner names
+    // Note: DB uses owner_user_id, not manager_user_id
+    const ownerIds = [...new Set((orders || []).map((o: any) => o.owner_user_id).filter(Boolean))];
+    
+    const { data: ownerProfiles } = ownerIds.length > 0
       ? await supabaseAdmin
           .from("user_profiles")
           .select("user_id, first_name, last_name")
-          .in("user_id", managerIds)
+          .in("user_id", ownerIds)
       : { data: [] };
     
-    // Build manager name lookup
-    const managerNames = new Map<string, string>();
-    (managerProfiles || []).forEach((p: any) => {
+    // Build owner name lookup
+    const ownerNames = new Map<string, string>();
+    (ownerProfiles || []).forEach((p: any) => {
       const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown";
-      managerNames.set(p.user_id, name);
+      ownerNames.set(p.user_id, name);
     });
     
     
@@ -216,9 +218,9 @@ export async function GET(request: NextRequest) {
       const paid = Number(order.amount_paid) || 0;
       const debt = amount - paid; // Calculate debt as amount - paid
       
-      // Owner from manager profiles
-      const managerId = order.manager_user_id as string;
-      const owner = managerId ? (managerNames.get(managerId) || "") : "";
+      // Owner from user profiles
+      const ownerId = order.owner_user_id as string;
+      const owner = ownerId ? (ownerNames.get(ownerId) || "") : "";
       
       return {
         orderId: order.order_code || order.order_number || `#${orderId}`,
