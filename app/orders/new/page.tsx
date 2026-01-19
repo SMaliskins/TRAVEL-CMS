@@ -260,10 +260,10 @@ function NewOrderForm() {
   const canCreate = !isCreating && !hasCreated && clientPartyId !== null && orderType;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 p-6">
       <div>
-        {/* Sticky Page Header */}
-        <div className="sticky top-14 z-30 -mx-6 bg-white border-b border-gray-200 px-6 py-4 shadow-sm mb-4">
+        {/* Page Header */}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm mb-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-semibold text-gray-900">New Order</h1>

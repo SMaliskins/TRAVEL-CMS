@@ -109,7 +109,7 @@ export default function DateRangePicker({
     setIsCalendarOpen(false);
   };
 
-  const displayValue = formatDateRange(from, to);
+  const displayValue = formatDateRange(from, to, true);
 
   return (
     <div ref={containerRef} className="relative">
