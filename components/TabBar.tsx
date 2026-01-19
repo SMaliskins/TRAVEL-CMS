@@ -320,12 +320,13 @@ export default function TabBar() {
       {tabs.length > 1 && (
         <button
           onClick={closeAllTabs}
-          className="ml-3 mb-1 px-2 py-1 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
+          className="ml-auto mb-1.5 px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-600 rounded transition-colors flex items-center gap-1"
           title="Close all tabs"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
+          <span>Clear</span>
         </button>
       )}
     </div>
