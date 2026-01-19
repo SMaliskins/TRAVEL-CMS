@@ -521,13 +521,14 @@ export default function OrdersPage() {
   const handleOrderClick = (order: OrderRow) => {
     const path = `/orders/${orderCodeToSlug(order.orderId)}`;
     const title = order.orderId;
+    const subtitle = order.client && order.client !== "—" ? order.client : undefined;
     const dates = order.datesFrom && order.datesTo 
       ? `${formatDate(order.datesFrom)} - ${formatDate(order.datesTo)}`
       : undefined;
-    openTab(path, title, "order", {
-      subtitle: order.client !== "—" ? order.client : undefined,
-      dates,
-    });
+    
+    console.log('[Tab] Opening order:', { title, subtitle, dates, client: order.client });
+    
+    openTab(path, title, "order", { subtitle, dates });
   };
 
   // Handle keyboard navigation (Enter key)
