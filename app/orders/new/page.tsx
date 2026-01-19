@@ -435,7 +435,7 @@ function NewOrderForm() {
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    value={`${ownerFullName} (${ownerAgent})`}
+                    value={ownerFullName}
                     readOnly
                     className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600 cursor-not-allowed"
                   />
