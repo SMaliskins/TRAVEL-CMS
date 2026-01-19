@@ -8,12 +8,15 @@ export interface Tab {
   path: string;
   title: string;
   type: "order" | "directory" | "settings" | "page";
+  // Extra info for tooltips
+  subtitle?: string; // e.g. client name
+  dates?: string;    // e.g. "02.02 - 10.02.2026"
 }
 
 interface TabsContextType {
   tabs: Tab[];
   activeTabId: string | null;
-  openTab: (path: string, title: string, type?: Tab["type"]) => void;
+  openTab: (path: string, title: string, type?: Tab["type"], extra?: { subtitle?: string; dates?: string }) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   isTabOpen: (path: string) => boolean;
@@ -131,7 +134,7 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
     return tabs.some(t => t.path === path);
   }, [tabs]);
 
-  const openTab = useCallback((path: string, title?: string, type?: Tab["type"]) => {
+  const openTab = useCallback((path: string, title?: string, type?: Tab["type"], extra?: { subtitle?: string; dates?: string }) => {
     // Check if tab already exists
     const existingTab = tabs.find(t => t.path === path);
     
@@ -148,6 +151,8 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
       path,
       title: title || getTitleFromPath(path),
       type: type || getTabType(path),
+      subtitle: extra?.subtitle,
+      dates: extra?.dates,
     };
     
     setTabs(prev => {

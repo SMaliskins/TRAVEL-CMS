@@ -517,18 +517,23 @@ export default function OrdersPage() {
     return null;
   };
 
-  // Handle click to navigate to order - opens in tab
-  const handleOrderClick = (orderCode: string) => {
-    const path = `/orders/${orderCodeToSlug(orderCode)}`;
-    // Format title: "0015/26-SM" -> "Order 0015/26-SM"
-    const title = `Order ${orderCode}`;
-    openTab(path, title, "order");
+  // Handle click to navigate to order - opens in tab with extra info
+  const handleOrderClick = (order: OrderRow) => {
+    const path = `/orders/${orderCodeToSlug(order.orderId)}`;
+    const title = order.orderId;
+    const dates = order.datesFrom && order.datesTo 
+      ? `${formatDate(order.datesFrom)} - ${formatDate(order.datesTo)}`
+      : undefined;
+    openTab(path, title, "order", {
+      subtitle: order.client !== "—" ? order.client : undefined,
+      dates,
+    });
   };
 
   // Handle keyboard navigation (Enter key)
-  const handleOrderKeyDown = (e: React.KeyboardEvent, orderCode: string) => {
+  const handleOrderKeyDown = (e: React.KeyboardEvent, order: OrderRow) => {
     if (e.key === "Enter") {
-      handleOrderClick(orderCode);
+      handleOrderClick(order);
     }
   };
 
@@ -592,21 +597,22 @@ export default function OrdersPage() {
     <div className="bg-gray-50">
       <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-            {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
-              <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                Filtered ({filteredOrders.length} results)
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-4 px-4 py-3">
+          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
           <button
             onClick={() => router.push("/orders/new")}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
-            New Order
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New
           </button>
+          {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
+            <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+              Filtered ({filteredOrders.length} results)
+            </span>
+          )}
         </div>
 
         {/* Empty state */}
@@ -792,8 +798,8 @@ export default function OrdersPage() {
                                     <tr
                                       key={`order-${order.orderId}`}
                                       className="cursor-pointer leading-tight transition-colors hover:bg-blue-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-inset"
-                                      onClick={() => handleOrderClick(order.orderId)}
-                                      onKeyDown={(e) => handleOrderKeyDown(e, order.orderId)}
+                                      onClick={() => handleOrderClick(order)}
+                                      onKeyDown={(e) => handleOrderKeyDown(e, order)}
                                       tabIndex={0}
                                       role="button"
                                       aria-label={`Open order ${order.orderId}`}
