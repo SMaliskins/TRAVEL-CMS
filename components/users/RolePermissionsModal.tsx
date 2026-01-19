@@ -255,6 +255,22 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
         </div>
 
         <div className="p-6">
+          {/* Legend at top */}
+          <div className="mb-4 flex items-center gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-green-100 text-green-600 text-[10px]">✓</span>
+              <span>{lang === "ru" ? "Разрешено" : "Allowed"}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[8px] font-bold">Own</span>
+              <span>{lang === "ru" ? "Только свои" : "Own data only"}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-400">–</span>
+              <span>{lang === "ru" ? "Запрещено" : "Denied"}</span>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -315,20 +331,6 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
             </table>
           </div>
 
-          <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-1">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-green-100 text-green-600 text-[10px]">✓</span>
-              <span>{lang === "ru" ? "Разрешено" : "Allowed"}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[8px] font-bold">Own</span>
-              <span>{lang === "ru" ? "Только свои" : "Own data only"}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-400">–</span>
-              <span>{lang === "ru" ? "Запрещено" : "Denied"}</span>
-            </div>
-          </div>
         </div>
 
         <div className="border-t border-gray-200 px-6 py-4">
