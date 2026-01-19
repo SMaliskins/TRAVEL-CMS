@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/hooks/useSidebar";
+import { UserProvider } from "@/contexts/UserContext";
 
 const RAIL_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
@@ -63,5 +64,5 @@ export default function LayoutClientWrapper({
     });
   }, [mode, isClient, skipLayout]);
 
-  return <>{children}</>;
+  return <UserProvider>{children}</UserProvider>;
 }

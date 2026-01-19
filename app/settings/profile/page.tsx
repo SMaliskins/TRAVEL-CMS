@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { useUser } from "@/contexts/UserContext";
 import RoleBadge from "@/components/users/RoleBadge";
 
 interface Profile {
@@ -28,6 +29,7 @@ interface Profile {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { updateAvatar } = useUser();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +153,7 @@ export default function ProfilePage() {
       }
 
       setAvatarUrl(publicUrl);
+      updateAvatar(publicUrl); // Update TopBar immediately
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {

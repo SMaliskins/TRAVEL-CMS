@@ -21,6 +21,7 @@ interface User {
   first_name: string;
   last_name: string;
   phone: string | null;
+  avatar_url: string | null;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
