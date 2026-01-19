@@ -7,23 +7,23 @@ import { useTabs, Tab } from "@/contexts/TabsContext";
 // Color scheme for different tab types
 const TAB_COLORS = {
   order: {
-    active: "bg-blue-50 text-blue-700 border-blue-500",
-    inactive: "text-blue-600 hover:bg-blue-50",
+    active: "bg-white text-blue-700 border-blue-500 border-b-white",
+    inactive: "bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-800",
     icon: "text-blue-500",
   },
   directory: {
-    active: "bg-emerald-50 text-emerald-700 border-emerald-500",
-    inactive: "text-emerald-600 hover:bg-emerald-50",
+    active: "bg-white text-emerald-700 border-emerald-500 border-b-white",
+    inactive: "bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-800",
     icon: "text-emerald-500",
   },
   settings: {
-    active: "bg-purple-50 text-purple-700 border-purple-500",
-    inactive: "text-purple-600 hover:bg-purple-50",
+    active: "bg-white text-purple-700 border-purple-500 border-b-white",
+    inactive: "bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-800",
     icon: "text-purple-500",
   },
   page: {
-    active: "bg-gray-100 text-gray-800 border-gray-500",
-    inactive: "text-gray-600 hover:bg-gray-100",
+    active: "bg-white text-gray-800 border-gray-500 border-b-white",
+    inactive: "bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-800",
     icon: "text-gray-500",
   },
 };
@@ -31,7 +31,7 @@ const TAB_COLORS = {
 // Icon for different tab types
 function TabIcon({ type, isActive }: { type: Tab["type"]; isActive: boolean }) {
   const colors = TAB_COLORS[type] || TAB_COLORS.page;
-  const colorClass = isActive ? "" : colors.icon;
+  const colorClass = isActive ? colors.icon : "text-gray-400";
   
   switch (type) {
     case "order":
@@ -130,32 +130,32 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
   return (
     <div
       ref={tabRef}
-      className="relative"
+      className="relative -mb-px"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       <div
         className={`
-          group flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium
+          group flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-xs font-medium
           cursor-pointer select-none transition-all duration-150
-          border
+          border border-b-2
           ${isActive
-            ? `${colors.active} border-current shadow-sm`
-            : `${colors.inactive} border-transparent`
+            ? colors.active
+            : colors.inactive
           }
         `}
         onClick={onSelect}
       >
         <TabIcon type={tab.type} isActive={isActive} />
-        <span className="truncate max-w-[100px]">{tab.title}</span>
+        <span className="truncate max-w-[120px]">{tab.title}</span>
         
         {/* Close button */}
         <button
           className={`
-            ml-0.5 rounded p-0.5 transition-all flex-shrink-0
+            ml-1 rounded p-0.5 transition-all flex-shrink-0
             ${isActive
-              ? "opacity-60 hover:opacity-100 hover:bg-black/10"
-              : "opacity-0 group-hover:opacity-60 hover:opacity-100 hover:bg-black/10"
+              ? "opacity-50 hover:opacity-100 hover:bg-gray-200"
+              : "opacity-0 group-hover:opacity-50 hover:opacity-100 hover:bg-gray-200"
             }
           `}
           onClick={(e) => {
@@ -187,7 +187,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="flex items-center gap-0.5 border-b border-gray-200 bg-white px-2 py-1 overflow-x-auto">
+    <div className="sticky top-14 z-40 flex items-end gap-1 border-b border-gray-300 bg-gray-100 px-2 pt-2 overflow-x-auto">
       {tabs.map((tab) => (
         <TabItem
           key={tab.id}
