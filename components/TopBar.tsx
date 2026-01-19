@@ -26,34 +26,28 @@ export default function TopBar() {
   const now = useClock();
 
   // Load user profile
-  const loadProfile = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
-
-    try {
-      const res = await fetch("/api/profile", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setProfile({
-          first_name: data.first_name || "",
-          last_name: data.last_name || "",
-          avatar_url: data.avatar_url || null,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to load profile:", err);
-    }
-  };
-
   useEffect(() => {
-    loadProfile();
+    async function loadProfile() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
 
-    // Listen for avatar updates from Profile page
-    const handleAvatarUpdate = () => loadProfile();
-    window.addEventListener("avatar-updated", handleAvatarUpdate);
-    return () => window.removeEventListener("avatar-updated", handleAvatarUpdate);
+      try {
+        const res = await fetch("/api/profile", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProfile({
+            first_name: data.first_name || "",
+            last_name: data.last_name || "",
+            avatar_url: data.avatar_url || null,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+      }
+    }
+    loadProfile();
   }, []);
 
   // Get initials from name

@@ -152,9 +152,7 @@ export default function ProfilePage() {
 
       setAvatarUrl(publicUrl);
       setProfileSuccess(true);
-      
-      // Force page reload to update TopBar avatar
-      setTimeout(() => window.location.reload(), 500);
+      setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
       console.error("Avatar upload error:", err);
       setError(err instanceof Error ? err.message : "Failed to upload avatar");
