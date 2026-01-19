@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@/contexts/UserContext";
 import RoleBadge from "./RoleBadge";
 import EditUserModal from "./EditUserModal";
 
@@ -45,6 +46,7 @@ export default function UserList({
   searchQuery,
 }: UserListProps) {
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const { profile: currentUserProfile } = useUser();
 
   // Filter users by search query
   const filteredUsers = users.filter((user) => {
@@ -126,18 +128,25 @@ export default function UserList({
                   <td className="whitespace-nowrap px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700">
-                        {user.avatar_url ? (
-                          <img
-                            src={user.avatar_url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <>
-                            {user.first_name?.[0]?.toUpperCase() || ""}
-                            {user.last_name?.[0]?.toUpperCase() || ""}
-                          </>
-                        )}
+                        {(() => {
+                          // For current user, use avatar from context (updates instantly)
+                          const avatarUrl = isSelf && currentUserProfile?.avatar_url
+                            ? currentUserProfile.avatar_url
+                            : user.avatar_url;
+                          
+                          return avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <>
+                              {user.first_name?.[0]?.toUpperCase() || ""}
+                              {user.last_name?.[0]?.toUpperCase() || ""}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div>
                         <div className="font-medium text-gray-900">
