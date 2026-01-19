@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTabs, Tab } from "@/contexts/TabsContext";
 import { supabase } from "@/lib/supabaseClient";
+import { slugToOrderCode } from "@/lib/orders/orderCode";
 
 interface OrderPreviewData {
   client: string;
@@ -83,10 +84,13 @@ function getStatusColor(status: string): string {
 }
 
 // Order Preview Tooltip
-function OrderPreview({ orderCode, anchorRect }: { orderCode: string; anchorRect: DOMRect | null }) {
+function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect: DOMRect | null }) {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OrderPreviewData | null>(null);
+  
+  // Convert slug to display format
+  const displayCode = slugToOrderCode(orderSlug);
   
   useEffect(() => {
     setMounted(true);
@@ -97,13 +101,13 @@ function OrderPreview({ orderCode, anchorRect }: { orderCode: string; anchorRect
     
     // Delay fetch to avoid unnecessary requests on quick hover
     const timer = setTimeout(async () => {
-      const preview = await fetchOrderPreview(orderCode);
+      const preview = await fetchOrderPreview(orderSlug);
       setData(preview);
       setLoading(false);
     }, 200);
     
     return () => clearTimeout(timer);
-  }, [mounted, orderCode]);
+  }, [mounted, orderSlug]);
   
   if (!mounted || !anchorRect) return null;
   
@@ -117,7 +121,7 @@ function OrderPreview({ orderCode, anchorRect }: { orderCode: string; anchorRect
     >
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
-        <div className="text-white font-semibold">{orderCode}</div>
+        <div className="text-white font-semibold">{displayCode}</div>
       </div>
       
       {/* Content */}
@@ -222,9 +226,9 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
     }
   };
 
-  // Extract order code from path
-  const orderCode = tab.type === "order" 
-    ? tab.path.replace("/orders/", "").replace(/-/g, "/").replace(/\/([^/]+)$/, "-$1")
+  // Extract slug from path for API (e.g., "/orders/0008-26-sm" -> "0008-26-sm")
+  const orderSlug = tab.type === "order" 
+    ? tab.path.replace("/orders/", "")
     : "";
 
   // Color dot based on type
@@ -283,8 +287,8 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
       </div>
       
       {/* Order Preview on hover */}
-      {showPreview && tab.type === "order" && (
-        <OrderPreview orderCode={tab.title} anchorRect={anchorRect} />
+      {showPreview && tab.type === "order" && orderSlug && (
+        <OrderPreview orderSlug={orderSlug} anchorRect={anchorRect} />
       )}
     </div>
   );
