@@ -154,6 +154,9 @@ export default function ProfilePage() {
       setAvatarUrl(publicUrl);
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
+
+      // Notify TopBar to refresh avatar
+      window.dispatchEvent(new CustomEvent("avatar-updated"));
     } catch (err) {
       console.error("Avatar upload error:", err);
       setError(err instanceof Error ? err.message : "Failed to upload avatar");
