@@ -10,8 +10,7 @@ interface RolePermissionsModalProps {
 
 // Permission matrix
 const PERMISSIONS = [
-  { key: "directory.view", label: { en: "View clients (directory)", ru: "Просмотр клиентов (справочник)" } },
-  { key: "directory.manage", label: { en: "Manage directory", ru: "Управление справочником" } },
+  { key: "contacts", label: { en: "Contacts", ru: "Контакты" } },
   { key: "orders.view", label: { en: "View orders", ru: "Просмотр заказов" } },
   { key: "orders.create", label: { en: "Create orders", ru: "Создание заказов" } },
   { key: "orders.edit", label: { en: "Edit orders", ru: "Редактирование заказов" } },
@@ -28,8 +27,7 @@ const PERMISSIONS = [
 // Role permissions (true = allowed, "own" = only own data, false = denied)
 const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
   subagent: {
-    "directory.view": "own",
-    "directory.manage": "own",
+    "contacts": "own",
     "orders.view": "own",
     "orders.create": true,
     "orders.edit": "own",
@@ -43,8 +41,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "settings.company": false,
   },
   agent: {
-    "directory.view": true,
-    "directory.manage": true,
+    "contacts": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -58,8 +55,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "settings.company": false,
   },
   finance: {
-    "directory.view": true,
-    "directory.manage": true,
+    "contacts": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -73,8 +69,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "settings.company": false,
   },
   manager: {
-    "directory.view": true,
-    "directory.manage": true,
+    "contacts": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
@@ -88,8 +83,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "settings.company": true,
   },
   supervisor: {
-    "directory.view": true,
-    "directory.manage": true,
+    "contacts": true,
     "orders.view": true,
     "orders.create": true,
     "orders.edit": true,
