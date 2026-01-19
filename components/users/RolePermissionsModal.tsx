@@ -235,10 +235,17 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
                   {ROLES.map((role) => (
                     <th
                       key={role}
-                      className="px-2 pb-3 text-center font-medium text-gray-900 cursor-help"
-                      title={ROLE_DESCRIPTIONS[role]?.[lang]}
+                      className="px-2 pb-3 text-center font-medium text-gray-900"
                     >
-                      {getRoleDisplayName(role, prefs.language)}
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{getRoleDisplayName(role, prefs.language)}</span>
+                        <span
+                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500"
+                          title={ROLE_DESCRIPTIONS[role]?.[lang]}
+                        >
+                          ?
+                        </span>
+                      </div>
                     </th>
                   ))}
                 </tr>
