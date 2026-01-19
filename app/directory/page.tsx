@@ -66,7 +66,7 @@ export default function DirectoryPage() {
           <h1 className="text-3xl font-bold text-gray-900">Directory</h1>
           <button
             onClick={() => router.push("/directory/new")}
-            className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
+            className="rounded-lg bg-blue-600 px-6 py-2 text-white transition-colors hover:bg-blue-700"
           >
             New Record
           </button>

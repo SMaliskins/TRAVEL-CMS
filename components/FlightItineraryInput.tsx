@@ -296,7 +296,7 @@ function SegmentEditForm({
           <button
             type="button"
             onClick={() => onSave(form)}
-            className="px-3 py-1 text-sm bg-black text-white rounded hover:bg-gray-800"
+            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Save
           </button>
@@ -1112,7 +1112,7 @@ export default function FlightItineraryInput({
               type="button"
               onClick={parseTextInput}
               disabled={isParsing || !textInput.trim()}
-              className="px-3 py-1.5 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {isParsing ? "Parsing..." : "Parse"}
             </button>

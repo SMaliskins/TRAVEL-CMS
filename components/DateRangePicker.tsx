@@ -151,7 +151,7 @@ export default function DateRangePicker({
             <button
               type="button"
               onClick={handleApply}
-              className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
             >
               Apply
             </button>

@@ -331,7 +331,7 @@ export default function PassportDetailsInput({
               type="button"
               onClick={parseTextWithAI}
               disabled={isParsing || !textInput.trim()}
-              className="px-3 py-1.5 text-sm bg-black text-white rounded hover:bg-gray-800 disabled:bg-gray-400"
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
             >
               {isParsing ? "Parsing..." : "Parse Text"}
             </button>

@@ -541,11 +541,13 @@ export default function OrdersPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="bg-gray-50">
+      <div className="bg-gray-50 p-6">
         <div className="mx-auto max-w-[1800px] space-y-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-            <div className="h-10 w-32 bg-gray-200 rounded-lg animate-pulse"></div>
+          <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+              <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse"></div>
+            </div>
           </div>
           <div className="rounded-lg bg-white shadow-sm p-6">
             <div className="space-y-3">
@@ -566,19 +568,21 @@ export default function OrdersPage() {
   // Error state
   if (loadError) {
     return (
-      <div className="bg-gray-50">
+      <div className="bg-gray-50 p-6">
         <div className="mx-auto max-w-[1800px] space-y-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold text-gray-900">Orders</h1>
-            <button
-              onClick={() => router.push("/orders/new")}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              New Order
-            </button>
+          <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+              <button
+                onClick={() => router.push("/orders/new")}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New
+              </button>
+            </div>
           </div>
           <div className="rounded-lg bg-red-50 border border-red-200 p-4">
             <p className="text-red-700">{loadError}</p>
@@ -595,25 +599,27 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="bg-gray-50">
+    <div className="bg-gray-50 p-6">
       <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4 px-4 py-3">
-          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
-          <button
-            onClick={() => router.push("/orders/new")}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New
-          </button>
-          {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
-            <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-              Filtered ({filteredOrders.length} results)
-            </span>
-          )}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+            <button
+              onClick={() => router.push("/orders/new")}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New
+            </button>
+            {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
+              <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                Filtered ({filteredOrders.length} results)
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Empty state */}

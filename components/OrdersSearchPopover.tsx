@@ -637,7 +637,7 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded-lg bg-black px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+                className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
               >
                 Done
               </button>

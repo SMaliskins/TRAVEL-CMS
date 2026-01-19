@@ -278,7 +278,7 @@ export default function ProfilePage() {
           <p className="text-gray-600">{error || "Profile not found"}</p>
           <button
             onClick={() => router.push("/dashboard")}
-            className="mt-4 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             Go to Dashboard
           </button>
@@ -427,7 +427,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={isSavingProfile}
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSavingProfile ? "Saving..." : "Save Changes"}
               </button>
@@ -501,7 +501,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={isSavingPassword || !currentPassword || !newPassword || !confirmPassword}
-                className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSavingPassword ? "Changing..." : "Change Password"}
               </button>

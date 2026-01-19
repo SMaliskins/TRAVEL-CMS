@@ -355,7 +355,7 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
         <div className="border-t border-gray-200 px-6 py-4">
           <button
             onClick={onClose}
-            className="w-full rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             {lang === "ru" ? "Закрыть" : "Close"}
           </button>

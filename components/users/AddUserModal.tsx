@@ -180,7 +180,7 @@ export default function AddUserModal({
 
           <button
             onClick={handleDone}
-            className="w-full rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             Done
           </button>
@@ -321,7 +321,7 @@ export default function AddUserModal({
             <button
               type="submit"
               disabled={isSubmitting || !email || !firstName || !lastName || !roleId}
-              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? "Creating..." : "Create User"}
             </button>

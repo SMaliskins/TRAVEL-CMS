@@ -178,7 +178,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
         <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
         <button
           onClick={onCreateNew}
-          className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
         >
           + Create Invoice
         </button>
@@ -189,7 +189,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
           <p className="text-gray-500 mb-4">No invoices created yet</p>
           <button
             onClick={onCreateNew}
-            className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
           >
             Create First Invoice
           </button>

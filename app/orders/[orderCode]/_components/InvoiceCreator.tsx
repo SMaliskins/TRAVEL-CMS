@@ -292,7 +292,7 @@ export default function InvoiceCreator({
         <div className="flex items-center gap-3 sticky bottom-0 bg-gray-50 p-4 -mx-4 border-t">
           <button
             onClick={handleSave}
-            className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 transition-colors"
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
           >
             Save & Issue Invoice
           </button>

@@ -378,7 +378,7 @@ export default function OrderClientSection({
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-3 py-1 text-xs font-medium text-white bg-black rounded hover:bg-gray-800 disabled:opacity-50"
+                className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
               >
                 {isSaving ? "..." : "Save"}
               </button>

@@ -212,7 +212,7 @@ export default function NewDirectoryPage() {
             <button
               onClick={handleSaveAndClose}
               disabled={!canSave}
-              className="rounded-lg bg-black px-6 py-2 text-sm font-medium text-white shadow-md transition-all duration-200 hover:bg-gray-800 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-md"
+              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white shadow-md transition-all duration-200 hover:bg-blue-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-md"
               style={isSaving ? { cursor: "wait" } : {}}
             >
               Save & Close

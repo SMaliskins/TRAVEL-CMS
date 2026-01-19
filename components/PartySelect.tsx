@@ -551,7 +551,7 @@ export default function PartySelect({
               type="button"
               onClick={handleCreateSubmit}
               disabled={isCreating}
-              className="px-3 py-1.5 text-sm bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50"
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {isCreating ? "Creating..." : "Save"}
             </button>

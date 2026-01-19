@@ -303,7 +303,7 @@ function NewOrderForm() {
               <button
                 onClick={handleSubmit}
                 disabled={!canCreate || isCreating || hasCreated}
-                className="flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 style={isCreating ? { cursor: "wait" } : {}}
               >
                 {isCreating ? (

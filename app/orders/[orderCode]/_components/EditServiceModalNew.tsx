@@ -590,7 +590,7 @@ export default function EditServiceModalNew({
               type="button"
               onClick={handleSave}
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {isSubmitting ? "Saving..." : "Save Changes"}
             </button>
