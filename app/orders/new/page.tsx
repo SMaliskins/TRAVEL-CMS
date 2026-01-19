@@ -82,7 +82,7 @@ function NewOrderForm() {
           const { data: profile } = await supabase
             .from("user_profiles")
             .select("first_name, last_name")
-            .eq("user_id", data.user.id)
+            .eq("id", data.user.id)
             .single();
           
           if (profile?.first_name && profile?.last_name) {
