@@ -170,7 +170,7 @@ export async function PATCH(
     const existingRole = Array.isArray(existingUser.role) ? existingUser.role[0] : existingUser.role;
 
     const body = await request.json();
-    const { firstName, lastName, phone, roleId, isActive } = body;
+    const { firstName, lastName, phone, avatarUrl, roleId, isActive } = body;
 
     // Security checks
     const isSelf = userId === currentUser.id;
@@ -228,6 +228,7 @@ export async function PATCH(
     if (firstName !== undefined) updateData.first_name = firstName;
     if (lastName !== undefined) updateData.last_name = lastName;
     if (phone !== undefined) updateData.phone = phone || null;
+    if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl || null;
     if (roleId !== undefined) updateData.role_id = roleId;
     if (isActive !== undefined) updateData.is_active = isActive;
 
