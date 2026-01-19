@@ -173,6 +173,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | ID | Area | Task | Owner | Status | Branch | Notes |
 |----|------|------|-------|--------|--------|-------|
 | D1 | Directory | Add Passport Details to Main Details (AI parsing) | CODE WRITER | DONE | feature/x | ✅ QA SCORE 9/10 - All parts completed |
+| DIR-STATS | Directory | Client Statistics Panel (Orders/Total/Debt/Trips) | CODE WRITER | DONE | feature/x | ✅ [18.01 03:15] API + UI implemented |
 
 ## PHASE 8: Dashboard UI Improvements
 

@@ -1,3 +1,235 @@
+## [2026-01-18 04:45] CODE WRITER — Stats: Auto-refresh без кнопки
+
+**Task:** DIR-STATS-IMPL (final) | **Status:** SUCCESS ✅
+
+**Change:** Убрана кнопка Refresh, добавлен auto-refresh
+
+**Auto-refresh срабатывает в 3 случаях:**
+
+1. **При загрузке** (useEffect on mount)
+2. **При переключении на вкладку Statistics** (activeTab change)
+3. **При возврате на страницу** (visibilitychange event)
+
+**Удалено:**
+- Кнопка "🔄 Refresh"
+
+**Добавлено:**
+- useEffect для activeTab === "statistics"
+- visibilitychange event listener
+- Cache buster (?t=timestamp) в каждом запросе
+
+**UX Flow:**
+1. User удаляет service в order
+2. User переключается на Statistics tab
+3. **Auto-refresh** → видит актуальные данные ✅
+
+**Commit:** 7b7b910
+
+---
+
+## [2026-01-18 04:40] CODE WRITER — Stats: Refresh + Scrollable Tooltip
+
+**Task:** DIR-STATS-IMPL (enhancement) | **Status:** SUCCESS
+
+**Feature:** Total Spent now shows breakdown on hover
+
+**Changes:**
+
+1. **API (app/api/directory/[id]/stats/route.ts)**
+   - Calculate spent per order (Map aggregation)
+   - Fetch order_code for each order
+   - Return `totalSpentBreakdown: [{ orderCode, amount }]`
+
+2. **UI (components/DirectoryForm.tsx)**
+   - Total Spent row has hover tooltip
+   - Dark theme popup (bg-gray-900)
+   - Shows breakdown: order code + amount
+   - Order codes are clickable links → `/orders/[code]`
+   - Shows total at bottom
+   - Arrow pointer for tooltip
+   - `cursor-help` on amount
+
+**UX:**
+- Hover over €636.92 → see breakdown
+- Click order code → navigate to order
+- Prevents click propagation on links
+
+**Commit:** 64c1130
+
+---
+
+## [2026-01-18 04:15] CODE WRITER — Stats: Next.js 15 Fix
+
+**Task:** DIR-STATS-IMPL (migration hotfix #2) | **Status:** MIGRATION READY (v3)
+
+**Issue:** SQL error `column p.roles does not exist`
+
+**Root Cause:**
+- Migration checked `'client' = ANY(p.roles)`
+- But `party` table has **NO `roles` column**
+- Roles stored in **separate junction tables**:
+  - `client_party` (party_id) ← Client role
+  - `partner_party` (party_id) ← Supplier role
+  - `subagents` (party_id) ← Subagent role
+
+**DB Schema (Roles):**
+```
+party (id, display_name, status, ...)
+├─ client_party (party_id FK)    ← HAS CLIENT ROLE
+├─ partner_party (party_id FK)   ← HAS SUPPLIER ROLE
+└─ subagents (party_id FK)       ← HAS SUBAGENT ROLE
+```
+
+**Solution:**
+Changed role check from:
+```sql
+AND 'client' = ANY(p.roles)  -- WRONG: column doesn't exist
+```
+
+To:
+```sql
+AND EXISTS (
+  SELECT 1 FROM client_party cp
+  WHERE cp.party_id = p.id
+)  -- CORRECT: check junction table
+```
+
+**Commit:** cfa06a5
+
+**Next Step:** User can now run migration successfully (all schema issues fixed)
+
+---
+
+## [2026-01-18 04:00] CODE WRITER — Migration Fix: Correct JOIN Syntax
+
+**Task:** DIR-STATS-IMPL (migration hotfix) | **Status:** MIGRATION READY (v2)
+
+**Issue:** SQL error `column p.first_name does not exist`
+
+**Root Cause:**
+- Migration tried to access `p.first_name`, `p.last_name` from `party` table
+- But these columns are in `party_person` table (1:1 FK relation)
+- Same for `p.name` (actually `company_name` in `party_company` table)
+
+**DB Schema Structure:**
+```
+party (id, display_name, roles, ...)
+├─ party_person (party_id FK, first_name, last_name, ...)
+└─ party_company (party_id FK, company_name, ...)
+```
+
+**Solution:**
+- Changed from `CROSS JOIN` to `LEFT JOIN` with `EXISTS` subqueries
+- Match logic:
+  1. Exact: `p.display_name = o.client_display_name`
+  2. Person: `EXISTS (party_person WHERE first_name + last_name matches)`
+  3. Company: `EXISTS (party_company WHERE company_name matches)`
+- Added `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY match priority)`
+- Only update rows with `match_rank = 1` (best match first)
+
+**Commit:** 5c9df5c
+
+**Next Step:** User can now run migration successfully
+
+---
+
+## [2026-01-18 03:45] CODE WRITER — Migration: Link Old Orders to Party
+
+**Task:** DIR-STATS-IMPL (data migration) | **Status:** MIGRATION READY
+
+**Issue:** "No statistics available" for existing clients
+- Order `0011-26-sm` has `client_display_name` but no `client_party_id`
+- Services also missing `client_party_id` / `payer_party_id`
+- Stats API queries by party_id → finds nothing
+
+**Root Cause:**
+- Orders created **before** commit `aeddec5` didn't save `client_party_id`
+- Only saved `client_display_name` (text field)
+- Stats API needs party_id for JOIN queries with order_services
+
+**Solution:**
+Created 3 migration options:
+
+1. **`update_order_0011_client_party.sql`** - Quick fix for single order
+2. **`link_old_orders_to_party.sql`** ⭐ **RECOMMENDED** - Full migration
+   - Matches `client_display_name` to `party.display_name`
+   - Also matches `first_name + last_name` and `company.name`
+   - Updates `orders.client_party_id`
+   - Updates `order_services.client_party_id` and `payer_party_id`
+   - Includes verification report
+   - Idempotent (safe to run multiple times)
+3. **Manual UI update** - Edit service → re-select client → save
+
+**Migration Instructions:** `migrations/MIGRATION_FIX_CLIENT_STATS.md`
+
+**Commit:** ea56df7
+
+**Next Step:** User needs to run migration in Supabase SQL Editor
+
+---
+
+## [2026-01-18 03:30] CODE WRITER — Directory Statistics: ReferenceError Fix
+
+**Task:** DIR-STATS-IMPL (hotfix) | **Status:** SUCCESS → READY FOR QA
+
+**Issue:** Runtime ReferenceError: "can't access lexical declaration 'roles' before initialization"
+
+**Root Cause:**
+- `useEffect` (lines 86-109) used `roles` in dependency array
+- But `roles` state was declared AFTER `useEffect` (line 119)
+- React/JS executes top-to-bottom → `useEffect` ran before `roles` existed
+
+**Solution:**
+- Moved `roles` state declaration from line 119 to line 80 (BEFORE useEffect)
+- Also moved `getBaseType()` and `baseType` for logical grouping
+- Now `roles` is available when `useEffect` dependencies are evaluated
+
+**Commit:** 0643f4b
+
+**Testing Required:**
+1. Open existing client with role "client"
+2. Check Statistics Tab loads without errors
+3. Verify real data displays (not €0 or "-")
+
+---
+
+## [2026-01-18 03:15] CODE WRITER — Directory Statistics Panel
+
+**Task:** DIR-STATS-IMPL | **Status:** SUCCESS → QA
+
+**Summary:** Implemented real-time client statistics panel in Directory
+
+**Changes:**
+1. Created API endpoint `/api/directory/[id]/stats/route.ts`
+   - Orders count: DISTINCT order_id WHERE client_party_id
+   - Total Spent: SUM(client_price) WHERE payer_party_id
+   - Debt: SUM(orders.amount_debt) for payer's orders
+   - Last Trip: MAX(date_to) <= today
+   - Next Trip: MIN(date_from) >= today
+
+2. Updated `components/DirectoryForm.tsx`
+   - Added stats state + statsLoading state
+   - Added useEffect to fetch stats when role = "client"
+   - Updated Statistics Tab to display:
+     * Orders count
+     * Total Spent (€X.XX)
+     * Debt (€X.XX in red if > 0)
+     * Last Trip (dd.mm.yyyy or "-")
+     * Next Trip (dd.mm.yyyy or "-")
+   - Shows spinner while loading
+   - Shows message if no client role
+
+**Business Rules:**
+- Total Spent/Debt: Only if party = Payer
+- Last/Next Trip: Only if party = Client in services
+- Real-time data from order_services + orders tables
+
+**Commit:** 1304e35
+
+**Next:** QA verification
+
+---
+
 ## [2026-01-09 22:45] CODE WRITER — Service Management: 4 Issues Fixed
 
 **Task:** SVC-FIX-1 to SVC-FIX-4 | **Status:** SUCCESS
