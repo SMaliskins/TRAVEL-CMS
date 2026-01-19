@@ -7,7 +7,6 @@ import { useClock } from "@/hooks/useClock";
 import { supabase } from "@/lib/supabaseClient";
 import TopBarProgress from "./TopBarProgress";
 import TopBarSearch from "./TopBarSearch";
-import Image from "next/image";
 
 interface UserProfile {
   first_name: string;
@@ -211,11 +210,9 @@ export default function TopBar() {
               className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-300"
             >
               {profile?.avatar_url ? (
-                <Image
+                <img
                   src={profile.avatar_url}
                   alt="Avatar"
-                  width={36}
-                  height={36}
                   className="h-full w-full object-cover"
                 />
               ) : (

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 import RoleBadge from "@/components/users/RoleBadge";
 
@@ -305,11 +304,9 @@ export default function ProfilePage() {
                 {isUploadingAvatar ? (
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
                 ) : avatarUrl ? (
-                  <Image
+                  <img
                     src={avatarUrl}
                     alt="Avatar"
-                    width={64}
-                    height={64}
                     className="h-full w-full object-cover"
                   />
                 ) : (
