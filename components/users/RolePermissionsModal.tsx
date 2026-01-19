@@ -178,34 +178,40 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
   const { prefs } = useUserPreferences();
   const lang = prefs.language === "ru" ? "ru" : "en";
 
+  const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }) => (
+    <span className="group relative inline-flex cursor-help">
+      {children}
+      <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+
   const renderPermission = (value: boolean | "own") => {
     if (value === true) {
       return (
-        <span
-          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-green-100 text-green-600"
-          title={lang === "ru" ? "Полный доступ" : "Full access"}
-        >
-          ✓
-        </span>
+        <Tooltip text={lang === "ru" ? "Полный доступ" : "Full access"}>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-green-600">
+            ✓
+          </span>
+        </Tooltip>
       );
     }
     if (value === "own") {
       return (
-        <span
-          className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold"
-          title={lang === "ru" ? "Только свои данные" : "Own data only"}
-        >
-          Own
-        </span>
+        <Tooltip text={lang === "ru" ? "Только свои данные" : "Own data only"}>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[10px] font-bold">
+            Own
+          </span>
+        </Tooltip>
       );
     }
     return (
-      <span
-        className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full bg-gray-100 text-gray-400"
-        title={lang === "ru" ? "Нет доступа" : "No access"}
-      >
-        –
-      </span>
+      <Tooltip text={lang === "ru" ? "Нет доступа" : "No access"}>
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+          –
+        </span>
+      </Tooltip>
     );
   };
 
@@ -241,12 +247,11 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
                     >
                       <div className="flex items-center justify-center gap-1">
                         <span>{getRoleDisplayName(role, prefs.language)}</span>
-                        <span
-                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500"
-                          title={ROLE_DESCRIPTIONS[role]?.[lang]}
-                        >
-                          ?
-                        </span>
+                        <Tooltip text={ROLE_DESCRIPTIONS[role]?.[lang] || ""}>
+                          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500">
+                            ?
+                          </span>
+                        </Tooltip>
                       </div>
                     </th>
                   ))}
