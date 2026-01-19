@@ -188,7 +188,7 @@ export default function TopBar() {
             {isDropdownOpen && (
               <div
                 ref={dropdownRef}
-                className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg"
+                className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg z-50"
               >
                 <div className="py-1">
                   <a
