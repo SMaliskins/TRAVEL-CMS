@@ -102,14 +102,11 @@ function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect
   useEffect(() => {
     if (!mounted) return;
     
-    // Delay fetch to avoid unnecessary requests on quick hover
-    const timer = setTimeout(async () => {
-      const preview = await fetchOrderPreview(orderSlug);
+    // Fetch immediately
+    fetchOrderPreview(orderSlug).then(preview => {
       setData(preview);
       setLoading(false);
-    }, 200);
-    
-    return () => clearTimeout(timer);
+    });
   }, [mounted, orderSlug]);
   
   if (!mounted || !anchorRect) return null;
@@ -211,11 +208,9 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
       setAnchorRect(tabRef.current.getBoundingClientRect());
     }
     
-    // Show preview after delay
+    // Show preview immediately for order tabs
     if (tab.type === "order") {
-      hoverTimerRef.current = setTimeout(() => {
-        setShowPreview(true);
-      }, 400);
+      setShowPreview(true);
     }
   };
   
