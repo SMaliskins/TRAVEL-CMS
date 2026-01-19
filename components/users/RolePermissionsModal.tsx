@@ -78,8 +78,8 @@ const PERMISSION_GROUPS = [
   },
 ];
 
-// Role permissions (true = allowed, "own" = only own data, false = denied)
-const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
+// Role permissions (true = allowed, "own" = only own data, "commission" = commission only, false = denied)
+const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own" | "commission">> = {
   subagent: {
     "contacts.view": "own",
     "contacts.edit": "own",
@@ -93,7 +93,7 @@ const ROLE_PERMISSIONS: Record<string, Record<string, boolean | "own">> = {
     "invoices.create": "own",
     "invoices.edit": "own",
     "payments.record": "own",
-    "reports.view": false,
+    "reports.view": "commission",
     "users.view": false,
     "users.manage": false,
     "settings.company": false,
@@ -188,12 +188,14 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
 
   const hideTooltip = () => setTooltip(null);
 
-  const renderPermission = (value: boolean | "own") => {
+  const renderPermission = (value: boolean | "own" | "commission") => {
     const tooltipText = value === true
       ? (lang === "ru" ? "Полный доступ" : "Full access")
       : value === "own"
         ? (lang === "ru" ? "Только свои данные" : "Own data only")
-        : (lang === "ru" ? "Нет доступа" : "No access");
+        : value === "commission"
+          ? (lang === "ru" ? "Только комиссия" : "Commission only")
+          : (lang === "ru" ? "Нет доступа" : "No access");
 
     if (value === true) {
       return (
@@ -214,6 +216,17 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
           onMouseLeave={hideTooltip}
         >
           Own
+        </span>
+      );
+    }
+    if (value === "commission") {
+      return (
+        <span
+          className="inline-flex h-auto px-1 cursor-help items-center justify-center rounded-full bg-purple-100 text-purple-600 text-[9px] font-bold"
+          onMouseEnter={(e) => showTooltip(e, tooltipText)}
+          onMouseLeave={hideTooltip}
+        >
+          Com
         </span>
       );
     }
@@ -263,6 +276,10 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 text-[8px] font-bold">Own</span>
               <span>{lang === "ru" ? "Только свои" : "Own data only"}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-flex h-4 px-1 items-center justify-center rounded-full bg-purple-100 text-purple-600 text-[8px] font-bold">Com</span>
+              <span>{lang === "ru" ? "Только комиссия" : "Commission only"}</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-400">–</span>
