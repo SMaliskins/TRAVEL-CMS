@@ -1,10 +1,12 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { ROLES, hasMinimumRole } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
 /**
  * Generate a random temporary password
@@ -19,31 +21,43 @@ function generateTempPassword(length = 12): string {
 }
 
 /**
- * Get current user with role from session
+ * Get current user from request
  */
-async function getCurrentUserWithRole() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll() {
-          // Read-only in API routes
-        },
-      },
+async function getCurrentUser(request: NextRequest) {
+  // Try Authorization header first
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (!error && data?.user) {
+      return data.user;
     }
-  );
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) {
-    return null;
   }
 
-  // Get user profile with role
+  // Try cookies
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Cookie: cookieHeader } },
+    });
+    const { data, error } = await authClient.auth.getUser();
+    if (!error && data?.user) {
+      return data.user;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get user with role from profile
+ */
+async function getCurrentUserWithRole(request: NextRequest) {
+  const user = await getCurrentUser(request);
+  if (!user) return null;
+
   const { data: profile } = await supabaseAdmin
     .from("user_profiles")
     .select(`
@@ -53,29 +67,30 @@ async function getCurrentUserWithRole() {
       last_name,
       role:roles(id, name, level)
     `)
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
-  if (!profile) {
-    return null;
-  }
+  if (!profile) return null;
+
+  // Handle role as single object (Supabase may return array for join)
+  const role = Array.isArray(profile.role) ? profile.role[0] : profile.role;
 
   return {
-    id: session.user.id,
-    email: session.user.email,
+    id: user.id,
+    email: user.email,
     companyId: profile.company_id,
     firstName: profile.first_name,
     lastName: profile.last_name,
-    role: profile.role,
+    role: role as { id: string; name: string; level: number } | null,
   };
 }
 
 /**
  * GET /api/users — List users in company (Supervisor/Manager only)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUserWithRole();
+    const currentUser = await getCurrentUserWithRole(request);
 
     if (!currentUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -115,7 +130,6 @@ export async function GET() {
     }
 
     // Get email addresses from auth.users
-    const userIds = users.map((u) => u.id);
     const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
     
     // Map emails to user profiles
@@ -145,9 +159,9 @@ export async function GET() {
 /**
  * POST /api/users — Create new user (Supervisor only)
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUserWithRole();
+    const currentUser = await getCurrentUserWithRole(request);
 
     if (!currentUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

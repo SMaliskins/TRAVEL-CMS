@@ -1,3 +1,179 @@
+## [2026-01-19 00:30] CODE WRITER — Directory Stats: Complete Fix Session ✅
+
+**Tasks:** SVC-CLIENT-PAYER-FIX + DIR-STATS-IMPL | **Status:** COMPLETED ✅
+
+**Session Summary:**
+Fixed multiple critical bugs with service duplication, client statistics, and debt calculation.
+
+---
+
+### 🔧 **1. Duplicate Service Button Not Working**
+
+**Root Cause:** Browser confirm dialogs were disabled by user (checkbox in confirm)
+- `confirm()` returned `false` automatically
+- Code treated as "Cancelled by user"
+
+**Solution:** Replaced browser `confirm()` with `ConfirmModal` component
+- Added `duplicateConfirmService` state
+- Created `handleDuplicateConfirm` function
+- Modal always works (not affected by browser settings)
+
+**Commits:** 154593f, ba7fd14
+
+---
+
+### 🐛 **2. Duplicated Services Have NULL party_ids**
+
+**Root Cause:** **snake_case vs camelCase bug** in `handleDuplicateConfirm`
+```javascript
+// ❌ БЫЛО (undefined):
+payerPartyId: service.payer_party_id
+
+// ✅ СТАЛО (correct UUID):
+payerPartyId: service.payerPartyId
+```
+
+**Evidence:**
+- Frontend logs: `payerPartyId: undefined`
+- Database: 4-5 services with NULL `payer_party_id`
+- Lost from stats: €2244 (222+222+900+900)
+
+**Solution:**
+1. Fixed code to use camelCase: `service.payerPartyId`
+2. Created migration to fix existing broken services
+3. Added debug logging to API
+
+**Investigation:** Used SQL queries to trace:
+- Which services had NULL party_ids
+- When they were created (timestamps)
+- Whether they were duplicates or manual entries
+
+**Commits:** ba7fd14, migrations for fixing data
+
+---
+
+### 🔧 **3. Cancel Service Button Not Working**
+
+**Root Cause:** Same as duplicate - browser confirm disabled
+
+**Solution:** Added second `ConfirmModal` for cancel
+- Added `cancelConfirmService` state
+- Created `handleCancelConfirm` function
+- Red theme for destructive action
+
+**Commit:** cee3e91
+
+---
+
+### 📊 **4. Statistics Not Updating After Duplicate/Cancel**
+
+**Root Cause:** Stats only refreshed on component mount, not when returning from Order page
+
+**Solution:** Enhanced auto-refresh logic
+- Added dependency on `record` object (not just `record.id`)
+- Now triggers on every card open (new object reference)
+- Cache buster ensures fresh API data
+
+**Commit:** c000962
+
+---
+
+### 💰 **5. Wrong payer_party_id for Existing Service**
+
+**Issue:** Service with Leo Malik as client had wrong `payer_party_id`
+- Current: `ce033ae3-94c8-483e-aa4a-75e884762b7c` ❌
+- Correct: `8a2712aa-7702-4bff-b399-7977c30999a5` ✅
+
+**Solution:** Created specific migration to fix this service
+- Updated `payer_party_id` for service ID `2c75158c-c398-4a74-8975-3539202d9693`
+- Verified Total Spent increased from €1111 to €1388.75
+
+**Migration:** `fix_leo_malik_payer_id.sql`
+
+---
+
+### 🏷️ **6. Rename "Total Spent" → "Turnover"**
+
+**User Request:** Change label to "Turnover" (Оборот)
+
+**Changes:**
+- Updated label in `DirectoryForm.tsx`
+- Internal variable name kept as `totalSpent` (no breaking changes)
+
+**Commit:** c3e951b
+
+---
+
+### 💸 **7. Debt Always Shows €0.00**
+
+**Root Cause:** API used static `amount_debt` field from `orders` table
+- `amount_debt` is never updated (always 0)
+- Should be calculated dynamically
+
+**Solution:** Changed Stats API to calculate debt as `Turnover - Amount Paid`
+```javascript
+// Before:
+debt = SUM(orders.amount_debt) // Always 0
+
+// After:
+const amountPaid = SUM(orders.amount_paid);
+const debt = totalSpent - amountPaid;
+```
+
+**Logic:**
+- Turnover (totalSpent) = SUM(services.client_price where payer, not cancelled)
+- Amount Paid = SUM(orders.amount_paid) for those orders
+- Debt = Turnover - Amount Paid
+
+**Example (Bogdans Ignatjevs):**
+- Turnover: €2080.75 ✅
+- Amount Paid: €0.00
+- Debt: €2080.75 ✅ (was €0.00 before)
+
+**Commit:** ec74e2f
+
+---
+
+### 📁 **Debug & Investigation Files Created:**
+
+1. `debug_duplicated_services.sql` - Check services with NULL party_ids
+2. `investigate_null_party_ids.sql` - Detailed investigation of NULL values
+3. `fix_duplicated_services_party_ids.sql` - Migration to fix broken duplicates
+4. `fix_leo_malik_payer_id.sql` - Fix specific service with wrong payer
+5. `check_debt.sql` - Verify debt calculation
+6. `check_amounts_detailed.sql` - Compare stored vs calculated amounts
+7. `verify_turnover.sql` - Verify turnover calculation
+8. `check_orders_schema.sql` - Inspect actual DB schema
+
+---
+
+### ✅ **Final State:**
+
+**Directory Statistics Panel:**
+- ✅ Turnover shows correct sum of services (excludes cancelled)
+- ✅ Debt calculated dynamically (Turnover - Paid)
+- ✅ Auto-refreshes on card open
+- ✅ Interactive tooltip with order breakdown
+- ✅ All party_ids correctly saved
+
+**Service Management:**
+- ✅ Duplicate button works (ConfirmModal)
+- ✅ Cancel button works (ConfirmModal)
+- ✅ Party IDs saved correctly (camelCase fix)
+- ✅ Client/Payer display in list
+- ✅ Stats update after actions
+
+**Technical Improvements:**
+- ✅ All browser confirm() replaced with ConfirmModal
+- ✅ Consistent camelCase in service data flow
+- ✅ Dynamic debt calculation (not static field)
+- ✅ Comprehensive SQL debugging queries
+- ✅ Data integrity migrations for existing records
+
+**Next:** Tasks marked as COMPLETED in TODO
+
+---
+
 ## [2026-01-18 04:45] CODE WRITER — Stats: Auto-refresh без кнопки
 
 **Task:** DIR-STATS-IMPL (final) | **Status:** SUCCESS ✅
@@ -10923,79 +11099,4 @@ npm run dev
 - Проверить Order 0005/26-SM — count должен измениться (без cancelled)
 
 **Next Step:** Пользователь перезапускает dev server
-
-
----
-
-### 📅 [2026-01-19] | [Runner Session Start]
-**Агент:** `RUNNER (Architect)`
-**Задачи:** USR1, USR4
-**Статус:** START
-
-**Анализ:**
-- USR2 (Dynamic Roles) — ✅ DONE, роли в БД готовы
-- AUTH1, AUTH2 — ✅ DONE, logout и protected routes работают
-- USR1 и USR4 разблокированы
-
-**Действия:**
-1. Создана спецификация USR1: `.ai/tasks/usr1-user-management-ui.md`
-   - API: /api/users (GET, POST)
-   - API: /api/users/[userId] (GET, PATCH, DELETE)
-   - UI: /settings/users page
-   - Components: UserList, AddUserModal, EditUserModal, RoleBadge
-
-2. Создана спецификация USR4: `.ai/tasks/usr4-user-profile.md`
-   - API: /api/profile (GET, PATCH)
-   - API: /api/profile/password (POST)
-   - UI: /settings/profile page
-
-3. Обновлён PROJECT_TODO.md:
-   - USR1: IN_PROGRESS, Pipeline: CW→QA
-   - USR4: IN_PROGRESS, Pipeline: CW→QA
-
-**Pipeline:**
-- USR1: CW→QA (🔴 CRITICAL — основной функционал)
-- USR4: CW→QA (🟡 Medium — self-service)
-
-**Next Step:** Code Writer берёт USR1 + USR4
-
-
----
-
-### 📅 [2026-01-19] | [Code Writer Session]
-**Агент:** `CODE WRITER`
-**Задачи:** USR1, USR4
-**Статус:** SUCCESS → QA
-
-**Реализовано:**
-
-**USR1 — User Management:**
-- ✅ `app/api/users/route.ts` — GET (список), POST (создание с temp password)
-- ✅ `app/api/users/[userId]/route.ts` — GET, PATCH, DELETE
-- ✅ `components/users/UserList.tsx` — таблица пользователей
-- ✅ `components/users/AddUserModal.tsx` — создание + показ temp password
-- ✅ `components/users/EditUserModal.tsx` — редактирование role/status
-- ✅ `app/settings/users/page.tsx` — страница User Management
-
-**USR4 — User Profile:**
-- ✅ `app/api/profile/route.ts` — GET, PATCH профиля
-- ✅ `app/api/profile/password/route.ts` — POST смена пароля
-- ✅ `app/settings/profile/page.tsx` — страница профиля
-
-**Navigation:**
-- ✅ TopBar dropdown обновлён: My Profile, Settings, User Management
-
-**Security:**
-- Supervisor: полный доступ к User Management
-- Manager: read-only доступ к списку
-- Agent/Finance: доступ запрещён (403)
-- Self-protection: нельзя деактивировать себя, понизить свою роль, удалить последнего Supervisor
-
-**Файлы:**
-- 4 новых API routes
-- 3 новых компонента
-- 2 новые страницы
-- 1 обновлённый компонент (TopBar)
-
-**Next Step:** QA тестирование
 

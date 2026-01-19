@@ -1,35 +1,48 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { ROLES, hasMinimumRole } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Get current user with role from session
- */
-async function getCurrentUserWithRole() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll() {
-          // Read-only in API routes
-        },
-      },
-    }
-  );
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) {
-    return null;
+/**
+ * Get current user from request
+ */
+async function getCurrentUser(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (!error && data?.user) {
+      return data.user;
+    }
   }
+
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Cookie: cookieHeader } },
+    });
+    const { data, error } = await authClient.auth.getUser();
+    if (!error && data?.user) {
+      return data.user;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get user with role from profile
+ */
+async function getCurrentUserWithRole(request: NextRequest) {
+  const user = await getCurrentUser(request);
+  if (!user) return null;
 
   const { data: profile } = await supabaseAdmin
     .from("user_profiles")
@@ -40,20 +53,21 @@ async function getCurrentUserWithRole() {
       last_name,
       role:roles(id, name, level)
     `)
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
-  if (!profile) {
-    return null;
-  }
+  if (!profile) return null;
+
+  // Handle role as single object (Supabase may return array for join)
+  const role = Array.isArray(profile.role) ? profile.role[0] : profile.role;
 
   return {
-    id: session.user.id,
-    email: session.user.email,
+    id: user.id,
+    email: user.email,
     companyId: profile.company_id,
     firstName: profile.first_name,
     lastName: profile.last_name,
-    role: profile.role,
+    role: role as { id: string; name: string; level: number } | null,
   };
 }
 
@@ -61,12 +75,12 @@ async function getCurrentUserWithRole() {
  * GET /api/users/:userId — Get user details
  */
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const { userId } = await params;
-    const currentUser = await getCurrentUserWithRole();
+    const currentUser = await getCurrentUserWithRole(request);
 
     if (!currentUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -120,12 +134,12 @@ export async function GET(
  * PATCH /api/users/:userId — Update user
  */
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const { userId } = await params;
-    const currentUser = await getCurrentUserWithRole();
+    const currentUser = await getCurrentUserWithRole(request);
 
     if (!currentUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -151,6 +165,9 @@ export async function PATCH(
     if (userError || !existingUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+
+    // Handle role as single object
+    const existingRole = Array.isArray(existingUser.role) ? existingUser.role[0] : existingUser.role;
 
     const body = await request.json();
     const { firstName, lastName, phone, roleId, isActive } = body;
@@ -186,7 +203,7 @@ export async function PATCH(
     }
 
     // If deactivating a supervisor, check there's at least one other active supervisor
-    if (isActive === false && existingUser.role?.name === ROLES.SUPERVISOR) {
+    if (isActive === false && existingRole?.name === ROLES.SUPERVISOR) {
       const { count } = await supabaseAdmin
         .from("user_profiles")
         .select("id", { count: "exact" })
@@ -253,12 +270,12 @@ export async function PATCH(
  * DELETE /api/users/:userId — Soft delete (deactivate) user
  */
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const { userId } = await params;
-    const currentUser = await getCurrentUserWithRole();
+    const currentUser = await getCurrentUserWithRole(request);
 
     if (!currentUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -292,16 +309,11 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // If deleting a supervisor, check there's at least one other active supervisor
-    if (existingUser.role?.name === ROLES.SUPERVISOR) {
-      const { count } = await supabaseAdmin
-        .from("user_profiles")
-        .select("id", { count: "exact" })
-        .eq("company_id", currentUser.companyId)
-        .eq("is_active", true)
-        .neq("id", userId);
+    // Handle role as single object
+    const existingRoleDelete = Array.isArray(existingUser.role) ? existingUser.role[0] : existingUser.role;
 
-      // Count supervisors
+    // If deleting a supervisor, check there's at least one other active supervisor
+    if (existingRoleDelete?.name === ROLES.SUPERVISOR) {
       const { data: supervisorRole } = await supabaseAdmin
         .from("roles")
         .select("id")

@@ -1,34 +1,49 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+
+/**
+ * Get current user from request
+ */
+async function getCurrentUser(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (!error && data?.user) {
+      return data.user;
+    }
+  }
+
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Cookie: cookieHeader } },
+    });
+    const { data, error } = await authClient.auth.getUser();
+    if (!error && data?.user) {
+      return data.user;
+    }
+  }
+
+  return null;
+}
+
 /**
  * POST /api/profile/password — Change current user's password
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll() {
-            // Read-only in API routes
-          },
-        },
-      }
-    );
-
-    const { data: { session } } = await supabase.auth.getSession();
+    const user = await getCurrentUser(request);
     
-    if (!session?.user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -60,8 +75,9 @@ export async function POST(request: Request) {
     }
 
     // Verify current password by attempting sign in
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: session.user.email!,
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { error: signInError } = await authClient.auth.signInWithPassword({
+      email: user.email!,
       password: currentPassword,
     });
 
@@ -74,7 +90,7 @@ export async function POST(request: Request) {
 
     // Update password using admin client
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      session.user.id,
+      user.id,
       { password: newPassword }
     );
 
