@@ -1,3 +1,37 @@
+## [2026-01-19 14:00] CODE WRITER — UX Improvements Session ✅
+
+**Task:** UI/UX Improvements | **Status:** COMPLETED ✅
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Реализовано:**
+
+1. **Tab System Enhancements**
+   - Order preview при наведении на вкладку (с кэшированием)
+   - Browser-style вкладки (активная сливается с контентом bg-gray-50)
+   - Вертикальные разделители между вкладками
+   - Кнопка "Close all tabs"
+   - Вкладки гаснут при переходе на другие страницы
+
+2. **Role Permissions**
+   - Матрица разрешений ROLE_PERMISSIONS в lib/auth/permissions.ts
+   - Поддержка scope: all/own/commission
+   - UI: badge "Com" для commission в RolePermissionsModal
+
+3. **User Management**
+   - Загрузка аватаров для Supervisor (Supabase Storage)
+   - Миграция create_avatars_bucket.sql
+
+4. **New Order Page**
+   - Owner/Agent загружается из user_profiles через API
+   - "Service dates" вместо "Check-in / Return"
+   - Формат дат dd.mm.yyyy
+   - Исправлен layout (не залазит на sidebar)
+
+**Коммиты:** 25+ в feature/x
+
+**SCORE:** 8/10
+
+---
 ## [2026-01-19 12:00] CODE WRITER — Tab System Implementation ✅
 
 **Task:** TABS-IMPL | **Status:** COMPLETED ✅
