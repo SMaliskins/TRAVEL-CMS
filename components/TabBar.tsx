@@ -300,22 +300,27 @@ export default function TabBar() {
   }
 
   return (
-    <div className="sticky top-14 z-30 flex items-end gap-0.5 bg-gray-100 px-3 pt-2 pb-0 overflow-x-auto">
-      {tabs.map((tab) => (
-        <TabItem
-          key={tab.id}
-          tab={tab}
-          isActive={tab.id === activeTabId}
-          onSelect={() => setActiveTab(tab.id)}
-          onClose={() => closeTab(tab.id)}
-        />
+    <div className="sticky top-14 z-30 flex items-end gap-0 bg-gray-100 px-3 pt-2 pb-0 overflow-x-auto">
+      {tabs.map((tab, index) => (
+        <div key={tab.id} className="flex items-end">
+          <TabItem
+            tab={tab}
+            isActive={tab.id === activeTabId}
+            onSelect={() => setActiveTab(tab.id)}
+            onClose={() => closeTab(tab.id)}
+          />
+          {/* Vertical separator */}
+          {index < tabs.length - 1 && tab.id !== activeTabId && tabs[index + 1]?.id !== activeTabId && (
+            <div className="w-px h-5 bg-gray-300 mb-2 mx-0.5" />
+          )}
+        </div>
       ))}
       
       {/* Close All button */}
       {tabs.length > 1 && (
         <button
           onClick={closeAllTabs}
-          className="ml-2 mb-1 px-2 py-1 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
+          className="ml-3 mb-1 px-2 py-1 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
           title="Close all tabs"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
