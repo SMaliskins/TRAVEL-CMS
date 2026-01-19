@@ -8,6 +8,30 @@ import { getRoleDisplayName } from "@/lib/auth/roles";
 import RoleBadge from "./RoleBadge";
 import RolePermissionsModal from "./RolePermissionsModal";
 
+// Role descriptions
+const ROLE_DESCRIPTIONS: Record<string, { en: string; ru: string }> = {
+  subagent: {
+    en: "External partner — access to own clients only",
+    ru: "Внешний партнёр — доступ только к своим клиентам",
+  },
+  agent: {
+    en: "Travel consultant — bookings and client service",
+    ru: "Консультант — бронирование и работа с клиентами",
+  },
+  finance: {
+    en: "Accountant — payments and reports only",
+    ru: "Бухгалтер — только платежи и отчёты",
+  },
+  manager: {
+    en: "Team lead — full operations access",
+    ru: "Руководитель — полный доступ к операциям",
+  },
+  supervisor: {
+    en: "Administrator — full access including users",
+    ru: "Администратор — полный доступ включая пользователей",
+  },
+};
+
 interface Role {
   id: string;
   name: string;
@@ -231,8 +255,16 @@ export default function EditUserModal({
                   </option>
                 ))}
               </select>
+              {(() => {
+                const selectedRole = availableRoles.find(r => r.id === roleId);
+                const desc = selectedRole ? ROLE_DESCRIPTIONS[selectedRole.name] : null;
+                const lang = prefs.language === "ru" ? "ru" : "en";
+                return desc ? (
+                  <p className="mt-1 text-xs text-gray-500">{desc[lang]}</p>
+                ) : null;
+              })()}
               {isSelf && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-amber-600">
                   You cannot change your own role
                 </p>
               )}
