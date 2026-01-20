@@ -160,9 +160,33 @@ export default function OrderServicesBlock({
     }
   }, [orderCode]);
 
+  // Fetch travellers from API
+  const fetchTravellers = useCallback(async () => {
+    if (!orderCode) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/travellers`, {
+        headers: {
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setOrderTravellers(data.travellers || []);
+      }
+    } catch (err) {
+      console.error("Fetch travellers error:", err);
+    }
+  }, [orderCode]);
+
   useEffect(() => {
     fetchServices();
-  }, [fetchServices]);
+    fetchTravellers();
+  }, [fetchServices, fetchTravellers]);
 
   // Handle new service added
   const handleServiceAdded = (service: ServiceData) => {
@@ -755,6 +779,7 @@ export default function OrderServicesBlock({
           services={services}
           setServices={setServices}
           mainClientId={defaultClientId || ""}
+          orderCode={orderCode}
           onClose={handleCloseModal}
         />
       )}

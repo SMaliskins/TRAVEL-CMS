@@ -206,7 +206,9 @@ export default function CompanySettingsPage() {
             .single();
           
           console.log("User role fallback:", { data, error });
-          const roleName = (data?.roles as { name: string } | null)?.name;
+          const rolesRaw = data?.roles as unknown;
+          const role = Array.isArray(rolesRaw) ? rolesRaw[0] : rolesRaw as { name: string } | null;
+          const roleName = role?.name;
           setIsSupervisor(roleName === "Supervisor");
         }
       }

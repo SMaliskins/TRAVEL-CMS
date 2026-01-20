@@ -59,7 +59,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to get profile", details: error.message }, { status: 500 });
     }
 
-    const roleName = (profile?.role as { id: string; name: string } | null)?.name || null;
+    const roleRaw = profile?.role as unknown;
+    const role = Array.isArray(roleRaw) ? roleRaw[0] : roleRaw as { id: string; name: string } | null;
+    const roleName = role?.name || null;
 
     return NextResponse.json({
       id: profile?.id,

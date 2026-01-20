@@ -43,9 +43,12 @@ async function getUserProfile(userId: string) {
     .eq("id", userId)
     .single();
   
+  const role = data?.role as { name: string } | { name: string }[] | null;
+  const roleName = Array.isArray(role) ? role[0]?.name : role?.name;
+  
   return {
     companyId: data?.company_id || null,
-    roleName: data?.role?.name || null
+    roleName: roleName || null
   };
 }
 

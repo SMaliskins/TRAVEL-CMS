@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { supabase } from "@/lib/supabaseClient";
 
 interface Traveller {
   id: string;
@@ -12,6 +13,7 @@ interface Traveller {
   dob?: string;
   personalCode?: string;
   contactNumber?: string;
+  isMainClient?: boolean;
 }
 
 interface Service {
@@ -31,6 +33,13 @@ interface Service {
   assignedTravellerIds: string[];
 }
 
+interface SuggestedGroup {
+  id: string;
+  name: string;
+  mode: "last" | "second" | "frequent";
+  travellers: Traveller[];
+}
+
 interface AssignedTravellersModalProps {
   service: Service;
   orderTravellers: Traveller[];
@@ -38,52 +47,9 @@ interface AssignedTravellersModalProps {
   services: Service[];
   setServices: React.Dispatch<React.SetStateAction<Service[]>>;
   mainClientId: string;
+  orderCode?: string;
   onClose: () => void;
 }
-
-// Mock suggested travellers groups
-const suggestedGroups: Array<{
-  id: string;
-  name: string;
-  mode: "last" | "second" | "frequent";
-  travellers: Array<{
-    firstName: string;
-    lastName: string;
-    title: "Mr" | "Mrs" | "Chd";
-    dob?: string;
-    personalCode?: string;
-    contactNumber?: string;
-  }>;
-}> = [
-  {
-    id: "last-trip",
-    name: "Last trip party",
-    mode: "last",
-    travellers: [
-      { firstName: "John", lastName: "Smith", title: "Mr" },
-      { firstName: "Jane", lastName: "Smith", title: "Mrs" },
-    ],
-  },
-  {
-    id: "second-last",
-    name: "Second last party",
-    mode: "second",
-    travellers: [
-      { firstName: "Alice", lastName: "Brown", title: "Mrs" },
-      { firstName: "Bob", lastName: "Johnson", title: "Mr" },
-      { firstName: "Charlie", lastName: "Wilson", title: "Chd", dob: "2015-06-15" },
-    ],
-  },
-  {
-    id: "most-frequent",
-    name: "Most frequent party",
-    mode: "frequent",
-    travellers: [
-      { firstName: "David", lastName: "Martinez", title: "Mr" },
-      { firstName: "Emma", lastName: "Garcia", title: "Mrs" },
-    ],
-  },
-];
 
 export default function AssignedTravellersModal({
   service,
@@ -92,6 +58,7 @@ export default function AssignedTravellersModal({
   services,
   setServices,
   mainClientId,
+  orderCode,
   onClose,
 }: AssignedTravellersModalProps) {
   const [draggedTravellerId, setDraggedTravellerId] = useState<string | null>(
@@ -103,11 +70,101 @@ export default function AssignedTravellersModal({
   const [suggestedMode, setSuggestedMode] = useState<"none" | "last" | "second" | "frequent">("none");
   const [suggestedTravellers, setSuggestedTravellers] = useState<Traveller[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [suggestedGroups, setSuggestedGroups] = useState<SuggestedGroup[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
   // ESC key handler
   useEscapeKey(onClose);
 
+  // Fetch suggested travellers from API
+  const fetchSuggestedTravellers = useCallback(async () => {
+    if (!mainClientId) return;
+    
+    setIsLoadingSuggestions(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/parties/${encodeURIComponent(mainClientId)}/suggested-travellers`, {
+        headers: {
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSuggestedGroups(data.suggestedGroups || []);
+      }
+    } catch (err) {
+      console.error("Fetch suggested travellers error:", err);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, [mainClientId]);
+
+  useEffect(() => {
+    fetchSuggestedTravellers();
+  }, [fetchSuggestedTravellers]);
+
+  // Save service travellers to API
+  const saveServiceTravellers = useCallback(async (serviceId: string, travellerIds: string[]) => {
+    if (!orderCode) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      await fetch(`/api/services/${encodeURIComponent(serviceId)}/travellers`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ travellerIds }),
+      });
+    } catch (err) {
+      console.error("Save service travellers error:", err);
+    }
+  }, [orderCode]);
+
+  // Add traveller to order via API
+  const addTravellerToOrder = useCallback(async (partyId: string) => {
+    if (!orderCode) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/travellers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ partyId }),
+      });
+    } catch (err) {
+      console.error("Add traveller to order error:", err);
+    }
+  }, [orderCode]);
+
   const assignedTravellerIds = service.assignedTravellerIds;
+  const prevAssignedRef = useRef<string[]>(assignedTravellerIds);
+
+  // Auto-save service travellers when they change
+  useEffect(() => {
+    // Skip on initial mount
+    if (prevAssignedRef.current === assignedTravellerIds) return;
+    
+    // Check if actually changed
+    const prevSorted = [...prevAssignedRef.current].sort().join(",");
+    const currSorted = [...assignedTravellerIds].sort().join(",");
+    
+    if (prevSorted !== currSorted) {
+      saveServiceTravellers(service.id, assignedTravellerIds);
+      prevAssignedRef.current = assignedTravellerIds;
+    }
+  }, [assignedTravellerIds, service.id, saveServiceTravellers]);
 
   // Auto-hide toast after 3 seconds
   useEffect(() => {
@@ -180,20 +237,16 @@ export default function AssignedTravellersModal({
     if (suggestedMode !== "none") {
       const traveller = suggestedTravellers.find((t) => t.id === travellerId);
       if (traveller) {
-        // Check if already exists in orderTravellers
-        const existingTraveller = orderTravellers.find(
-          (t) =>
-            t.firstName === traveller.firstName &&
-            t.lastName === traveller.lastName
-        );
+        // Check if already exists in orderTravellers by ID (since suggested travellers have real party IDs)
+        const existingTraveller = orderTravellers.find((t) => t.id === traveller.id);
 
-        const finalId = existingTraveller ? existingTraveller.id : traveller.id;
-
-        if (currentService.assignedTravellerIds.includes(finalId)) return;
+        if (currentService.assignedTravellerIds.includes(traveller.id)) return;
 
         // Add to orderTravellers if doesn't exist
         if (!existingTraveller) {
           setOrderTravellers((current) => [...current, traveller]);
+          // Also add to order via API
+          addTravellerToOrder(traveller.id);
         }
 
         // Assign to service
@@ -202,7 +255,7 @@ export default function AssignedTravellersModal({
             s.id === service.id
               ? {
                   ...s,
-                  assignedTravellerIds: [...s.assignedTravellerIds, finalId],
+                  assignedTravellerIds: [...s.assignedTravellerIds, traveller.id],
                 }
               : s
           )
@@ -247,28 +300,18 @@ export default function AssignedTravellersModal({
       setOrderTravellers((current) => {
         const travellersToAdd: Traveller[] = [];
         suggestedTravellers.forEach((suggestedTraveller) => {
-          const exists = current.some(
-            (t) =>
-              t.firstName === suggestedTraveller.firstName &&
-              t.lastName === suggestedTraveller.lastName
-          );
+          const exists = current.some((t) => t.id === suggestedTraveller.id);
           if (!exists) {
             travellersToAdd.push(suggestedTraveller);
+            // Add to order via API
+            addTravellerToOrder(suggestedTraveller.id);
           }
         });
 
-        // Map suggested IDs to orderTraveller IDs (with new ones added)
-        const updatedOrderTravellers = [...current, ...travellersToAdd];
-        const mappedIds = suggestedTravellers.map((t) => {
-          const existing = updatedOrderTravellers.find(
-            (ot) =>
-              ot.firstName === t.firstName &&
-              ot.lastName === t.lastName
-          );
-          return existing ? existing.id : t.id;
-        });
+        // Use traveller IDs directly (they're real party IDs from API)
+        const suggestedIds = suggestedTravellers.map((t) => t.id);
         const uniqueIds = Array.from(
-          new Set([...assignedTravellerIds, ...mappedIds])
+          new Set([...assignedTravellerIds, ...suggestedIds])
         );
 
         setServices(
@@ -279,7 +322,7 @@ export default function AssignedTravellersModal({
           )
         );
 
-        return updatedOrderTravellers;
+        return [...current, ...travellersToAdd];
       });
     } else {
       // Normal mode: assign all from orderTravellers
@@ -328,19 +371,9 @@ export default function AssignedTravellersModal({
     );
   };
 
-  const handleSelectSuggestedGroup = (group: typeof suggestedGroups[0]) => {
-    // Create Traveller objects from suggested group
-    const travellers: Traveller[] = group.travellers.map((t) => ({
-      id: crypto.randomUUID(),
-      firstName: t.firstName,
-      lastName: t.lastName,
-      title: t.title,
-      dob: t.dob,
-      personalCode: t.personalCode,
-      contactNumber: t.contactNumber,
-    }));
-
-    setSuggestedTravellers(travellers);
+  const handleSelectSuggestedGroup = (group: SuggestedGroup) => {
+    // Use travellers from API (they already have IDs)
+    setSuggestedTravellers(group.travellers);
     setSuggestedMode(group.mode);
     setShowSuggestedMenu(false);
   };
@@ -350,35 +383,20 @@ export default function AssignedTravellersModal({
       return; // Disabled state - nothing to do
     }
 
-    // Merge suggestedTravellers into orderTravellers (without duplicates by name, then map to IDs)
+    // Merge suggestedTravellers into orderTravellers (without duplicates by ID)
     setOrderTravellers((current) => {
       const travellersToAdd: Traveller[] = [];
       suggestedTravellers.forEach((suggestedTraveller) => {
-        const exists = current.some(
-          (t) =>
-            t.firstName === suggestedTraveller.firstName &&
-            t.lastName === suggestedTraveller.lastName
-        );
+        const exists = current.some((t) => t.id === suggestedTraveller.id);
         if (!exists) {
           travellersToAdd.push(suggestedTraveller);
+          // Add to order via API
+          addTravellerToOrder(suggestedTraveller.id);
         }
       });
 
-      // Add new travellers to orderTravellers
-      const updatedOrderTravellers =
-        travellersToAdd.length > 0
-          ? [...current, ...travellersToAdd]
-          : current;
-
-      // Map suggested travellers to their IDs in orderTravellers (by name)
-      const suggestedIds = suggestedTravellers.map((suggestedTraveller) => {
-        const existing = updatedOrderTravellers.find(
-          (t) =>
-            t.firstName === suggestedTraveller.firstName &&
-            t.lastName === suggestedTraveller.lastName
-        );
-        return existing ? existing.id : suggestedTraveller.id;
-      });
+      // Use traveller IDs directly (they're real party IDs from API)
+      const suggestedIds = suggestedTravellers.map((t) => t.id);
 
       // Union: existing assigned + suggested IDs
       const unionIds = Array.from(
@@ -403,7 +421,7 @@ export default function AssignedTravellersModal({
         );
       }
 
-      return updatedOrderTravellers;
+      return [...current, ...travellersToAdd];
     });
   };
 
@@ -412,26 +430,16 @@ export default function AssignedTravellersModal({
     setOrderTravellers((current) => {
       const travellersToAdd: Traveller[] = [];
       suggestedTravellers.forEach((suggestedTraveller) => {
-        const exists = current.some(
-          (t) =>
-            t.firstName === suggestedTraveller.firstName &&
-            t.lastName === suggestedTraveller.lastName
-        );
+        const exists = current.some((t) => t.id === suggestedTraveller.id);
         if (!exists) {
           travellersToAdd.push(suggestedTraveller);
+          // Add to order via API
+          addTravellerToOrder(suggestedTraveller.id);
         }
       });
 
-      // Map suggested travellers to their IDs in orderTravellers (with new ones added)
-      const updatedOrderTravellers = [...current, ...travellersToAdd];
-      const suggestedIds = suggestedTravellers.map((suggestedTraveller) => {
-        const existing = updatedOrderTravellers.find(
-          (t) =>
-            t.firstName === suggestedTraveller.firstName &&
-            t.lastName === suggestedTraveller.lastName
-        );
-        return existing ? existing.id : suggestedTraveller.id;
-      });
+      // Use traveller IDs directly
+      const suggestedIds = suggestedTravellers.map((t) => t.id);
 
       // Replace assignedTravellerIds for current service
       setServices(
@@ -442,7 +450,7 @@ export default function AssignedTravellersModal({
         )
       );
 
-      return updatedOrderTravellers;
+      return [...current, ...travellersToAdd];
     });
 
     setToastMessage("Replaced travellers for this service");
