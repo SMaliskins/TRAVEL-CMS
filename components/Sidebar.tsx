@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
+import { supabase } from "@/lib/supabaseClient";
 
 interface NavItem {
   name: string;
@@ -71,12 +72,21 @@ export default function Sidebar() {
   useEffect(() => {
     const fetchCompanyLogo = async () => {
       try {
-        const response = await fetch("/api/company", { credentials: "include" });
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch("/api/company", { 
+          headers: {
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include" 
+        });
         if (response.ok) {
           const data = await response.json();
+          console.log("Company data for logo:", data);
           if (data.company?.logo_url) {
             setCompanyLogo(data.company.logo_url);
           }
+        } else {
+          console.log("Failed to fetch company:", response.status);
         }
       } catch (err) {
         console.error("Failed to fetch company logo:", err);
