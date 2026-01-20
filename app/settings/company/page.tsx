@@ -159,10 +159,12 @@ export default function CompanySettingsPage() {
         credentials: "include",
       });
 
+      console.log("API /api/users/me response status:", response.status);
+      const responseData = await response.json();
+      console.log("API /api/users/me response:", responseData);
+
       if (response.ok) {
-        const data = await response.json();
-        console.log("User role check:", data);
-        setIsSupervisor(data.role === "Supervisor");
+        setIsSupervisor(responseData.role === "Supervisor");
       } else {
         // Fallback: try direct query
         const { data: { user } } = await supabase.auth.getUser();

@@ -47,7 +47,6 @@ export async function GET(request: NextRequest) {
         id,
         first_name,
         last_name,
-        email,
         role_id,
         company_id,
         role:roles(id, name)
@@ -66,7 +65,7 @@ export async function GET(request: NextRequest) {
       id: profile?.id,
       first_name: profile?.first_name,
       last_name: profile?.last_name,
-      email: profile?.email,
+      email: user.email, // email from auth user, not profile
       role_id: profile?.role_id,
       role: roleName,
       company_id: profile?.company_id,
