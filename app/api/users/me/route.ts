@@ -50,17 +50,17 @@ export async function GET(request: NextRequest) {
         email,
         role_id,
         company_id,
-        roles(id, name)
+        role:roles(id, name)
       `)
       .eq("id", user.id)
       .single();
 
     if (error) {
       console.error("Get user profile error:", error);
-      return NextResponse.json({ error: "Failed to get profile" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to get profile", details: error.message }, { status: 500 });
     }
 
-    const roleName = (profile?.roles as { id: string; name: string } | null)?.name || null;
+    const roleName = (profile?.role as { id: string; name: string } | null)?.name || null;
 
     return NextResponse.json({
       id: profile?.id,
