@@ -60,6 +60,31 @@ const TIMEZONE_OPTIONS = [
   { cityLabel: "Los Angeles", timezone: "America/Los_Angeles" },
 ];
 
+const COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia", "Australia", 
+  "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", 
+  "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", 
+  "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde", "Central African Republic",
+  "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", 
+  "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", 
+  "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", 
+  "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", 
+  "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", 
+  "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", 
+  "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", 
+  "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Mauritania", 
+  "Mauritius", "Mexico", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", 
+  "Namibia", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", 
+  "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", 
+  "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", 
+  "Saint Lucia", "Samoa", "San Marino", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", 
+  "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "Spain", 
+  "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", 
+  "Thailand", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", 
+  "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", 
+  "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
+];
+
 interface License {
   id: string;
   type: string;
@@ -137,6 +162,11 @@ export default function CompanySettingsPage() {
   const [financeAsPrimary, setFinanceAsPrimary] = useState(false);
   const [techAsPrimary, setTechAsPrimary] = useState(false);
   const [generalAsPrimary, setGeneralAsPrimary] = useState(false);
+  
+  // Country autocomplete
+  const [countrySearch, setCountrySearch] = useState("");
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+  const countryInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadCompany();
@@ -430,15 +460,51 @@ export default function CompanySettingsPage() {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
                 <input
+                  ref={countryInputRef}
                   type="text"
-                  value={formData.country || ""}
-                  onChange={(e) => updateField("country", e.target.value)}
+                  value={countryDropdownOpen ? countrySearch : (formData.country || "")}
+                  onChange={(e) => {
+                    setCountrySearch(e.target.value);
+                    setCountryDropdownOpen(true);
+                  }}
+                  onFocus={() => {
+                    setCountrySearch(formData.country || "");
+                    setCountryDropdownOpen(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setCountryDropdownOpen(false), 200);
+                  }}
                   disabled={readonly}
+                  placeholder="Start typing..."
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
+                {countryDropdownOpen && !readonly && (
+                  <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    {COUNTRIES.filter(c => 
+                      c.toLowerCase().includes(countrySearch.toLowerCase())
+                    ).slice(0, 10).map((country) => (
+                      <button
+                        key={country}
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          updateField("country", country);
+                          setCountrySearch(country);
+                          setCountryDropdownOpen(false);
+                        }}
+                      >
+                        {country}
+                      </button>
+                    ))}
+                    {COUNTRIES.filter(c => c.toLowerCase().includes(countrySearch.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-400">No countries found</div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">VAT / Tax ID</label>
