@@ -144,17 +144,42 @@ export default function CompanySettingsPage() {
   }, []);
 
   const checkRole = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from("user_profiles")
-        .select("role_id, roles(name)")
-        .eq("id", user.id)
-        .single();
-      
-      const roleName = (data?.roles as { name: string } | null)?.name;
-      console.log("User role check:", { data, roleName });
-      setIsSupervisor(roleName === "Supervisor");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.log("No session");
+        return;
+      }
+
+      // Use API to get role (bypasses RLS)
+      const response = await fetch("/api/users/me", {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("User role check:", data);
+        setIsSupervisor(data.role === "Supervisor");
+      } else {
+        // Fallback: try direct query
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data, error } = await supabase
+            .from("user_profiles")
+            .select("role_id, roles:role_id(name)")
+            .eq("id", user.id)
+            .single();
+          
+          console.log("User role fallback:", { data, error });
+          const roleName = (data?.roles as { name: string } | null)?.name;
+          setIsSupervisor(roleName === "Supervisor");
+        }
+      }
+    } catch (err) {
+      console.error("Role check error:", err);
     }
   };
 
