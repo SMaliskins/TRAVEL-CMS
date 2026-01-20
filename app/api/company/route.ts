@@ -94,7 +94,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Only Supervisor can update company settings
-    if (roleName !== "Supervisor") {
+    if (roleName?.toLowerCase() !== "supervisor") {
       return NextResponse.json({ error: "Only Supervisor can update company settings" }, { status: 403 });
     }
 
