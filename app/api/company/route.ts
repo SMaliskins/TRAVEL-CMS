@@ -107,22 +107,20 @@ export async function PATCH(request: NextRequest) {
       "country", "vat_number", "legal_address", "operating_address", "website",
       // Company type
       "primary_type", "additional_types", "other_type_description",
-      // Contacts
-      "phone", "email", "finance_phone", "finance_email",
-      "tech_phone", "tech_email", "general_phone", "general_email",
-      // Licenses
-      "license_number", "tato_number", "other_licenses",
+      // Contacts (as JSONB)
+      "primary_contact", "finance_contact", "tech_contact", "general_contact",
+      // Licenses (as JSONB array)
+      "licenses",
       // Banking
       "bank_name", "bank_account", "swift_code", "beneficiary_name",
       // IATA
       "is_iata_accredited", "iata_code", "iata_type", "bsp_remittance_frequency",
-      // Operational
-      "default_currency", "date_format", "document_language", "default_origin_city",
-      // Regional
+      // Regional Settings
+      "default_currency", "date_format", "document_language", "timezone", "city_label",
       "show_order_source",
       // Additional
       "working_hours", "emergency_contact", "invoice_prefix",
-      "default_payment_terms", "commission_rate", "social_media"
+      "default_payment_terms"
     ];
 
     const updateData: Record<string, unknown> = {

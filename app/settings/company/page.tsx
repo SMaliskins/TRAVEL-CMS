@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 // Company types for classification
@@ -32,7 +31,7 @@ const BSP_FREQUENCIES = [
   { value: "monthly", label: "Monthly" },
 ];
 
-const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK"];
+const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "SEK", "NOK", "DKK", "AED", "CAD", "CNY", "JPY", "TRY"];
 
 const DATE_FORMATS = [
   { value: "dd.mm.yyyy", label: "DD.MM.YYYY" },
@@ -45,7 +44,34 @@ const LANGUAGES = [
   { value: "lv", label: "Latvian" },
   { value: "ru", label: "Russian" },
   { value: "de", label: "German" },
+  { value: "fr", label: "French" },
+  { value: "es", label: "Spanish" },
 ];
+
+const TIMEZONE_OPTIONS = [
+  { cityLabel: "Riga", timezone: "Europe/Riga" },
+  { cityLabel: "London", timezone: "Europe/London" },
+  { cityLabel: "Berlin", timezone: "Europe/Berlin" },
+  { cityLabel: "Paris", timezone: "Europe/Paris" },
+  { cityLabel: "Rome", timezone: "Europe/Rome" },
+  { cityLabel: "Madrid", timezone: "Europe/Madrid" },
+  { cityLabel: "Dubai", timezone: "Asia/Dubai" },
+  { cityLabel: "New York", timezone: "America/New_York" },
+  { cityLabel: "Los Angeles", timezone: "America/Los_Angeles" },
+];
+
+interface License {
+  id: string;
+  type: string;
+  number: string;
+}
+
+interface Contact {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+}
 
 interface Company {
   id: string;
@@ -62,39 +88,38 @@ interface Company {
   primary_type?: string;
   additional_types?: string[];
   other_type_description?: string;
-  phone?: string;
-  email?: string;
-  finance_phone?: string;
-  finance_email?: string;
-  tech_phone?: string;
-  tech_email?: string;
-  general_phone?: string;
-  general_email?: string;
-  license_number?: string;
-  tato_number?: string;
-  other_licenses?: string;
-  bank_name?: string;
-  bank_account?: string;
-  swift_code?: string;
-  beneficiary_name?: string;
+  // Contacts as JSON
+  primary_contact?: Contact;
+  finance_contact?: Contact;
+  tech_contact?: Contact;
+  general_contact?: Contact;
+  // Licenses as JSON array
+  licenses?: License[];
+  // IATA
   is_iata_accredited?: boolean;
   iata_code?: string;
   iata_type?: string;
   bsp_remittance_frequency?: string;
+  // Banking
+  bank_name?: string;
+  bank_account?: string;
+  swift_code?: string;
+  beneficiary_name?: string;
+  // Regional Settings
   default_currency?: string;
   date_format?: string;
   document_language?: string;
-  default_origin_city?: string;
+  timezone?: string;
+  city_label?: string;
   show_order_source?: boolean;
+  // Additional
   working_hours?: string;
   emergency_contact?: string;
   invoice_prefix?: string;
   default_payment_terms?: number;
-  commission_rate?: number;
 }
 
 export default function CompanySettingsPage() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [company, setCompany] = useState<Company | null>(null);
@@ -107,6 +132,11 @@ export default function CompanySettingsPage() {
 
   // Form state
   const [formData, setFormData] = useState<Partial<Company>>({});
+  
+  // Contact same as primary flags
+  const [financeAsPrimary, setFinanceAsPrimary] = useState(false);
+  const [techAsPrimary, setTechAsPrimary] = useState(false);
+  const [generalAsPrimary, setGeneralAsPrimary] = useState(false);
 
   useEffect(() => {
     loadCompany();
@@ -118,11 +148,13 @@ export default function CompanySettingsPage() {
     if (user) {
       const { data } = await supabase
         .from("user_profiles")
-        .select("role:roles(name)")
+        .select("role_id, roles(name)")
         .eq("id", user.id)
         .single();
       
-      setIsSupervisor(data?.role?.name === "Supervisor");
+      const roleName = (data?.roles as { name: string } | null)?.name;
+      console.log("User role check:", { data, roleName });
+      setIsSupervisor(roleName === "Supervisor");
     }
   };
 
@@ -155,7 +187,10 @@ export default function CompanySettingsPage() {
   };
 
   const handleSave = async () => {
-    if (!isSupervisor) return;
+    if (!isSupervisor) {
+      setError("Only Supervisor can edit company settings");
+      return;
+    }
     
     try {
       setSaving(true);
@@ -225,12 +260,39 @@ export default function CompanySettingsPage() {
     setFormData({ ...formData, [field]: value });
   };
 
+  const updateContact = (type: 'primary_contact' | 'finance_contact' | 'tech_contact' | 'general_contact', field: keyof Contact, value: string) => {
+    const current = formData[type] || { first_name: '', last_name: '', phone: '', email: '' };
+    setFormData({ ...formData, [type]: { ...current, [field]: value } });
+  };
+
+  const copyPrimaryToContact = (type: 'finance_contact' | 'tech_contact' | 'general_contact') => {
+    const primary = formData.primary_contact || { first_name: '', last_name: '', phone: '', email: '' };
+    setFormData({ ...formData, [type]: { ...primary } });
+  };
+
   const toggleAdditionalType = (type: string) => {
     const current = formData.additional_types || [];
     const updated = current.includes(type)
       ? current.filter(t => t !== type)
       : [...current, type];
     setFormData({ ...formData, additional_types: updated });
+  };
+
+  const addLicense = () => {
+    const current = formData.licenses || [];
+    const newLicense: License = { id: Date.now().toString(), type: '', number: '' };
+    setFormData({ ...formData, licenses: [...current, newLicense] });
+  };
+
+  const updateLicense = (id: string, field: keyof License, value: string) => {
+    const current = formData.licenses || [];
+    const updated = current.map(l => l.id === id ? { ...l, [field]: value } : l);
+    setFormData({ ...formData, licenses: updated });
+  };
+
+  const removeLicense = (id: string) => {
+    const current = formData.licenses || [];
+    setFormData({ ...formData, licenses: current.filter(l => l.id !== id) });
   };
 
   if (loading) {
@@ -299,7 +361,7 @@ export default function CompanySettingsPage() {
         )}
         {readonly && (
           <div className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-700">
-            Only Supervisors can edit company settings.
+            Only Supervisors can edit company settings. Your role: {isSupervisor ? "Supervisor" : "Not Supervisor"}
           </div>
         )}
 
@@ -317,7 +379,7 @@ export default function CompanySettingsPage() {
                   value={formData.legal_name || ""}
                   onChange={(e) => updateField("legal_name", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -327,7 +389,7 @@ export default function CompanySettingsPage() {
                   value={formData.trading_name || ""}
                   onChange={(e) => updateField("trading_name", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="If different from legal name"
                 />
               </div>
@@ -338,7 +400,7 @@ export default function CompanySettingsPage() {
                   value={formData.registration_number || ""}
                   onChange={(e) => updateField("registration_number", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -348,7 +410,7 @@ export default function CompanySettingsPage() {
                   value={formData.country || ""}
                   onChange={(e) => updateField("country", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -358,7 +420,7 @@ export default function CompanySettingsPage() {
                   value={formData.vat_number || ""}
                   onChange={(e) => updateField("vat_number", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -368,7 +430,7 @@ export default function CompanySettingsPage() {
                   onChange={(e) => updateField("legal_address", e.target.value)}
                   disabled={readonly}
                   rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -378,7 +440,7 @@ export default function CompanySettingsPage() {
                   onChange={(e) => updateField("operating_address", e.target.value)}
                   disabled={readonly}
                   rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="If different from legal address"
                 />
               </div>
@@ -389,7 +451,7 @@ export default function CompanySettingsPage() {
                   value={formData.website || ""}
                   onChange={(e) => updateField("website", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="https://"
                 />
               </div>
@@ -402,7 +464,7 @@ export default function CompanySettingsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Primary Type</label>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {COMPANY_TYPES.map((type) => (
                     <label key={type.value} className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -424,15 +486,15 @@ export default function CompanySettingsPage() {
                     value={formData.other_type_description || ""}
                     onChange={(e) => updateField("other_type_description", e.target.value)}
                     disabled={readonly}
-                    className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Specify other type"
                   />
                 )}
               </div>
               <div className="pt-4 border-t">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Additional Types</label>
-                <div className="space-y-2">
-                  {COMPANY_TYPES.filter(t => t.value !== "other" && t.value !== formData.primary_type).map((type) => (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {COMPANY_TYPES.filter(t => t.value !== formData.primary_type).map((type) => (
                     <label key={type.value} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -442,6 +504,16 @@ export default function CompanySettingsPage() {
                         className="h-4 w-4 text-blue-600 rounded"
                       />
                       <span className="text-sm text-gray-700">{type.label}</span>
+                      {type.value === "other" && (formData.additional_types || []).includes("other") && (
+                        <input
+                          type="text"
+                          value={formData.other_type_description || ""}
+                          onChange={(e) => updateField("other_type_description", e.target.value)}
+                          disabled={readonly}
+                          className="ml-2 flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+                          placeholder="Specify..."
+                        />
+                      )}
                     </label>
                   ))}
                 </div>
@@ -453,88 +525,211 @@ export default function CompanySettingsPage() {
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h2>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Primary Phone</label>
+              {/* Primary Contact */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Primary Contact</p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
                   <input
-                    type="tel"
-                    value={formData.phone || ""}
-                    onChange={(e) => updateField("phone", e.target.value)}
+                    type="text"
+                    value={formData.primary_contact?.first_name || ""}
+                    onChange={(e) => updateContact("primary_contact", "first_name", e.target.value)}
                     disabled={readonly}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    placeholder="First name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <input
+                    type="text"
+                    value={formData.primary_contact?.last_name || ""}
+                    onChange={(e) => updateContact("primary_contact", "last_name", e.target.value)}
+                    disabled={readonly}
+                    placeholder="Last name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Primary Email</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="tel"
+                    value={formData.primary_contact?.phone || ""}
+                    onChange={(e) => updateContact("primary_contact", "phone", e.target.value)}
+                    disabled={readonly}
+                    placeholder="Phone"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
                   <input
                     type="email"
-                    value={formData.email || ""}
-                    onChange={(e) => updateField("email", e.target.value)}
+                    value={formData.primary_contact?.email || ""}
+                    onChange={(e) => updateContact("primary_contact", "email", e.target.value)}
                     disabled={readonly}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    placeholder="Email"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
+
+              {/* Financial Contact */}
               <div className="pt-2 border-t">
-                <p className="text-xs font-medium text-gray-500 mb-2">Financial</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-700">Financial Contact</p>
+                  <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={financeAsPrimary}
+                      onChange={(e) => {
+                        setFinanceAsPrimary(e.target.checked);
+                        if (e.target.checked) copyPrimaryToContact("finance_contact");
+                      }}
+                      disabled={readonly}
+                      className="h-3 w-3 rounded"
+                    />
+                    Same as Primary
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={formData.finance_contact?.first_name || ""}
+                    onChange={(e) => updateContact("finance_contact", "first_name", e.target.value)}
+                    disabled={readonly || financeAsPrimary}
+                    placeholder="First name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <input
+                    type="text"
+                    value={formData.finance_contact?.last_name || ""}
+                    onChange={(e) => updateContact("finance_contact", "last_name", e.target.value)}
+                    disabled={readonly || financeAsPrimary}
+                    placeholder="Last name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <input
                     type="tel"
-                    value={formData.finance_phone || ""}
-                    onChange={(e) => updateField("finance_phone", e.target.value)}
-                    disabled={readonly}
+                    value={formData.finance_contact?.phone || ""}
+                    onChange={(e) => updateContact("finance_contact", "phone", e.target.value)}
+                    disabled={readonly || financeAsPrimary}
                     placeholder="Phone"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                   <input
                     type="email"
-                    value={formData.finance_email || ""}
-                    onChange={(e) => updateField("finance_email", e.target.value)}
-                    disabled={readonly}
+                    value={formData.finance_contact?.email || ""}
+                    onChange={(e) => updateContact("finance_contact", "email", e.target.value)}
+                    disabled={readonly || financeAsPrimary}
                     placeholder="Email"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
+
+              {/* Technical Support */}
               <div className="pt-2 border-t">
-                <p className="text-xs font-medium text-gray-500 mb-2">Technical Support</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-700">Technical Support</p>
+                  <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={techAsPrimary}
+                      onChange={(e) => {
+                        setTechAsPrimary(e.target.checked);
+                        if (e.target.checked) copyPrimaryToContact("tech_contact");
+                      }}
+                      disabled={readonly}
+                      className="h-3 w-3 rounded"
+                    />
+                    Same as Primary
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={formData.tech_contact?.first_name || ""}
+                    onChange={(e) => updateContact("tech_contact", "first_name", e.target.value)}
+                    disabled={readonly || techAsPrimary}
+                    placeholder="First name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <input
+                    type="text"
+                    value={formData.tech_contact?.last_name || ""}
+                    onChange={(e) => updateContact("tech_contact", "last_name", e.target.value)}
+                    disabled={readonly || techAsPrimary}
+                    placeholder="Last name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <input
                     type="tel"
-                    value={formData.tech_phone || ""}
-                    onChange={(e) => updateField("tech_phone", e.target.value)}
-                    disabled={readonly}
+                    value={formData.tech_contact?.phone || ""}
+                    onChange={(e) => updateContact("tech_contact", "phone", e.target.value)}
+                    disabled={readonly || techAsPrimary}
                     placeholder="Phone"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                   <input
                     type="email"
-                    value={formData.tech_email || ""}
-                    onChange={(e) => updateField("tech_email", e.target.value)}
-                    disabled={readonly}
+                    value={formData.tech_contact?.email || ""}
+                    onChange={(e) => updateContact("tech_contact", "email", e.target.value)}
+                    disabled={readonly || techAsPrimary}
                     placeholder="Email"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
+
+              {/* General Queries */}
               <div className="pt-2 border-t">
-                <p className="text-xs font-medium text-gray-500 mb-2">General Queries</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-700">General Queries</p>
+                  <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={generalAsPrimary}
+                      onChange={(e) => {
+                        setGeneralAsPrimary(e.target.checked);
+                        if (e.target.checked) copyPrimaryToContact("general_contact");
+                      }}
+                      disabled={readonly}
+                      className="h-3 w-3 rounded"
+                    />
+                    Same as Primary
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={formData.general_contact?.first_name || ""}
+                    onChange={(e) => updateContact("general_contact", "first_name", e.target.value)}
+                    disabled={readonly || generalAsPrimary}
+                    placeholder="First name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <input
+                    type="text"
+                    value={formData.general_contact?.last_name || ""}
+                    onChange={(e) => updateContact("general_contact", "last_name", e.target.value)}
+                    disabled={readonly || generalAsPrimary}
+                    placeholder="Last name"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <input
                     type="tel"
-                    value={formData.general_phone || ""}
-                    onChange={(e) => updateField("general_phone", e.target.value)}
-                    disabled={readonly}
+                    value={formData.general_contact?.phone || ""}
+                    onChange={(e) => updateContact("general_contact", "phone", e.target.value)}
+                    disabled={readonly || generalAsPrimary}
                     placeholder="Phone"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                   <input
                     type="email"
-                    value={formData.general_email || ""}
-                    onChange={(e) => updateField("general_email", e.target.value)}
-                    disabled={readonly}
+                    value={formData.general_contact?.email || ""}
+                    onChange={(e) => updateContact("general_contact", "email", e.target.value)}
+                    disabled={readonly || generalAsPrimary}
                     placeholder="Email"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -552,7 +747,7 @@ export default function CompanySettingsPage() {
                   value={formData.bank_name || ""}
                   onChange={(e) => updateField("bank_name", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -562,7 +757,7 @@ export default function CompanySettingsPage() {
                   value={formData.bank_account || ""}
                   onChange={(e) => updateField("bank_account", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -572,7 +767,7 @@ export default function CompanySettingsPage() {
                   value={formData.swift_code || ""}
                   onChange={(e) => updateField("swift_code", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
@@ -582,17 +777,62 @@ export default function CompanySettingsPage() {
                   value={formData.beneficiary_name || ""}
                   onChange={(e) => updateField("beneficiary_name", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
           </div>
 
-          {/* IATA Accreditation */}
+          {/* Licenses & Certifications + IATA */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">IATA Accreditation</h2>
-            <div className="space-y-4">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Licenses & Certifications</h2>
+              {!readonly && (
+                <button
+                  onClick={addLicense}
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                >
+                  <span className="text-lg">+</span> Add
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {(formData.licenses || []).map((license) => (
+                <div key={license.id} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={license.type}
+                    onChange={(e) => updateLicense(license.id, "type", e.target.value)}
+                    disabled={readonly}
+                    placeholder="License type"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <input
+                    type="text"
+                    value={license.number}
+                    onChange={(e) => updateLicense(license.id, "number", e.target.value)}
+                    disabled={readonly}
+                    placeholder="Number"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  {!readonly && (
+                    <button
+                      onClick={() => removeLicense(license.id)}
+                      className="text-red-500 hover:text-red-600 px-2"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {(formData.licenses || []).length === 0 && (
+                <p className="text-sm text-gray-400 italic">No licenses added</p>
+              )}
+            </div>
+
+            {/* IATA */}
+            <div className="mt-6 pt-4 border-t">
+              <label className="flex items-center gap-2 cursor-pointer mb-4">
                 <input
                   type="checkbox"
                   checked={formData.is_iata_accredited || false}
@@ -604,7 +844,7 @@ export default function CompanySettingsPage() {
               </label>
               
               {formData.is_iata_accredited && (
-                <>
+                <div className="space-y-3 pl-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">IATA Code</label>
                     <input
@@ -612,7 +852,7 @@ export default function CompanySettingsPage() {
                       value={formData.iata_code || ""}
                       onChange={(e) => updateField("iata_code", e.target.value)}
                       disabled={readonly}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                       placeholder="e.g., 12345678"
                     />
                   </div>
@@ -622,7 +862,7 @@ export default function CompanySettingsPage() {
                       value={formData.iata_type || ""}
                       onChange={(e) => updateField("iata_type", e.target.value)}
                       disabled={readonly}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Select type</option>
                       {IATA_TYPES.map((type) => (
@@ -636,7 +876,7 @@ export default function CompanySettingsPage() {
                       value={formData.bsp_remittance_frequency || ""}
                       onChange={(e) => updateField("bsp_remittance_frequency", e.target.value)}
                       disabled={readonly}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Select frequency</option>
                       {BSP_FREQUENCIES.map((freq) => (
@@ -644,62 +884,55 @@ export default function CompanySettingsPage() {
                       ))}
                     </select>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Licenses */}
+          {/* Regional Settings */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Licenses & Certifications</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Regional Settings</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tour Operator License</label>
-                <input
-                  type="text"
-                  value={formData.license_number || ""}
-                  onChange={(e) => updateField("license_number", e.target.value)}
+                <label className="block text-sm font-medium text-gray-700 mb-1">City / Timezone</label>
+                <select
+                  value={formData.timezone || "Europe/Riga"}
+                  onChange={(e) => {
+                    const opt = TIMEZONE_OPTIONS.find(o => o.timezone === e.target.value);
+                    updateField("timezone", e.target.value);
+                    if (opt) updateField("city_label", opt.cityLabel);
+                  }}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                />
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  {TIMEZONE_OPTIONS.map((opt) => (
+                    <option key={opt.timezone} value={opt.timezone}>{opt.cityLabel}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">TATO Number (Latvia)</label>
-                <input
-                  type="text"
-                  value={formData.tato_number || ""}
-                  onChange={(e) => updateField("tato_number", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Other Licenses</label>
-                <textarea
-                  value={formData.other_licenses || ""}
-                  onChange={(e) => updateField("other_licenses", e.target.value)}
-                  disabled={readonly}
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Operational Settings */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Operational Settings</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Currency</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
                 <select
                   value={formData.default_currency || "EUR"}
                   onChange={(e) => updateField("default_currency", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   {CURRENCIES.map((cur) => (
                     <option key={cur} value={cur}>{cur}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">System Language</label>
+                <select
+                  value={formData.document_language || "en"}
+                  onChange={(e) => updateField("document_language", e.target.value)}
+                  disabled={readonly}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  {LANGUAGES.map((lang) => (
+                    <option key={lang.value} value={lang.value}>{lang.label}</option>
                   ))}
                 </select>
               </div>
@@ -709,115 +942,78 @@ export default function CompanySettingsPage() {
                   value={formData.date_format || "dd.mm.yyyy"}
                   onChange={(e) => updateField("date_format", e.target.value)}
                   disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   {DATE_FORMATS.map((fmt) => (
                     <option key={fmt.value} value={fmt.value}>{fmt.label}</option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Document Language</label>
-                <select
-                  value={formData.document_language || "en"}
-                  onChange={(e) => updateField("document_language", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                >
-                  {LANGUAGES.map((lang) => (
-                    <option key={lang.value} value={lang.value}>{lang.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Origin City</label>
-                <input
-                  type="text"
-                  value={formData.default_origin_city || ""}
-                  onChange={(e) => updateField("default_origin_city", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                  placeholder="e.g., Riga"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Prefix</label>
-                <input
-                  type="text"
-                  value={formData.invoice_prefix || ""}
-                  onChange={(e) => updateField("invoice_prefix", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                  placeholder="e.g., INV-"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Payment Terms (days)</label>
-                <input
-                  type="number"
-                  value={formData.default_payment_terms || 14}
-                  onChange={(e) => updateField("default_payment_terms", parseInt(e.target.value))}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Commission Rate (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.commission_rate || ""}
-                  onChange={(e) => updateField("commission_rate", parseFloat(e.target.value))}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                  placeholder="e.g., 10.00"
-                />
+              
+              <div className="pt-4 border-t">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.show_order_source || false}
+                    onChange={(e) => updateField("show_order_source", e.target.checked)}
+                    disabled={readonly}
+                    className="h-4 w-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Show Order Source (TA/TO/CORP/NON)</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  For Latvian legislation compliance
+                </p>
               </div>
             </div>
-          </div>
 
-          {/* Regional Settings */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Regional Settings</h2>
-            <div className="space-y-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.show_order_source || false}
-                  onChange={(e) => updateField("show_order_source", e.target.checked)}
-                  disabled={readonly}
-                  className="h-4 w-4 text-blue-600 rounded"
-                />
-                <span className="text-sm font-medium text-gray-700">Show Order Source (TA/TO/CORP/NON)</span>
-              </label>
-              <p className="text-xs text-gray-500">
-                Enable this for Latvian legislation compliance. Shows order classification in order details.
-              </p>
-            </div>
-
-            <h3 className="text-md font-semibold text-gray-900 mt-6 mb-4">Additional</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Working Hours</label>
-                <input
-                  type="text"
-                  value={formData.working_hours || ""}
-                  onChange={(e) => updateField("working_hours", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                  placeholder="e.g., Mon-Fri 9:00-18:00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact (24/7)</label>
-                <input
-                  type="text"
-                  value={formData.emergency_contact || ""}
-                  onChange={(e) => updateField("emergency_contact", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
-                  placeholder="+371..."
-                />
+            {/* Additional */}
+            <div className="mt-6 pt-4 border-t">
+              <h3 className="text-md font-semibold text-gray-900 mb-4">Additional</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Working Hours</label>
+                  <input
+                    type="text"
+                    value={formData.working_hours || ""}
+                    onChange={(e) => updateField("working_hours", e.target.value)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g., Mon-Fri 9:00-18:00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact (24/7)</label>
+                  <input
+                    type="text"
+                    value={formData.emergency_contact || ""}
+                    onChange={(e) => updateField("emergency_contact", e.target.value)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="+371..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Prefix</label>
+                  <input
+                    type="text"
+                    value={formData.invoice_prefix || ""}
+                    onChange={(e) => updateField("invoice_prefix", e.target.value)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g., INV-"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Payment Terms (days)</label>
+                  <input
+                    type="number"
+                    value={formData.default_payment_terms || 14}
+                    onChange={(e) => updateField("default_payment_terms", parseInt(e.target.value))}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
               </div>
             </div>
           </div>
