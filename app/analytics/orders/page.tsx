@@ -469,10 +469,12 @@ export default function OrdersAnalyticsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="bg-gray-50 p-6">
+      <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header */}
-        <h1 className="text-3xl font-bold text-gray-900">Orders Analytics</h1>
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <h1 className="text-2xl font-semibold text-gray-900">Orders Analytics</h1>
+        </div>
 
         {/* Filters */}
         <div className="rounded-lg bg-white p-6 shadow-sm">

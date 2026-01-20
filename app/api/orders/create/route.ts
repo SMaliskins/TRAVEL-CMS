@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
       order_no: orderNo,
       order_year: orderYear,
       order_code: orderCode,
-      order_type: body.orderType,
+      order_source: body.orderType,
       status: body.status || "Active",
     };
 

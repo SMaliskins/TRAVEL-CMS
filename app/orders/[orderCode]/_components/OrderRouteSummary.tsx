@@ -130,39 +130,9 @@ export default function OrderRouteSummary({
   return (
     <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
       <div className="flex items-center gap-4 flex-wrap">
-        {/* Client Name + Selectors */}
+        {/* Client Name */}
         {clientDisplayName && (
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-bold text-gray-900">{clientDisplayName}</span>
-            
-            {/* Order Source (TA/TO/CORP/NON) */}
-            <select
-              value={orderSource || "TA"}
-              onChange={(e) => handleOrderSourceChange(e.target.value)}
-              disabled={isUpdating}
-              className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded border-none outline-none cursor-pointer hover:bg-blue-100 disabled:opacity-50"
-            >
-              {ORDER_SOURCES.map((source) => (
-                <option key={source.value} value={source.value}>
-                  {source.label}
-                </option>
-              ))}
-            </select>
-
-            {/* Order Type (Leisure/Business/Lifestyle) */}
-            <select
-              value={orderType || "leisure"}
-              onChange={(e) => handleOrderTypeChange(e.target.value)}
-              disabled={isUpdating}
-              className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded border-none outline-none cursor-pointer hover:bg-gray-200 disabled:opacity-50"
-            >
-              {ORDER_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <span className="text-lg font-bold text-gray-900">{clientDisplayName}</span>
         )}
 
         {/* Route */}

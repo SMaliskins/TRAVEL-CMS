@@ -139,7 +139,8 @@ export async function PATCH(
       "countries_cities", 
       "date_from", 
       "date_to",
-      "order_type"
+      "order_type",
+      "order_source"
     ];
     
     const updateData: Record<string, unknown> = {
@@ -161,6 +162,7 @@ export async function PATCH(
     }
 
     // Update order
+    console.log("Updating order:", orderCode, "with data:", updateData);
     const { data: order, error } = await supabaseAdmin
       .from("orders")
       .update(updateData)
@@ -170,8 +172,8 @@ export async function PATCH(
       .single();
 
     if (error) {
-      console.error("Order update error:", error);
-      return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
+      console.error("Order update error:", error.message, error.details, error.hint);
+      return NextResponse.json({ error: `Failed to update order: ${error.message}` }, { status: 500 });
     }
 
     if (!order) {

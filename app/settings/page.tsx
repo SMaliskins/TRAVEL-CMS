@@ -122,12 +122,15 @@ export default function SettingsPage() {
   const gmtOffset = getGmtOffsetLabel(prefs.timezone, now);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="mb-6 text-2xl font-bold text-gray-900">Settings</h1>
+    <div className="bg-gray-50 p-6">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+        </div>
 
         {/* Localization Section */}
-        <div className="mb-6 rounded-lg bg-white shadow-sm">
+        <div className="rounded-lg bg-white shadow-sm">
           <div className="border-b border-gray-200 px-6 py-4">
             <h2 className="text-lg font-semibold text-gray-900">
               Localization
@@ -135,7 +138,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="px-6 py-6">
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* City / Timezone */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -150,24 +153,14 @@ export default function SettingsPage() {
                     const offset = getGmtOffsetLabel(opt.timezone, now);
                     return (
                       <option key={opt.timezone} value={opt.timezone}>
-                        {opt.cityLabel} ({opt.timezone}) — {offset}
+                        {opt.cityLabel} — {offset}
                       </option>
                     );
                   })}
                 </select>
                 <p className="mt-1 text-xs text-gray-500">
-                  Used for TopBar time and reminders
+                  {previewTime} ({gmtOffset})
                 </p>
-                
-                {/* Preview */}
-                <div className="mt-3 rounded-md bg-gray-50 px-3 py-2">
-                  <p className="text-sm text-gray-700">
-                    Current time in selected city: <span className="font-medium">{previewTime}</span>
-                  </p>
-                  <p className="mt-1 text-xs text-gray-600">
-                    Offset: <span className="font-medium">{gmtOffset}</span>
-                  </p>
-                </div>
               </div>
 
               {/* Base Currency */}

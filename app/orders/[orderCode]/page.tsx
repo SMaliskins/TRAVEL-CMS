@@ -46,6 +46,29 @@ export default function OrderPage({
   const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
   const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
+  const [showOrderSource, setShowOrderSource] = useState(false);
+
+  // Fetch company settings for conditional Order Source display
+  useEffect(() => {
+    const fetchCompanySettings = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch("/api/company", {
+          headers: {
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setShowOrderSource(data.company?.show_order_source || false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch company settings:", err);
+      }
+    };
+    fetchCompanySettings();
+  }, []);
 
   // Fetch order data
   useEffect(() => {
@@ -141,23 +164,108 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
         {/* A) Order Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Order {orderCode}
-            </h1>
-            <OrderStatusBadge 
-              status={effectiveStatus}
-              onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
-              readonly={effectiveStatus === "Completed" || isSaving}
-            />
+        <div className="mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-bold text-gray-900">
+                Order {orderCode}
+              </h1>
+              <OrderStatusBadge 
+                status={effectiveStatus}
+                onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
+                readonly={effectiveStatus === "Completed" || isSaving}
+              />
+            </div>
           </div>
-          <div className="text-sm text-gray-500">
-            {order?.order_type && (
-              <span className="px-2 py-1 bg-gray-100 rounded text-gray-700">
-                {order.order_type}
-              </span>
+          
+          {/* Order Source & Type Radio Bars */}
+          <div className="mt-3 flex items-center gap-4">
+            {/* Order Source (TA/TO/CORP/NON) - shown only if enabled in Company Settings */}
+            {showOrderSource && (
+              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                {[
+                  { value: "TA", label: "TA" },
+                  { value: "TO", label: "TO" },
+                  { value: "CORP", label: "CORP" },
+                  { value: "NON", label: "NON" },
+                ].map((source) => (
+                  <button
+                    key={source.value}
+                    type="button"
+                    onClick={async () => {
+                      if (!order) return;
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                          },
+                          credentials: "include",
+                          body: JSON.stringify({ order_source: source.value }),
+                        });
+                        if (response.ok) {
+                          setOrder({ ...order, order_source: source.value });
+                        }
+                      } catch (err) {
+                        console.error("Update error:", err);
+                      }
+                    }}
+                    disabled={isSaving}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                      order?.order_source === source.value
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    } disabled:opacity-50`}
+                  >
+                    {source.label}
+                  </button>
+                ))}
+              </div>
             )}
+
+            {/* Order Type (Leisure/Business/Lifestyle) */}
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+              {[
+                { value: "leisure", label: "Leisure" },
+                { value: "business", label: "Business" },
+                { value: "lifestyle", label: "Lifestyle" },
+              ].map((type) => (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={async () => {
+                    if (!order) return;
+                    try {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                        },
+                        credentials: "include",
+                        body: JSON.stringify({ order_type: type.value }),
+                      });
+                      if (response.ok) {
+                        setOrder({ ...order, order_type: type.value });
+                      }
+                    } catch (err) {
+                      console.error("Update error:", err);
+                    }
+                  }}
+                  disabled={isSaving}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    order?.order_type === type.value
+                      ? "bg-gray-700 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  } disabled:opacity-50`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -282,17 +282,19 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-[1600px] space-y-6">
+    <div className="bg-gray-50 p-6">
+      <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header with Period Selector */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-blue-600">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
-                    <PeriodSelector
-            value={period}
-            onChange={handlePeriodChange}
-            startDate={periodStart}
-            endDate={periodEnd}
-          />
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
+            <PeriodSelector
+              value={period}
+              onChange={handlePeriodChange}
+              startDate={periodStart}
+              endDate={periodEnd}
+            />
+          </div>
         </div>
 
         {/* Statistic Cards */}

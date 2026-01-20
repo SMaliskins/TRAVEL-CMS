@@ -20,7 +20,17 @@ const navConfig: NavElement[] = [
   { name: "Orders", href: "/orders", icon: "📋" },
   { name: "Analytics", href: "/analytics/orders", icon: "📈" },
   { name: "Directory", href: "/directory", icon: "📁" },
-  { name: "Settings", href: "/settings", icon: "⚙️" },
+  { 
+    name: "Settings", 
+    href: "/settings", 
+    icon: "⚙️",
+    children: [
+      { name: "General", href: "/settings", icon: "🔧" },
+      { name: "Company", href: "/settings/company", icon: "🏢" },
+      { name: "Users", href: "/settings/users", icon: "👥" },
+      { name: "Profile", href: "/settings/profile", icon: "👤" },
+    ]
+  },
 ];
 
 const modeLabels: Record<SidebarMode, string> = {

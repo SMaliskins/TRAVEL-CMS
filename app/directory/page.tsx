@@ -60,16 +60,22 @@ export default function DirectoryPage() {
   }, [filters]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-7xl px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Directory</h1>
-          <button
-            onClick={() => router.push("/directory/new")}
-            className="rounded-lg bg-blue-600 px-6 py-2 text-white transition-colors hover:bg-blue-700"
-          >
-            New Record
-          </button>
+    <div className="bg-gray-50 p-6">
+      <div className="mx-auto max-w-[1800px] space-y-6">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-semibold text-gray-900">Directory</h1>
+            <button
+              onClick={() => router.push("/directory/new")}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New
+            </button>
+          </div>
         </div>
 
         {loading ? (

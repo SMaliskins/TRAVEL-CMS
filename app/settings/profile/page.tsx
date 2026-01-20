@@ -288,103 +288,105 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-2xl">
-        <h1 className="mb-6 text-2xl font-bold text-gray-900">My Profile</h1>
-
-        {/* Profile Info Card */}
-        <div className="mb-6 rounded-lg bg-white p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            {/* Avatar with upload */}
-            <div className="relative">
-              <div
-                className="flex h-16 w-16 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-gray-200 text-xl font-medium text-gray-700 hover:ring-2 hover:ring-blue-400"
-                onClick={() => fileInputRef.current?.click()}
-                title="Click to change avatar"
-              >
-                {isUploadingAvatar ? (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-                ) : avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt="Avatar"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <>
-                    {firstName?.[0]?.toUpperCase() || ""}
-                    {lastName?.[0]?.toUpperCase() || ""}
-                  </>
-                )}
-              </div>
-              {/* Edit icon overlay */}
-              <div
-                className="absolute bottom-0 right-0 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarUpload}
-                className="hidden"
-              />
-            </div>
-
-            {/* Info */}
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {firstName} {lastName}
-              </h2>
-              <p className="text-sm text-gray-500">{profile.email}</p>
-              <div className="mt-2 flex items-center gap-3">
-                {profile.role && <RoleBadge role={profile.role.name} size="sm" />}
-                {profile.company && (
-                  <span className="text-sm text-gray-500">{profile.company.name}</span>
-                )}
-              </div>
-            </div>
-          </div>
+    <div className="bg-gray-50 p-6">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <h1 className="text-2xl font-semibold text-gray-900">My Profile</h1>
         </div>
 
-        {/* Personal Information Form */}
-        <div className="mb-6 rounded-lg bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-900">Personal Information</h2>
+        {/* 3-column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Column 1: Profile Info Card */}
+          <div className="rounded-lg bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
+            <div className="flex flex-col items-center text-center">
+              {/* Avatar with upload */}
+              <div className="relative mb-4">
+                <div
+                  className="flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-gray-200 text-2xl font-medium text-gray-700 hover:ring-2 hover:ring-blue-400"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Click to change avatar"
+                >
+                  {isUploadingAvatar ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                  ) : avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      {firstName?.[0]?.toUpperCase() || ""}
+                      {lastName?.[0]?.toUpperCase() || ""}
+                    </>
+                  )}
+                </div>
+                {/* Edit icon overlay */}
+                <div
+                  className="absolute bottom-0 right-0 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Info */}
+              <h3 className="text-lg font-semibold text-gray-900">
+                {firstName} {lastName}
+              </h3>
+              <p className="text-sm text-gray-500">{profile.email}</p>
+              <div className="mt-3 flex items-center gap-2">
+                {profile.role && <RoleBadge role={profile.role.name} size="sm" />}
+              </div>
+              {profile.company && (
+                <p className="mt-2 text-sm text-gray-500">{profile.company.name}</p>
+              )}
+            </div>
           </div>
 
-          <form onSubmit={handleSaveProfile} className="p-6">
-            {error && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+          {/* Column 2: Personal Information Form */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Personal Information</h2>
+            </div>
 
-            {profileSuccess && (
-              <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-                Profile updated successfully!
-              </div>
-            )}
+            <form onSubmit={handleSaveProfile} className="p-6">
+              {error && (
+                <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
 
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  disabled
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
-                />
-                <p className="mt-1 text-xs text-gray-400">Email cannot be changed</p>
-              </div>
+              {profileSuccess && (
+                <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                  Profile updated successfully!
+                </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={profile.email}
+                    disabled
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+                  />
+                </div>
+
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     First Name
@@ -396,6 +398,7 @@ export default function ProfilePage() {
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
                   />
                 </div>
+
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Last Name
@@ -407,106 +410,106 @@ export default function ProfilePage() {
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
                   />
                 </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+371 12345678"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+371 12345678"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                />
+              <div className="mt-6">
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingProfile ? "Saving..." : "Save Changes"}
+                </button>
               </div>
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                type="submit"
-                disabled={isSavingProfile}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSavingProfile ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Change Password Form */}
-        <div className="rounded-lg bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
+            </form>
           </div>
 
-          <form onSubmit={handleChangePassword} className="p-6">
-            {passwordError && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                {passwordError}
-              </div>
-            )}
-
-            {passwordSuccess && (
-              <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-                Password changed successfully!
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                />
-                <p className="mt-1 text-xs text-gray-400">Minimum 8 characters</p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                />
-              </div>
+          {/* Column 3: Change Password Form */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
             </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                type="submit"
-                disabled={isSavingPassword || !currentPassword || !newPassword || !confirmPassword}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSavingPassword ? "Changing..." : "Change Password"}
-              </button>
-            </div>
-          </form>
+            <form onSubmit={handleChangePassword} className="p-6">
+              {passwordError && (
+                <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {passwordError}
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                  Password changed successfully!
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Current Password
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">Minimum 8 characters</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="submit"
+                  disabled={isSavingPassword || !currentPassword || !newPassword || !confirmPassword}
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingPassword ? "Changing..." : "Change Password"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>

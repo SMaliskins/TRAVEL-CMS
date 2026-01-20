@@ -107,7 +107,7 @@ export default function OrderClientSection({
   clientEmail,
   amountTotal = 0,
   amountPaid = 0,
-  orderType = "leisure",
+  orderType,
   onUpdate,
 }: OrderClientSectionProps) {
   const [isSaving, setIsSaving] = useState(false);
