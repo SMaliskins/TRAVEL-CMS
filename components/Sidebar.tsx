@@ -142,14 +142,14 @@ export default function Sidebar() {
     }
   }, [isCollapsed, directoryPopoverOpen]);
 
-  // Helper function to check if Directory should be active
-  const isDirectoryActive = (item: NavItem): boolean => {
+  // Helper function to check if item with children should be active
+  const isParentActive = (item: NavItem): boolean => {
     if (item.children) {
-      return (
-        pathname?.startsWith("/clients") || pathname?.startsWith("/partners")
+      return item.children.some(
+        child => pathname === child.href || pathname?.startsWith(child.href + "/")
       );
     }
-    return false;
+    return pathname === item.href || pathname?.startsWith(item.href + "/");
   };
 
   // Helper function to render navigation items
@@ -158,7 +158,7 @@ export default function Sidebar() {
     return navConfig.map((item, idx) => {
       const hasChildren = item.children && item.children.length > 0;
       const isActive = hasChildren
-        ? isDirectoryActive(item)
+        ? isParentActive(item)
         : pathname === item.href || pathname?.startsWith(item.href + "/");
 
       // Render item with children (Directory)
