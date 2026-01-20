@@ -198,6 +198,7 @@ export default function TopBar() {
                   >
                     My Profile
                   </a>
+                  <div className="border-t border-gray-100 my-1" />
                   <a
                     href="/settings"
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -206,16 +207,24 @@ export default function TopBar() {
                     Settings
                   </a>
                   <a
+                    href="/settings/company"
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setIsDropdownOpen(false)}
+                  >
+                    Company
+                  </a>
+                  <a
                     href="/settings/users"
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => setIsDropdownOpen(false)}
                   >
                     User Management
                   </a>
+                  <div className="border-t border-gray-100 my-1" />
                   <button
                     type="button"
                     disabled={isLoggingOut}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100 disabled:opacity-50"
                     onClick={handleLogout}
                   >
                     {isLoggingOut ? "Logging out..." : "Logout"}
