@@ -93,7 +93,7 @@ export default function TopBar() {
   }, [isDropdownOpen]);
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-gray-200 bg-white">
+    <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 bg-white">
       <div className="flex h-full items-center gap-4 px-4">
         {/* Left side - Company Logo */}
         <div className="flex-shrink-0">
@@ -101,7 +101,7 @@ export default function TopBar() {
             <img 
               src={companyLogo} 
               alt="Company Logo" 
-              className="h-8 max-w-[120px] object-contain"
+              className="h-10 max-w-[140px] object-contain"
             />
           )}
         </div>
