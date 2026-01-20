@@ -1,9 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useFontScale } from "@/hooks/useFontScale";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useClock } from "@/hooks/useClock";
 import { getGmtOffsetLabel } from "@/utils/timezone";
+
+const SETTINGS_SECTIONS = [
+  { name: "Company", href: "/settings/company", icon: "🏢", description: "Company profile, licenses, banking" },
+  { name: "Users", href: "/settings/users", icon: "👥", description: "User management and roles" },
+  { name: "Profile", href: "/settings/profile", icon: "👤", description: "Your personal settings" },
+];
 
 // City/Timezone options
 const TIMEZONE_OPTIONS = [
@@ -127,6 +134,23 @@ export default function SettingsPage() {
         {/* Header */}
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
           <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+        </div>
+
+        {/* Settings Navigation */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {SETTINGS_SECTIONS.map((section) => (
+            <Link
+              key={section.href}
+              href={section.href}
+              className="flex items-center gap-4 rounded-lg bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <span className="text-2xl">{section.icon}</span>
+              <div>
+                <h3 className="font-medium text-gray-900">{section.name}</h3>
+                <p className="text-sm text-gray-500">{section.description}</p>
+              </div>
+            </Link>
+          ))}
         </div>
 
         {/* Localization Section */}

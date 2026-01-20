@@ -161,22 +161,15 @@ export default function Sidebar() {
         ? isParentActive(item)
         : pathname === item.href || pathname?.startsWith(item.href + "/");
 
-      // Render item with children (Directory)
+      // Render item with children
       if (hasChildren && item.children) {
         if (showTooltip) {
-          // Collapsed mode: show only icon, popover on click
+          // Collapsed mode: show only icon, navigate to parent page on click
           return (
             <li key={item.href} className="relative">
-              <button
-                ref={directoryButtonRef}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (directoryButtonRef.current) {
-                    const rect = directoryButtonRef.current.getBoundingClientRect();
-                    setDirectoryPopoverPosition({ top: rect.top });
-                    setDirectoryPopoverOpen(true);
-                  }
-                }}
+              <Link
+                href={item.href}
+                onClick={onItemClick}
                 className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-gray-900/10 text-gray-900"
@@ -186,50 +179,12 @@ export default function Sidebar() {
                 onMouseLeave={() => setHoveredItem(null)}
               >
                 <span className="text-lg leading-none">{item.icon}</span>
-              </button>
+              </Link>
               {/* Tooltip */}
-              {hoveredItem === item.href && !directoryPopoverOpen && (
+              {hoveredItem === item.href && (
                 <div className="absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white whitespace-nowrap shadow-lg">
                   {item.name}
                   <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
-                </div>
-              )}
-              {/* Directory Popover (collapsed mode) */}
-              {directoryPopoverOpen && directoryPopoverPosition && (
-                <div
-                  ref={directoryPopoverRef}
-                  className="fixed z-50 rounded-lg border border-gray-200 bg-white shadow-xl"
-                  style={{
-                    left: "72px",
-                    top: `${directoryPopoverPosition.top}px`,
-                    minWidth: "180px",
-                  }}
-                >
-                  <div className="py-1">
-                    {item.children.map((child) => {
-                      const childActive =
-                        pathname === child.href ||
-                        pathname?.startsWith(child.href + "/");
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          onClick={() => {
-                            setDirectoryPopoverOpen(false);
-                            onItemClick?.();
-                          }}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors ${
-                            childActive
-                              ? "bg-gray-900/10 text-gray-900"
-                              : "text-gray-700 hover:bg-gray-900/5"
-                          }`}
-                        >
-                          <span className="text-base">{child.icon}</span>
-                          <span>{child.name}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
                 </div>
               )}
             </li>
