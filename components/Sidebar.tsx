@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
-import { supabase } from "@/lib/supabaseClient";
 
 interface NavItem {
   name: string;
@@ -51,7 +50,6 @@ export default function Sidebar() {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [directoryPopoverOpen, setDirectoryPopoverOpen] = useState(false);
   const [directoryPopoverPosition, setDirectoryPopoverPosition] = useState<{ top: number } | null>(null);
-  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const directoryButtonRef = useRef<HTMLButtonElement>(null);
@@ -66,33 +64,6 @@ export default function Sidebar() {
     checkScreenSize();
     window.addEventListener("resize", checkScreenSize);
     return () => window.removeEventListener("resize", checkScreenSize);
-  }, []);
-
-  // Fetch company logo
-  useEffect(() => {
-    const fetchCompanyLogo = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch("/api/company", { 
-          headers: {
-            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-          },
-          credentials: "include" 
-        });
-        if (response.ok) {
-          const data = await response.json();
-          console.log("Company data for logo:", data);
-          if (data.company?.logo_url) {
-            setCompanyLogo(data.company.logo_url);
-          }
-        } else {
-          console.log("Failed to fetch company:", response.status);
-        }
-      } catch (err) {
-        console.error("Failed to fetch company logo:", err);
-      }
-    };
-    fetchCompanyLogo();
   }, []);
 
   // Close popover on click outside or Escape
@@ -317,11 +288,7 @@ export default function Sidebar() {
             <aside className="fixed left-0 top-0 z-50 h-screen w-64 border-r border-gray-200 bg-white lg:hidden">
               <div className="flex h-full flex-col">
                 <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4">
-                  {companyLogo ? (
-                    <img src={companyLogo} alt="Logo" className="h-8 object-contain" />
-                  ) : (
-                    <div className="font-semibold text-gray-900">Travel CMS</div>
-                  )}
+                  <div className="font-semibold text-gray-900">Travel CMS</div>
                   <button
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-gray-100"
@@ -363,17 +330,9 @@ export default function Sidebar() {
         onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex h-full flex-col">
-          {/* Header with Company Logo */}
+          {/* Header */}
           <div className="flex h-14 items-center border-b border-gray-200 px-3">
-            {companyLogo ? (
-              <div className="flex w-full items-center justify-center">
-                <img 
-                  src={companyLogo} 
-                  alt="Company Logo" 
-                  className={`object-contain ${isExpanded ? "h-10 max-w-[140px]" : "h-8 w-8"}`}
-                />
-              </div>
-            ) : isExpanded ? (
+            {isExpanded ? (
               <div className="flex w-full items-center justify-between">
                 <div className="font-semibold text-gray-900 whitespace-nowrap">
                   Travel CMS
@@ -489,16 +448,12 @@ export default function Sidebar() {
           onMouseLeave={() => setIsHovered(false)}
         >
           <div className="flex h-full flex-col">
-            {/* Header with Company Logo */}
+            {/* Header */}
             <div className="flex h-14 items-center border-b border-gray-200 px-3">
-              <div className="flex w-full items-center justify-center">
-                {companyLogo ? (
-                  <img src={companyLogo} alt="Logo" className="h-10 max-w-[140px] object-contain" />
-                ) : (
-                  <div className="font-semibold text-gray-900 whitespace-nowrap">
-                    Travel CMS
-                  </div>
-                )}
+              <div className="flex w-full items-center justify-between">
+                <div className="font-semibold text-gray-900 whitespace-nowrap">
+                  Travel CMS
+                </div>
               </div>
             </div>
 

@@ -19,6 +19,31 @@ export default function TopBar() {
   const { prefs, isMounted: prefsMounted } = useUserPreferences();
   const now = useClock();
   const { profile } = useUser();
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+
+  // Fetch company logo
+  useEffect(() => {
+    const fetchCompanyLogo = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch("/api/company", { 
+          headers: {
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include" 
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.company?.logo_url) {
+            setCompanyLogo(data.company.logo_url);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch company logo:", err);
+      }
+    };
+    fetchCompanyLogo();
+  }, []);
 
   // Get initials from name
   const getInitials = () => {
@@ -70,8 +95,16 @@ export default function TopBar() {
   return (
     <div className="fixed top-0 left-0 right-0 z-40 h-14 border-b border-gray-200 bg-white">
       <div className="flex h-full items-center gap-4 px-4">
-        {/* Left side - empty for now, could add logo or navigation */}
-        <div className="flex-shrink-0" style={{ width: "0px", minWidth: "0px" }} />
+        {/* Left side - Company Logo */}
+        <div className="flex-shrink-0">
+          {companyLogo && (
+            <img 
+              src={companyLogo} 
+              alt="Company Logo" 
+              className="h-8 max-w-[120px] object-contain"
+            />
+          )}
+        </div>
         
         {/* Center - Progress widget */}
         <div className="flex flex-1 items-center justify-center">
