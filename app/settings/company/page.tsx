@@ -164,7 +164,7 @@ export default function CompanySettingsPage() {
       console.log("API /api/users/me response:", responseData);
 
       if (response.ok) {
-        setIsSupervisor(responseData.role === "Supervisor");
+        setIsSupervisor(responseData.role?.toLowerCase() === "supervisor");
       } else {
         // Fallback: try direct query
         const { data: { user } } = await supabase.auth.getUser();
