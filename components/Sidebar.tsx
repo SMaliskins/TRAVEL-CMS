@@ -322,29 +322,14 @@ export default function Sidebar() {
   // Desktop: sidebar with 3 modes
   return (
     <>
-      {/* Base sidebar - always fixed */}
+      {/* Base sidebar - always fixed, below TopBar */}
       <aside
-        className="fixed left-0 top-0 h-screen border-r border-gray-200 bg-white transition-all duration-200 ease-in-out"
+        className="fixed left-0 top-16 h-[calc(100vh-4rem)] border-r border-gray-200 bg-white transition-all duration-200 ease-in-out"
         style={{ width: `${baseSidebarWidth}px` }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex h-full flex-col">
-          {/* Header */}
-          <div className="flex h-14 items-center border-b border-gray-200 px-3">
-            {isExpanded ? (
-              <div className="flex w-full items-center justify-between">
-                <div className="font-semibold text-gray-900 whitespace-nowrap">
-                  Travel CMS
-                </div>
-              </div>
-            ) : (
-              <div className="flex w-full items-center justify-center">
-                <span className="text-lg font-bold text-gray-900">T</span>
-              </div>
-            )}
-          </div>
-
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto px-2 py-1">
             <ul className="space-y-0.5">
@@ -442,21 +427,12 @@ export default function Sidebar() {
       {/* Expanded overlay for hover mode */}
       {overlayEnabled && (
         <aside
-          className="fixed left-0 top-0 z-50 h-screen border-r border-gray-200 bg-white shadow-xl transition-all duration-200 ease-in-out"
+          className="fixed left-0 top-16 z-50 h-[calc(100vh-4rem)] border-r border-gray-200 bg-white shadow-xl transition-all duration-200 ease-in-out"
           style={{ width: `${expandedWidth}px` }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           <div className="flex h-full flex-col">
-            {/* Header */}
-            <div className="flex h-14 items-center border-b border-gray-200 px-3">
-              <div className="flex w-full items-center justify-between">
-                <div className="font-semibold text-gray-900 whitespace-nowrap">
-                  Travel CMS
-                </div>
-              </div>
-            </div>
-
             {/* Navigation - expanded view */}
             <nav className="flex-1 overflow-y-auto px-2 py-1">
               <ul className="space-y-0.5">
