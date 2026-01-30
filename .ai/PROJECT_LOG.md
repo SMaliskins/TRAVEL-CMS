@@ -5,6 +5,42 @@
 
 ---
 
+## [2026-01-30] Add Service — Package Tour layout = Edit Service ✅
+
+**Task:** PKG-TOUR-ADD-LAYOUT | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- Add Service для Package Tour: layout как в Edit Service
+- Booking Terms перенесён внутрь Column 3 (Pricing → References → Booking Terms)
+- Refund Policy скрыт для Tour (только Price Type)
+- Cancellation/Refund details скрыты для Tour
+- 2x2 grid: Deposit Due + Deposit %, Final Due + Final %
+- Стиль: bg-gray-50, border-gray-300 (как Edit Service)
+
+**Результат:** Add Service и Edit Service — одинаковый layout для Package Tour.
+
+**Файл:** `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+
+---
+
+## [2026-01-30] CODE WRITER — Avatar modal Edit/Delete UX ✅
+
+**Task:** DIR-AVATAR-MODAL | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟢 Micro
+
+**Действия:**
+- Модальное окно аватара: кнопки Change photo и Delete в панели под фото
+- Подтверждение удаления (Delete this photo? Cancel/Delete)
+- Убран дублирующий hover-оверлей с кнопками
+- Закрытие по Escape, клику по фону; блокировка скролла
+
+**Результат:** Выполнено и принято. Одна панель действий, без дублирования.
+
+**Файл:** `components/AvatarUpload.tsx`
+
+---
+
 ## [2026-01-27] CODE WRITER — Package Tour logic in AddServiceModal ✅
 
 **Task:** PKG-TOUR-ADD | **Status:** SUCCESS

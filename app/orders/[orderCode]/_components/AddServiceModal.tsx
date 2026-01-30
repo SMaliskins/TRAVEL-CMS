@@ -233,6 +233,8 @@ export default function AddServiceModal({
   // Payment deadline fields
   const [paymentDeadlineDeposit, setPaymentDeadlineDeposit] = useState<string>("");
   const [paymentDeadlineFinal, setPaymentDeadlineFinal] = useState<string>("");
+  const [depositPercent, setDepositPercent] = useState<string>("");
+  const [finalPercent, setFinalPercent] = useState<string>("");
   const [paymentTerms, setPaymentTerms] = useState<string>("");
 
   // Terms & Conditions fields
@@ -740,7 +742,7 @@ export default function AddServiceModal({
   };
 
   // Tour (Package Tour) AI parsing - apply parsed data to form
-  const applyParsedTourData = useCallback((p: Record<string, unknown>) => {
+  const applyParsedTourData = useCallback(async (p: Record<string, unknown>) => {
     const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" => {
       const p2 = (plan || "").toUpperCase();
       if (p2 === "RO" || p2 === "ROOM ONLY") return "room_only";
@@ -832,16 +834,64 @@ export default function AddServiceModal({
       const pt = p.paymentTerms as Record<string, unknown>;
       if (pt.depositDueDate) { setPaymentDeadlineDeposit(String(pt.depositDueDate)); fields.add("paymentDeadlineDeposit"); }
       if (pt.finalDueDate) { setPaymentDeadlineFinal(String(pt.finalDueDate)); fields.add("paymentDeadlineFinal"); }
-      if (pt.depositPercent != null && pt.finalPercent != null) {
-        setPaymentTerms(`${pt.depositPercent}% deposit, ${pt.finalPercent}% final`);
-        fields.add("paymentTerms");
-      }
+      if (pt.depositPercent != null) { setDepositPercent(String(pt.depositPercent)); fields.add("depositPercent"); }
+      if (pt.finalPercent != null) { setFinalPercent(String(pt.finalPercent)); fields.add("finalPercent"); }
+      setPaymentTerms(`${pt.depositPercent ?? 0}% deposit, ${pt.finalPercent ?? 100}% final`);
     }
     if (p.operator && typeof p.operator === "object" && (p.operator as Record<string, unknown>).name) {
       setSupplierName(String((p.operator as Record<string, unknown>).name));
       fields.add("supplierName");
     }
     if (p.bookingRef) { setRefNr(String(p.bookingRef)); fields.add("refNr"); }
+    // Travellers: find-or-create and add to clients (same as EditServiceModalNew)
+    if (Array.isArray(p.travellers) && p.travellers.length > 0) {
+      const travellers = p.travellers
+        .map((t: unknown) => {
+          if (t && typeof t === "object" && "name" in t) {
+            const obj = t as { name?: string; firstName?: string; lastName?: string };
+            const name = String(obj.name || "").trim();
+            if (!name) return null;
+            return {
+              name,
+              firstName: obj.firstName?.trim(),
+              lastName: obj.lastName?.trim(),
+            };
+          }
+          return null;
+        })
+        .filter((x) => x !== null) as { name: string; firstName?: string; lastName?: string }[];
+      if (travellers.length > 0) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch("/api/parties/find-or-create-travellers", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ travellers }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const parties = data.parties || [];
+            const clientEntries = parties.map((r: { name: string; id: string; displayName: string }) => ({
+              id: r.id,
+              name: r.displayName || r.name,
+            }));
+            if (clientEntries.length > 0) {
+              setClients(clientEntries);
+              if (clientEntries.length === 1) {
+                setPayerPartyId(clientEntries[0].id);
+                setPayerName(clientEntries[0].name);
+              }
+              fields.add("clients");
+            }
+          }
+        } catch (err) {
+          console.error("Find-or-create travellers error:", err);
+        }
+      }
+    }
     setParsedFields(fields);
   }, []);
 
@@ -987,7 +1037,9 @@ export default function AddServiceModal({
       if (paymentDeadlineFinal) {
         payload.paymentDeadlineFinal = paymentDeadlineFinal;
       }
-      if (paymentTerms.trim()) {
+      if (categoryType === "tour" && (depositPercent || finalPercent)) {
+        payload.paymentTerms = `${depositPercent || 0}% deposit, ${finalPercent || 100}% final`;
+      } else if (paymentTerms.trim()) {
         payload.paymentTerms = paymentTerms.trim();
       }
 
@@ -1588,8 +1640,8 @@ export default function AddServiceModal({
               </div>
             </div>
 
-            {/* Column 3: Pricing & Refs */}
-            <div className="space-y-3">
+            {/* Column 3: Pricing, Refs, Booking Terms (same layout as Edit Service) */}
+            <div className="space-y-2">
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Pricing</h4>
 
@@ -1863,91 +1915,88 @@ export default function AddServiceModal({
                   </div>
                 )}
               </div>
-              
-            </div>
 
-            {/* Booking Terms - Combined section (hidden for Flight) */}
-            {categoryType !== "flight" && (
-            <div className="p-3 bg-amber-50 rounded-lg space-y-2 border border-amber-200">
-              <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Booking Terms</h4>
-              
-              <div className="grid grid-cols-2 gap-2">
-                {/* Price Type - only for Tour */}
-                {categoryType === "tour" && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Price Type</label>
-                    <select
-                      value={priceType}
-                      onChange={(e) => setPriceType(e.target.value as "ebd" | "regular" | "spo")}
-                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                    >
-                      <option value="regular">Regular</option>
-                      <option value="ebd">Early Booking (EBD)</option>
-                      <option value="spo">Special Offer (SPO)</option>
-                    </select>
+              {/* Booking Terms (hidden for Flight) - inside Column 3, same as Edit Service */}
+              {categoryType !== "flight" && (
+              <div className="p-3 bg-gray-50 rounded-lg space-y-2">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Booking Terms</h4>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Price Type - only for Tour */}
+                  {categoryType === "tour" && (
+                    <div className="sm:col-span-2 min-w-0">
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Price Type</label>
+                      <select
+                        value={priceType}
+                        onChange={(e) => setPriceType(e.target.value as "ebd" | "regular" | "spo")}
+                        className="w-full min-w-[10rem] rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="regular">Regular</option>
+                        <option value="ebd">Early Booking (EBD)</option>
+                        <option value="spo">Special Offer (SPO)</option>
+                      </select>
+                    </div>
+                  )}
+                  
+                  {/* Refund Policy - hidden for Tour */}
+                  {categoryType !== "tour" && (
+                    <div className={categoryType === "flight" ? "" : "col-span-2"}>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
+                      <select
+                        value={refundPolicy}
+                        onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="non_ref">Non-refundable</option>
+                        <option value="refundable">Refundable (with conditions)</option>
+                        <option value="fully_ref">Fully Refundable</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Cancellation/Refund details - hidden for Tour */}
+                {categoryType !== "tour" && refundPolicy === "refundable" && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
+                      <input
+                        type="date"
+                        value={freeCancellationUntil}
+                        onChange={(e) => setFreeCancellationUntil(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty EUR</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={cancellationPenaltyAmount}
+                        onChange={(e) => setCancellationPenaltyAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={cancellationPenaltyPercent}
+                        onChange={(e) => setCancellationPenaltyPercent(e.target.value)}
+                        placeholder="0"
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      />
+                    </div>
                   </div>
                 )}
                 
-                {/* Refund Policy */}
-                <div className={categoryType === "tour" ? "" : "col-span-2"}>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
-                  <select
-                    value={refundPolicy}
-                    onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  >
-                    <option value="non_ref">Non-refundable</option>
-                    <option value="refundable">Refundable (with conditions)</option>
-                    <option value="fully_ref">Fully Refundable</option>
-                  </select>
-                </div>
-              </div>
-              
-              {/* Cancellation/Refund details - refundable (not fully_ref) */}
-              {refundPolicy === "refundable" && (
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
-                    <input
-                      type="date"
-                      value={freeCancellationUntil}
-                      onChange={(e) => setFreeCancellationUntil(e.target.value)}
-                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty EUR</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={cancellationPenaltyAmount}
-                      onChange={(e) => setCancellationPenaltyAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={cancellationPenaltyPercent}
-                      onChange={(e) => setCancellationPenaltyPercent(e.target.value)}
-                      placeholder="0"
-                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                    />
-                  </div>
-                </div>
-              )}
-              
-              {/* Payment Deadlines - Tour or Other */}
-              {(
-              <div className="border-t border-amber-200 pt-2 mt-2">
-                {categoryType === "tour" ? (
-                  // Tour: deposit + final payment — min-width so date picker & calendar icon are visible
-                  <div className="space-y-2">
+                {/* Payment Deadlines - Tour (2x2) or Other */}
+                <div className="border-t border-gray-200 pt-2 mt-2">
+                  {categoryType === "tour" ? (
                     <div className="grid grid-cols-2 gap-3">
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit Due</label>
@@ -1955,7 +2004,19 @@ export default function AddServiceModal({
                           type="date"
                           value={paymentDeadlineDeposit}
                           onChange={(e) => setPaymentDeadlineDeposit(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"}`}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={depositPercent}
+                          onChange={(e) => setDepositPercent(e.target.value)}
+                          placeholder="10"
+                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -1964,37 +2025,37 @@ export default function AddServiceModal({
                           type="date"
                           value={paymentDeadlineFinal}
                           onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"}`}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Final %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={finalPercent}
+                          onChange={(e) => setFinalPercent(e.target.value)}
+                          placeholder="90"
+                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                     </div>
+                  ) : (
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Terms</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
                       <input
-                        type="text"
-                        value={paymentTerms}
-                        onChange={(e) => setPaymentTerms(e.target.value)}
-                        placeholder="e.g., 30% deposit, 70% 14 days before"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("paymentTerms") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"}`}
+                        type="date"
+                        value={paymentDeadlineFinal}
+                        onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
                       />
                     </div>
-                  </div>
-                ) : (
-                  // Other categories: single deadline
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                    <input
-                      type="date"
-                      value={paymentDeadlineFinal}
-                      onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                    />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               )}
             </div>
-            )}
           </div>
 
           {/* Flight Schedule - show parsed segments (Flight or Tour) */}
