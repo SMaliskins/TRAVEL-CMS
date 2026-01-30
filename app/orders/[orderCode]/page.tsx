@@ -1,14 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock from "./_components/OrderServicesBlock";
-import OrderClientSection from "./_components/OrderClientSection";
-import OrderRouteSummary from "./_components/OrderRouteSummary";
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
+import PartySelect from "@/components/PartySelect";
+import DateRangePicker from "@/components/DateRangePicker";
+import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
+import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -30,6 +34,10 @@ interface OrderData {
   profit_estimated: number;
   client_phone?: string | null;
   client_email?: string | null;
+  // Agent and creation info
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  created_at?: string | null;
 }
 
 export default function OrderPage({
@@ -37,6 +45,7 @@ export default function OrderPage({
 }: {
   params: Promise<{ orderCode: string }>;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("client");
   const [orderCode, setOrderCode] = useState<string>("");
   const [order, setOrder] = useState<OrderData | null>(null);
@@ -45,8 +54,280 @@ export default function OrderPage({
   const [isSaving, setIsSaving] = useState(false);
   const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
   const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
+  const [invoiceServicesByPayer, setInvoiceServicesByPayer] = useState<Map<string, any[]>>(new Map());
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+  const [editingHeaderField, setEditingHeaderField] = useState<"client" | "itinerary" | "dates" | null>(null);
+  
+  // Inline edit states
+  const [editClientId, setEditClientId] = useState<string | null>(null);
+  const [editClientName, setEditClientName] = useState<string>("");
+  const [editDateFrom, setEditDateFrom] = useState<string>("");
+  const [editDateTo, setEditDateTo] = useState<string>("");
+  const [editOrigin, setEditOrigin] = useState<CityWithCountry | null>(null);
+  const [editDestinations, setEditDestinations] = useState<CityWithCountry[]>([]);
+  const [editReturnToOrigin, setEditReturnToOrigin] = useState(true);
+  const [editReturnCity, setEditReturnCity] = useState<CityWithCountry | null>(null);
+  const [isSavingField, setIsSavingField] = useState(false);
+  const [draggedDestIdx, setDraggedDestIdx] = useState<number | null>(null);
+  
+  // Track Ctrl key for Ctrl+click navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Control" || e.key === "Meta") setIsCtrlPressed(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Control" || e.key === "Meta") setIsCtrlPressed(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+  
+  // Parse itinerary from countries_cities
+  const parsedItinerary = useMemo(() => {
+    if (!order?.countries_cities) return { origin: null, destinations: [], returnCity: null, daysNights: null, daysUntil: null };
+    
+    const countriesCities = order.countries_cities;
+    let originCity: { name: string; countryCode?: string } | null = null;
+    let destinations: { name: string; countryCode?: string }[] = [];
+    let returnCity: { name: string; countryCode?: string } | null = null;
+    
+    // Check for new format with origin:/return:
+    if (countriesCities.includes("origin:") || countriesCities.includes("|")) {
+      const parts = countriesCities.split("|");
+      for (const part of parts) {
+        if (part.startsWith("origin:")) {
+          const cityStr = part.replace("origin:", "").trim();
+          const cityName = cityStr.split(",")[0]?.trim() || "";
+          const cityData = getCityByName(cityName);
+          originCity = cityData || (cityName ? { name: cityName } : null);
+        } else if (part.startsWith("return:")) {
+          const cityStr = part.replace("return:", "").trim();
+          const cityName = cityStr.split(",")[0]?.trim() || "";
+          if (cityName) {
+            const cityData = getCityByName(cityName);
+            returnCity = cityData || { name: cityName };
+          }
+        } else if (part.trim()) {
+          // Destinations
+          destinations = part.split(";").map(item => {
+            const cityName = item.trim().split(",")[0]?.trim() || "";
+            const cityData = getCityByName(cityName);
+            return cityData || (cityName ? { name: cityName } : null);
+          }).filter(Boolean) as { name: string; countryCode?: string }[];
+        }
+      }
+    } else {
+      // Legacy format
+      const cities = countriesCities.split(",").map((c) => c.trim());
+      originCity = cities.length > 0 ? getCityByName(cities[0]) || { name: cities[0] } : null;
+      destinations = cities.slice(1).map((c) => getCityByName(c) || { name: c });
+    }
+    
+    // Calculate days/nights
+    let daysNights = null;
+    let daysUntil = null;
+    if (order.date_from && order.date_to) {
+      const days = Math.ceil((new Date(order.date_to).getTime() - new Date(order.date_from).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const nights = Math.max(0, days - 1);
+      daysNights = `${days} ${days === 1 ? 'day' : 'days'} / ${nights} ${nights === 1 ? 'night' : 'nights'}`;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tripDate = new Date(order.date_from);
+      tripDate.setHours(0, 0, 0, 0);
+      daysUntil = Math.ceil((tripDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    }
+    
+    return { origin: originCity, destinations, returnCity, daysNights, daysUntil };
+  }, [order?.countries_cities, order?.date_from, order?.date_to]);
+
+  // Build destinations array for map (origin + destinations + returnCity if different)
+  const itineraryDestinations: CityWithCountry[] = useMemo(() => {
+    const result: CityWithCountry[] = [];
+    if (parsedItinerary.origin) {
+      const cityData = getCityByName(parsedItinerary.origin.name);
+      result.push({
+        city: parsedItinerary.origin.name,
+        country: cityData?.country || "",
+        countryCode: parsedItinerary.origin.countryCode || cityData?.countryCode,
+        lat: cityData?.lat,
+        lng: cityData?.lng,
+      });
+    }
+    for (const dest of parsedItinerary.destinations) {
+      const cityData = getCityByName(dest.name);
+      result.push({
+        city: dest.name,
+        country: cityData?.country || "",
+        countryCode: dest.countryCode || cityData?.countryCode,
+        lat: cityData?.lat,
+        lng: cityData?.lng,
+      });
+    }
+    // Add return city for map - even when same as origin (round trip: Tallinn→Nice→Tallinn)
+    if (parsedItinerary.returnCity) {
+      const cityData = getCityByName(parsedItinerary.returnCity.name);
+      result.push({
+        city: parsedItinerary.returnCity.name,
+        country: cityData?.country || "",
+        countryCode: parsedItinerary.returnCity.countryCode || cityData?.countryCode,
+        lat: cityData?.lat,
+        lng: cityData?.lng,
+      });
+    }
+    return result;
+  }, [parsedItinerary]);
+
+  // Initialize edit states when starting to edit
+  const startEditingClient = useCallback(() => {
+    setEditClientId(order?.client_party_id || null);
+    setEditClientName(order?.client_display_name || "");
+    setEditingHeaderField("client");
+  }, [order?.client_party_id, order?.client_display_name]);
+
+  const startEditingDates = useCallback(() => {
+    setEditDateFrom(order?.date_from || "");
+    setEditDateTo(order?.date_to || "");
+    setEditingHeaderField("dates");
+  }, [order?.date_from, order?.date_to]);
+
+  const startEditingItinerary = useCallback(() => {
+    // Parse current itinerary to CityWithCountry format
+    let originCity: CityWithCountry | null = null;
+    if (parsedItinerary.origin) {
+      const cityData = getCityByName(parsedItinerary.origin.name);
+      originCity = cityData ? {
+        city: cityData.name,
+        country: cityData.country || "",
+        countryCode: cityData.countryCode,
+        lat: cityData.lat,
+        lng: cityData.lng,
+      } : { city: parsedItinerary.origin.name, country: "" };
+      setEditOrigin(originCity);
+    } else {
+      setEditOrigin(null);
+    }
+    setEditDestinations(parsedItinerary.destinations.map(d => {
+      const cityData = getCityByName(d.name);
+      return cityData ? {
+        city: cityData.name,
+        country: cityData.country || "",
+        countryCode: cityData.countryCode,
+        lat: cityData.lat,
+        lng: cityData.lng,
+      } : { city: d.name, country: "" };
+    }));
+    // Default to return to origin
+    setEditReturnToOrigin(true);
+    setEditReturnCity(null);
+    setEditingHeaderField("itinerary");
+  }, [parsedItinerary.origin, parsedItinerary.destinations]);
+
+  // Save functions
+  const saveClient = async (partyId: string, displayName: string) => {
+    if (!order) return;
+    setIsSavingField(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          client_party_id: partyId || null,
+          client_display_name: displayName || null,
+        }),
+      });
+      if (response.ok) {
+        setOrder({ ...order, client_party_id: partyId || null, client_display_name: displayName || null });
+        setEditingHeaderField(null);
+      }
+    } catch (err) {
+      console.error("Error saving client:", err);
+    } finally {
+      setIsSavingField(false);
+    }
+  };
+
+  const saveDates = async () => {
+    if (!order) return;
+    setIsSavingField(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          date_from: editDateFrom || null,
+          date_to: editDateTo || null,
+        }),
+      });
+      if (response.ok) {
+        setOrder({ ...order, date_from: editDateFrom, date_to: editDateTo });
+        setEditingHeaderField(null);
+      }
+    } catch (err) {
+      console.error("Error saving dates:", err);
+    } finally {
+      setIsSavingField(false);
+    }
+  };
+
+  const saveItinerary = async () => {
+    if (!order) return;
+    setIsSavingField(true);
+    try {
+      let formattedCities = "";
+      if (editOrigin) {
+        formattedCities = `origin:${editOrigin.city}, ${editOrigin.country}|`;
+      }
+      const uniqueDests = editDestinations.filter((city, idx, arr) => 
+        arr.findIndex(c => c.city.toLowerCase() === city.city.toLowerCase()) === idx
+      );
+      if (uniqueDests.length > 0) {
+        formattedCities += uniqueDests.map(c => `${c.city}, ${c.country}`).join("; ");
+      }
+      // Return city
+      let returnCityStr = "";
+      if (editReturnToOrigin && editOrigin) {
+        returnCityStr = `${editOrigin.city}, ${editOrigin.country}`;
+      } else if (!editReturnToOrigin && editReturnCity) {
+        returnCityStr = `${editReturnCity.city}, ${editReturnCity.country}`;
+      }
+      formattedCities += "|return:" + returnCityStr;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          countries_cities: formattedCities || null,
+        }),
+      });
+      if (response.ok) {
+        setOrder({ ...order, countries_cities: formattedCities });
+        setEditingHeaderField(null);
+      }
+    } catch (err) {
+      console.error("Error saving itinerary:", err);
+    } finally {
+      setIsSavingField(false);
+    }
+  };
 
   // Fetch company settings for conditional Order Source display
   useEffect(() => {
@@ -163,37 +444,364 @@ export default function OrderPage({
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
-        {/* A) Order Header */}
+        {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
         <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-3xl font-bold text-gray-900">
-                Order {orderCode}
-              </h1>
-              <OrderStatusBadge 
-                status={effectiveStatus}
-                onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
-                readonly={effectiveStatus === "Completed" || isSaving}
-              />
+          {/* Main Row: Order Code | Client + Itinerary + Dates | Amount + Payment */}
+          <div className="flex items-start justify-between gap-6 flex-wrap">
+            {/* Left: Order Code + Status + Created/Agent */}
+            <div className="shrink-0">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {orderCode}
+                </h1>
+                <OrderStatusBadge 
+                  status={effectiveStatus}
+                  onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
+                  readonly={effectiveStatus === "Completed" || isSaving}
+                />
+              </div>
+              {/* Created date + Agent - directly under order code */}
+              {order?.created_at && (
+                <div className="mt-0.5 text-xs text-gray-400">
+                  Created on {new Date(order.created_at).toLocaleDateString("en-GB")} by {order.owner_name || "Unknown"}
+                </div>
+              )}
             </div>
+            
+            {/* Center: Client Name + Itinerary + Dates (each with inline editor) */}
+            {order && (
+              <div className="flex-1 min-w-0 ml-4">
+                {/* Row 1: Client Name */}
+                {editingHeaderField === "client" ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="w-64">
+                      <PartySelect
+                        value={editClientId}
+                        onChange={(partyId, displayName) => {
+                          if (partyId && displayName) {
+                            // Save new client
+                            saveClient(partyId, displayName);
+                          }
+                          // If X is pressed (partyId === null), don't save - just clear input for new selection
+                          // User must select a new client or Cancel to restore old one
+                        }}
+                        roleFilter="client"
+                        initialDisplayName={order.client_display_name || ""}
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Close without saving - original client stays
+                        setEditingHeaderField(null);
+                      }}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                    <span className="text-xs text-gray-400">
+                      (Select new or Cancel to keep current)
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Lead Passenger</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span 
+                        className={`text-xl font-bold cursor-pointer rounded px-1 -mx-1 transition-colors ${
+                          isCtrlPressed && order.client_party_id 
+                            ? "text-blue-600 underline" 
+                            : "text-gray-900 hover:bg-gray-100"
+                        }`}
+                        onClick={() => {
+                          if (isCtrlPressed && order.client_party_id) {
+                            router.push(`/directory/${order.client_party_id}`);
+                          } else {
+                            startEditingClient();
+                          }
+                        }}
+                        title={isCtrlPressed ? "Ctrl+Click to open client" : "Click to change client"}
+                      >
+                        {order.client_display_name || "Select client"}
+                      </span>
+                      {order.client_phone && (
+                        <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
+                          {order.client_phone}
+                        </a>
+                      )}
+                      {order.client_email && (
+                        <a href={`mailto:${order.client_email}`} className="text-sm text-blue-600 hover:text-blue-800">
+                          {order.client_email}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Row 2: Itinerary */}
+                {editingHeaderField === "itinerary" ? (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
+                        <CityMultiSelect
+                          selectedCities={editOrigin ? [editOrigin] : []}
+                          onChange={(cities) => setEditOrigin(cities[0] || null)}
+                          placeholder="Origin city..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">To (drag to reorder)</label>
+                        {/* Draggable destination tags */}
+                        {editDestinations.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {editDestinations.map((city, idx) => (
+                              <div
+                                key={`${city.city}-${idx}`}
+                                draggable
+                                onDragStart={() => setDraggedDestIdx(idx)}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={() => {
+                                  if (draggedDestIdx !== null && draggedDestIdx !== idx) {
+                                    const newDests = [...editDestinations];
+                                    const [dragged] = newDests.splice(draggedDestIdx, 1);
+                                    newDests.splice(idx, 0, dragged);
+                                    setEditDestinations(newDests);
+                                  }
+                                  setDraggedDestIdx(null);
+                                }}
+                                onDragEnd={() => setDraggedDestIdx(null)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded cursor-move text-xs transition-all ${
+                                  draggedDestIdx === idx 
+                                    ? "bg-blue-200 text-blue-800 opacity-50" 
+                                    : "bg-green-100 text-green-800 hover:bg-green-200"
+                                }`}
+                              >
+                                {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
+                                {city.city}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditDestinations(prev => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className="ml-0.5 text-green-600 hover:text-green-800"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <CityMultiSelect
+                          selectedCities={[]}
+                          onChange={(cities) => {
+                            if (cities.length > 0) {
+                              setEditDestinations(prev => [...prev, ...cities]);
+                            }
+                          }}
+                          placeholder="Add destination..."
+                        />
+                      </div>
+                    </div>
+                    {/* Return options */}
+                    <div className="mt-3 flex items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editReturnToOrigin}
+                          onChange={(e) => {
+                            setEditReturnToOrigin(e.target.checked);
+                            if (e.target.checked) setEditReturnCity(null);
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">Return to origin</span>
+                      </label>
+                      {!editReturnToOrigin && (
+                        <div className="flex-1 max-w-48">
+                          <CityMultiSelect
+                            selectedCities={editReturnCity ? [editReturnCity] : []}
+                            onChange={(cities) => setEditReturnCity(cities[0] || null)}
+                            placeholder="Return city..."
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        onClick={saveItinerary}
+                        disabled={isSavingField}
+                        className="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {isSavingField ? "..." : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingHeaderField(null)}
+                        className="text-sm text-gray-500 hover:text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="flex items-center gap-1.5 flex-wrap mt-1 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
+                    onClick={startEditingItinerary}
+                    title="Click to edit itinerary"
+                  >
+                    {parsedItinerary.origin || parsedItinerary.destinations.length > 0 ? (
+                      <>
+                        <span className="text-xs text-gray-500 uppercase tracking-wide mr-1">Destination:</span>
+                        {/* Only show destinations (where main service is). NOT origin/departure point. */}
+                        {(() => {
+                          const allCities = [
+                            ...parsedItinerary.destinations,
+                            ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name 
+                              ? [parsedItinerary.returnCity] : [])
+                          ];
+                          if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set destination</span>;
+                          
+                          // Group by country
+                          const countryCities: Record<string, { countryCode?: string; cities: string[] }> = {};
+                          for (const city of allCities) {
+                            const cityData = getCityByName(city.name);
+                            const countryName = cityData?.country || "Unknown";
+                            const countryCode = city.countryCode || cityData?.countryCode;
+                            
+                            if (!countryCities[countryName]) {
+                              countryCities[countryName] = { countryCode, cities: [] };
+                            }
+                            if (!countryCities[countryName].cities.includes(city.name)) {
+                              countryCities[countryName].cities.push(city.name);
+                            }
+                          }
+                          
+                          return Object.entries(countryCities).map(([country, data], idx) => (
+                            <span key={country} className="flex items-center">
+                              <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
+                                {data.countryCode && (
+                                  <span>{countryCodeToFlag(data.countryCode)}</span>
+                                )}
+                                {country} ({data.cities.join(", ")})
+                              </span>
+                              {idx < Object.keys(countryCities).length - 1 && (
+                                <span className="text-gray-400 text-sm mx-2">/</span>
+                              )}
+                            </span>
+                          ));
+                        })()}
+                      </>
+                    ) : (
+                      <span className="text-gray-400 text-sm">Click to set destination</span>
+                    )}
+                  </div>
+                )}
+                
+                {/* Row 3: Dates */}
+                {editingHeaderField === "dates" ? (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <div className="w-80">
+                      <DateRangePicker
+                        label=""
+                        from={editDateFrom || undefined}
+                        to={editDateTo || undefined}
+                        onChange={(from, to) => {
+                          setEditDateFrom(from || "");
+                          setEditDateTo(to || "");
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={saveDates}
+                      disabled={isSavingField}
+                      className="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {isSavingField ? "..." : "Save"}
+                    </button>
+                    <button
+                      onClick={() => setEditingHeaderField(null)}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div 
+                    className="flex items-center gap-2 mt-1 text-sm text-gray-600 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
+                    onClick={startEditingDates}
+                    title="Click to edit dates"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>
+                      {order.date_from ? formatDateDDMMYYYY(order.date_from) : "—"} — {order.date_to ? formatDateDDMMYYYY(order.date_to) : "—"}
+                    </span>
+                    {parsedItinerary.daysNights && (
+                      <span className="text-gray-500">({parsedItinerary.daysNights})</span>
+                    )}
+                    {parsedItinerary.daysUntil !== null && parsedItinerary.daysUntil >= 0 && (
+                      <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                        {parsedItinerary.daysUntil} {parsedItinerary.daysUntil === 1 ? 'day' : 'days'} before trip
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Right: Amount + Payment Status */}
+            {order && (
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="text-right">
+                  <div className="text-xl font-bold text-gray-900">
+                    €{(order.amount_total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </div>
+                  {order.amount_debt > 0 && (
+                    <div className="text-xs text-red-600">
+                      Debt: €{order.amount_debt.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </div>
+                  )}
+                </div>
+                
+                <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                  order.amount_paid >= order.amount_total && order.amount_total > 0
+                    ? "bg-green-100 text-green-800"
+                    : order.amount_paid > 0
+                    ? "bg-yellow-100 text-yellow-800"
+                    : "bg-red-100 text-red-800"
+                }`}>
+                  {order.amount_paid >= order.amount_total && order.amount_total > 0
+                    ? "Paid"
+                    : order.amount_paid > 0
+                    ? `Partial`
+                    : "Unpaid"
+                  }
+                </div>
+              </div>
+            )}
           </div>
           
-          {/* Order Source & Type Radio Bars */}
-          <div className="mt-3 flex items-center gap-4">
-            {/* Order Source (TA/TO/CORP/NON) - shown only if enabled in Company Settings */}
-            {showOrderSource && (
-              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-                {[
-                  { value: "TA", label: "TA" },
-                  { value: "TO", label: "TO" },
-                  { value: "CORP", label: "CORP" },
-                  { value: "NON", label: "NON" },
-                ].map((source) => (
-                  <button
-                    key={source.value}
-                    type="button"
-                    onClick={async () => {
-                      if (!order) return;
+          
+          {/* Order Type & Source Radio Bars - stacked vertically */}
+          <div className="mt-3 flex flex-col gap-1.5">
+            {/* Order Type (Leisure/Business/Lifestyle) - on top */}
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
+              {[
+                { value: "leisure", label: "Leisure" },
+                { value: "business", label: "Business" },
+                { value: "lifestyle", label: "Lifestyle" },
+              ].map((type) => (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => {
+                    if (!order || order.order_type === type.value) return;
+                    const prevValue = order.order_type;
+                    // Optimistic update - instant UI change
+                    setOrder({ ...order, order_type: type.value });
+                    // Background save
+                    (async () => {
                       try {
                         const { data: { session } } = await supabase.auth.getSession();
                         const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
@@ -203,16 +811,69 @@ export default function OrderPage({
                             ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
                           },
                           credentials: "include",
-                          body: JSON.stringify({ order_source: source.value }),
+                          body: JSON.stringify({ order_type: type.value }),
                         });
-                        if (response.ok) {
-                          setOrder({ ...order, order_source: source.value });
+                        if (!response.ok) {
+                          // Rollback on error
+                          setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
                         }
                       } catch (err) {
                         console.error("Update error:", err);
+                        setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
                       }
+                    })();
+                  }}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    order?.order_type === type.value
+                      ? "bg-gray-700 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+            
+            {/* Order Source (TA/TO/CORP/NON) - below, shown only if enabled */}
+            {showOrderSource && (
+              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
+                {[
+                  { value: "TA", label: "TA" },
+                  { value: "TO", label: "TO" },
+                  { value: "CORP", label: "CORP" },
+                  { value: "NON", label: "NON" },
+                ].map((source) => (
+                  <button
+                    key={source.value}
+                    type="button"
+                    onClick={() => {
+                      if (!order || order.order_source === source.value) return;
+                      const prevValue = order.order_source;
+                      // Optimistic update - instant UI change
+                      setOrder({ ...order, order_source: source.value });
+                      // Background save
+                      (async () => {
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession();
+                          const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                            method: "PATCH",
+                            headers: {
+                              "Content-Type": "application/json",
+                              ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                            },
+                            credentials: "include",
+                            body: JSON.stringify({ order_source: source.value }),
+                          });
+                          if (!response.ok) {
+                            // Rollback on error
+                            setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
+                          }
+                        } catch (err) {
+                          console.error("Update error:", err);
+                          setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
+                        }
+                      })();
                     }}
-                    disabled={isSaving}
                     className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
                       order?.order_source === source.value
                         ? "bg-blue-600 text-white shadow-sm"
@@ -224,48 +885,6 @@ export default function OrderPage({
                 ))}
               </div>
             )}
-
-            {/* Order Type (Leisure/Business/Lifestyle) */}
-            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-              {[
-                { value: "leisure", label: "Leisure" },
-                { value: "business", label: "Business" },
-                { value: "lifestyle", label: "Lifestyle" },
-              ].map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={async () => {
-                    if (!order) return;
-                    try {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
-                        method: "PATCH",
-                        headers: {
-                          "Content-Type": "application/json",
-                          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-                        },
-                        credentials: "include",
-                        body: JSON.stringify({ order_type: type.value }),
-                      });
-                      if (response.ok) {
-                        setOrder({ ...order, order_type: type.value });
-                      }
-                    } catch (err) {
-                      console.error("Update error:", err);
-                    }
-                  }}
-                  disabled={isSaving}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                    order?.order_type === type.value
-                      ? "bg-gray-700 text-white shadow-sm"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                  } disabled:opacity-50`}
-                >
-                  {type.label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -325,26 +944,6 @@ export default function OrderPage({
           </nav>
         </div>
 
-        {/* Route Summary */}
-        {order && (
-          <OrderRouteSummary
-            orderId={order.id}
-            orderCode={orderCode}
-            clientDisplayName={order.client_display_name}
-            countriesCities={order.countries_cities}
-            dateFrom={order.date_from}
-            dateTo={order.date_to}
-            orderType={order.order_type}
-            orderSource={order.order_source}
-            onUpdate={(updates) => {
-              setOrder({
-                ...order,
-                ...updates,
-              } as OrderData);
-            }}
-          />
-        )}
-
         {/* Tab Content */}
         <div className="mb-6">
           {activeTab === "client" && order && (
@@ -356,32 +955,44 @@ export default function OrderPage({
                 defaultClientName={order.client_display_name || undefined}
                 orderDateFrom={order.date_from}
                 orderDateTo={order.date_to}
+                itineraryDestinations={itineraryDestinations}
+                orderSource={(order.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 onIssueInvoice={(services) => {
-                  setInvoiceServices(services);
-                  setShowInvoiceCreator(true);
-                  setActiveTab("finance");
-                }}
-              />
-              
-              {/* Client Section */}
-              <OrderClientSection
-                orderId={order.id}
-                orderCode={orderCode}
-                clientDisplayName={order.client_display_name}
-                clientPartyId={order.client_party_id}
-                countriesCities={order.countries_cities}
-                dateFrom={order.date_from}
-                dateTo={order.date_to}
-                clientPhone={order.client_phone}
-                clientEmail={order.client_email}
-                amountTotal={order.amount_total}
-                amountPaid={order.amount_paid}
-                orderType={order.order_type}
-                onUpdate={(updates) => {
-                  setOrder({
-                    ...order,
-                    ...updates,
-                  } as OrderData);
+                  // Filter out cancelled services
+                  const activeServices = services.filter(s => s.resStatus !== 'cancelled');
+                  
+                  if (activeServices.length === 0) {
+                    alert('No active services selected. Cancelled services are excluded.');
+                    return;
+                  }
+                  
+                  // Group services by payer
+                  // Group by payer name (normalized) - if names are the same (case-insensitive, trimmed), it's the same payer
+                  const groupedByPayerName = new Map<string, any[]>();
+                  
+                  activeServices.forEach(service => {
+                    // Normalize payer name: trim, lowercase for comparison, but keep original for display
+                    const payerNameRaw = (service.payer || 'no-payer').trim();
+                    const payerNameKey = payerNameRaw.toLowerCase();
+                    
+                    if (!groupedByPayerName.has(payerNameKey)) {
+                      groupedByPayerName.set(payerNameKey, []);
+                    }
+                    groupedByPayerName.get(payerNameKey)!.push(service);
+                  });
+                  
+                  // If multiple different payers (by normalized name), show grouped services
+                  if (groupedByPayerName.size > 1) {
+                    setInvoiceServicesByPayer(groupedByPayerName);
+                    setShowInvoiceCreator(true);
+                    setActiveTab("finance");
+                  } else {
+                    // Single payer - use existing flow
+                    setInvoiceServices(services);
+                    setInvoiceServicesByPayer(new Map());
+                    setShowInvoiceCreator(true);
+                    setActiveTab("finance");
+                  }
                 }}
               />
             </div>
@@ -394,13 +1005,16 @@ export default function OrderPage({
                   orderCode={orderCode}
                   clientName={order?.client_display_name || null}
                   selectedServices={invoiceServices}
+                  servicesByPayer={invoiceServicesByPayer.size > 0 ? invoiceServicesByPayer : undefined}
                   onClose={() => {
                     setShowInvoiceCreator(false);
                     setInvoiceServices([]);
+                    setInvoiceServicesByPayer(new Map());
                   }}
                   onSuccess={() => {
                     setShowInvoiceCreator(false);
                     setInvoiceServices([]);
+                    setInvoiceServicesByPayer(new Map());
                     setInvoiceRefetchTrigger(prev => prev + 1);
                   }}
                 />
@@ -445,6 +1059,7 @@ export default function OrderPage({
         </div>
 
       </div>
+      
     </div>
   );
 }

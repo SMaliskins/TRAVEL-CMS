@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
       email_marketing_consent: false,
       phone_marketing_consent: false,
       created_by: user.id,
+      // Country
+      country: data.country || null,
+      // Supplier service areas
+      service_areas: data.supplierExtras?.serviceAreas || null,
+      // Supplier commissions
+      supplier_commissions: data.supplierExtras?.commissions || null,
     };
 
     const { data: party, error: partyError } = await supabaseAdmin
@@ -147,6 +153,7 @@ export async function POST(request: NextRequest) {
         passport_issuing_country: data.passportIssuingCountry || null,
         passport_full_name: data.passportFullName || null,
         nationality: data.nationality || null,
+        avatar_url: data.avatarUrl || null,
       };
 
       const { error: personError } = await supabaseAdmin

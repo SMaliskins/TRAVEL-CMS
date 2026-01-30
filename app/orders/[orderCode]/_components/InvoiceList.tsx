@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 
 interface Invoice {
   id: string;
@@ -12,7 +12,9 @@ interface Invoice {
   subtotal: number;
   tax_amount: number;
   client_name: string;
+  payer_name?: string | null;
   notes: string | null;
+  created_at?: string;
   invoice_items: Array<{
     id: string;
     service_name: string;
@@ -35,15 +37,26 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hideCancelled, setHideCancelled] = useState(false);
 
   const loadInvoices = async () => {
     try {
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`);
-      if (!response.ok) throw new Error('Failed to load invoices');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to load invoices:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        throw new Error(errorData.error || `Failed to load invoices: ${response.status} ${response.statusText}`);
+      }
       const data = await response.json();
       setInvoices(data.invoices || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading invoices:', error);
+      // Show user-friendly error message
+      alert(`Failed to load invoices: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -64,6 +77,38 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}.${month}.${year}`;
+  };
+
+  // Extract short number from invoice number (e.g., "00965" from "0633/25-SM-00965")
+  const getShortNumber = (invoiceNumber: string): string => {
+    const parts = invoiceNumber.split('-');
+    return parts[parts.length - 1] || invoiceNumber;
+  };
+
+  // Group invoices by payer
+  const groupedInvoices = useMemo(() => {
+    const filtered = hideCancelled 
+      ? invoices.filter(inv => inv.status !== 'cancelled')
+      : invoices;
+    
+    const grouped = new Map<string, Invoice[]>();
+    filtered.forEach(invoice => {
+      const payerName = invoice.payer_name || invoice.client_name || 'Unknown';
+      if (!grouped.has(payerName)) {
+        grouped.set(payerName, []);
+      }
+      grouped.get(payerName)!.push(invoice);
+    });
+    return grouped;
+  }, [invoices, hideCancelled]);
+
+  // Calculate totals for a payer group
+  const calculateGroupTotals = (groupInvoices: Invoice[]) => {
+    return groupInvoices.reduce((acc, inv) => {
+      acc.total += inv.total;
+      acc.paid += inv.status === 'paid' ? inv.total : 0;
+      return acc;
+    }, { total: 0, paid: 0 });
   };
 
   const getStatusBadge = (status: Invoice['status']) => {
@@ -108,31 +153,81 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       const invoice = invoices.find(inv => inv.id === invoiceId);
       if (!invoice) return;
 
-      // TODO: Implement PDF export API endpoint
       const response = await fetch(
         `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`
       );
       
       if (!response.ok) {
-        // Временное решение пока нет API
-        alert('PDF export API not yet implemented. Coming soon!');
+        const error = await response.json().catch(() => ({ error: 'Failed to generate PDF' }));
+        alert(`Failed to export PDF: ${error.error || 'Unknown error'}`);
         return;
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${invoice.invoice_number}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-
-      alert('✅ PDF exported successfully');
-    } catch (error) {
+      // Get HTML and convert to PDF using browser print
+      const html = await response.text();
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.onload = () => {
+          printWindow.print();
+        };
+      } else {
+        // Fallback: download HTML
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${invoice.invoice_number}.html`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        alert('✅ Invoice HTML downloaded. Use browser print to save as PDF.');
+      }
+    } catch (error: any) {
       console.error('Error exporting PDF:', error);
-      alert('PDF export feature coming soon!');
+      alert(`Failed to export PDF: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleSendEmail = async (invoiceId: string) => {
+    try {
+      const invoice = invoices.find(inv => inv.id === invoiceId);
+      if (!invoice) return;
+
+      const email = prompt('Enter email address:', invoice.payer_email || '');
+      if (!email || !email.trim()) return;
+
+      const subject = prompt('Email subject:', `Invoice ${invoice.invoice_number}`);
+      if (subject === null) return; // User cancelled
+
+      const message = prompt('Email message:', `Please find attached invoice ${invoice.invoice_number}.`);
+      if (message === null) return; // User cancelled
+
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/email`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: email.trim(),
+            subject: subject || `Invoice ${invoice.invoice_number}`,
+            message: message || `Please find attached invoice ${invoice.invoice_number}.`,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to send email' }));
+        alert(`Failed to send email: ${error.error || 'Unknown error'}`);
+        return;
+      }
+
+      alert('✅ Invoice email sent successfully!');
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      alert(`Failed to send email: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -172,19 +267,53 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
     );
   }
 
+  const getStatusLabel = (status: Invoice['status']) => {
+    const labels: Record<Invoice['status'], string> = {
+      draft: 'Draft',
+      sent: 'Sent',
+      paid: 'Paid',
+      cancelled: 'Cancelled',
+      overdue: 'Overdue',
+    };
+    return labels[status] || status;
+  };
+
+  const getStatusColor = (status: Invoice['status']) => {
+    const colors: Record<Invoice['status'], string> = {
+      draft: 'text-gray-600',
+      sent: 'text-blue-600',
+      paid: 'text-green-600',
+      cancelled: 'text-red-600',
+      overdue: 'text-orange-600',
+    };
+    return colors[status] || 'text-gray-600';
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
-        <button
-          onClick={onCreateNew}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-        >
-          + Create Invoice
-        </button>
+        <h2 className="text-lg font-semibold text-gray-900">Invoices and payment paypapers</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHideCancelled(!hideCancelled)}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+              hideCancelled 
+                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {hideCancelled ? 'Show' : 'Hide'} Cancelled
+          </button>
+          <button
+            onClick={onCreateNew}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+          >
+            + Create Invoice
+          </button>
+        </div>
       </div>
 
-      {invoices.length === 0 ? (
+      {groupedInvoices.size === 0 ? (
         <div className="rounded-lg bg-gray-50 border border-gray-200 p-8 text-center">
           <p className="text-gray-500 mb-4">No invoices created yet</p>
           <button
@@ -195,86 +324,91 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {invoices.map((invoice) => (
-            <div
-              key={invoice.id}
-              className="rounded-lg bg-white border border-gray-200 p-4 hover:shadow-sm transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-semibold text-gray-900">{invoice.invoice_number}</h3>
-                    {getStatusBadge(invoice.status)}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <span>Client: {invoice.client_name}</span>
-                    <span className="mx-2">•</span>
-                    <span>Date: {formatDate(invoice.invoice_date)}</span>
-                    {invoice.due_date && (
-                      <>
-                        <span className="mx-2">•</span>
-                        <span>Due: {formatDate(invoice.due_date)}</span>
-                      </>
-                    )}
-                  </div>
+        <div className="max-w-6xl">
+          {Array.from(groupedInvoices.entries()).map(([payerName, payerInvoices]) => {
+            const totals = calculateGroupTotals(payerInvoices);
+            const debt = totals.total - totals.paid;
+            
+            return (
+              <div key={payerName} className="mb-4">
+                {/* Payer Header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <h3 className="font-semibold text-gray-900">{payerName}</h3>
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-gray-900">{formatCurrency(invoice.total)}</div>
-                  <div className="text-xs text-gray-500">{invoice.invoice_items.length} services</div>
+                
+                {/* Compact Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-300 bg-gray-50">
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Short nr.</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Complete nr.</th>
+                        <th className="text-right py-2 px-3 font-medium text-gray-700">Total</th>
+                        <th className="text-right py-2 px-3 font-medium text-gray-700">Paid</th>
+                        <th className="text-right py-2 px-3 font-medium text-gray-700">Debt</th>
+                        <th className="text-center py-2 px-3 font-medium text-gray-700">Cur</th>
+                        <th className="text-center py-2 px-3 font-medium text-gray-700">Status</th>
+                        <th className="text-center py-2 px-3 font-medium text-gray-700">Invoice date</th>
+                        <th className="text-center py-2 px-3 font-medium text-gray-700">Created</th>
+                        <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payerInvoices.map((invoice) => {
+                        const paid = invoice.status === 'paid' ? invoice.total : 0;
+                        const invoiceDebt = invoice.total - paid;
+                        
+                        return (
+                          <tr key={invoice.id} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="py-2 px-3 text-gray-900">{getShortNumber(invoice.invoice_number)}</td>
+                            <td className="py-2 px-3">
+                              <span className={`${invoice.status === 'cancelled' ? 'text-red-600' : 'text-gray-900'}`}>
+                                {invoice.invoice_number}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoice.total)}</td>
+                            <td className="py-2 px-3 text-right text-gray-600">{formatCurrency(paid)}</td>
+                            <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoiceDebt)}</td>
+                            <td className="py-2 px-3 text-center text-gray-600">EUR</td>
+                            <td className="py-2 px-3 text-center">
+                              <span className={getStatusColor(invoice.status)}>
+                                {getStatusLabel(invoice.status)}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center text-blue-600">{formatDate(invoice.invoice_date)}</td>
+                            <td className="py-2 px-3 text-center text-blue-600">
+                              {invoice.created_at ? formatDate(invoice.created_at) : formatDate(invoice.invoice_date)}
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleExportPDF(invoice.id)}
+                                  className="px-2 py-1 text-xs text-blue-600 hover:text-blue-700"
+                                  title="Export PDF"
+                                >
+                                  📄
+                                </button>
+                                <button
+                                  onClick={() => handleSendEmail(invoice.id)}
+                                  className="px-2 py-1 text-xs text-green-600 hover:text-green-700"
+                                  title="Send Email"
+                                >
+                                  ✉️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-
-              {/* Services Preview */}
-              <div className="mb-3 text-sm text-gray-600">
-                {invoice.invoice_items.slice(0, 3).map((item, idx) => (
-                  <div key={item.id}>
-                    • {item.service_name} - {formatCurrency(item.line_total)}
-                  </div>
-                ))}
-                {invoice.invoice_items.length > 3 && (
-                  <div className="text-xs text-gray-400 italic">
-                    +{invoice.invoice_items.length - 3} more services
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 pt-3 border-t">
-                <button
-                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-                  onClick={() => handleViewInvoice(invoice.id)}
-                >
-                  View
-                </button>
-                
-                {/* NEW: Edit button — only for Draft/Sent/Overdue */}
-                {(invoice.status === 'draft' || invoice.status === 'sent' || invoice.status === 'overdue') && (
-                  <button
-                    className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors"
-                    onClick={() => handleEditInvoice(invoice.id)}
-                  >
-                    Edit
-                  </button>
-                )}
-                
-                {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
-                  <button
-                    className="px-3 py-1.5 text-xs font-medium text-red-700 bg-white border border-red-300 rounded hover:bg-red-50 transition-colors"
-                    onClick={() => handleCancelInvoice(invoice.id)}
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button
-                  className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors"
-                  onClick={() => handleExportPDF(invoice.id)}
-                >
-                  Export PDF
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -43,10 +43,50 @@ export default function OrderRouteSummary({
 }: OrderRouteSummaryProps) {
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Parse route
+  // Parse route - supports both new format (origin:|return:) and legacy (comma-separated)
   const parsedRoute = useMemo(() => {
     if (!countriesCities) return { origin: null, destinations: [], returnCity: null };
 
+    // Check if new format with origin:/return:
+    if (countriesCities.includes("origin:") || countriesCities.includes("|")) {
+      let originCity: { name: string; countryCode?: string } | null = null;
+      let returnCity: { name: string; countryCode?: string } | null = null;
+      let destinations: { name: string; countryCode?: string }[] = [];
+      
+      const parts = countriesCities.split("|");
+      for (const part of parts) {
+        if (part.startsWith("origin:")) {
+          const cityStr = part.replace("origin:", "").trim();
+          const cityName = cityStr.split(",")[0]?.trim() || "";
+          const cityData = getCityByName(cityName);
+          if (cityData) {
+            originCity = cityData;
+          } else if (cityName) {
+            originCity = { name: cityName };
+          }
+        } else if (part.startsWith("return:")) {
+          const cityStr = part.replace("return:", "").trim();
+          const cityName = cityStr.split(",")[0]?.trim() || "";
+          const cityData = getCityByName(cityName);
+          if (cityData) {
+            returnCity = cityData;
+          } else if (cityName) {
+            returnCity = { name: cityName };
+          }
+        } else if (part.trim()) {
+          // Destinations - split by semicolon
+          destinations = part.split(";").map(item => {
+            const cityName = item.trim().split(",")[0]?.trim() || "";
+            const cityData = getCityByName(cityName);
+            return cityData || (cityName ? { name: cityName } : null);
+          }).filter(Boolean) as { name: string; countryCode?: string }[];
+        }
+      }
+      
+      return { origin: originCity, destinations, returnCity };
+    }
+
+    // Legacy format: comma-separated city names
     const cities = countriesCities.split(",").map((c) => c.trim());
     const origin = cities.length > 0 ? getCityByName(cities[0]) : null;
     const destinations = cities.slice(1).map((c) => getCityByName(c)).filter(Boolean);
@@ -71,8 +111,8 @@ export default function OrderRouteSummary({
     if (!dateFrom || !dateTo) return null;
     const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const nights = Math.max(0, days - 1);
-    const dayWord = days === 1 ? "день" : days > 4 ? "дней" : "дня";
-    const nightWord = nights === 1 ? "ночь" : nights > 4 ? "ночей" : "ночи";
+    const dayWord = days === 1 ? "day" : "days";
+    const nightWord = nights === 1 ? "night" : "nights";
     return ` (${days} ${dayWord} / ${nights} ${nightWord})`;
   }, [dateFrom, dateTo]);
 

@@ -6,12 +6,39 @@ import {
   DirectoryType,
   DirectoryRole,
   SupplierDetails,
+  SupplierCommission,
   SubagentDetails,
   SubagentCommissionType,
 } from "@/lib/types/directory";
 import { useRipple } from "@/hooks/useRipple";
 import { ValidationIcon } from "@/components/ValidationIcon";
 import PassportDetailsInput, { PassportData } from "@/components/PassportDetailsInput";
+import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
+
+const COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia", "Australia",
+  "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium",
+  "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei",
+  "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde", "Central African Republic",
+  "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus",
+  "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt",
+  "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland",
+  "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea",
+  "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran",
+  "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati",
+  "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein",
+  "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Mauritania",
+  "Mauritius", "Mexico", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar",
+  "Namibia", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea",
+  "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea",
+  "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda",
+  "Saint Lucia", "Samoa", "San Marino", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone",
+  "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "Spain",
+  "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania",
+  "Thailand", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu",
+  "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan",
+  "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
+];
 
 interface DirectoryFormProps {
   record?: DirectoryRecord;
@@ -20,6 +47,7 @@ interface DirectoryFormProps {
   onCancel: () => void;
   onValidationChange?: (isValid: boolean) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  onAvatarChange?: (avatarUrl: string | undefined) => void;
   saveSuccess?: boolean; // Signal that save was successful for green border effect
 }
 
@@ -29,7 +57,7 @@ export interface DirectoryFormHandle {
 
 const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
   function DirectoryForm(
-    { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange, saveSuccess = false },
+    { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange, onAvatarChange, saveSuccess = false },
     ref
   ) {
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -172,6 +200,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       passportFullName: record?.passportFullName || undefined,
       dob: record?.dob || undefined,
       nationality: record?.nationality || undefined,
+      avatarUrl: record?.avatarUrl || undefined,
     });
 
     // Company fields
@@ -185,7 +214,19 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [phone, setPhone] = useState(record?.phone || "");
     const [email, setEmail] = useState(record?.email || "");
 
-    // Supplier fields - removed (no additional fields needed)
+    // Country field (for company)
+    const [country, setCountry] = useState(record?.country || "");
+    const [countrySearch, setCountrySearch] = useState("");
+    const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+
+    // Supplier fields
+    const [serviceAreas, setServiceAreas] = useState<string[]>(
+      record?.supplierExtras?.serviceAreas || []
+    );
+    const [availableCategories, setAvailableCategories] = useState<{id: string; name: string; type: string}[]>([]);
+    const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>(
+      record?.supplierExtras?.commissions || []
+    );
 
     // Subagent fields
     const [subagentCommissionType, setSubagentCommissionType] = useState<SubagentCommissionType>(
@@ -221,6 +262,23 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       }
     }, [roles, baseType]);
 
+    // Load travel service categories for Supplier Service Areas
+    useEffect(() => {
+      const loadCategories = async () => {
+        try {
+          const response = await fetchWithAuth("/api/travel-service-categories");
+          if (response.ok) {
+            const data = await response.json();
+            const cats = (data.categories || []).filter((c: any) => c.is_active);
+            setAvailableCategories(cats.map((c: any) => ({ id: c.id, name: c.name, type: c.type })));
+          }
+        } catch (error) {
+          console.error("Error loading categories:", error);
+        }
+      };
+      loadCategories();
+    }, []);
+
     // Sync passport fields from record when record changes (after save)
     useEffect(() => {
       if (record) {
@@ -232,6 +290,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           passportFullName: record.passportFullName || undefined,
           dob: record.dob || undefined,
           nationality: record.nationality || undefined,
+          avatarUrl: record.avatarUrl || undefined,
         });
       } else if (mode === "create") {
         // Reset passport fields in create mode
@@ -314,7 +373,16 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         return true;
       }
 
-      // Supplier role has no additional fields to check
+      // Check supplier details
+      const initialSupplier = initialValues.supplierExtras;
+      if (roles.includes("supplier")) {
+        const initialAreas = initialSupplier?.serviceAreas || [];
+        const currentAreas = [...serviceAreas].sort().join(",");
+        const initialAreasStr = [...initialAreas].sort().join(",");
+        if (currentAreas !== initialAreasStr) {
+          return true;
+        }
+      }
 
       // Check subagent details
       const initialSubagent = initialValues.subagentExtras;
@@ -449,6 +517,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.passportIssuingCountry = passportData.passportIssuingCountry || undefined;
         formData.passportFullName = passportData.passportFullName || undefined;
         formData.nationality = passportData.nationality || undefined;
+        formData.avatarUrl = passportData.avatarUrl || undefined;
         // dob is already set above, but update from passport if provided
         if (passportData.dob) {
           formData.dob = passportData.dob;
@@ -463,7 +532,18 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         }
       }
 
-      // Supplier details - no additional fields needed
+      // Country (for company)
+      if (displayType === "company" && country.trim()) {
+        formData.country = country.trim();
+      }
+
+      // Supplier details
+      if (roles.includes("supplier")) {
+        formData.supplierExtras = {
+          serviceAreas: serviceAreas.length > 0 ? serviceAreas : undefined,
+          commissions: supplierCommissions.length > 0 ? supplierCommissions : undefined,
+        };
+      }
 
       // Subagent details
       if (roles.includes("subagent")) {
@@ -493,7 +573,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     
     // Helper function to get input classes based on field state - Modern 2025 styling
     const getInputClasses = (fieldName: string, isRequired: boolean = false, value: string | number | undefined = ""): string => {
-      const baseClasses = "w-full rounded-xl border px-4 py-2.5 text-sm font-medium tracking-tight transition-all duration-300 placeholder:text-gray-400/60 placeholder:font-normal focus:outline-none h-[2.75rem] backdrop-blur-sm";
+      // Match Company Settings style: simple and clean
+      const baseClasses = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm";
       
       // Check if field is required and empty
       const isEmpty = !value || (typeof value === "string" && value.trim() === "");
@@ -501,20 +582,19 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       
       // Priority: saved > required empty > dirty > normal
       if (savedFields.has(fieldName)) {
-        // Simple green border for saved field
-        return `${baseClasses} border-green-500 focus:border-green-600 saved-field-input`;
+        return `${baseClasses} border-green-500 focus:border-green-600`;
       } else if (isRequiredEmpty) {
-        return `${baseClasses} border-red-300/70 bg-gradient-to-br from-red-50/60 to-white shadow-[0_0_0_3px_rgba(239,68,68,0.06)] focus:border-red-400 focus:shadow-[0_0_0_4px_rgba(239,68,68,0.1)]`;
+        return `${baseClasses} border-red-300 focus:border-red-400`;
       } else if (dirtyFields.has(fieldName)) {
-        return `${baseClasses} border-amber-300/70 bg-gradient-to-br from-amber-50/60 to-white shadow-[0_0_0_3px_rgba(245,158,11,0.06)] focus:border-amber-400 focus:shadow-[0_0_0_4px_rgba(245,158,11,0.1)]`;
+        return `${baseClasses} border-amber-300 focus:border-amber-400`;
       } else {
-        return `${baseClasses} border-gray-200/80 bg-white/90 shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] hover:border-gray-300 hover:shadow-[0_2px_4px_0_rgba(0,0,0,0.04)] focus:border-gray-900/20 focus:shadow-[0_0_0_4px_rgba(0,0,0,0.04)]`;
+        return `${baseClasses} focus:border-blue-500 focus:ring-1 focus:ring-blue-500`;
       }
     };
     
-    // Helper function for consistent label styling (fixed height to prevent jumping)
+    // Helper function for consistent label styling (match Company Settings)
     const getLabelClasses = (): string => {
-      return "mb-1.5 block min-h-[1.25rem] text-sm font-medium text-gray-700 transition-colors";
+      return "block text-sm font-medium text-gray-700 mb-1";
     };
     
     // Helper function to get validation status for a field
@@ -592,14 +672,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       >
         {/* Main details and Statistics sections in 2 columns */}
         <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-12">
-          {/* Left: Main Details (1/3 width) */}
-          <div className={`lg:col-span-4 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
+          {/* Left: Main Details (2/3 width) */}
+          <div className={`lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Main details</h2>
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               {/* Type and Roles in one row - labels on top, options below */}
               {/* Always show in edit mode, or in create mode if not client, or if client */}
               {(mode === "edit" || (mode === "create" && !isClient) || isClient) ? (
-                <div className="flex items-start gap-12">
+                <div className="flex items-start gap-12 md:col-span-2">
                   {/* Type selection */}
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-semibold tracking-tight text-gray-900 whitespace-nowrap">
@@ -688,98 +768,74 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               {displayType === "person" && (
                 <>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       First name <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => {
-                          setFirstName(e.target.value);
-                          markFieldDirty("firstName");
-                        }}
-                        onBlur={() => markFieldTouched("firstName")}
-                        onFocus={() => markFieldTouched("firstName")}
-                        className={`${getInputClasses("firstName", true, firstName)} ${touchedFields.has("firstName") || firstName.trim() ? 'pr-10' : ''}`}
-                        required
-                        aria-label="First name"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("firstName", true, firstName, touchedFields.has("firstName"))}
-                        show={touchedFields.has("firstName") || firstName.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => {
+                        setFirstName(e.target.value);
+                        markFieldDirty("firstName");
+                      }}
+                      onBlur={() => markFieldTouched("firstName")}
+                      onFocus={() => markFieldTouched("firstName")}
+                      className={getInputClasses("firstName", true, firstName)}
+                      required
+                      aria-label="First name"
+                    />
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Last name <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={lastName}
-                        onChange={(e) => {
-                          setLastName(e.target.value);
-                          markFieldDirty("lastName");
-                        }}
-                        onBlur={() => markFieldTouched("lastName")}
-                        onFocus={() => markFieldTouched("lastName")}
-                        className={`${getInputClasses("lastName", true, lastName)} ${touchedFields.has("lastName") || lastName.trim() ? 'pr-10' : ''}`}
-                        required
-                        aria-label="Last name"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("lastName", true, lastName, touchedFields.has("lastName"))}
-                        show={touchedFields.has("lastName") || lastName.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        markFieldDirty("lastName");
+                      }}
+                      onBlur={() => markFieldTouched("lastName")}
+                      onFocus={() => markFieldTouched("lastName")}
+                      className={getInputClasses("lastName", true, lastName)}
+                      required
+                      aria-label="Last name"
+                    />
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Personal code
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={personalCode}
-                        onChange={(e) => {
-                          setPersonalCode(e.target.value);
-                          markFieldDirty("personalCode");
-                        }}
-                        onBlur={() => markFieldTouched("personalCode")}
-                        onFocus={() => markFieldTouched("personalCode")}
-                        className={`${getInputClasses("personalCode", false, personalCode)} ${touchedFields.has("personalCode") || personalCode.trim() ? 'pr-10' : ''}`}
-                        aria-label="Personal code"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("personalCode", false, personalCode, touchedFields.has("personalCode"))}
-                        show={touchedFields.has("personalCode") || personalCode.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={personalCode}
+                      onChange={(e) => {
+                        setPersonalCode(e.target.value);
+                        markFieldDirty("personalCode");
+                      }}
+                      onBlur={() => markFieldTouched("personalCode")}
+                      onFocus={() => markFieldTouched("personalCode")}
+                      className={getInputClasses("personalCode", false, personalCode)}
+                      aria-label="Personal code"
+                    />
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Date of birth
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="date"
-                        value={dob}
-                        onChange={(e) => {
-                          setDob(e.target.value);
-                          markFieldDirty("dob");
-                        }}
-                        onBlur={() => markFieldTouched("dob")}
-                        onFocus={() => markFieldTouched("dob")}
-                        className={`${getInputClasses("dob", false, dob)} ${touchedFields.has("dob") || dob.trim() ? 'pr-10' : ''}`}
-                        aria-label="Date of birth"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("dob", false, dob, touchedFields.has("dob"))}
-                        show={touchedFields.has("dob") || dob.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => {
+                        setDob(e.target.value);
+                        markFieldDirty("dob");
+                      }}
+                      onBlur={() => markFieldTouched("dob")}
+                      onFocus={() => markFieldTouched("dob")}
+                      className={getInputClasses("dob", false, dob)}
+                      aria-label="Date of birth"
+                    />
                   </div>
 
                   {/* Passport Details */}
@@ -788,9 +844,22 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       data={passportData}
                       onChange={(data) => {
                         setPassportData(data);
-                        // Update dob if provided from passport
-                        if (data.dob && !dob) {
+                        // Notify parent so header avatar updates immediately
+                        if (data.avatarUrl !== undefined) onAvatarChange?.(data.avatarUrl);
+                        // Always update form fields from parsed passport
+                        if (data.firstName && data.lastName) {
+                          setFirstName(data.firstName);
+                          setLastName(data.lastName);
+                          markFieldDirty("firstName");
+                          markFieldDirty("lastName");
+                        }
+                        if (data.dob) {
                           setDob(data.dob);
+                          markFieldDirty("dob");
+                        }
+                        if (data.personalCode) {
+                          setPersonalCode(data.personalCode);
+                          markFieldDirty("personalCode");
                         }
                         markFieldDirty("passport");
                       }}
@@ -804,100 +873,139 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               {displayType === "company" && (
                 <>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Company name <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={companyName}
-                        onChange={(e) => {
-                          setCompanyName(e.target.value);
-                          markFieldDirty("companyName");
-                        }}
-                        onBlur={() => markFieldTouched("companyName")}
-                        onFocus={() => markFieldTouched("companyName")}
-                        className={`${getInputClasses("companyName", true, companyName)} ${touchedFields.has("companyName") || companyName.trim() ? 'pr-10' : ''}`}
-                        required
-                        aria-label="Company name"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("companyName", true, companyName, touchedFields.has("companyName"))}
-                        show={touchedFields.has("companyName") || companyName.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => {
+                        setCompanyName(e.target.value);
+                        markFieldDirty("companyName");
+                      }}
+                      onBlur={() => markFieldTouched("companyName")}
+                      onFocus={() => markFieldTouched("companyName")}
+                      className={getInputClasses("companyName", true, companyName)}
+                      required
+                      aria-label="Company name"
+                    />
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Reg Nr
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={regNo}
-                        onChange={(e) => {
-                          setRegNo(e.target.value);
-                          markFieldDirty("regNo");
-                        }}
-                        onBlur={() => markFieldTouched("regNo")}
-                        onFocus={() => markFieldTouched("regNo")}
-                        className={`${getInputClasses("regNo", false, regNo)} ${touchedFields.has("regNo") || regNo.trim() ? 'pr-10' : ''}`}
-                        aria-label="Registration number"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("regNo", false, regNo, touchedFields.has("regNo"))}
-                        show={touchedFields.has("regNo") || regNo.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={regNo}
+                      onChange={(e) => {
+                        setRegNo(e.target.value);
+                        markFieldDirty("regNo");
+                      }}
+                      onBlur={() => markFieldTouched("regNo")}
+                      onFocus={() => markFieldTouched("regNo")}
+                      className={getInputClasses("regNo", false, regNo)}
+                      aria-label="Registration number"
+                    />
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Address
                     </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={address}
-                        onChange={(e) => {
-                          setAddress(e.target.value);
-                          markFieldDirty("address");
-                        }}
-                        onBlur={() => markFieldTouched("address")}
-                        onFocus={() => markFieldTouched("address")}
-                        className={`${getInputClasses("address", false, address)} ${touchedFields.has("address") || address.trim() ? 'pr-10' : ''}`}
-                        aria-label="Address"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("address", false, address, touchedFields.has("address"))}
-                        show={touchedFields.has("address") || address.trim() !== ""}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={address}
+                      onChange={(e) => {
+                        setAddress(e.target.value);
+                        markFieldDirty("address");
+                      }}
+                      onBlur={() => markFieldTouched("address")}
+                      onFocus={() => markFieldTouched("address")}
+                      className={getInputClasses("address", false, address)}
+                      aria-label="Address"
+                    />
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Actual address
                     </label>
-                    <div className="relative min-h-[2.5rem]">
+                    <input
+                      type="text"
+                      value={actualAddress}
+                      onChange={(e) => {
+                        setActualAddress(e.target.value);
+                        markFieldDirty("actualAddress");
+                      }}
+                      onBlur={() => markFieldTouched("actualAddress")}
+                      onFocus={() => markFieldTouched("actualAddress")}
+                      className={getInputClasses("actualAddress", false, actualAddress)}
+                      aria-label="Actual address"
+                    />
+                  </div>
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Country
+                    </label>
+                    <div className="relative">
                       <input
                         type="text"
-                        value={actualAddress}
+                        value={countryDropdownOpen ? countrySearch : country}
                         onChange={(e) => {
-                          setActualAddress(e.target.value);
-                          markFieldDirty("actualAddress");
+                          setCountrySearch(e.target.value);
+                          setCountryDropdownOpen(true);
+                          if (!e.target.value) setCountry("");
+                          markFieldDirty("country");
                         }}
-                        onBlur={() => markFieldTouched("actualAddress")}
-                        onFocus={() => markFieldTouched("actualAddress")}
-                        className={`${getInputClasses("actualAddress", false, actualAddress)} ${touchedFields.has("actualAddress") || actualAddress.trim() ? 'pr-10' : ''}`}
-                        aria-label="Actual address"
+                        onFocus={() => {
+                          setCountrySearch(country);
+                          setCountryDropdownOpen(true);
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            if (countryDropdownOpen) setCountry(countrySearch || country);
+                            setCountryDropdownOpen(false);
+                          }, 200);
+                        }}
+                        className={`${getInputClasses("country", false, country)} ${touchedFields.has("country") || country.trim() ? 'pr-10' : ''}`}
+                        aria-label="Country"
+                        placeholder="Start typing country..."
                       />
                       <ValidationIcon
-                        status={getValidationStatus("actualAddress", false, actualAddress, touchedFields.has("actualAddress"))}
-                        show={touchedFields.has("actualAddress") || actualAddress.trim() !== ""}
+                        status={getValidationStatus("country", false, country, touchedFields.has("country"))}
+                        show={touchedFields.has("country") || country.trim() !== ""}
                       />
+                      {countryDropdownOpen && (
+                        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                          {COUNTRIES.filter((c) =>
+                            c.toLowerCase().includes((countryDropdownOpen ? countrySearch : country).toLowerCase())
+                          )
+                            .slice(0, 12)
+                            .map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setCountry(c);
+                                  setCountrySearch(c);
+                                  setCountryDropdownOpen(false);
+                                  markFieldDirty("country");
+                                }}
+                              >
+                                {c}
+                              </button>
+                            ))}
+                          {COUNTRIES.filter((c) =>
+                            c.toLowerCase().includes((countryDropdownOpen ? countrySearch : country).toLowerCase())
+                          ).length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-400">No countries found</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
+                    <label className="block mb-1 text-sm font-medium text-gray-700 transition-colors truncate">
                       Contact person
                     </label>
                     <div className="relative min-h-[2.5rem]">
@@ -924,62 +1032,307 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
               {/* Common fields */}
               <div>
-                <label className="mb-2 flex items-center gap-2 min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
-                  <svg className="h-3.5 w-3.5 text-gray-500 transition-transform duration-200 group-hover:scale-110 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  <span className="truncate">Phone</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone
                 </label>
-                <div className="relative min-h-[2.5rem]">
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => {
-                      setPhone(e.target.value);
-                      markFieldDirty("phone");
-                    }}
-                    onBlur={() => markFieldTouched("phone")}
-                    onFocus={() => markFieldTouched("phone")}
-                    className={`${getInputClasses("phone", false, phone)} ${touchedFields.has("phone") || phone.trim() ? 'pr-10' : ''}`}
-                    aria-label="Phone"
-                  />
-                  <ValidationIcon
-                    status={getValidationStatus("phone", false, phone, touchedFields.has("phone"))}
-                    show={touchedFields.has("phone") || phone.trim() !== ""}
-                  />
-                </div>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    markFieldDirty("phone");
+                  }}
+                  onBlur={() => markFieldTouched("phone")}
+                  onFocus={() => markFieldTouched("phone")}
+                  className={getInputClasses("phone", false, phone)}
+                  aria-label="Phone"
+                />
               </div>
               <div>
-                <label className="mb-2 flex items-center gap-2 min-h-[1.25rem] text-xs font-semibold uppercase tracking-wider text-gray-600 transition-colors truncate">
-                  <svg className="h-3.5 w-3.5 text-gray-500 transition-transform duration-200 group-hover:scale-110 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  <span className="truncate">Email</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
                 </label>
-                <div className="relative min-h-[2.5rem]">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      markFieldDirty("email");
-                    }}
-                    onBlur={() => markFieldTouched("email")}
-                    onFocus={() => markFieldTouched("email")}
-                    className={`${getInputClasses("email", false, email)} ${touchedFields.has("email") || email.trim() ? 'pr-10' : ''}`}
-                    aria-label="Email"
-                  />
-                  <ValidationIcon
-                    status={getValidationStatus("email", false, email, touchedFields.has("email"))}
-                    show={touchedFields.has("email") || email.trim() !== ""}
-                  />
-                </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    markFieldDirty("email");
+                  }}
+                  onBlur={() => markFieldTouched("email")}
+                  onFocus={() => markFieldTouched("email")}
+                  className={getInputClasses("email", false, email)}
+                  aria-label="Email"
+                />
               </div>
+
+              {/* Supplier Details - inside Main details so visible when Supplier checked */}
+              {isSupplier && (
+                <div className="md:col-span-2 mt-6 pt-6 border-t border-gray-200">
+                  <div
+                    id="supplier-settings"
+                    className="rounded-lg bg-gray-50/80 p-4 border border-gray-100"
+                  >
+                    <h2 className="mb-3 text-lg font-semibold text-gray-900">Supplier Details</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Service Areas
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Select the travel service categories this supplier provides
+                        </p>
+                        {availableCategories.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {availableCategories.map((cat) => {
+                              const isSelected = serviceAreas.includes(cat.name);
+                              return (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setServiceAreas(serviceAreas.filter(s => s !== cat.name));
+                                    } else {
+                                      setServiceAreas([...serviceAreas, cat.name]);
+                                    }
+                                    markFieldDirty("serviceAreas");
+                                  }}
+                                  className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                                    isSelected
+                                      ? "bg-green-100 text-green-800 ring-2 ring-green-500"
+                                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                  }`}
+                                >
+                                  {cat.name}
+                                  {isSelected && (
+                                    <svg className="ml-1.5 h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            No categories available. Add categories in{" "}
+                            <a href="/settings/travel-services" className="text-blue-600 hover:underline">
+                              Settings → Travel Services
+                            </a>
+                          </p>
+                        )}
+                      </div>
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="text-sm font-medium text-gray-700">Commissions</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSupplierCommissions([
+                                ...supplierCommissions,
+                                { name: "", rate: 0, isActive: true }
+                              ]);
+                              markFieldDirty("supplierCommissions");
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            <span>+</span> Add Commission
+                          </button>
+                        </div>
+                        {supplierCommissions.length === 0 ? (
+                          <p className="text-sm text-gray-400 italic">No commissions added</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {supplierCommissions.map((commission, index) => (
+                              <div key={index} className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-100">
+                                <input
+                                  type="text"
+                                  placeholder="Commission name"
+                                  value={commission.name}
+                                  onChange={(e) => {
+                                    const updated = [...supplierCommissions];
+                                    updated[index] = { ...updated[index], name: e.target.value };
+                                    setSupplierCommissions(updated);
+                                    markFieldDirty("supplierCommissions");
+                                  }}
+                                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                />
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    placeholder="Rate"
+                                    value={commission.rate || ""}
+                                    onChange={(e) => {
+                                      const updated = [...supplierCommissions];
+                                      updated[index] = { ...updated[index], rate: parseFloat(e.target.value) || 0 };
+                                      setSupplierCommissions(updated);
+                                      markFieldDirty("supplierCommissions");
+                                    }}
+                                    className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                  />
+                                  <span className="text-sm text-gray-500">%</span>
+                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={commission.isActive}
+                                    onChange={(e) => {
+                                      const updated = [...supplierCommissions];
+                                      updated[index] = { ...updated[index], isActive: e.target.checked };
+                                      setSupplierCommissions(updated);
+                                      markFieldDirty("supplierCommissions");
+                                    }}
+                                    className="h-4 w-4 rounded text-green-600"
+                                  />
+                                  <span className="text-xs text-gray-600">Active</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSupplierCommissions(supplierCommissions.filter((_, i) => i !== index));
+                                    markFieldDirty("supplierCommissions");
+                                  }}
+                                  className="text-red-500 hover:text-red-600 p-1"
+                                  aria-label="Remove commission"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Subagent Details - inside Main details */}
+              {isSubagent && (
+                <div className="md:col-span-2 mt-6 pt-6 border-t border-gray-200">
+                  <div
+                    id="subagent-settings"
+                    ref={subagentSectionRef}
+                    className="rounded-lg bg-gray-50/80 p-4 border border-gray-100"
+                  >
+                    <h2 className="mb-4 text-lg font-semibold text-gray-900">Subagent Details</h2>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Commission type</label>
+                          <select
+                            ref={subagentCommissionTypeSelectRef}
+                            value={subagentCommissionType}
+                            onChange={(e) => {
+                              setSubagentCommissionType(e.target.value as SubagentCommissionType);
+                              markFieldDirty("subagentCommissionType");
+                            }}
+                            className={getInputClasses("subagentCommissionType", false, subagentCommissionType)}
+                            aria-label="Subagent commission type"
+                          >
+                            <option value="revenue">From revenue</option>
+                            <option value="profit">From profit</option>
+                            <option value="progressive">Progressive ladder</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Commission value</label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={subagentCommissionValue || ""}
+                              onChange={(e) => {
+                                setSubagentCommissionValue(e.target.value ? parseFloat(e.target.value) : undefined);
+                                markFieldDirty("subagentCommissionValue");
+                              }}
+                              onBlur={() => markFieldTouched("subagentCommissionValue")}
+                              onFocus={() => markFieldTouched("subagentCommissionValue")}
+                              className={`${getInputClasses("subagentCommissionValue", false, String(subagentCommissionValue ?? ""))} w-full`}
+                              aria-label="Commission value"
+                            />
+                            <ValidationIcon
+                              status={getValidationStatus("subagentCommissionValue", false, String(subagentCommissionValue ?? ""), touchedFields.has("subagentCommissionValue"))}
+                              show={touchedFields.has("subagentCommissionValue") || subagentCommissionValue !== undefined}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Commission currency</label>
+                        <select
+                          value={subagentCommissionCurrency}
+                          onChange={(e) => {
+                            setSubagentCommissionCurrency(e.target.value);
+                            markFieldDirty("subagentCommissionCurrency");
+                          }}
+                          className={getInputClasses("subagentCommissionCurrency", false, subagentCommissionCurrency)}
+                          aria-label="Commission currency"
+                        >
+                          <option value="EUR">EUR</option>
+                          <option value="USD">USD</option>
+                          <option value="GBP">GBP</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Period type</label>
+                        <select
+                          value={subagentPeriodType}
+                          onChange={(e) => {
+                            setSubagentPeriodType(e.target.value as "year" | "custom");
+                            markFieldDirty("subagentPeriodType");
+                          }}
+                          className={getInputClasses("subagentPeriodType", false, subagentPeriodType)}
+                          aria-label="Subagent period type"
+                        >
+                          <option value="year">Default (year)</option>
+                          <option value="custom">Custom period</option>
+                        </select>
+                      </div>
+                    </div>
+                    {subagentPeriodType === "custom" && (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Period from</label>
+                          <input
+                            type="date"
+                            value={subagentPeriodFrom}
+                            onChange={(e) => { setSubagentPeriodFrom(e.target.value); markFieldDirty("subagentPeriodFrom"); }}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            aria-label="Period from"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Period to</label>
+                          <input
+                            type="date"
+                            value={subagentPeriodTo}
+                            onChange={(e) => { setSubagentPeriodTo(e.target.value); markFieldDirty("subagentPeriodTo"); }}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            aria-label="Period to"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-4">
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Payment details (IBAN, bank, etc.)</label>
+                      <textarea
+                        value={subagentPaymentDetails}
+                        onChange={(e) => { setSubagentPaymentDetails(e.target.value); markFieldDirty("subagentPaymentDetails"); }}
+                        rows={3}
+                        placeholder="IBAN, bank name, account holder..."
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Right: Statistics with Tabs (2/3 width) - Always visible */}
-          <div className="lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08),0_2px_4px_-1px_rgba(0,0,0,0.04)] hover:-translate-y-0.5">
+          {/* Right: Statistics with Tabs (1/3 width) - Always visible */}
+          <div className="lg:col-span-4 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md">
               <h2 className="mb-4 md:mb-5 text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
               <div className="space-y-3 md:space-y-4">
                 {/* Tabs - modern style with switching */}
@@ -1124,192 +1477,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               </div>
             </div>
         </div>
-
-
-        {/* Supplier Details Section */}
-        {isSupplier && (
-          <div
-            id="supplier-settings"
-            className={`group overflow-hidden will-change-transform opacity-0 animate-[fadeInExpand_0.5s_ease-out_forwards] rounded-lg bg-white p-4 md:p-6 shadow-sm transition-all duration-500 hover:shadow-md ${
-              highlightedSection === "supplier"
-                ? "ring-2 ring-blue-300 bg-gradient-to-br from-blue-50/50 to-white"
-                : ""
-            }`}
-          >
-            <h2 className="mb-3 md:mb-4 text-lg font-semibold text-gray-900">Supplier Details</h2>
-            <div className="text-sm text-gray-600">
-              <p className="mb-2">No additional fields required for Supplier role.</p>
-              <p className="text-xs text-gray-500">Supplier-specific fields can be added here in the future.</p>
-            </div>
-          </div>
-        )}
-
-        {/* Subagent Details Section */}
-        {isSubagent && (
-          <div
-            id="subagent-settings"
-            ref={subagentSectionRef}
-            className={`group overflow-hidden will-change-transform opacity-0 animate-[fadeInExpand_0.5s_ease-out_forwards] rounded-lg bg-white p-4 md:p-6 shadow-sm transition-all duration-500 hover:shadow-md ${
-              highlightedSection === "subagent"
-                ? "ring-2 ring-purple-300 bg-gradient-to-br from-purple-50/50 to-white"
-                : ""
-            }`}
-          >
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Subagent Details</h2>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Commission type
-                  </label>
-                  <select
-                    ref={subagentCommissionTypeSelectRef}
-                    value={subagentCommissionType}
-                    onChange={(e) => {
-                      setSubagentCommissionType(e.target.value as SubagentCommissionType);
-                      markFieldDirty("subagentCommissionType");
-                    }}
-                    className={getInputClasses("subagentCommissionType", false, subagentCommissionType)}
-                    aria-label="Subagent commission type"
-                  >
-                    <option value="revenue">From revenue</option>
-                    <option value="profit">From profit</option>
-                    <option value="progressive">Progressive ladder</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Commission value
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={subagentCommissionValue || ""}
-                      onChange={(e) => {
-                        setSubagentCommissionValue(
-                          e.target.value ? parseFloat(e.target.value) : undefined
-                        );
-                        markFieldDirty("subagentCommissionValue");
-                      }}
-                      onBlur={() => markFieldTouched("subagentCommissionValue")}
-                      onFocus={() => markFieldTouched("subagentCommissionValue")}
-                      className={`${getInputClasses("subagentCommissionValue", false, subagentCommissionValue)} ${touchedFields.has("subagentCommissionValue") || subagentCommissionValue ? 'pr-10' : ''}`}
-                      aria-label="Subagent commission value"
-                    />
-                    <ValidationIcon
-                      status={getValidationStatus("subagentCommissionValue", false, subagentCommissionValue, touchedFields.has("subagentCommissionValue"))}
-                      show={touchedFields.has("subagentCommissionValue") || subagentCommissionValue !== undefined}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Currency</label>
-                  <select
-                    value={subagentCommissionCurrency}
-                    onChange={(e) => {
-                      setSubagentCommissionCurrency(e.target.value);
-                      markFieldDirty("subagentCommissionCurrency");
-                    }}
-                    className={getInputClasses("subagentCommissionCurrency", false, subagentCommissionCurrency)}
-                    aria-label="Subagent commission currency"
-                  >
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                    <option value="GBP">GBP</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Period type</label>
-                  <select
-                    value={subagentPeriodType}
-                    onChange={(e) => {
-                      setSubagentPeriodType(e.target.value as "year" | "custom");
-                      markFieldDirty("subagentPeriodType");
-                    }}
-                    className={getInputClasses("subagentPeriodType", false, subagentPeriodType)}
-                    aria-label="Subagent period type"
-                  >
-                    <option value="year">Default (year)</option>
-                    <option value="custom">Custom period</option>
-                  </select>
-                </div>
-              </div>
-              {subagentPeriodType === "custom" && (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Period from
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={subagentPeriodFrom}
-                        onChange={(e) => {
-                          setSubagentPeriodFrom(e.target.value);
-                          markFieldDirty("subagentPeriodFrom");
-                        }}
-                        onBlur={() => markFieldTouched("subagentPeriodFrom")}
-                        onFocus={() => markFieldTouched("subagentPeriodFrom")}
-                        className={`${getInputClasses("subagentPeriodFrom", false, subagentPeriodFrom)} ${touchedFields.has("subagentPeriodFrom") || subagentPeriodFrom.trim() ? 'pr-10' : ''}`}
-                        aria-label="Subagent period from"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("subagentPeriodFrom", false, subagentPeriodFrom, touchedFields.has("subagentPeriodFrom"))}
-                        show={touchedFields.has("subagentPeriodFrom") || subagentPeriodFrom.trim() !== ""}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Period to</label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={subagentPeriodTo}
-                        onChange={(e) => {
-                          setSubagentPeriodTo(e.target.value);
-                          markFieldDirty("subagentPeriodTo");
-                        }}
-                        onBlur={() => markFieldTouched("subagentPeriodTo")}
-                        onFocus={() => markFieldTouched("subagentPeriodTo")}
-                        className={`${getInputClasses("subagentPeriodTo", false, subagentPeriodTo)} ${touchedFields.has("subagentPeriodTo") || subagentPeriodTo.trim() ? 'pr-10' : ''}`}
-                        aria-label="Subagent period to"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("subagentPeriodTo", false, subagentPeriodTo, touchedFields.has("subagentPeriodTo"))}
-                        show={touchedFields.has("subagentPeriodTo") || subagentPeriodTo.trim() !== ""}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Payment details (IBAN, bank, etc.)
-                </label>
-                <div className="relative">
-                  <textarea
-                    value={subagentPaymentDetails}
-                    onChange={(e) => {
-                      setSubagentPaymentDetails(e.target.value);
-                      markFieldDirty("subagentPaymentDetails");
-                    }}
-                    onBlur={() => markFieldTouched("subagentPaymentDetails")}
-                    onFocus={() => markFieldTouched("subagentPaymentDetails")}
-                    rows={3}
-                    placeholder="IBAN, bank name, account holder..."
-                    className={`${getInputClasses("subagentPaymentDetails", false, subagentPaymentDetails)} ${touchedFields.has("subagentPaymentDetails") || subagentPaymentDetails.trim() ? 'pr-10' : ''}`}
-                    aria-label="Payment details"
-                  />
-                  <ValidationIcon
-                    status={getValidationStatus("subagentPaymentDetails", false, subagentPaymentDetails, touchedFields.has("subagentPaymentDetails"))}
-                    show={touchedFields.has("subagentPaymentDetails") || subagentPaymentDetails.trim() !== ""}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Audit section (only for edit mode) */}
         {mode === "edit" && record && (

@@ -186,6 +186,9 @@ function NewOrderForm() {
           orderType,
           ownerAgent,
           ownerName: ownerFullName,
+          // Send full city objects to preserve city-country mapping
+          citiesWithCountries: selectedCities.map((c) => ({ city: c.city, country: c.country })),
+          // Keep legacy fields for backwards compatibility
           cities: selectedCities.map((c) => c.city),
           countries: selectedCountries,
           checkIn: checkInDate || null,

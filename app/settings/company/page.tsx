@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
 
 // Company types for classification
 const COMPANY_TYPES = [
@@ -399,15 +400,23 @@ export default function CompanySettingsPage() {
                 <p className="text-sm text-gray-500">{formData.name || company?.name}</p>
               </div>
             </div>
-            {isSupervisor && (
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+            <div className="flex items-center gap-4">
+              <Link
+                href="/settings"
+                className="text-sm text-blue-600 hover:text-blue-700"
               >
-                {saving ? "Saving..." : "Save Changes"}
-              </button>
-            )}
+                ← Back to Settings
+              </Link>
+              {isSupervisor && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -831,12 +840,36 @@ export default function CompanySettingsPage() {
             </div>
           </div>
 
-          {/* Banking Details */}
+          {/* Financial */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Banking Details</h2>
-            <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Financial</h2>
+            
+            {/* Tax Settings */}
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Tax Settings</h3>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Default VAT Rate (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.default_vat_rate || ""}
+                  onChange={(e) => updateField("default_vat_rate", e.target.value ? parseFloat(e.target.value) : undefined)}
+                  disabled={readonly}
+                  placeholder="21"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 mt-1">Default VAT rate for the country (e.g., 21% for Latvia)</p>
+              </div>
+            </div>
+            
+            {/* Banking Details */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Banking Details</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
                 <input
                   type="text"
                   value={formData.bank_name || ""}
@@ -874,6 +907,7 @@ export default function CompanySettingsPage() {
                   disabled={readonly}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
+              </div>
               </div>
             </div>
           </div>

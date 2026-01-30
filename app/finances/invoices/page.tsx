@@ -1,0 +1,263 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+
+interface Invoice {
+  id: string;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string | null;
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
+  total: number;
+  subtotal: number;
+  tax_amount: number;
+  payer_name: string;
+  order_id: string;
+  order_code?: string;
+  notes: string | null;
+  processed_by?: string | null;
+  processed_at?: string | null;
+  invoice_items: Array<{
+    id: string;
+    service_name: string;
+    service_client: string;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+  }>;
+}
+
+export default function FinancesInvoicesPage() {
+  const router = useRouter();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+
+  useEffect(() => {
+    loadInvoices();
+  }, [filterStatus]);
+
+  const loadInvoices = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch('/api/finances/invoices', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        let filtered = data.invoices || [];
+        
+        if (filterStatus !== 'all') {
+          filtered = filtered.filter((inv: Invoice) => inv.status === filterStatus);
+        }
+        
+        setInvoices(filtered);
+      }
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkProcessed = async (invoiceId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/finances/invoices/${invoiceId}/process`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ processed: true }),
+      });
+
+      if (response.ok) {
+        loadInvoices();
+      }
+    } catch (error) {
+      console.error('Error marking invoice as processed:', error);
+    }
+  };
+
+  const handleExportPDF = async (invoiceId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/orders/[orderCode]/invoices/${invoiceId}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `invoice-${invoiceId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('PDF export feature coming soon!');
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-GB');
+  };
+
+  const getStatusBadge = (status: Invoice['status']) => {
+    const styles = {
+      draft: 'bg-gray-100 text-gray-700',
+      sent: 'bg-blue-100 text-blue-700',
+      paid: 'bg-green-100 text-green-700',
+      cancelled: 'bg-red-100 text-red-700',
+      overdue: 'bg-orange-100 text-orange-700',
+      processed: 'bg-purple-100 text-purple-700',
+    };
+
+    const labels = {
+      draft: 'Draft',
+      sent: 'Sent',
+      paid: 'Paid',
+      cancelled: 'Cancelled',
+      overdue: 'Overdue',
+      processed: 'Processed',
+    };
+
+    return (
+      <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || styles.draft}`}>
+        {labels[status] || status}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading invoices...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Finances - Invoices</h1>
+        <p className="text-sm text-gray-600 mt-1">Manage and process invoices</p>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-sm text-gray-700">Filter:</span>
+        {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilterStatus(status)}
+            className={`px-3 py-1 text-xs font-medium rounded ${
+              filterStatus === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Invoices Table */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Invoice #</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Payer</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Order</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">Amount</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {invoices.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  No invoices found
+                </td>
+              </tr>
+            ) : (
+              invoices.map((invoice) => (
+                <tr key={invoice.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{invoice.invoice_number}</td>
+                  <td className="px-4 py-3 text-gray-600">{formatDate(invoice.invoice_date)}</td>
+                  <td className="px-4 py-3 text-gray-600">{invoice.payer_name || "-"}</td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {invoice.order_code ? (
+                      <button
+                        onClick={() => router.push(`/orders/${invoice.order_code}`)}
+                        className="text-blue-600 hover:text-blue-700 hover:underline"
+                      >
+                        {invoice.order_code}
+                      </button>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                    {formatCurrency(invoice.total)}
+                  </td>
+                  <td className="px-4 py-3">{getStatusBadge(invoice.status)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => handleExportPDF(invoice.id)}
+                        className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
+                        title="Export PDF"
+                      >
+                        PDF
+                      </button>
+                      {invoice.status !== 'processed' && (
+                        <button
+                          onClick={() => handleMarkProcessed(invoice.id)}
+                          className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+                          title="Mark as processed"
+                        >
+                          ✓ Processed
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

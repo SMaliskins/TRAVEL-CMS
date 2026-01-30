@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import AssignedTravellersModal from "./AssignedTravellersModal";
 import AddServiceModal, { ServiceData } from "./AddServiceModal";
@@ -9,8 +10,27 @@ import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
 import SplitServiceModal from "./SplitServiceModal";
 import SplitModalMulti from "./SplitModalMulti";
+import MergeServicesModal from "./MergeServicesModal";
 import ConfirmModal from "@/components/ConfirmModal";
+import ChangeServiceModal from "./ChangeServiceModal";
+import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
+import TripMap from "@/components/TripMap";
+import { CityWithCountry } from "@/components/CityMultiSelect";
+import { getCityByName, getCityByIATA } from "@/lib/data/cities";
+import ItineraryTabs from "./ItineraryTabs";
+import SmartHintRow from "./SmartHintRow";
+import ItineraryTimeline, { SelectedBoardingPass } from "./ItineraryTimeline";
+import { 
+  getRefundPolicyBadge, 
+  getDeadlineUrgency, 
+  formatDeadlineFull,
+  calculateInternalDeadline,
+  getEarliestDeadline,
+  getRefundPolicyLabel,
+  getPriceTypeLabel
+} from "@/lib/services/deadlineCalculator";
+import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
 
 interface Traveller {
   id: string;
@@ -22,11 +42,17 @@ interface Traveller {
   contactNumber?: string;
 }
 
+// Functional types that determine which features are available
+type CategoryType = 'flight' | 'hotel' | 'transfer' | 'tour' | 'insurance' | 'visa' | 'rent_a_car' | 'cruise' | 'other';
+
 interface Service {
   id: string;
   dateFrom: string;
   dateTo: string;
   category: string;
+  categoryId?: string | null;
+  categoryType?: string | null;
+  vatRate?: number | null;
   name: string;
   supplier: string;
   client: string;
@@ -39,14 +65,21 @@ interface Service {
   payer_party_id?: string;
   servicePrice: number;
   clientPrice: number;
-  resStatus: "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
+  resStatus: "draft" | "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr?: string;
   ticketNr?: string;
+  ticketNumbers?: { clientId: string; clientName: string; ticketNr: string }[];
   assignedTravellerIds: string[];
   invoice_id?: string | null;
   splitGroupId?: string | null;
   // Hotel-specific
   hotelName?: string;
+  hotelStarRating?: string | null;
+  hotelRoom?: string | null;
+  hotelBoard?: string | null;
+  mealPlanText?: string | null;
+  transferType?: string | null;
+  additionalServices?: string | null;
   hotelAddress?: string;
   hotelPhone?: string;
   hotelEmail?: string;
@@ -58,6 +91,61 @@ interface Service {
   linkedFlightId?: string;
   // Flight-specific
   flightSegments?: FlightSegment[];
+  boardingPasses?: { id: string; fileName: string; fileUrl: string; clientId: string; clientName: string; uploadedAt: string }[];
+  baggage?: string; // Baggage info
+  cabinClass?: "economy" | "premium_economy" | "business" | "first";
+  // Terms & Conditions
+  priceType?: "ebd" | "regular" | "spo" | null;
+  refundPolicy?: "non_ref" | "refundable" | "fully_ref" | null;
+  paymentDeadlineDeposit?: string | null;
+  paymentDeadlineFinal?: string | null;
+  paymentTerms?: string | null;
+  freeCancellationUntil?: string | null;
+  cancellationPenaltyAmount?: number | null;
+  cancellationPenaltyPercent?: number | null;
+  // Amendment fields (change/cancellation)
+  parentServiceId?: string | null;
+  serviceType?: "original" | "change" | "cancellation";
+  cancellationFee?: number | null;
+  refundAmount?: number | null;
+  changeFee?: number | null;
+  // Tour
+  commissionName?: string | null;
+  commissionRate?: number | null;
+  commissionAmount?: number | null;
+  agentDiscountValue?: number | null;
+  agentDiscountType?: "%" | "€" | null;
+}
+
+function toTitleCase(str: string): string {
+  return str
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(" ");
+}
+
+// Format hotel/tour name: Title Case hotel + " 5*" + Title Case room + meal (parsed text for Package Tour, else board labels)
+function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, fallback: string): string {
+  const name = (s.hotelName || "").trim();
+  const parts: string[] = [];
+  if (name) parts.push(toTitleCase(name));
+  if (s.hotelStarRating?.trim()) parts.push(`${s.hotelStarRating.trim().replace(/\*/g, "")}*`);
+  if (s.hotelRoom?.trim()) parts.push(toTitleCase(s.hotelRoom.trim()));
+  const boardLabels: Record<string, string> = {
+    room_only: "Room Only",
+    breakfast: "Breakfast",
+    half_board: "Half Board",
+    full_board: "Full Board",
+    all_inclusive: "All Inclusive",
+  };
+  const board = s.mealPlanText?.trim()
+    ? toTitleCase(s.mealPlanText.trim())
+    : s.hotelBoard
+      ? boardLabels[String(s.hotelBoard)] || toTitleCase(String(s.hotelBoard))
+      : null;
+  if (board) parts.push(board);
+  return parts.length > 0 ? parts.join(" · ").replace(/\* · /g, "*· ") : toTitleCase(fallback);
 }
 
 interface OrderServicesBlockProps {
@@ -68,6 +156,10 @@ interface OrderServicesBlockProps {
   orderDateFrom?: string | null;
   orderDateTo?: string | null;
   onIssueInvoice?: (services: any[]) => void;
+  // Itinerary destinations for map
+  itineraryDestinations?: CityWithCountry[];
+  // Order source for smart hints
+  orderSource?: 'TA' | 'TO' | 'CORP' | 'NON';
 }
 
 export default function OrderServicesBlock({ 
@@ -77,7 +169,10 @@ export default function OrderServicesBlock({
   orderDateFrom,
   orderDateTo,
   onIssueInvoice,
+  itineraryDestinations = [],
+  orderSource = 'NON',
 }: OrderServicesBlockProps) {
+  const router = useRouter();
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [modalServiceId, setModalServiceId] = useState<string | null>(null);
@@ -87,10 +182,6 @@ export default function OrderServicesBlock({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
-  const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
-  const [duplicateConfirmService, setDuplicateConfirmService] = useState<Service | null>(null);
-  const [cancelConfirmService, setCancelConfirmService] = useState<Service | null>(null);
   
   // Cancelled filter with localStorage persistence
   const [hideCancelled, setHideCancelled] = useState(() => {
@@ -100,6 +191,178 @@ export default function OrderServicesBlock({
     return false;
   });
   
+  // Traveller filter for itinerary tabs
+  const [selectedTravellerId, setSelectedTravellerId] = useState<string | null>(null);
+  
+  // Filter services based on cancelled filter and selected traveller
+  const visibleServices = useMemo(() => {
+    return services.filter(s => {
+      if (hideCancelled && s.resStatus === 'cancelled') return false;
+      if (selectedTravellerId && !s.assignedTravellerIds.includes(selectedTravellerId)) return false;
+      return true;
+    });
+  }, [services, hideCancelled, selectedTravellerId]);
+  
+  // Get visible services without invoice for "select all" functionality (excluding cancelled)
+  const visibleServicesWithoutInvoice = useMemo(() => {
+    return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
+  }, [visibleServices]);
+  
+  // Also filter out cancelled services from selectedServiceIds when they become cancelled
+  useEffect(() => {
+    setSelectedServiceIds(prev => prev.filter(id => {
+      const service = services.find(s => s.id === id);
+      return service && service.resStatus !== 'cancelled';
+    }));
+  }, [services]);
+  
+  // Check if all visible services without invoice are selected
+  const allNonInvoicedSelected = useMemo(() => {
+    if (visibleServicesWithoutInvoice.length === 0) return false;
+    return visibleServicesWithoutInvoice.every(id => selectedServiceIds.includes(id));
+  }, [visibleServicesWithoutInvoice, selectedServiceIds]);
+  
+  // Handle "select all" checkbox - only for visible services
+  const handleSelectAllNonInvoiced = (checked: boolean) => {
+    if (checked) {
+      // Select all visible services without invoice
+      setSelectedServiceIds(prev => {
+        const newIds = [...prev];
+        visibleServicesWithoutInvoice.forEach(id => {
+          const service = services.find(s => s.id === id);
+          // Double check: don't add cancelled services
+          if (service && service.resStatus !== 'cancelled' && !newIds.includes(id)) {
+            newIds.push(id);
+          }
+        });
+        return newIds;
+      });
+    } else {
+      // Deselect all visible services without invoice
+      setSelectedServiceIds(prev => prev.filter(id => !visibleServicesWithoutInvoice.includes(id)));
+    }
+  };
+  
+  const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
+  const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [duplicateConfirmService, setDuplicateConfirmService] = useState<Service | null>(null);
+  const [cancelConfirmService, setCancelConfirmService] = useState<Service | null>(null);
+  // New modals for change/cancellation with fees
+  const [changeModalService, setChangeModalService] = useState<Service | null>(null);
+  const [cancelModalService, setCancelModalService] = useState<Service | null>(null);
+  
+  // Bulk actions state
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const bulkActionsRef = React.useRef<HTMLDivElement>(null);
+  const [bulkSearchQuery, setBulkSearchQuery] = useState("");
+  const [bulkSearchResults, setBulkSearchResults] = useState<Array<{ id: string; displayName: string; type: string }>>([]);
+  const [bulkSearchLoading, setBulkSearchLoading] = useState(false);
+  const [bulkSelectedClients, setBulkSelectedClients] = useState<Array<{ id: string; displayName: string }>>([]);
+  
+  // Draggable floating bar state
+  const [floatingBarPosition, setFloatingBarPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = React.useRef<{ x: number; y: number; barX: number; barY: number } | null>(null);
+  const floatingBarRef = React.useRef<HTMLDivElement>(null);
+  
+  // Handle drag
+  React.useEffect(() => {
+    if (!isDragging) return;
+    
+    // Prevent text selection while dragging
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'grabbing';
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      e.preventDefault();
+      const deltaX = e.clientX - dragStartRef.current.x;
+      const deltaY = e.clientY - dragStartRef.current.y;
+      setFloatingBarPosition({
+        x: dragStartRef.current.barX + deltaX,
+        y: dragStartRef.current.barY + deltaY,
+      });
+    };
+    
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, [isDragging]);
+  
+  const handleDragStart = (e: React.MouseEvent) => {
+    // Don't start drag on buttons
+    if ((e.target as HTMLElement).closest('button')) return;
+    
+    e.preventDefault();
+    
+    const bar = floatingBarRef.current;
+    if (!bar) return;
+    
+    const currentX = floatingBarPosition?.x ?? (window.innerWidth / 2);
+    const currentY = floatingBarPosition?.y ?? (window.innerHeight - 60);
+    
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      barX: currentX,
+      barY: currentY,
+    };
+    setIsDragging(true);
+    
+    // Initialize position if not set
+    if (!floatingBarPosition) {
+      setFloatingBarPosition({ x: currentX, y: currentY });
+    }
+  };
+  
+  // Track Ctrl key and hovered party for Ctrl+click navigation hint
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+  const [hoveredPartyId, setHoveredPartyId] = useState<string | null>(null);
+  
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) setIsCtrlPressed(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) setIsCtrlPressed(false);
+    };
+    const handleBlur = () => setIsCtrlPressed(false);
+    
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+  
+  // Close bulk actions dropdown on outside click
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (bulkActionsRef.current && !bulkActionsRef.current.contains(event.target as Node)) {
+        setShowBulkActions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+  
   const toggleHideCancelled = () => {
     const newValue = !hideCancelled;
     setHideCancelled(newValue);
@@ -108,10 +371,518 @@ export default function OrderServicesBlock({
     }
   };
   
-  // Filter services based on cancelled filter
-  const visibleServices = services.filter(s => 
-    hideCancelled ? s.resStatus !== 'cancelled' : true
-  );
+  // Multi-select boarding passes across services
+  const [selectedBoardingPasses, setSelectedBoardingPasses] = useState<SelectedBoardingPass[]>([]);
+  
+  const handleToggleBoardingPassSelection = useCallback((pass: SelectedBoardingPass) => {
+    setSelectedBoardingPasses(prev => {
+      const exists = prev.some(p => p.passId === pass.passId);
+      if (exists) {
+        return prev.filter(p => p.passId !== pass.passId);
+      } else {
+        return [...prev, pass];
+      }
+    });
+  }, []);
+
+  const handleClearBoardingPassSelection = useCallback(() => {
+    setSelectedBoardingPasses([]);
+  }, []);
+
+  const handleSendSelectedBoardingPasses = useCallback(async (method: "whatsapp" | "email") => {
+    if (selectedBoardingPasses.length === 0) return;
+    
+    try {
+      const files: File[] = [];
+      for (const pass of selectedBoardingPasses) {
+        try {
+          const response = await fetch(pass.fileUrl);
+          const blob = await response.blob();
+          const ext = pass.fileName.split(".").pop()?.toLowerCase();
+          let mimeType = blob.type;
+          if (ext === "pkpass") mimeType = "application/vnd.apple.pkpass";
+          else if (ext === "pdf") mimeType = "application/pdf";
+          files.push(new File([blob], pass.fileName, { type: mimeType }));
+        } catch (err) {
+          console.error("Failed to download:", pass.fileName, err);
+        }
+      }
+
+      if (files.length === 0) {
+        alert("Failed to download files");
+        return;
+      }
+
+      // Try Web Share API (works on mobile)
+      if (navigator.share && navigator.canShare?.({ files })) {
+        await navigator.share({
+          title: "Boarding Passes",
+          text: `Boarding Passes: ${selectedBoardingPasses.map(p => p.flightNumber).filter((v, i, a) => a.indexOf(v) === i).join(", ")}`,
+          files,
+        });
+        handleClearBoardingPassSelection();
+        return;
+      }
+
+      // Desktop fallback: download files first
+      for (const file of files) {
+        const url = window.URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }
+
+      const fileNames = selectedBoardingPasses.map(p => p.fileName).join(", ");
+      
+      if (method === "whatsapp") {
+        alert(`Files downloaded: ${fileNames}\n\nOpen WhatsApp and attach the downloaded files.`);
+        window.open("https://web.whatsapp.com/", "_blank");
+      } else {
+        const flights = selectedBoardingPasses.map(p => p.flightNumber).filter((v, i, a) => a.indexOf(v) === i).join(", ");
+        window.location.href = `mailto:?subject=${encodeURIComponent(`Boarding Passes - ${flights}`)}`;
+        alert(`Files downloaded: ${fileNames}\n\nAttach them to your email.`);
+      }
+      
+      handleClearBoardingPassSelection();
+    } catch (err) {
+      console.error("Share failed:", err);
+    }
+  }, [selectedBoardingPasses, handleClearBoardingPassSelection]);
+  
+  // Calculate service count by traveller
+  const serviceCountByTraveller = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const service of services) {
+      if (hideCancelled && service.resStatus === 'cancelled') continue;
+      for (const tid of service.assignedTravellerIds) {
+        counts[tid] = (counts[tid] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [services, hideCancelled]);
+  
+  // Map route points — FIXED. See .ai/specs/itinerary-map-spec.md
+  // Origin = where they fly FROM. Destinations = where they go. Full path = origin + each arrival.
+  const mapRoutePoints = useMemo(() => {
+    const routePoints: CityWithCountry[] = [];
+    const seenCities = new Set<string>();
+    
+    const activeServices = services.filter(s => {
+      if (s.resStatus === "cancelled") return false;
+      if (selectedTravellerId && !s.assignedTravellerIds.includes(selectedTravellerId)) return false;
+      return true;
+    });
+    
+    const flightServices = activeServices
+      .filter(s => {
+        const cat = (s.category || "").toLowerCase();
+        return (cat.includes("flight") || cat.includes("tour")) && s.flightSegments && s.flightSegments.length > 0;
+      })
+      .sort((a, b) => {
+        const dateA = a.flightSegments?.[0]?.departureDate || a.dateFrom;
+        const dateB = b.flightSegments?.[0]?.departureDate || b.dateFrom;
+        return new Date(dateA).getTime() - new Date(dateB).getTime();
+      });
+    
+    const allSegments: Array<{
+      arrival: string;
+      arrivalCity?: string;
+      arrivalDate: string;
+      arrivalTime: string;
+      departure: string;
+      departureDate: string;
+      departureTime: string;
+    }> = [];
+    for (const service of flightServices) {
+      for (const seg of service.flightSegments || []) {
+        const s = seg as Record<string, unknown>;
+        allSegments.push({
+          arrival: String(s.arrival ?? ""),
+          arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
+          arrivalDate: String(s.arrivalDate ?? s.arrival_date ?? ""),
+          arrivalTime: String(s.arrivalTimeScheduled ?? s.arrival_time_scheduled ?? s.arrivalTime ?? s.arrival_time ?? ""),
+          departure: String(s.departure ?? ""),
+          departureDate: String(s.departureDate ?? s.departure_date ?? ""),
+          departureTime: String(s.departureTimeScheduled ?? s.departure_time_scheduled ?? s.departureTime ?? s.departure_time ?? ""),
+        });
+      }
+    }
+    allSegments.sort((a, b) => {
+      const dateTimeA = new Date(`${a.departureDate}T${a.departureTime}`);
+      const dateTimeB = new Date(`${b.departureDate}T${b.departureTime}`);
+      return dateTimeA.getTime() - dateTimeB.getTime();
+    });
+    
+    // Full route: origin (first departure) + each arrival (TLL, FRA, NCE, FRA, TLL)
+    if (allSegments.length > 0) {
+      const depCode = allSegments[0].departure; // Origin = where they fly FROM
+      if (depCode) {
+        const cityData = getCityByIATA(depCode) || getCityByName(allSegments[0].departure);
+        if (cityData) {
+          routePoints.push({
+            city: cityData.name,
+            country: cityData.country || "",
+            countryCode: cityData.countryCode,
+            lat: cityData.lat,
+            lng: cityData.lng,
+          });
+        }
+      }
+      for (const seg of allSegments) {
+        const arrCode = seg.arrival; // Destinations + transits
+        if (arrCode) {
+          const cityData = getCityByIATA(arrCode) || getCityByName(seg.arrivalCity || seg.arrival);
+          if (cityData) {
+            routePoints.push({
+              city: cityData.name,
+              country: cityData.country || "",
+              countryCode: cityData.countryCode,
+              lat: cityData.lat,
+              lng: cityData.lng,
+            });
+          }
+        }
+      }
+    }
+    
+    if (routePoints.length === 0) {
+      const hotelServices = activeServices.filter(s => 
+        (s.category === "Hotel" || s.category === "Tour") && s.dateFrom && s.dateTo
+      );
+      for (const hotel of hotelServices) {
+        if (hotel.dateFrom && hotel.dateTo) {
+          const checkIn = new Date(hotel.dateFrom);
+          const checkOut = new Date(hotel.dateTo);
+          const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+          if (nights >= 1) {
+            const hotelCity = (hotel as { hotelName?: string }).hotelName?.split(",")[0]?.trim()
+              || hotel.name?.split(",")[0]?.trim()
+              || hotel.supplier?.split(",")[0]?.trim();
+            if (hotelCity && !seenCities.has(hotelCity.toLowerCase())) {
+              seenCities.add(hotelCity.toLowerCase());
+              const cityData = getCityByName(hotelCity);
+              if (cityData) {
+                routePoints.push({
+                  city: cityData.name,
+                  country: cityData.country || "",
+                  countryCode: cityData.countryCode,
+                  lat: cityData.lat,
+                  lng: cityData.lng,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Don't fall back to itineraryDestinations when all services are cancelled
+    if (routePoints.length > 0) return routePoints;
+    const hasActiveServices = services.some(s => s.resStatus !== "cancelled");
+    return hasActiveServices ? itineraryDestinations : [];
+  }, [services, itineraryDestinations, selectedTravellerId]);
+
+  // Colors for different travellers
+  const ROUTE_COLORS = [
+    "#3b82f6", // blue
+    "#ef4444", // red
+    "#22c55e", // green
+    "#f59e0b", // amber
+    "#8b5cf6", // purple
+    "#ec4899", // pink
+    "#14b8a6", // teal
+    "#f97316", // orange
+  ];
+
+  // Helper: get route key from destinations (for grouping identical routes)
+  const getRouteKey = (destinations: CityWithCountry[]): string => {
+    return destinations.map(d => `${d.city}|${d.countryCode || ""}`).join("→");
+  };
+
+  // Helper: build full flight route for a traveller
+  // Origin (first departure) = where they fly FROM. Destinations = where they go (incl. transits like Frankfurt)
+  const buildTravellerRoute = (travellerId: string): CityWithCountry[] => {
+    const routePoints: CityWithCountry[] = [];
+    const seenCities = new Set<string>();
+    
+    const travellerServices = services.filter(s => 
+      s.resStatus !== "cancelled" && s.assignedTravellerIds.includes(travellerId)
+    );
+    
+    const flightServices = travellerServices
+      .filter(s => {
+        const cat = (s.category || "").toLowerCase();
+        return (cat.includes("flight") || cat.includes("tour")) && s.flightSegments && s.flightSegments.length > 0;
+      })
+      .sort((a, b) => {
+        const dateA = a.flightSegments?.[0]?.departureDate || a.dateFrom;
+        const dateB = b.flightSegments?.[0]?.departureDate || b.dateFrom;
+        return new Date(dateA).getTime() - new Date(dateB).getTime();
+      });
+    
+    const allSegments: Array<{
+      arrival: string;
+      arrivalCity?: string;
+      arrivalDate: string;
+      arrivalTime: string;
+      departure: string;
+      departureDate: string;
+      departureTime: string;
+    }> = [];
+    for (const service of flightServices) {
+      for (const seg of service.flightSegments || []) {
+        const s = seg as Record<string, unknown>;
+        allSegments.push({
+          arrival: String(s.arrival ?? ""),
+          arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
+          arrivalDate: String(s.arrivalDate ?? s.arrival_date ?? ""),
+          arrivalTime: String(s.arrivalTimeScheduled ?? s.arrival_time_scheduled ?? s.arrivalTime ?? s.arrival_time ?? ""),
+          departure: String(s.departure ?? ""),
+          departureDate: String(s.departureDate ?? s.departure_date ?? ""),
+          departureTime: String(s.departureTimeScheduled ?? s.departure_time_scheduled ?? s.departureTime ?? s.departure_time ?? ""),
+        });
+      }
+    }
+    allSegments.sort((a, b) => {
+      const dateTimeA = new Date(`${a.departureDate}T${a.departureTime}`);
+      const dateTimeB = new Date(`${b.departureDate}T${b.departureTime}`);
+      return dateTimeA.getTime() - dateTimeB.getTime();
+    });
+    
+    // Full route: origin (first departure) + each arrival (TLL, FRA, NCE, FRA, TLL)
+    if (allSegments.length > 0) {
+      const depCode = allSegments[0].departure; // Origin = where they fly FROM
+      if (depCode) {
+        const cityData = getCityByIATA(depCode) || getCityByName(allSegments[0].departure);
+        if (cityData) {
+          routePoints.push({
+            city: cityData.name,
+            country: cityData.country || "",
+            countryCode: cityData.countryCode,
+            lat: cityData.lat,
+            lng: cityData.lng,
+          });
+        }
+      }
+      for (const seg of allSegments) {
+        const arrCode = seg.arrival; // Destinations + transits
+        if (arrCode) {
+          const cityData = getCityByIATA(arrCode) || getCityByName(seg.arrivalCity || seg.arrival);
+          if (cityData) {
+            routePoints.push({
+              city: cityData.name,
+              country: cityData.country || "",
+              countryCode: cityData.countryCode,
+              lat: cityData.lat,
+              lng: cityData.lng,
+            });
+          }
+        }
+      }
+    }
+    
+    if (routePoints.length === 0) {
+      const hotelServices = travellerServices.filter(s => 
+        (s.category === "Hotel" || s.category === "Tour") && s.dateFrom && s.dateTo
+      );
+      for (const hotel of hotelServices) {
+        if (hotel.dateFrom && hotel.dateTo) {
+          const checkIn = new Date(hotel.dateFrom);
+          const checkOut = new Date(hotel.dateTo);
+          const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+          if (nights >= 1) {
+            const hotelCity = (hotel as { hotelName?: string }).hotelName?.split(",")[0]?.trim()
+              || hotel.name?.split(",")[0]?.trim()
+              || hotel.supplier?.split(",")[0]?.trim();
+            if (hotelCity && !seenCities.has(hotelCity.toLowerCase())) {
+              seenCities.add(hotelCity.toLowerCase());
+              const cityData = getCityByName(hotelCity);
+              if (cityData) {
+                routePoints.push({
+                  city: cityData.name,
+                  country: cityData.country || "",
+                  countryCode: cityData.countryCode,
+                  lat: cityData.lat,
+                  lng: cityData.lng,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return routePoints;
+  };
+
+  // Build routes for each traveller (for multi-route map)
+  // Group travellers with identical routes under one color
+  const travellerRoutes = useMemo(() => {
+    // If a specific traveller is selected, show only their route with legend
+    if (selectedTravellerId) {
+      const traveller = orderTravellers.find(t => t.id === selectedTravellerId);
+      if (!traveller) return [];
+      
+      const destinations = buildTravellerRoute(selectedTravellerId);
+      if (destinations.length === 0) return [];
+      
+      return [{
+        travellerId: traveller.id,
+        travellerName: `${traveller.firstName} ${traveller.lastName}`,
+        color: ROUTE_COLORS[0],
+        destinations,
+      }];
+    }
+    
+    const travellersWithServices = orderTravellers.filter(t => 
+      services.some(s => s.resStatus !== "cancelled" && s.assignedTravellerIds.includes(t.id))
+    );
+    
+    if (travellersWithServices.length === 0) {
+      return [];
+    }
+    
+    // Build destinations for each traveller and group by route
+    const routeGroups = new Map<string, {
+      travellerIds: string[];
+      travellerNames: string[];
+      destinations: CityWithCountry[];
+    }>();
+    
+    for (const traveller of travellersWithServices) {
+      const destinations = buildTravellerRoute(traveller.id);
+      if (destinations.length === 0) continue;
+      
+      const routeKey = getRouteKey(destinations);
+      const existing = routeGroups.get(routeKey);
+      
+      if (existing) {
+        existing.travellerIds.push(traveller.id);
+        existing.travellerNames.push(`${traveller.firstName} ${traveller.lastName}`);
+      } else {
+        routeGroups.set(routeKey, {
+          travellerIds: [traveller.id],
+          travellerNames: [`${traveller.firstName} ${traveller.lastName}`],
+          destinations,
+        });
+      }
+    }
+    
+    // Convert groups to routes with colors
+    return Array.from(routeGroups.values()).map((group, idx) => ({
+      travellerId: group.travellerIds.join(","),
+      travellerName: group.travellerNames.join(", "),
+      color: ROUTE_COLORS[idx % ROUTE_COLORS.length],
+      destinations: group.destinations,
+    }));
+  }, [services, orderTravellers, selectedTravellerId]);
+  
+  // Smart hints state - load from localStorage
+  const dismissedHintsKey = React.useMemo(() => `dismissedHints_${orderCode}`, [orderCode]);
+  
+  const [dismissedHintIds, setDismissedHintIds] = useState<Set<string>>(new Set());
+  const [hintsLoaded, setHintsLoaded] = useState(false);
+  
+  // Load dismissed hints from localStorage on mount and when orderCode changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && orderCode) {
+      try {
+        const saved = localStorage.getItem(dismissedHintsKey);
+        if (saved) {
+          const parsed = JSON.parse(saved) as string[];
+          const loadedSet = new Set(parsed);
+          console.log(`[Hints] Loaded ${loadedSet.size} dismissed hints for order ${orderCode}:`, Array.from(loadedSet));
+          setDismissedHintIds(loadedSet);
+        } else {
+          console.log(`[Hints] No dismissed hints found for order ${orderCode}`);
+          setDismissedHintIds(new Set());
+        }
+      } catch (e) {
+        console.error('Failed to load dismissed hints from localStorage:', e);
+        setDismissedHintIds(new Set());
+      } finally {
+        setHintsLoaded(true);
+      }
+    }
+  }, [orderCode, dismissedHintsKey]);
+  
+  // Save dismissed hints to localStorage whenever they change (but only after initial load)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && orderCode && hintsLoaded) {
+      try {
+        const arrayToSave = Array.from(dismissedHintIds);
+        localStorage.setItem(
+          dismissedHintsKey,
+          JSON.stringify(arrayToSave)
+        );
+        console.log(`[Hints] Saved ${arrayToSave.length} dismissed hints for order ${orderCode}:`, arrayToSave);
+      } catch (e) {
+        console.error('Failed to save dismissed hints to localStorage:', e);
+      }
+    }
+  }, [dismissedHintIds, dismissedHintsKey, orderCode, hintsLoaded]);
+  
+  // Generate smart hints based on services and order source (only after hints are loaded)
+  const smartHints = React.useMemo(() => {
+    if (!hintsLoaded) {
+      return []; // Don't show hints until dismissed hints are loaded
+    }
+    
+    const servicesForHint: ServiceForHint[] = services.map(s => ({
+      id: s.id,
+      category: s.category,
+      dateFrom: s.dateFrom,
+      dateTo: s.dateTo,
+      name: s.name,
+      resStatus: s.resStatus,
+      flightSegments: s.flightSegments, // Include flight segments for connection time calculation
+    }));
+    
+    const allHints = generateSmartHints(servicesForHint, orderSource);
+    const filtered = allHints.filter(h => !dismissedHintIds.has(h.id));
+    console.log(`[Hints] Generated ${allHints.length} hints, ${filtered.length} visible (${dismissedHintIds.size} dismissed)`);
+    return filtered;
+  }, [services, orderSource, dismissedHintIds, hintsLoaded]);
+  
+  // Get hints for a specific service
+  const getHintsAfterService = (serviceId: string): SmartHint[] => {
+    return smartHints.filter(h => h.afterServiceId === serviceId);
+  };
+  
+  // Handle hint action (open add service modal with prefill)
+  const handleHintAction = (hint: SmartHint) => {
+    if (hint.action) {
+      // For now just open the add service modal
+      // In future, could prefill with hint.action.prefillData
+      setShowAddModal(true);
+    }
+  };
+  
+  // Dismiss a hint
+  const handleDismissHint = (hintId: string) => {
+    console.log(`[Hints] Dismissing hint: ${hintId}`);
+    setDismissedHintIds(prev => {
+      const newSet = new Set([...prev, hintId]);
+      // Save to localStorage immediately
+      if (typeof window !== 'undefined') {
+        try {
+          const arrayToSave = Array.from(newSet);
+          localStorage.setItem(
+            dismissedHintsKey,
+            JSON.stringify(arrayToSave)
+          );
+          console.log(`[Hints] Immediately saved dismissed hint ${hintId}. Total dismissed: ${arrayToSave.length}`);
+        } catch (e) {
+          console.error('Failed to save dismissed hint to localStorage:', e);
+        }
+      }
+      return newSet;
+    });
+  };
 
   // Fetch services from API
   const fetchServices = useCallback(async () => {
@@ -135,6 +906,9 @@ export default function OrderServicesBlock({
           dateFrom: s.dateFrom || "",
           dateTo: s.dateTo || s.dateFrom || "",
           category: s.category || "Other",
+          categoryId: s.categoryId || null,
+          categoryType: s.categoryType || null,
+          vatRate: s.vatRate ?? null,
           name: s.serviceName,
           supplier: s.supplierName || "-",
           client: s.clientName || "-",
@@ -150,6 +924,44 @@ export default function OrderServicesBlock({
           assignedTravellerIds: s.travellerIds || [],
           invoice_id: s.invoice_id || null,
           splitGroupId: s.splitGroupId || null,
+          // Flight-specific
+          flightSegments: s.flightSegments || [],
+          ticketNumbers: s.ticketNumbers || [],
+          boardingPasses: s.boardingPasses || [],
+          baggage: s.baggage || "",
+          cabinClass: s.cabinClass || "economy",
+          // Terms & Conditions
+          priceType: s.priceType || null,
+          refundPolicy: s.refundPolicy || null,
+          freeCancellationUntil: s.freeCancellationUntil || null,
+          cancellationPenaltyAmount: s.cancellationPenaltyAmount || null,
+          cancellationPenaltyPercent: s.cancellationPenaltyPercent || null,
+          // Amendment fields
+          parentServiceId: s.parentServiceId || null,
+          serviceType: s.serviceType || "original",
+          cancellationFee: s.cancellationFee || null,
+          refundAmount: s.refundAmount || null,
+          changeFee: s.changeFee || null,
+          // Tour (persisted commission - must pass all for Edit modal to display)
+          commissionName: s.commissionName ?? null,
+          commissionRate: s.commissionRate ?? null,
+          commissionAmount: s.commissionAmount ?? null,
+          agentDiscountValue: s.agentDiscountValue ?? null,
+          agentDiscountType: s.agentDiscountType ?? null,
+          // Tour/Hotel fields (must pass for Edit modal to display after save)
+          hotelName: s.hotelName ?? null,
+          hotelStarRating: s.hotelStarRating ?? null,
+          hotelRoom: s.hotelRoom ?? null,
+          hotelBoard: s.hotelBoard ?? null,
+          mealPlanText: s.mealPlanText ?? null,
+          transferType: s.transferType ?? null,
+          additionalServices: s.additionalServices ?? null,
+          hotelAddress: s.hotelAddress ?? null,
+          hotelPhone: s.hotelPhone ?? null,
+          hotelEmail: s.hotelEmail ?? null,
+          paymentDeadlineDeposit: s.paymentDeadlineDeposit ?? null,
+          paymentDeadlineFinal: s.paymentDeadlineFinal ?? null,
+          paymentTerms: s.paymentTerms ?? null,
         }));
         setServices(mappedServices);
       }
@@ -240,6 +1052,8 @@ export default function OrderServicesBlock({
 
   const getResStatusColor = (status: Service["resStatus"]) => {
     switch (status) {
+      case "draft":
+        return "bg-slate-100 text-slate-600 border border-dashed border-slate-300";
       case "confirmed":
         return "bg-green-100 text-green-800";
       case "booked":
@@ -333,12 +1147,62 @@ export default function OrderServicesBlock({
     setDuplicateConfirmService(null);
     
     console.log('[Duplicate] Confirmed, duplicating...', {
+      supplierPartyId: service.supplierPartyId,
+      clientPartyId: service.clientPartyId,
       payerPartyId: service.payerPartyId,
-      payerName: service.payer
+      assignedTravellerIds: service.assignedTravellerIds,
     });
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      
+      // Build duplicate payload with ALL fields
+      const duplicatePayload = {
+        // Basic info with "(copy)" suffix
+        serviceName: service.name + " (copy)",
+        category: service.category,
+        
+        // Dates
+        dateFrom: service.dateFrom,
+        dateTo: service.dateTo,
+        
+        // Parties - copy all IDs and names
+        supplierPartyId: service.supplierPartyId || service.supplier_party_id,
+        supplierName: service.supplier !== "-" ? service.supplier : null,
+        clientPartyId: service.clientPartyId || service.client_party_id,
+        clientName: service.client !== "-" ? service.client : null,
+        payerPartyId: service.payerPartyId || service.payer_party_id,
+        payerName: service.payer !== "-" ? service.payer : null,
+        
+        // Pricing
+        servicePrice: service.servicePrice,
+        clientPrice: service.clientPrice,
+        vatRate: 0,
+        
+        // Status - keep same status
+        resStatus: service.resStatus,
+        refNr: service.refNr,
+        ticketNr: service.ticketNr,
+        
+        // Flight-specific fields
+        cabinClass: service.cabinClass,
+        baggage: service.baggage,
+        flightSegments: service.flightSegments,
+        ticketNumbers: service.ticketNumbers,
+        
+        // Terms & conditions
+        priceType: service.priceType,
+        refundPolicy: service.refundPolicy,
+        freeCancellationUntil: service.freeCancellationUntil,
+        cancellationPenaltyAmount: service.cancellationPenaltyAmount,
+        cancellationPenaltyPercent: service.cancellationPenaltyPercent,
+        
+        // Travellers - copy assigned travellers
+        clients: service.assignedTravellerIds?.map(id => ({ partyId: id })) || [],
+      };
+      
+      console.log('[Duplicate] Sending payload:', duplicatePayload);
+      
       const response = await fetch(
         `/api/orders/${encodeURIComponent(orderCode)}/services`,
         {
@@ -347,28 +1211,17 @@ export default function OrderServicesBlock({
             "Content-Type": "application/json",
             ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
           },
-          body: JSON.stringify({
-            serviceName: service.name,
-            category: service.category,
-            servicePrice: service.servicePrice,
-            clientPrice: service.clientPrice,
-            resStatus: service.resStatus,
-            refNr: service.refNr,
-            ticketNr: service.ticketNr,
-            dateFrom: service.dateFrom,
-            dateTo: service.dateTo,
-            supplierPartyId: service.supplierPartyId,
-            supplierName: service.supplier,
-            clientPartyId: service.clientPartyId,
-            clientName: service.client,
-            payerPartyId: service.payerPartyId,
-            payerName: service.payer,
-          })
+          body: JSON.stringify(duplicatePayload)
         }
       );
-      if (!response.ok) throw new Error("Failed to duplicate service");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error('[Duplicate] Failed:', errData);
+        throw new Error("Failed to duplicate service");
+      }
       console.log('[Duplicate] Success!');
       fetchServices();
+      fetchTravellers();
     } catch (error) {
       console.error("Error duplicating service:", error);
       alert("Failed to duplicate service");
@@ -441,7 +1294,10 @@ export default function OrderServicesBlock({
 
   return (
     <>
-      <div className="rounded-lg bg-white shadow-sm">
+      {/* Vertical layout: Services on top, Map below */}
+      <div className="space-y-4">
+        {/* Services table */}
+        <div className="rounded-lg bg-white shadow-sm">
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-base">📋</span>
@@ -480,12 +1336,35 @@ export default function OrderServicesBlock({
           </div>
         </div>
 
+        {/* Itinerary Tabs - filter by traveller */}
+        <div className="px-3">
+          <ItineraryTabs
+            travellers={orderTravellers}
+            selectedTravellerId={selectedTravellerId}
+            onSelectTraveller={setSelectedTravellerId}
+            serviceCountByTraveller={serviceCountByTraveller}
+          />
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="w-20 px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Invoice
+                  <div className="flex items-center justify-center gap-2">
+                    {visibleServicesWithoutInvoice.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={allNonInvoicedSelected}
+                        onChange={(e) => handleSelectAllNonInvoiced(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        title="Select all visible services without invoice"
+                        aria-label="Select all visible services without invoice"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                    <span>Invoice</span>
+                  </div>
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Category
@@ -502,26 +1381,20 @@ export default function OrderServicesBlock({
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Payer
                 </th>
-                <th className="px-2 py-1.5 text-right text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-1 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Service Price
                 </th>
-                <th className="px-2 py-1.5 text-right text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-1 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Client Price
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Res Status
-                </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Ref Nr
-                </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Ticket Nr
-                </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="min-w-[180px] px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Travellers
                 </th>
-                <th className="px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Actions
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Status
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Terms
                 </th>
               </tr>
             </thead>
@@ -616,19 +1489,26 @@ export default function OrderServicesBlock({
                                       </svg>
                                     </button>
                                   </div>
+                                ) : service.resStatus === 'cancelled' ? (
+                                  <span className="text-gray-400 text-xs" title="Cancelled service cannot be invoiced">-</span>
                                 ) : (
                                   <input
                                     type="checkbox"
                                     checked={selectedServiceIds.includes(service.id)}
                                     onChange={(e) => {
                                       e.stopPropagation();
+                                      // Prevent selecting cancelled services
+                                      if (service.resStatus === 'cancelled') {
+                                        return;
+                                      }
                                       if (e.target.checked) {
                                         setSelectedServiceIds(prev => [...prev, service.id]);
                                       } else {
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    disabled={service.resStatus === 'cancelled'}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label={`Select ${service.name} for invoice`}
                                     title="Select for invoice"
                                   />
@@ -646,40 +1526,63 @@ export default function OrderServicesBlock({
                                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
                                   </span>
                                 )}
-                                <span>{service.name}</span>
+                                <span>
+                                  {(service.category === "Hotel" || service.category === "Tour" || service.category === "Package Tour")
+                                    ? formatHotelDisplayName(service as { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, service.name)
+                                    : service.name}
+                                </span>
                               </div>
                             </td>
-                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                            <td 
+                              className={`px-2 py-1 text-sm leading-tight ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              onClick={(e) => {
+                                if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
+                                  e.preventDefault();
+                                  router.push(`/directory/${service.supplierPartyId}`);
+                                }
+                              }}
+                              onMouseEnter={() => service.supplierPartyId && setHoveredPartyId(`supplier-${service.id}`)}
+                              onMouseLeave={() => setHoveredPartyId(null)}
+                            >
                               {service.supplier}
                             </td>
-                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                            <td 
+                              className={`px-2 py-1 text-sm leading-tight ${service.clientPartyId && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              onClick={(e) => {
+                                if ((e.ctrlKey || e.metaKey) && service.clientPartyId) {
+                                  e.preventDefault();
+                                  router.push(`/directory/${service.clientPartyId}`);
+                                }
+                              }}
+                              onMouseEnter={() => service.clientPartyId && setHoveredPartyId(`client-${service.id}`)}
+                              onMouseLeave={() => setHoveredPartyId(null)}
+                            >
                               {service.client}
                             </td>
-                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                            <td 
+                              className={`px-2 py-1 text-sm leading-tight ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              onClick={(e) => {
+                                if ((e.ctrlKey || e.metaKey) && service.payerPartyId) {
+                                  e.preventDefault();
+                                  router.push(`/directory/${service.payerPartyId}`);
+                                }
+                              }}
+                              onMouseEnter={() => service.payerPartyId && setHoveredPartyId(`payer-${service.id}`)}
+                              onMouseLeave={() => setHoveredPartyId(null)}
+                            >
                               {service.payer}
                             </td>
-                            <td className="whitespace-nowrap px-2 py-1 text-right text-sm text-gray-700 leading-tight">
+                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700 leading-tight">
                               {formatCurrency(service.servicePrice)}
                             </td>
-                            <td className="whitespace-nowrap px-2 py-1 text-right text-sm font-medium text-gray-900 leading-tight">
+                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium text-gray-900 leading-tight">
                               {formatCurrency(service.clientPrice)}
                             </td>
-                            <td className="px-2 py-1 text-sm leading-tight">
-                              <span
-                                className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-medium ${getResStatusColor(
-                                  service.resStatus
-                                )}`}
-                              >
-                                {service.resStatus}
-                              </span>
-                            </td>
-                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
-                              {service.refNr || "-"}
-                            </td>
-                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
-                              {service.ticketNr || "-"}
-                            </td>
-                            <td className="px-2 py-1 leading-tight">
+                            <td 
+                              className="min-w-[180px] px-2 py-1 leading-tight cursor-pointer hover:bg-blue-50 transition-colors"
+                              onClick={(e) => handleOpenModal(service.id, e)}
+                              title="Click to manage travellers"
+                            >
                               <div className="flex items-center gap-1">
                                 <div className="flex items-center gap-0.5">
                                   {visibleIds.map((travellerId) => (
@@ -705,61 +1608,90 @@ export default function OrderServicesBlock({
                                     </span>
                                   )}
                                 </div>
-                                <button
-                                  onClick={(e) =>
-                                    handleOpenModal(service.id, e)
-                                  }
-                                  className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-600 transition-colors hover:bg-gray-50"
-                                >
+                                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-600">
                                   +
-                                </button>
+                                </span>
                               </div>
                             </td>
-
-
-                            {/* Split Button (always visible) */}
-                            <td className="px-2 py-1 text-center">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSplitServiceId(service.id);
-                                }}
-                                className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors text-sm"
-                                title="Split Service"
+                            {/* Status */}
+                            <td className="px-2 py-1 text-sm leading-tight">
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getResStatusColor(
+                                  service.resStatus
+                                )}`}
                               >
-                                🔗
-                              </button>
+                                {service.resStatus}
+                              </span>
                             </td>
-                            {/* Duplicate Button */}
-                            <td className="px-2 py-1 text-center">
-                              <button
-                                onClick={(e) => {
-                                  console.log('[Duplicate] Button clicked', service);
-                                  e.stopPropagation();
-                                  setDuplicateConfirmService(service);
-                                }}
-                                className="text-purple-600 hover:text-purple-800 p-1 rounded hover:bg-purple-50 transition-colors text-sm"
-                                title="Duplicate Service"
-                              >
-                                📋
-                              </button>
-                            </td>
-                            {/* Cancel Button (hover effect) */}
-                            <td className="px-2 py-1 text-right">
-                              {service.resStatus !== "cancelled" && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCancelConfirmService(service);
-                                  }}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
-                                  title="Cancel Service"
-                                >
-                                  🚫
-                                </button>
-                              )}
+                            {/* Terms */}
+                            <td className="px-2 py-1 text-sm leading-tight">
+                              {(() => {
+                                const policy = service.refundPolicy || "non_ref";
+                                const freeCancelDate = service.freeCancellationUntil || null;
+                                const badge = getRefundPolicyBadge(policy as "non_ref" | "refundable" | "fully_ref", freeCancelDate);
+                                const urgency = getDeadlineUrgency(freeCancelDate);
+                                
+                                // Badge colors based on policy and urgency
+                                let badgeClass = "";
+                                if (policy === "non_ref") {
+                                  badgeClass = "bg-red-100 text-red-700 border border-red-200";
+                                } else if (policy === "fully_ref") {
+                                  badgeClass = "bg-green-100 text-green-700 border border-green-200";
+                                } else {
+                                  // Refundable - color by urgency
+                                  if (urgency === "overdue") {
+                                    badgeClass = "bg-red-100 text-red-700 border border-red-200";
+                                  } else if (urgency === "urgent") {
+                                    badgeClass = "bg-red-100 text-red-700 border border-red-200 animate-pulse";
+                                  } else if (urgency === "warning") {
+                                    badgeClass = "bg-yellow-100 text-yellow-700 border border-yellow-200";
+                                  } else {
+                                    badgeClass = "bg-green-100 text-green-700 border border-green-200";
+                                  }
+                                }
+                                
+                                // Build tooltip content
+                                const tooltipParts: string[] = [];
+                                tooltipParts.push(`Refund: ${getRefundPolicyLabel(policy as "non_ref" | "refundable" | "fully_ref")}`);
+                                if (service.categoryType === "tour" && service.priceType) {
+                                  tooltipParts.push(`Price: ${getPriceTypeLabel(service.priceType)}`);
+                                }
+                                if (freeCancelDate) {
+                                  tooltipParts.push(`Free cancel until: ${formatDeadlineFull(freeCancelDate)}`);
+                                  const internalDeadline = calculateInternalDeadline(
+                                    getEarliestDeadline(freeCancelDate)
+                                  );
+                                  if (internalDeadline) {
+                                    tooltipParts.push(`Internal deadline: ${formatDeadlineFull(internalDeadline)}`);
+                                  }
+                                }
+                                if (service.cancellationPenaltyAmount) {
+                                  tooltipParts.push(`Penalty: €${service.cancellationPenaltyAmount}`);
+                                }
+                                if (service.cancellationPenaltyPercent) {
+                                  tooltipParts.push(`Penalty: ${service.cancellationPenaltyPercent}%`);
+                                }
+                                
+                                return badge ? (
+                                  <span
+                                    className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium cursor-help ${badgeClass}`}
+                                    title={tooltipParts.join("\n")}
+                                  >
+                                    {badge}
+                                  </span>
+                                ) : null;
+                              })()}
                             </td>
                           </tr>
+                          {/* Smart hints after this service */}
+                          {getHintsAfterService(service.id).map(hint => (
+                            <SmartHintRow
+                              key={hint.id}
+                              hint={hint}
+                              onAction={handleHintAction}
+                              onDismiss={handleDismissHint}
+                            />
+                          ))}
                           </React.Fragment>
                         );
                       })}
@@ -768,6 +1700,106 @@ export default function OrderServicesBlock({
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+        {/* Itinerary Timeline + Map - side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Left: Itinerary Timeline (2/3) */}
+          <div className="lg:col-span-2">
+            <ItineraryTimeline
+              services={visibleServices.map(s => ({
+                id: s.id,
+                dateFrom: s.dateFrom,
+                dateTo: s.dateTo,
+                category: s.category,
+                categoryType: s.categoryType,
+                serviceType: s.serviceType,
+                name: s.name,
+                supplier: s.supplier,
+                resStatus: s.resStatus,
+                hotelName: s.hotelName,
+                flightSegments: s.flightSegments,
+                refNr: s.refNr,
+                ticketNumbers: s.ticketNumbers,
+                boardingPasses: s.boardingPasses,
+                baggage: s.baggage,
+                splitGroupId: s.splitGroupId ?? null,
+                assignedTravellerIds: s.assignedTravellerIds ?? [],
+              }))}
+              travellers={orderTravellers.filter(t => (serviceCountByTraveller[t.id] || 0) > 0)}
+              selectedTravellerId={selectedTravellerId}
+              onSelectTraveller={setSelectedTravellerId}
+              onUploadBoardingPass={async (serviceId, file, clientId, flightNumber) => {
+                const client = orderTravellers.find(t => t.id === clientId);
+                const clientName = client ? `${client.firstName} ${client.lastName}` : "Unknown";
+                
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("clientId", clientId);
+                formData.append("clientName", clientName);
+                formData.append("flightNumber", flightNumber);
+                
+                const response = await fetch(`/api/services/${serviceId}/boarding-passes`, {
+                  method: "POST",
+                  body: formData,
+                });
+                
+                if (response.ok) {
+                  // Refresh services to get updated boarding passes
+                  fetchServices();
+                } else {
+                  const error = await response.json();
+                  alert(error.error || "Failed to upload boarding pass");
+                }
+              }}
+              onViewBoardingPass={(pass) => {
+                window.open(pass.fileUrl, "_blank");
+              }}
+              onDeleteBoardingPass={async (serviceId, passId) => {
+                if (!confirm("Delete this boarding pass?")) return;
+                
+                const response = await fetch(
+                  `/api/services/${serviceId}/boarding-passes?passId=${passId}`,
+                  { method: "DELETE" }
+                );
+                
+                if (response.ok) {
+                  fetchServices();
+                } else {
+                  alert("Failed to delete boarding pass");
+                }
+              }}
+              onEditService={(serviceId) => {
+                setEditServiceId(serviceId);
+              }}
+              selectedBoardingPasses={selectedBoardingPasses}
+              onToggleBoardingPassSelection={handleToggleBoardingPassSelection}
+            />
+          </div>
+          
+          {/* Right: Itinerary Map (1/3) */}
+          <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-gray-200 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🗺️</span>
+                <h2 className="text-base font-semibold text-gray-900">Map</h2>
+              </div>
+            </div>
+            {mapRoutePoints.length > 0 || travellerRoutes.length > 0 ? (
+              <TripMap
+                destinations={mapRoutePoints}
+                travellerRoutes={travellerRoutes.length > 0 ? travellerRoutes : undefined}
+                dateFrom={orderDateFrom || undefined}
+                dateTo={orderDateTo || undefined}
+                className="h-[500px]"
+              />
+            ) : (
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+                No destinations set
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -807,6 +1839,9 @@ export default function OrderServicesBlock({
             onServiceUpdated={(updated) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
               setEditServiceId(null);
+              // Refresh travellers and services after update (clients may have been added)
+              fetchTravellers();
+              fetchServices();
             }}
           />
         </>
@@ -831,44 +1866,80 @@ export default function OrderServicesBlock({
           services={services.filter(s => selectedServiceIds.includes(s.id))}
           orderCode={orderCode}
           onClose={() => setSplitMultiModalOpen(false)}
-          onServicesUpdated={(updated) => {
+          onServicesUpdated={() => {
             fetchServices();
             setSplitMultiModalOpen(false);
             setSelectedServiceIds([]);
           }}
         />
       )}
+      
+      {/* Merge Services Modal */}
+      {mergeModalOpen && (
+        <MergeServicesModal
+          services={services.filter(s => selectedServiceIds.includes(s.id))}
+          orderCode={orderCode}
+          onClose={() => setMergeModalOpen(false)}
+          onSuccess={() => {
+            fetchServices();
+            setMergeModalOpen(false);
+            setSelectedServiceIds([]);
+          }}
+        />
+      )}
 
-      {/* Floating Action Bar */}
-      {selectedServiceIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.2s_ease-out]">
-          <div className="bg-black text-white rounded-lg shadow-2xl px-6 py-3 flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      {/* Floating Action Bar - hide when modals are open */}
+      {selectedServiceIds.length > 0 && !splitMultiModalOpen && !splitServiceId && !mergeModalOpen && (
+        <div 
+          ref={floatingBarRef}
+          className={`fixed z-50 ${floatingBarPosition ? '' : 'bottom-6 left-1/2 -translate-x-1/2'} ${!floatingBarPosition ? 'animate-[slideUp_0.3s_ease-out]' : ''}`}
+          style={floatingBarPosition ? {
+            left: floatingBarPosition.x,
+            top: floatingBarPosition.y,
+            transform: 'translate(-50%, -50%)',
+          } : undefined}
+        >
+          <div 
+            className={`bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 px-2 py-2 flex items-center gap-1 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+            onMouseDown={handleDragStart}
+          >
+            {/* Drag handle - double click to reset position */}
+            <div 
+              className="px-1 py-2 cursor-grab active:cursor-grabbing text-white/30 hover:text-white/50" 
+              title="Drag to move, double-click to reset"
+              onDoubleClick={() => setFloatingBarPosition(null)}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM14 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM14 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" />
               </svg>
-              <span className="font-medium">
-                {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'service' : 'services'} selected
-              </span>
             </div>
-            <div className="h-6 w-px bg-gray-600" />
-            <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="font-bold text-green-400">
-                €{services
-                  .filter(s => selectedServiceIds.includes(s.id))
-                  .reduce((sum, s) => sum + s.clientPrice, 0)
-                  .toLocaleString()}
-              </span>
+            
+            {/* Selection info */}
+            <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-xl mr-1">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <span className="text-blue-400 font-bold text-sm">{selectedServiceIds.length}</span>
+                </div>
+                <span className="text-white/70 text-sm hidden sm:block">selected</span>
+              </div>
+              <div className="w-px h-6 bg-white/10" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-emerald-400 font-semibold">
+                  €{services
+                    .filter(s => selectedServiceIds.includes(s.id))
+                    .reduce((sum, s) => sum + s.clientPrice, 0)
+                    .toLocaleString()}
+                </span>
+              </div>
             </div>
-            <div className="h-6 w-px bg-gray-600" />
+
+            {/* Action buttons */}
             <button
               onClick={() => {
                 if (onIssueInvoice) {
+                  // Filter out cancelled services before passing to onIssueInvoice
                   const selectedServicesData = services
-                    .filter(s => selectedServiceIds.includes(s.id))
+                    .filter(s => selectedServiceIds.includes(s.id) && s.resStatus !== 'cancelled')
                     .map(s => ({
                       id: s.id,
                       name: s.name,
@@ -876,32 +1947,152 @@ export default function OrderServicesBlock({
                       category: s.category,
                       dateFrom: s.dateFrom,
                       dateTo: s.dateTo,
+                      client: s.client,
+                      clientPartyId: s.clientPartyId,
+                      payer: s.payer,
+                      payerPartyId: s.payerPartyId,
+                      paymentDeadlineDeposit: s.paymentDeadlineDeposit,
+                      paymentDeadlineFinal: s.paymentDeadlineFinal,
+                      paymentTerms: s.paymentTerms,
+                      resStatus: s.resStatus, // Add resStatus for filtering cancelled services
                     }));
+                  
+                  if (selectedServicesData.length === 0) {
+                    alert('No active services selected. Cancelled services are excluded.');
+                    return;
+                  }
                   onIssueInvoice(selectedServicesData);
-                  setSelectedServiceIds([]); // Clear selection
+                  setSelectedServiceIds([]);
                 }
               }}
-              className="px-4 py-2 bg-white text-black font-medium rounded hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-900 text-sm font-semibold rounded-xl hover:bg-gray-100 transition-all hover:scale-105 active:scale-95"
             >
-              Issue Invoice
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="hidden sm:inline">Invoice</span>
             </button>
+
             <button
               onClick={() => {
-                const selectedServicesData = services.filter(s => selectedServiceIds.includes(s.id));
-                if (selectedServicesData.length > 0) {
+                if (selectedServiceIds.length === 1) {
+                  setSplitServiceId(selectedServiceIds[0]);
+                } else if (selectedServiceIds.length > 1) {
                   setSplitMultiModalOpen(true);
                 }
               }}
-              className="px-4 py-2 bg-amber-500 text-white font-medium rounded hover:bg-amber-600 transition-colors ml-2"
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-400 transition-all hover:scale-105 active:scale-95"
             >
-              🔗 Split ({selectedServiceIds.length})
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              <span className="hidden sm:inline">Split</span>
             </button>
+
+            {selectedServiceIds.length >= 2 && (
+              <button
+                onClick={() => setMergeModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-purple-500 text-white text-sm font-semibold rounded-xl hover:bg-purple-400 transition-all hover:scale-105 active:scale-95"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span className="hidden sm:inline">Merge</span>
+              </button>
+            )}
+
+            {/* More Actions Dropdown */}
+            <div className="relative" ref={bulkActionsRef}>
+              <button
+                onClick={() => setShowBulkActions(!showBulkActions)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl transition-all hover:scale-105 active:scale-95 ${
+                  showBulkActions 
+                    ? 'bg-white/20 text-white' 
+                    : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                </svg>
+                <span className="hidden sm:inline">More</span>
+              </button>
+              
+              {showBulkActions && (
+                <div className={`absolute right-0 w-52 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 overflow-hidden max-h-80 overflow-y-auto ${
+                  (floatingBarPosition?.y ?? window.innerHeight) < window.innerHeight / 2 
+                    ? 'top-full mt-3' 
+                    : 'bottom-full mb-3'
+                }`}>
+                  <div className="px-3 py-1.5 text-xs font-medium text-gray-400 uppercase tracking-wider">Assign</div>
+                  <button
+                    onClick={() => { setBulkAction("status"); setShowBulkActions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Set Status
+                  </button>
+                  <button
+                    onClick={() => { setBulkAction("payer"); setShowBulkActions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    Set Payer
+                  </button>
+                  <button
+                    onClick={() => { setBulkAction("supplier"); setShowBulkActions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    Set Supplier
+                  </button>
+                  <button
+                    onClick={() => { setBulkAction("client"); setShowBulkActions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Set Client
+                  </button>
+                  
+                  <div className="border-t border-gray-100 my-2" />
+                  <div className="px-3 py-1.5 text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</div>
+                  
+                  <button
+                    onClick={() => { setBulkAction("duplicate"); setShowBulkActions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Duplicate
+                  </button>
+                  <button
+                    onClick={() => { setBulkAction("cancel"); setShowBulkActions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    Cancel Services
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Close button */}
             <button
               onClick={() => setSelectedServiceIds([])}
-              className="ml-2 text-gray-400 hover:text-white transition-colors"
+              className="ml-1 p-2.5 text-white/40 hover:text-white hover:bg-white/10 rounded-xl transition-all"
               aria-label="Clear selection"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -930,6 +2121,470 @@ export default function OrderServicesBlock({
         confirmText="Cancel Service"
         cancelText="Keep"
       />
+      
+      {/* Change Service Modal (for Flights) */}
+      {changeModalService && (
+        <ChangeServiceModal
+          service={changeModalService}
+          orderCode={orderCode}
+          onClose={() => setChangeModalService(null)}
+          onChangeConfirmed={() => {
+            fetchServices();
+            fetchTravellers();
+          }}
+        />
+      )}
+      
+      {/* Cancel Service with Fees Modal */}
+      {cancelModalService && (
+        <CancelServiceModal
+          service={cancelModalService}
+          orderCode={orderCode}
+          onClose={() => setCancelModalService(null)}
+          onCancellationConfirmed={() => {
+            fetchServices();
+            fetchTravellers();
+          }}
+        />
+      )}
+      
+      {/* Bulk Actions Popovers - appear near the floating bar */}
+      {bulkAction === "status" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-72">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">Set Status</h3>
+              <button onClick={() => setBulkAction(null)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-1">
+              {["booked", "confirmed", "changed", "rejected", "cancelled"].map(status => (
+                <button
+                  key={status}
+                  onClick={async () => {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    for (const serviceId of selectedServiceIds) {
+                      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                        },
+                        body: JSON.stringify({ res_status: status }),
+                      });
+                    }
+                    fetchServices();
+                    setBulkAction(null);
+                  }}
+                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 capitalize text-sm"
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {bulkAction === "cancel" && (
+        <ConfirmModal
+          isOpen={true}
+          onCancel={() => setBulkAction(null)}
+          onConfirm={async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            for (const serviceId of selectedServiceIds) {
+              await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                },
+                body: JSON.stringify({ res_status: "cancelled" }),
+              });
+            }
+            fetchServices();
+            setBulkAction(null);
+          }}
+          title="Cancel Services"
+          message={`Cancel ${selectedServiceIds.length} selected services?`}
+          confirmText="Cancel Services"
+          cancelText="Keep"
+        />
+      )}
+      
+      {bulkAction === "duplicate" && (
+        <ConfirmModal
+          isOpen={true}
+          onCancel={() => setBulkAction(null)}
+          onConfirm={async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            for (const serviceId of selectedServiceIds) {
+              const serviceData = services.find(s => s.id === serviceId);
+              if (serviceData) {
+                await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    serviceName: serviceData.name + " (copy)",
+                    category: serviceData.category,
+                    dateFrom: serviceData.dateFrom,
+                    dateTo: serviceData.dateTo,
+                    supplierPartyId: serviceData.supplierPartyId || serviceData.supplier_party_id,
+                    supplierName: serviceData.supplier !== "-" ? serviceData.supplier : null,
+                    clientPartyId: serviceData.clientPartyId || serviceData.client_party_id,
+                    clientName: serviceData.client !== "-" ? serviceData.client : null,
+                    payerPartyId: serviceData.payerPartyId || serviceData.payer_party_id,
+                    payerName: serviceData.payer !== "-" ? serviceData.payer : null,
+                    servicePrice: serviceData.servicePrice,
+                    clientPrice: serviceData.clientPrice,
+                    resStatus: serviceData.resStatus,
+                    refNr: serviceData.refNr,
+                    ticketNr: serviceData.ticketNr,
+                    cabinClass: serviceData.cabinClass,
+                    baggage: serviceData.baggage,
+                    flightSegments: serviceData.flightSegments,
+                    clients: serviceData.assignedTravellerIds?.map(id => ({ partyId: id })) || [],
+                  }),
+                });
+              }
+            }
+            fetchServices();
+            fetchTravellers();
+            setBulkAction(null);
+          }}
+          title="Duplicate Services"
+          message={`Duplicate ${selectedServiceIds.length} selected services?`}
+          confirmText="Duplicate"
+          cancelText="Cancel"
+        />
+      )}
+      
+      {/* Set Payer Popover */}
+      {bulkAction === "payer" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">Set Payer</h3>
+              <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Search payer..."
+              value={bulkSearchQuery}
+              autoFocus
+              onChange={async (e) => {
+                const query = e.target.value;
+                setBulkSearchQuery(query);
+                if (query.length < 2) {
+                  setBulkSearchResults([]);
+                  return;
+                }
+                setBulkSearchLoading(true);
+                const { data: { session } } = await supabase.auth.getSession();
+                const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
+                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
+                    id: r.id,
+                    type: r.type,
+                    displayName: r.type === "person" 
+                      ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
+                      : r.companyName || "Unknown",
+                  }));
+                  setBulkSearchResults(mapped);
+                }
+                setBulkSearchLoading(false);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {bulkSearchResults.map(party => (
+                <button
+                  key={party.id}
+                  onClick={async () => {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    for (const serviceId of selectedServiceIds) {
+                      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                        },
+                        body: JSON.stringify({ payer_party_id: party.id, payer_name: party.displayName }),
+                      });
+                    }
+                    fetchServices();
+                    setBulkAction(null);
+                    setBulkSearchQuery("");
+                    setBulkSearchResults([]);
+                  }}
+                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
+                >
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
+                  <span>{party.displayName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Set Supplier Popover */}
+      {bulkAction === "supplier" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">Set Supplier</h3>
+              <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Search supplier..."
+              value={bulkSearchQuery}
+              autoFocus
+              onChange={async (e) => {
+                const query = e.target.value;
+                setBulkSearchQuery(query);
+                if (query.length < 2) {
+                  setBulkSearchResults([]);
+                  return;
+                }
+                setBulkSearchLoading(true);
+                const { data: { session } } = await supabase.auth.getSession();
+                const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&role=supplier&limit=10`, {
+                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
+                    id: r.id,
+                    type: r.type,
+                    displayName: r.type === "person" 
+                      ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
+                      : r.companyName || "Unknown",
+                  }));
+                  setBulkSearchResults(mapped);
+                }
+                setBulkSearchLoading(false);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {bulkSearchResults.map(party => (
+                <button
+                  key={party.id}
+                  onClick={async () => {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    for (const serviceId of selectedServiceIds) {
+                      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                        },
+                        body: JSON.stringify({ supplier_party_id: party.id, supplier_name: party.displayName }),
+                      });
+                    }
+                    fetchServices();
+                    setBulkAction(null);
+                    setBulkSearchQuery("");
+                    setBulkSearchResults([]);
+                  }}
+                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
+                >
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
+                  <span>{party.displayName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Set Client Popover - Multiple Selection */}
+      {bulkAction === "client" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">Add Clients</h3>
+              <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); setBulkSelectedClients([]); }} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Selected clients */}
+            {bulkSelectedClients.length > 0 && (
+              <div className="mb-3 p-2 bg-blue-50 rounded-lg">
+                <div className="flex flex-wrap gap-1">
+                  {bulkSelectedClients.map(client => (
+                    <span key={client.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      {client.displayName}
+                      <button
+                        onClick={() => setBulkSelectedClients(prev => prev.filter(c => c.id !== client.id))}
+                        className="hover:text-blue-600"
+                      >
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <input
+              type="text"
+              placeholder="Search clients..."
+              value={bulkSearchQuery}
+              autoFocus
+              onChange={async (e) => {
+                const query = e.target.value;
+                setBulkSearchQuery(query);
+                if (query.length < 2) {
+                  setBulkSearchResults([]);
+                  return;
+                }
+                setBulkSearchLoading(true);
+                const { data: { session } } = await supabase.auth.getSession();
+                const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
+                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
+                    id: r.id,
+                    type: r.type,
+                    displayName: r.type === "person" 
+                      ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
+                      : r.companyName || "Unknown",
+                  }));
+                  setBulkSearchResults(mapped);
+                }
+                setBulkSearchLoading(false);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
+            <div className="max-h-36 overflow-y-auto space-y-1 mb-3">
+              {bulkSearchResults
+                .filter(party => !bulkSelectedClients.some(c => c.id === party.id))
+                .map(party => (
+                <button
+                  key={party.id}
+                  onClick={() => {
+                    setBulkSelectedClients(prev => [...prev, { id: party.id, displayName: party.displayName }]);
+                    setBulkSearchQuery("");
+                    setBulkSearchResults([]);
+                  }}
+                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
+                >
+                  <svg className="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
+                  <span>{party.displayName}</span>
+                </button>
+              ))}
+            </div>
+            
+            <button
+              onClick={async () => {
+                if (bulkSelectedClients.length === 0) return;
+                const { data: { session } } = await supabase.auth.getSession();
+                for (const serviceId of selectedServiceIds) {
+                  await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                    method: "PATCH",
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                    },
+                    body: JSON.stringify({ 
+                      clients: bulkSelectedClients.map(c => ({ id: c.id, name: c.displayName })),
+                      client_party_id: bulkSelectedClients[0]?.id,
+                      client_name: bulkSelectedClients[0]?.displayName,
+                    }),
+                  });
+                }
+                fetchServices();
+                fetchTravellers();
+                setBulkAction(null);
+                setBulkSearchQuery("");
+                setBulkSearchResults([]);
+                setBulkSelectedClients([]);
+              }}
+              disabled={bulkSelectedClients.length === 0}
+              className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            >
+              Apply ({bulkSelectedClients.length})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating panel for selected boarding passes */}
+      {selectedBoardingPasses.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 py-3 flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedBoardingPasses.length} boarding pass{selectedBoardingPasses.length > 1 ? "es" : ""} selected
+            </span>
+            <div className="flex gap-1 max-w-xs overflow-x-auto">
+              {selectedBoardingPasses.slice(0, 3).map(pass => (
+                <span key={pass.passId} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs whitespace-nowrap">
+                  {pass.flightNumber}
+                </span>
+              ))}
+              {selectedBoardingPasses.length > 3 && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                  +{selectedBoardingPasses.length - 3}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleSendSelectedBoardingPasses("whatsapp")}
+              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-1"
+            >
+              <span>📱</span> WhatsApp
+            </button>
+            <button
+              onClick={() => handleSendSelectedBoardingPasses("email")}
+              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-1"
+            >
+              <span>✉️</span> Email
+            </button>
+            <button
+              onClick={handleClearBoardingPassSelection}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+              title="Clear selection"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/contexts/UserContext";
 import RoleBadge from "@/components/users/RoleBadge";
@@ -291,8 +292,17 @@ export default function ProfilePage() {
     <div className="bg-gray-50 p-6">
       <div className="space-y-6">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
-          <h1 className="text-2xl font-semibold text-gray-900">My Profile</h1>
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">My Profile</h1>
+            <p className="text-sm text-gray-500 mt-1">Your personal settings and preferences</p>
+          </div>
+          <Link
+            href="/settings"
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            ← Back to Settings
+          </Link>
         </div>
 
         {/* 3-column layout */}

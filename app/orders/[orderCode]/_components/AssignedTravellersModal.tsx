@@ -27,7 +27,7 @@ interface Service {
   payer: string;
   servicePrice: number;
   clientPrice: number;
-  resStatus: "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
+  resStatus: "draft" | "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr?: string;
   ticketNr?: string;
   assignedTravellerIds: string[];
@@ -72,6 +72,13 @@ export default function AssignedTravellersModal({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [suggestedGroups, setSuggestedGroups] = useState<SuggestedGroup[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  
+  // Add traveller search state
+  const [showAddSearch, setShowAddSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; phone?: string; email?: string }>>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ESC key handler
   useEscapeKey(onClose);
@@ -105,6 +112,72 @@ export default function AssignedTravellersModal({
   useEffect(() => {
     fetchSuggestedTravellers();
   }, [fetchSuggestedTravellers]);
+
+  // Search directory for travellers
+  const searchDirectory = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    
+    setIsSearching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
+        headers: {
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Filter to only show persons (clients)
+        const results = (data.data || [])
+          .filter((item: { roles?: string[] }) => 
+            item.roles?.includes("client") || !item.roles?.includes("supplier")
+          )
+          .map((item: { id: string; firstName?: string; lastName?: string; companyName?: string; phone?: string; email?: string }) => {
+            // Build display name from firstName + lastName or companyName
+            let displayName = "";
+            if (item.firstName || item.lastName) {
+              displayName = [item.firstName, item.lastName].filter(Boolean).join(" ");
+            } else if (item.companyName) {
+              displayName = item.companyName;
+            }
+            return {
+              id: item.id,
+              name: displayName || "Unknown",
+              phone: item.phone,
+              email: item.email,
+            };
+          });
+        setSearchResults(results);
+      }
+    } catch (err) {
+      console.error("Search directory error:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (showAddSearch && searchQuery) {
+        searchDirectory(searchQuery);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, showAddSearch, searchDirectory]);
+
+  // Focus search input when showing
+  useEffect(() => {
+    if (showAddSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showAddSearch]);
 
   // Save service travellers to API
   const saveServiceTravellers = useCallback(async (serviceId: string, travellerIds: string[]) => {
@@ -160,7 +233,15 @@ export default function AssignedTravellersModal({
     const prevSorted = [...prevAssignedRef.current].sort().join(",");
     const currSorted = [...assignedTravellerIds].sort().join(",");
     
+    console.log("[Auto-save] Checking travellers change:", {
+      prev: prevSorted,
+      curr: currSorted,
+      changed: prevSorted !== currSorted,
+      assignedTravellerIds
+    });
+    
     if (prevSorted !== currSorted) {
+      console.log("[Auto-save] Saving travellers for service:", service.id);
       saveServiceTravellers(service.id, assignedTravellerIds);
       prevAssignedRef.current = assignedTravellerIds;
     }
@@ -350,19 +431,58 @@ export default function AssignedTravellersModal({
   };
 
   const handleAddToPool = () => {
-    const newTraveller: Traveller = {
-      id: crypto.randomUUID(),
-      firstName: "New Traveller",
-      lastName: `${newTravellerCounter}`,
-      title: "Mr",
-    };
+    // Open search instead of creating fake traveller
+    setShowAddSearch(true);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
 
-    if (suggestedMode === "none") {
-      setOrderTravellers([...orderTravellers, newTraveller]);
+  const handleSelectFromSearch = async (item: { id: string; name: string }) => {
+    // Check if already in order
+    const alreadyInOrder = orderTravellers.some(t => t.id === item.id);
+    
+    if (!alreadyInOrder) {
+      // Fetch full traveller details from API
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        const response = await fetch(`/api/directory/${encodeURIComponent(item.id)}`, {
+          headers: {
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const record = data.data || data;
+          
+          const newTraveller: Traveller = {
+            id: item.id,
+            firstName: record.firstName || item.name.split(" ")[0] || "",
+            lastName: record.lastName || item.name.split(" ").slice(1).join(" ") || "",
+            title: record.title || "Mr",
+            dob: record.dob || undefined,
+            personalCode: record.personalCode || undefined,
+            contactNumber: record.phone || undefined,
+          };
+          
+          setOrderTravellers(prev => [...prev, newTraveller]);
+          
+          // Add to order via API
+          addTravellerToOrder(item.id);
+          
+          setToastMessage(`Added ${item.name} to order`);
+        }
+      } catch (err) {
+        console.error("Fetch traveller details error:", err);
+      }
     } else {
-      setSuggestedTravellers([...suggestedTravellers, newTraveller]);
+      setToastMessage(`${item.name} is already in order`);
     }
-    setNewTravellerCounter(newTravellerCounter + 1);
+    
+    setShowAddSearch(false);
+    setSearchQuery("");
   };
 
   const travellerExists = (firstName: string, lastName: string): boolean => {
@@ -534,42 +654,36 @@ export default function AssignedTravellersModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="mx-4 w-full max-w-6xl rounded-lg bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-200 px-4 py-3">
+        <div className="border-b border-gray-200 px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">👥</span>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Travellers
-                </h2>
-              </div>
-              <div className="mt-1.5">
-                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                  {getServiceIcon(service.category)} {service.name} • {formatDate(service.dateFrom)}
-                  {service.dateTo !== service.dateFrom &&
-                    ` – ${formatDate(service.dateTo)}`}
-                </span>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                  <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Travellers
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {getServiceIcon(service.category)} {service.name} • {formatDate(service.dateFrom)}
+                    {service.dateTo !== service.dateFrom && ` – ${formatDate(service.dateTo)}`}
+                  </p>
+                </div>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              title="Close"
             >
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -577,96 +691,147 @@ export default function AssignedTravellersModal({
 
         {/* Toast Message */}
         {toastMessage && (
-          <div className="border-b border-gray-200 bg-green-50 px-4 py-2">
-            <p className="text-xs font-medium text-green-800">{toastMessage}</p>
+          <div className="border-b border-gray-200 bg-green-50 px-6 py-3 flex-shrink-0">
+            <p className="text-sm font-medium text-green-800">{toastMessage}</p>
           </div>
         )}
 
         {/* Content */}
-        <div className="flex p-4">
-          {/* LEFT COLUMN - Pool */}
-          <div className="w-64 flex-shrink-0 border-r border-gray-200 pr-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-700">
-              Travellers (this order)
-            </h3>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* LEFT COLUMN - Pool */}
+            <div className="lg:col-span-1 lg:border-r lg:border-gray-200 lg:pr-6">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-700">
+                Travellers (this order)
+              </h3>
 
-            <div className="mb-3 flex flex-wrap gap-2">
-              <button
-                onClick={handleAssignAll}
-                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                Assign all
-              </button>
-              <div className="relative" ref={suggestedMenuRef}>
+              <div className="mb-4 flex flex-wrap gap-2">
                 <button
-                  onClick={() => setShowSuggestedMenu(!showSuggestedMenu)}
-                  className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                  onClick={handleAssignAll}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
-                  Suggested
+                  Assign all
                 </button>
-                {showSuggestedMenu && (
-                  <div className="absolute left-0 top-full z-10 mt-1 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
-                    <div className="p-1">
-                      {suggestedGroups.map((group) => (
+                <div className="relative" ref={suggestedMenuRef}>
+                  <button
+                    onClick={() => setShowSuggestedMenu(!showSuggestedMenu)}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    Suggested
+                  </button>
+                  {showSuggestedMenu && (
+                    <div className="absolute left-0 top-full z-10 mt-1 w-56 rounded-lg border border-gray-200 bg-white shadow-lg">
+                      <div className="p-2">
+                        {suggestedGroups.map((group) => (
+                          <button
+                            key={group.id}
+                            onClick={() => handleSelectSuggestedGroup(group)}
+                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100"
+                          >
+                            {group.name}
+                          </button>
+                        ))}
+                        <div className="my-2 border-t border-gray-200" />
                         <button
-                          key={group.id}
-                          onClick={() => handleSelectSuggestedGroup(group)}
-                          className="w-full rounded px-2 py-1.5 text-left text-xs text-gray-700 transition-colors hover:bg-gray-100"
+                          onClick={handleAssignAllSuggested}
+                          className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50"
                         >
-                          {group.name}
+                          Assign all to this service
                         </button>
-                      ))}
-                      <div className="my-1 border-t border-gray-200" />
-                      <button
-                        onClick={handleAssignAllSuggested}
-                        className="w-full rounded px-2 py-1.5 text-left text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50"
-                      >
-                        Assign all to this service
-                      </button>
+                      </div>
                     </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleAddToPool}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  + Add traveller
+                </button>
+              </div>
+
+            {/* Add traveller search panel */}
+            {showAddSearch && (
+              <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-medium text-blue-800">Search Directory</span>
+                  <button
+                    onClick={() => setShowAddSearch(false)}
+                    className="ml-auto p-1 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+                    title="Close search"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Type name to search..."
+                  className="w-full rounded-lg border border-blue-300 bg-white px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+                {isSearching && (
+                  <p className="mt-2 text-sm text-blue-600">Searching...</p>
+                )}
+                {searchResults.length > 0 && (
+                  <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-blue-200 bg-white">
+                    {searchResults.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleSelectFromSearch(item)}
+                        className="w-full px-4 py-3 text-left hover:bg-blue-100 border-b border-blue-100 last:border-b-0 transition-colors"
+                      >
+                        <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                        {(item.phone || item.email) && (
+                          <div className="text-gray-500 text-sm mt-0.5">
+                            {item.phone} {item.email && `• ${item.email}`}
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 )}
+                {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
+                  <p className="mt-2 text-sm text-gray-500">No results found</p>
+                )}
               </div>
-              <button
-                onClick={handleAddToPool}
-                className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
-              >
-                + Add traveller
-              </button>
-            </div>
+            )}
 
             {/* Suggested mode badge */}
             {suggestedMode !== "none" && (
-              <div className="mb-2 rounded-lg border border-yellow-200 bg-yellow-50 p-2">
-                <p className="mb-2 text-xs font-medium text-yellow-800">
+              <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                <p className="mb-3 text-sm font-medium text-yellow-800">
                   Showing suggestions (not added to order)
                 </p>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleAddShownTravellersToService}
-                    className="rounded border border-yellow-300 bg-white px-2 py-0.5 text-xs font-medium text-yellow-700 transition-colors hover:bg-yellow-100"
+                    className="rounded-lg border border-yellow-300 bg-white px-3 py-1.5 text-sm font-medium text-yellow-700 transition-colors hover:bg-yellow-100"
                   >
-                    Add shown travellers to service
+                    Add shown travellers
                   </button>
                   <button
                     onClick={handleReplaceTravellersForService}
-                    className="rounded border border-yellow-300 bg-white px-2 py-0.5 text-xs font-medium text-yellow-700 transition-colors hover:bg-yellow-100"
+                    className="rounded-lg border border-yellow-300 bg-white px-3 py-1.5 text-sm font-medium text-yellow-700 transition-colors hover:bg-yellow-100"
                   >
-                    Replace travellers for this service
+                    Replace travellers
                   </button>
                   <button
                     onClick={handleExitSuggestions}
-                    className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                   >
-                    Exit suggestions
+                    Exit
                   </button>
                 </div>
               </div>
             )}
 
-            <div className="space-y-1 max-h-[500px] overflow-y-auto">
+            <div className="space-y-2 max-h-[400px] lg:max-h-[500px] overflow-y-auto">
               {poolTravellers.length === 0 ? (
-                <p className="py-4 text-center text-xs text-gray-500">
+                <p className="py-8 text-center text-sm text-gray-500">
                   No travellers in order
                 </p>
               ) : (
@@ -678,29 +843,31 @@ export default function AssignedTravellersModal({
                       draggable
                       onDragStart={() => handleDragStart(traveller.id)}
                       onDragEnd={handleDragEnd}
-                      className={`group flex items-center justify-between rounded border p-2 transition-colors ${
+                      className={`group flex items-center justify-between rounded-lg border p-3 transition-colors cursor-grab ${
                         draggedTravellerId === traveller.id
                           ? "opacity-50 border-blue-300 bg-blue-50"
-                          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 hover:shadow-sm"
                       }`}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <div className="text-xs font-medium text-gray-900 truncate">
-                            {getTravellerInitials(traveller.id)} {traveller.firstName}{" "}
-                            {traveller.lastName}
-                          </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700">
+                            {getTravellerInitials(traveller.id)}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900">
+                            {traveller.firstName} {traveller.lastName}
+                          </span>
                           {isMainClient && (
-                            <span className="inline-flex items-center rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                            <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
                               Main client
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-2 ml-2">
                         <button
                           onClick={() => handleAssignTraveller(traveller.id)}
-                          className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
                         >
                           Assign
                         </button>
@@ -708,20 +875,10 @@ export default function AssignedTravellersModal({
                           <button
                             onClick={(e) => handleRemoveFromPool(traveller.id, e)}
                             aria-label="Remove from order"
-                            className="rounded p-0.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100"
+                            className="rounded-lg p-1.5 text-gray-400 opacity-0 transition-all hover:bg-red-100 hover:text-red-600 group-hover:opacity-100"
                           >
-                            <svg
-                              className="h-3 w-3"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12"
-                              />
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                           </button>
                         )}
@@ -733,112 +890,115 @@ export default function AssignedTravellersModal({
             </div>
           </div>
 
-          {/* RIGHT COLUMN - Assigned Table */}
-          <div className="flex-1 pl-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-700">
-                Travellers for this service
-              </h3>
-              {assignedTravellers.length > 0 && (
-                <button
-                  onClick={handleRemoveAll}
-                  className="rounded border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 hover:border-red-300"
-                >
-                  Remove all
-                </button>
-              )}
-            </div>
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              className="min-h-[400px] rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-2"
-            >
-              {assignedTravellers.length === 0 ? (
-                <p className="py-8 text-center text-xs text-gray-500">
-                  Drag travellers from left list or click "Assign"
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse bg-white text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Initials
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Title
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Name
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Surname
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          DOB
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Personal code
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Contact number
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-700">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {assignedTravellers.map((traveller) => (
-                        <tr
-                          key={traveller.id}
-                          className="hover:bg-gray-50"
-                        >
-                          <td className="px-2 py-2 font-medium text-gray-900">
-                            {getTravellerInitials(traveller.id)}
-                          </td>
-                          <td className="px-2 py-2 text-gray-700">
-                            {traveller.title}
-                          </td>
-                          <td className="px-2 py-2 text-gray-700">
-                            {traveller.firstName}
-                          </td>
-                          <td className="px-2 py-2 text-gray-700">
-                            {traveller.lastName}
-                          </td>
-                          <td className="px-2 py-2 text-gray-700">
-                            {traveller.dob ? formatDate(traveller.dob) : "-"}
-                          </td>
-                          <td className="px-2 py-2 text-gray-700">
-                            {traveller.personalCode || "-"}
-                          </td>
-                          <td className="px-2 py-2 text-gray-700">
-                            {traveller.contactNumber || "-"}
-                          </td>
-                          <td className="px-2 py-2">
-                            <button
-                              onClick={() => handleRemoveTraveller(traveller.id)}
-                              className="text-xs text-red-600 hover:text-red-800 hover:underline"
-                            >
-                              Remove
-                            </button>
-                          </td>
+            {/* RIGHT COLUMN - Assigned Table */}
+            <div className="lg:col-span-2">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">
+                  Travellers for this service
+                </h3>
+                {assignedTravellers.length > 0 && (
+                  <button
+                    onClick={handleRemoveAll}
+                    className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:border-red-300"
+                  >
+                    Remove all
+                  </button>
+                )}
+              </div>
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                className="min-h-[300px] lg:min-h-[400px] rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4"
+              >
+                {assignedTravellers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <svg className="h-12 w-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <p className="text-sm text-gray-500">
+                      Drag travellers from the list or click &quot;Assign&quot;
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">
+                            Traveller
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700 hidden sm:table-cell">
+                            Title
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700 hidden md:table-cell">
+                            DOB
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700 hidden lg:table-cell">
+                            Personal code
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700 hidden md:table-cell">
+                            Contact
+                          </th>
+                          <th className="px-4 py-3 text-right font-medium text-gray-700">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {assignedTravellers.map((traveller) => (
+                          <tr key={traveller.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700">
+                                  {getTravellerInitials(traveller.id)}
+                                </span>
+                                <div>
+                                  <div className="font-medium text-gray-900">
+                                    {traveller.firstName} {traveller.lastName}
+                                  </div>
+                                  <div className="text-gray-500 text-sm sm:hidden">
+                                    {traveller.title}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">
+                              {traveller.title}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 hidden md:table-cell">
+                              {traveller.dob ? formatDate(traveller.dob) : "-"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 hidden lg:table-cell">
+                              {traveller.personalCode || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 hidden md:table-cell">
+                              {traveller.contactNumber || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleRemoveTraveller(traveller.id)}
+                                className="text-sm text-red-600 hover:text-red-800 font-medium"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-4 py-3">
+        <div className="border-t border-gray-200 px-6 py-4 flex-shrink-0 bg-gray-50">
           <div className="flex justify-end">
             <button
               onClick={onClose}
-              className="rounded bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+              className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               Close
             </button>

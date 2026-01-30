@@ -116,6 +116,8 @@ export async function PATCH(request: NextRequest) {
       "licenses",
       // Banking
       "bank_name", "bank_account", "swift_code", "beneficiary_name",
+      // Financial / Tax
+      "default_vat_rate",
       // IATA
       "is_iata_accredited", "iata_code", "iata_type", "bsp_remittance_frequency",
       // Regional Settings

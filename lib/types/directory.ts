@@ -2,8 +2,15 @@ export type DirectoryType = "person" | "company";
 export type DirectoryRole = "client" | "supplier" | "subagent";
 export type SubagentCommissionType = "percentage" | "fixed";
 
+export interface SupplierCommission {
+  name: string;
+  rate: number; // percentage
+  isActive: boolean;
+}
+
 export interface SupplierDetails {
-  // No additional fields needed for Supplier role
+  serviceAreas?: string[]; // Categories from travel_service_categories (e.g., ["Hotel", "Transfer"])
+  commissions?: SupplierCommission[];
 }
 
 export interface SubagentDetails {
@@ -14,6 +21,7 @@ export interface SubagentDetails {
 
 export interface DirectoryRecord {
   id: string;
+  displayId?: number; // Sequential ID (00001, 00002, ...)
   type: DirectoryType;
   roles: DirectoryRole[];
   isActive: boolean;
@@ -35,6 +43,7 @@ export interface DirectoryRecord {
   passportIssuingCountry?: string;
   passportFullName?: string;
   nationality?: string;
+  avatarUrl?: string; // Photo extracted from passport
   
   // Company fields
   companyName?: string;
@@ -45,6 +54,7 @@ export interface DirectoryRecord {
   // Common fields
   phone?: string;
   email?: string;
+  country?: string;
   
   // Supplier-specific
   supplierExtras?: SupplierDetails;

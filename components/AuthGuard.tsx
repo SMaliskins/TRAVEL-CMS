@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-// Pages that don't require authentication
-const PUBLIC_PATHS = ["/login"];
+function isPublicPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return pathname === "/" || pathname === "/register" || pathname.startsWith("/login");
+}
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,7 +17,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Check if current path is public
-    const isPublicPath = PUBLIC_PATHS.some((path) => pathname?.startsWith(path));
+    const publicPath = isPublicPath(pathname);
 
     const checkAuth = async () => {
       try {
@@ -24,21 +26,21 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (session) {
           setIsAuthenticated(true);
           // If authenticated and on login page, redirect to dashboard
-          if (isPublicPath) {
+          if (publicPath) {
             router.push("/dashboard");
             return;
           }
         } else {
           setIsAuthenticated(false);
           // If not authenticated and not on public path, redirect to login
-          if (!isPublicPath) {
+          if (!publicPath) {
             router.push("/login");
             return;
           }
         }
       } catch (error) {
         console.error("Auth check failed:", error);
-        if (!isPublicPath) {
+        if (!publicPath) {
           router.push("/login");
           return;
         }
@@ -54,12 +56,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       (event, session) => {
         if (event === "SIGNED_OUT") {
           setIsAuthenticated(false);
-          if (!isPublicPath) {
+          if (!publicPath) {
             router.push("/login");
           }
         } else if (event === "SIGNED_IN" && session) {
           setIsAuthenticated(true);
-          if (isPublicPath) {
+          if (publicPath) {
             router.push("/dashboard");
           }
         }
@@ -84,8 +86,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // For public paths, render children regardless of auth state
-  const isPublicPath = PUBLIC_PATHS.some((path) => pathname?.startsWith(path));
-  if (isPublicPath) {
+  if (isPublicPath(pathname)) {
     return <>{children}</>;
   }
 

@@ -168,6 +168,23 @@ Current tasks and their status. Agents update relevant rows when starting, block
 
 ---
 
+## PHASE 6.5: Package Tour & Directory (ACTIVE)
+
+| ID | Area | Task | Owner | Status | Branch | Notes |
+|----|------|------|-------|--------|--------|-------|
+| PT1 | Orders | Split: copy all fields (flight_segments, hotel, etc.) | CW | DONE | - | ✅ Implemented |
+| PT2 | Orders | Split: copy order_service_travellers | CW | DONE | - | ✅ Implemented |
+| PT3 | Orders | Itinerary: deduplicate flights for splitted | CW | DONE | - | Already via seenSegmentKeys |
+| PT4 | Orders | Itinerary: deduplicate hotel check-in/check-out for splitted | CW | DONE | - | splitGroupId + seenSplitGroupHotelIds |
+| PT5 | Orders | Itinerary: deduplicate Transfer for splitted | CW | DONE | - | seenSplitGroupTransferIds |
+| PT6 | Orders | Itinerary: show traveller surnames per event | CW | DONE | - | assignedTravellerIds → travellerSurnames |
+| PT7 | Orders | Itinerary: excursions/VIP — show once + surnames | CW | DONE | - | Same as PT4-6 |
+| DIR1 | Directory | Parsing: fix firstName/lastName (AI + find-or-create) | CW | DONE | - | Passport MRZ, parse-package-tour, find-or-create |
+| DIR2 | Directory | Merge contacts | CW | DONE | - | API /api/directory/merge + MergeContactModal |
+| DIR3 | Directory | Search: diacritics, typos, layout, name variants | CW | DONE | - | lib/directory/searchNormalize.ts |
+
+---
+
 ## PHASE 7: Directory Enhancements
 
 | ID | Area | Task | Owner | Status | Branch | Notes |

@@ -359,7 +359,7 @@ const handleSplit = async () => {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
         <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="mb-6 flex items-start justify-between">
             <div>

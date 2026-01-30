@@ -2,27 +2,49 @@
 
 import { useState, useEffect } from "react";
 
-const STORAGE_KEY = "ui-font-scale";
-const DEFAULT_SCALE = 1;
-const MIN_SCALE = 0.85;
-const MAX_SCALE = 1.2;
+// Storage keys
+const SCALE_STORAGE_KEY = "ui-font-scale";
+const FONT_STORAGE_KEY = "ui-font-family";
 
-const SCALE_STEPS = {
-  decrease: 0.9,
-  default: 1,
-  increase: 1.1,
-} as const;
+// Scale presets (5 options)
+export const SCALE_PRESETS = [
+  { value: 0.8, label: "Compact", description: "Максимум информации" },
+  { value: 0.9, label: "Small", description: "Меньше стандартного" },
+  { value: 1.0, label: "Default", description: "Стандартный размер" },
+  { value: 1.1, label: "Large", description: "Комфортный для чтения" },
+  { value: 1.2, label: "Extra Large", description: "Максимальный размер" },
+] as const;
+
+// Font family presets (using CSS variables from next/font)
+export const FONT_PRESETS = [
+  { value: "system", label: "System", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
+  { value: "inter", label: "Inter", css: "var(--font-inter), -apple-system, sans-serif" },
+  { value: "roboto", label: "Roboto", css: "var(--font-roboto), -apple-system, sans-serif" },
+  { value: "opensans", label: "Open Sans", css: "var(--font-opensans), -apple-system, sans-serif" },
+  { value: "lato", label: "Lato", css: "var(--font-lato), -apple-system, sans-serif" },
+  { value: "nunito", label: "Nunito", css: "var(--font-nunito), -apple-system, sans-serif" },
+  { value: "poppins", label: "Poppins", css: "var(--font-poppins), -apple-system, sans-serif" },
+  { value: "sourcesans", label: "Source Sans", css: "var(--font-sourcesans), -apple-system, sans-serif" },
+] as const;
+
+const DEFAULT_SCALE = 1;
+const MIN_SCALE = 0.8;
+const MAX_SCALE = 1.2;
+const DEFAULT_FONT = "system";
 
 export function useFontScale() {
   const [scale, setScaleState] = useState<number>(DEFAULT_SCALE);
+  const [fontFamily, setFontFamilyState] = useState<string>(DEFAULT_FONT);
   const [isClient, setIsClient] = useState(false);
 
-  // Load scale from localStorage on mount
+  // Load settings from localStorage on mount
   useEffect(() => {
     setIsClient(true);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = parseFloat(stored);
+    
+    // Load scale
+    const storedScale = localStorage.getItem(SCALE_STORAGE_KEY);
+    if (storedScale) {
+      const parsed = parseFloat(storedScale);
       if (!isNaN(parsed) && parsed >= MIN_SCALE && parsed <= MAX_SCALE) {
         setScaleState(parsed);
         applyScale(parsed);
@@ -32,106 +54,107 @@ export function useFontScale() {
     } else {
       applyScale(DEFAULT_SCALE);
     }
+    
+    // Load font family
+    const storedFont = localStorage.getItem(FONT_STORAGE_KEY);
+    if (storedFont) {
+      setFontFamilyState(storedFont);
+      applyFontFamily(storedFont);
+    } else {
+      applyFontFamily(DEFAULT_FONT);
+    }
   }, []);
 
   const applyScale = (newScale: number) => {
     if (typeof document !== "undefined") {
-      // Set CSS variable on html element (document.documentElement)
       document.documentElement.style.setProperty("--font-scale", String(newScale));
+      // Also apply to base font size
+      document.documentElement.style.fontSize = `${newScale * 100}%`;
+    }
+  };
+
+  const applyFontFamily = (fontValue: string) => {
+    if (typeof document !== "undefined") {
+      const preset = FONT_PRESETS.find(f => f.value === fontValue);
+      if (preset) {
+        document.documentElement.style.setProperty("--font-family", preset.css);
+        document.body.style.fontFamily = preset.css;
+      }
     }
   };
 
   const setScale = (newScale: number) => {
-    // Clamp scale between MIN and MAX
     const clampedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-    
-    // (a) Update state
     setScaleState(clampedScale);
-    
-    // (b) Set CSS var on html
     applyScale(clampedScale);
     
-    // (c) Write to localStorage
     try {
-      localStorage.setItem(STORAGE_KEY, String(clampedScale));
+      localStorage.setItem(SCALE_STORAGE_KEY, String(clampedScale));
     } catch (e) {
-      // Ignore localStorage errors (e.g., in private browsing)
-      console.warn("Failed to save font scale to localStorage:", e);
+      console.warn("Failed to save font scale:", e);
     }
   };
 
-  const decreaseFont = () => {
-    // Step down: if at 1.1 or above, go to 1.0
-    // If at 1.0, go to 0.9
-    // If at 0.9, go to 0.85 (min)
-    if (scale >= SCALE_STEPS.increase) {
-      setScale(SCALE_STEPS.default);
-    } else if (scale >= SCALE_STEPS.default) {
-      setScale(SCALE_STEPS.decrease);
-    } else if (scale > MIN_SCALE) {
-      setScale(MIN_SCALE);
+  const setFontFamily = (fontValue: string) => {
+    setFontFamilyState(fontValue);
+    applyFontFamily(fontValue);
+    
+    try {
+      localStorage.setItem(FONT_STORAGE_KEY, fontValue);
+    } catch (e) {
+      console.warn("Failed to save font family:", e);
     }
-    // Already at minimum, do nothing
   };
 
-  const increaseFont = () => {
-    // Step up: if at 0.9 or below, go to 1.0
-    // If at 1.0, go to 1.1
-    // If at 1.1, go to 1.2 (max)
-    if (scale <= SCALE_STEPS.decrease) {
-      setScale(SCALE_STEPS.default);
-    } else if (scale <= SCALE_STEPS.default) {
-      setScale(SCALE_STEPS.increase);
-    } else if (scale < MAX_SCALE) {
-      setScale(MAX_SCALE);
-    }
-    // Already at maximum, do nothing
-  };
-
+  // For slider (0-100 mapped to scale range)
   const setScaleFromSlider = (value: number) => {
-    // Map slider 0-2 to scale 0.85-1.2
-    // 0 -> 0.85, 1 -> 1.0, 2 -> 1.2
-    let newScale: number;
-    if (value === 0) {
-      newScale = MIN_SCALE; // 0.85
-    } else if (value === 1) {
-      newScale = DEFAULT_SCALE; // 1.0
-    } else {
-      newScale = MAX_SCALE; // 1.2
-    }
+    // Map 0-100 to MIN_SCALE-MAX_SCALE
+    const newScale = MIN_SCALE + (value / 100) * (MAX_SCALE - MIN_SCALE);
     setScale(newScale);
   };
 
   const getSliderValue = () => {
-    // Map scale to slider 0-2
-    if (scale <= SCALE_STEPS.decrease) return 0; // Small
-    if (scale <= SCALE_STEPS.default) return 1; // Default
-    return 2; // Large
+    // Map scale to 0-100
+    return Math.round(((scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100);
+  };
+
+  // Get current preset index (for preset buttons)
+  const getCurrentPresetIndex = () => {
+    const index = SCALE_PRESETS.findIndex(p => Math.abs(p.value - scale) < 0.05);
+    return index >= 0 ? index : 2; // Default to middle
+  };
+
+  const setScalePreset = (index: number) => {
+    if (index >= 0 && index < SCALE_PRESETS.length) {
+      setScale(SCALE_PRESETS[index].value);
+    }
   };
 
   const resetFont = () => {
     setScale(DEFAULT_SCALE);
+    setFontFamily(DEFAULT_FONT);
   };
 
-  // Active states: highlight button closest to current scale
-  const isDecreaseActive = scale < DEFAULT_SCALE && scale >= SCALE_STEPS.decrease - 0.05;
-  const isDefaultActive = Math.abs(scale - DEFAULT_SCALE) < 0.05;
-  const isIncreaseActive = scale > DEFAULT_SCALE && scale <= SCALE_STEPS.increase + 0.05;
-
   return {
+    // Scale
     scale,
-    decreaseFont,
-    increaseFont,
-    resetFont,
+    setScale,
     setScaleFromSlider,
     getSliderValue,
-    isDecreaseActive,
-    isIncreaseActive,
-    isDefaultActive,
+    getCurrentPresetIndex,
+    setScalePreset,
+    // Font family
+    fontFamily,
+    setFontFamily,
+    // Reset
+    resetFont,
+    // Meta
     isClient,
     MIN_SCALE,
     MAX_SCALE,
     DEFAULT_SCALE,
+    SCALE_PRESETS,
+    FONT_PRESETS,
   };
 }
 

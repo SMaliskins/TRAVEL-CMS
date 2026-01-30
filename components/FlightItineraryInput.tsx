@@ -825,6 +825,126 @@ export default function FlightItineraryInput({
         };
         
         parsedSegments.push(segment);
+      } else if (text.includes("British Airways") || text.match(/BA\d{3,4}\s+\w+\s+to\s+\w+/i)) {
+        // Parse British Airways confirmation format
+        const months: Record<string, string> = {
+          january: "01", february: "02", march: "03", april: "04", may: "05", june: "06",
+          july: "07", august: "08", september: "09", october: "10", november: "11", december: "12"
+        };
+        
+        // Extract booking reference
+        const bookingRefMatch = text.match(/Booking\s+reference:\s*\n?\s*([A-Z0-9]{6})/i);
+        const bookingRef = bookingRefMatch ? bookingRefMatch[1] : undefined;
+        
+        // Extract ticket number
+        const ticketMatch = text.match(/Ticket\s+number\(s\)\s*([0-9-]+)/i);
+        const ticketNumber = ticketMatch ? ticketMatch[1] : undefined;
+        
+        // Extract passenger name
+        const passengerMatch = text.match(/Passenger\s+Name[\s\S]*?\n\s*([A-Za-z]+\s+[A-Za-z]+)\s+(?:Select|[0-9A-Z])/i);
+        const passengerName = passengerMatch ? passengerMatch[1] : undefined;
+        
+        // Split by "City - City" pattern (e.g., "Nice - London", "London - Nice")
+        // Use regex to find all flight sections
+        const flightSectionPattern = /([A-Z][a-z]+)\s*-\s*([A-Z][a-z]+)\s*\n?\s*British Airways.*?BA(\d{3,4})\s+\1\s+to\s+\2[\s\S]*?(?=(?:[A-Z][a-z]+\s*-\s*[A-Z][a-z]+\s*\n?\s*British Airways)|(?:Please check)|(?:Passengers)|$)/gi;
+        
+        let segmentIndex = 0;
+        
+        // Find all flight sections by looking for "BA### City to City" pattern
+        const flightPattern = /BA(\d{3,4})\s+([A-Za-z]+)\s+to\s+([A-Za-z]+)/gi;
+        const flightMatches: { num: string; from: string; to: string; index: number }[] = [];
+        let flightMatch;
+        while ((flightMatch = flightPattern.exec(text)) !== null) {
+          flightMatches.push({
+            num: flightMatch[1],
+            from: flightMatch[2],
+            to: flightMatch[3],
+            index: flightMatch.index
+          });
+        }
+        
+        for (let i = 0; i < flightMatches.length; i++) {
+          const flight = flightMatches[i];
+          const flightNumber = `BA${flight.num}`;
+          const fromCity = flight.from;
+          const toCity = flight.to;
+          
+          // Extract section from this flight to next flight (or end)
+          const sectionStart = flight.index;
+          const sectionEnd = flightMatches[i + 1]?.index || text.indexOf("Passengers", sectionStart) || text.length;
+          const section = text.substring(sectionStart, sectionEnd);
+          
+          // Extract departure date and time
+          const departsMatch = section.match(/Departs:\s*\w+,\s*(\d{1,2})\s+(\w+)\s+(\d{4})/i);
+          const arrivesMatch = section.match(/Arrives:\s*\w+,\s*(\d{1,2})\s+(\w+)\s+(\d{4})/i);
+          
+          if (!departsMatch || !arrivesMatch) continue;
+          
+          // Parse dates
+          const depDay = departsMatch[1].padStart(2, "0");
+          const depMonth = months[departsMatch[2].toLowerCase()] || "01";
+          const depYear = departsMatch[3];
+          const depDate = `${depYear}-${depMonth}-${depDay}`;
+          
+          const arrDay = arrivesMatch[1].padStart(2, "0");
+          const arrMonth = months[arrivesMatch[2].toLowerCase()] || "01";
+          const arrYear = arrivesMatch[3];
+          const arrDate = `${arrYear}-${arrMonth}-${arrDay}`;
+          
+          // Extract times: look for pattern "City HH:MM" followed by "CODE - Terminal"
+          // Nice	07:35 NCE - Terminal 1
+          const depTimeMatch = section.match(new RegExp(fromCity + "\\s+(\\d{1,2}:\\d{2})", "i"));
+          const arrTimeMatch = section.match(new RegExp(toCity + "\\s*\\n?.*?(\\d{1,2}:\\d{2})", "i")) ||
+                              section.match(/Arrives:[\s\S]*?(\d{1,2}:\d{2})/i);
+          
+          // Extract airports: "NCE - Terminal 1" and "LHR - Terminal 5"
+          const airportPattern = /([A-Z]{3})\s*-\s*Terminal\s*(\d+)/gi;
+          const airports: { code: string; terminal: string }[] = [];
+          let airportMatch;
+          while ((airportMatch = airportPattern.exec(section)) !== null) {
+            airports.push({ code: airportMatch[1], terminal: airportMatch[2] });
+          }
+          
+          // Extract cabin and duration
+          const cabinMatch = section.match(/(Euro\s+Traveller|Club\s+Europe|World\s+Traveller|First|Business|Economy)/i);
+          const durationMatch = section.match(/(\d+)\s*hours?\s*(\d+)\s*minutes?/i);
+          
+          // Determine cabin class
+          let cabinClass: "economy" | "premium_economy" | "business" | "first" | undefined;
+          if (cabinMatch) {
+            const cabin = cabinMatch[1].toLowerCase();
+            if (cabin.includes("club") || cabin.includes("business")) cabinClass = "business";
+            else if (cabin.includes("first")) cabinClass = "first";
+            else if (cabin.includes("world") || cabin.includes("premium")) cabinClass = "premium_economy";
+            else cabinClass = "economy";
+          }
+          
+          const segment: FlightSegment = {
+            id: `seg-${Date.now()}-${segmentIndex}`,
+            flightNumber,
+            airline: "British Airways",
+            departure: airports[0]?.code || "",
+            departureCity: fromCity,
+            arrival: airports[1]?.code || "",
+            arrivalCity: toCity,
+            departureDate: depDate,
+            departureTimeScheduled: depTimeMatch ? depTimeMatch[1] : "",
+            arrivalDate: arrDate,
+            arrivalTimeScheduled: arrTimeMatch ? arrTimeMatch[1] : "",
+            departureTerminal: airports[0]?.terminal,
+            arrivalTerminal: airports[1]?.terminal,
+            duration: durationMatch ? `${durationMatch[1]}h ${durationMatch[2]}m` : undefined,
+            cabinClass,
+            bookingRef,
+            ticketNumber,
+            passengerName,
+            departureStatus: "scheduled",
+            arrivalStatus: "scheduled",
+          };
+          
+          parsedSegments.push(segment);
+          segmentIndex++;
+        }
       } else {
         // Try FlyDubai/Emirates format
         // Example: "Departure from Riga (Flight FZ 1442)\nEconomy Lite\n20 December 2025..."
@@ -990,7 +1110,7 @@ export default function FlightItineraryInput({
         setTextInput("");
         setShowTextInput(false);
       } else {
-        setParseError("Could not parse. Supported formats:\n• LX348 GVA-LHR 06.01 15:55-16:40\n• Amadeus/Galileo booking\n• FlyDubai/Emirates itinerary");
+        setParseError("Could not parse. Supported formats:\n• LX348 GVA-LHR 06.01 15:55-16:40\n• Amadeus/Galileo booking\n• British Airways confirmation\n• FlyDubai/Emirates itinerary");
       }
     } catch (err) {
       console.error("Parse error:", err);

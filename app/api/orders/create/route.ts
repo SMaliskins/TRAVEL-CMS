@@ -11,14 +11,20 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
 
+interface CityCountryPair {
+  city: string;
+  country: string;
+}
+
 interface CreateOrderRequest {
   clientPartyId: string;
   clientDisplayName?: string;
   orderType: "TA" | "TO" | "CORP" | "NON";
   ownerAgent: string;
   ownerName?: string;
-  cities: string[];
-  countries: string[];
+  citiesWithCountries?: CityCountryPair[]; // New format with proper city-country mapping
+  cities: string[]; // Legacy: just city names
+  countries: string[]; // Legacy: just country names
   checkIn: string | null;
   return: string | null;
   status?: string;
@@ -156,8 +162,32 @@ export async function POST(request: NextRequest) {
                               await getClientDisplayName(body.clientPartyId) ||
                               "Unknown Client";
 
-    // Build countries_cities string
-    const countriesCities = [...new Set([...body.countries, ...body.cities])].join(", ");
+    // Build countries_cities string in proper format: "origin:City, Country|Dest1, Country1; Dest2, Country2|return:City, Country"
+    // For new orders, first city becomes origin, rest are destinations
+    let countriesCities = "";
+    
+    // Prefer new format with proper city-country mapping
+    const cityCountryPairs: CityCountryPair[] = body.citiesWithCountries && body.citiesWithCountries.length > 0
+      ? body.citiesWithCountries
+      : (body.cities || []).map((city, i) => ({
+          city,
+          country: body.countries?.[i] || body.countries?.[0] || ""
+        }));
+    
+    if (cityCountryPairs.length > 0) {
+      // First city is origin
+      const origin = cityCountryPairs[0];
+      countriesCities = `origin:${origin.city}, ${origin.country}`;
+      
+      // Rest are destinations
+      if (cityCountryPairs.length > 1) {
+        const destinations = cityCountryPairs.slice(1);
+        countriesCities += "|" + destinations.map(c => `${c.city}, ${c.country}`).join("; ");
+      }
+      
+      // Add return (same as origin by default)
+      countriesCities += `|return:${origin.city}, ${origin.country}`;
+    }
 
     // Build insert payload with correct field names
     // Start with required fields only

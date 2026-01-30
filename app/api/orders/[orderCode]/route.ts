@@ -76,7 +76,98 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ order });
+    // Get owner name from user_profiles or profiles if owner_user_id exists
+    let ownerName = null;
+    if (order.owner_user_id) {
+      // Try user_profiles first (id = auth.users.id)
+      const { data: profile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", order.owner_user_id)
+        .single();
+      
+      if (profile) {
+        ownerName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || null;
+      }
+      
+      // Fallback to profiles table
+      if (!ownerName) {
+        const { data: oldProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("display_name, initials")
+          .eq("user_id", order.owner_user_id)
+          .single();
+        
+        if (oldProfile) {
+          ownerName = oldProfile.display_name || null;
+        }
+      }
+    }
+    
+    // Fallback: try manager_user_id if owner_user_id not set
+    if (!ownerName && order.manager_user_id) {
+      const { data: managerProfile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", order.manager_user_id)
+        .single();
+      
+      if (managerProfile) {
+        ownerName = [managerProfile.first_name, managerProfile.last_name].filter(Boolean).join(" ") || null;
+      }
+    }
+    
+    // Fallback: try created_by if still no owner
+    if (!ownerName && order.created_by) {
+      const { data: creatorProfile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", order.created_by)
+        .single();
+      
+      if (creatorProfile) {
+        ownerName = [creatorProfile.first_name, creatorProfile.last_name].filter(Boolean).join(" ") || null;
+      }
+      
+      // Also try profiles table for created_by
+      if (!ownerName) {
+        const { data: creatorOldProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("display_name, initials")
+          .eq("user_id", order.created_by)
+          .single();
+        
+        if (creatorOldProfile) {
+          ownerName = creatorOldProfile.display_name || null;
+        }
+      }
+    }
+    
+    // Last fallback: try to get name from auth.users metadata
+    if (!ownerName && order.created_by) {
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(order.created_by);
+      if (authUser?.user) {
+        const meta = authUser.user.user_metadata;
+        ownerName = meta?.full_name || meta?.name || 
+                    [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
+                    authUser.user.email?.split("@")[0] || null;
+      }
+    }
+    
+    // Ultimate fallback: use current user's name or email
+    if (!ownerName && user) {
+      const meta = user.user_metadata;
+      ownerName = meta?.full_name || meta?.name || 
+                  [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
+                  user.email?.split("@")[0] || null;
+    }
+
+    return NextResponse.json({ 
+      order: {
+        ...order,
+        owner_name: ownerName,
+      }
+    });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Order GET error:", errorMsg);
@@ -158,6 +249,20 @@ export async function PATCH(
       const validStatuses = ["Draft", "Active", "Cancelled", "Completed", "On hold"];
       if (!validStatuses.includes(updateData.status as string)) {
         return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+      }
+    }
+
+    // Auto-sync client_display_name when client_party_id changes
+    if (updateData.client_party_id && !updateData.client_display_name) {
+      const { data: partyData } = await supabaseAdmin
+        .from("party")
+        .select("display_name")
+        .eq("id", updateData.client_party_id)
+        .single();
+      
+      if (partyData?.display_name) {
+        updateData.client_display_name = partyData.display_name;
+        console.log("[Order PATCH] Auto-synced client_display_name:", partyData.display_name);
       }
     }
 

@@ -57,6 +57,15 @@ export default function PartySelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [wasCleared, setWasCleared] = useState(false);
+
+  // Update inputValue when initialDisplayName changes (e.g., after async load)
+  // But don't restore if user manually cleared the field
+  useEffect(() => {
+    if (initialDisplayName && !inputValue && !wasCleared) {
+      setInputValue(initialDisplayName);
+    }
+  }, [initialDisplayName, inputValue, wasCleared]);
 
   // Search parties
   const searchParties = useCallback(async (query: string) => {
@@ -339,6 +348,7 @@ export default function PartySelect({
   const handleClear = () => {
     setSelectedParty(null);
     setInputValue("");
+    setWasCleared(true);
     onChange(null, "");
     inputRef.current?.focus();
   };
@@ -351,7 +361,13 @@ export default function PartySelect({
           type="text"
           value={inputValue}
           onChange={handleInputChange}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            setIsOpen(true);
+            // Trigger search on focus if there's already text
+            if (inputValue.length >= 2) {
+              searchParties(inputValue);
+            }
+          }}
           placeholder="Search or type name..."
           className={`w-full rounded-lg border px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-1 ${
             error

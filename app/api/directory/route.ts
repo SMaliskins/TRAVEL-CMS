@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
+import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -30,6 +31,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
 
   const record: DirectoryRecord = {
     id: row.id,
+    displayId: row.display_id || undefined,
     type: row.party_type === "company" ? "company" : "person",
     roles,
     isActive: row.status === "active",
@@ -52,6 +54,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.passportIssuingCountry = row.passport_issuing_country || undefined;
     record.passportFullName = row.passport_full_name || undefined;
     record.nationality = row.nationality || undefined;
+    record.avatarUrl = row.avatar_url || undefined;
   }
 
   // Company fields
@@ -65,10 +68,14 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   // Common fields
   record.phone = row.phone || undefined;
   record.email = row.email || undefined;
+  record.country = row.country || undefined;
 
-  // Supplier details - no additional fields needed
+  // Supplier details
   if (row.is_supplier) {
-    record.supplierExtras = {};
+    record.supplierExtras = {
+      serviceAreas: row.service_areas || undefined,
+      commissions: row.supplier_commissions || undefined,
+    };
   }
 
   // Subagent details
@@ -113,10 +120,11 @@ export async function GET(request: NextRequest) {
       userCompanyId = profile?.company_id || null;
     }
 
-    // Build base query
+    // Build base query – select only columns needed for list (avoids heavy payload)
+    const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country";
     let query = supabaseAdmin
       .from("party")
-      .select("*", { count: "exact" });
+      .select(partyColumns, { count: "exact" });
     
     // Apply tenant isolation if user is authenticated
     if (userCompanyId) {
@@ -136,10 +144,16 @@ export async function GET(request: NextRequest) {
     // because is_client/is_supplier/is_subagent are determined by join tables
     // (client_party, partner_party, subagents), not columns in party table
 
-    // Apply search filter in SQL (ilike on display_name)
-    // This ensures search works BEFORE pagination
+    // Apply search filter: diacritics, layout transliteration, name variants (DIR3)
     if (search) {
-      query = query.ilike("display_name", `%${search}%`);
+      const patterns = getSearchPatterns(search);
+      const safePatterns = patterns.slice(0, 5).map((p) => p.replace(/[%,]/g, "")); // Limit and sanitize
+      if (safePatterns.length === 1) {
+        query = query.ilike("display_name", `%${safePatterns[0]}%`);
+      } else if (safePatterns.length > 1) {
+        const orClause = safePatterns.map((p) => `display_name.ilike.%${p}%`).join(",");
+        query = query.or(orClause);
+      }
     }
 
     // Pagination
@@ -160,20 +174,23 @@ export async function GET(request: NextRequest) {
 
     // If search provided and no results from display_name, try searching in party_person and party_company
     if (search && (!parties || parties.length === 0)) {
-      const searchLower = search.toLowerCase();
+      const patterns = getSearchPatterns(search).slice(0, 3).map((p) => p.replace(/[%,]/g, ""));
+      const searchTerms = patterns.length > 0 ? patterns : [search.replace(/[%,]/g, "")];
+      const personOr = searchTerms.flatMap((p) => [`first_name.ilike.%${p}%`, `last_name.ilike.%${p}%`]).join(",");
+      const companyOr = searchTerms.map((p) => `company_name.ilike.%${p}%`).join(",");
       
       // Search in party_person by first_name or last_name
       const { data: personMatches } = await supabaseAdmin
         .from("party_person")
         .select("party_id")
-        .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`)
+        .or(personOr)
         .limit(limit);
       
       // Search in party_company by company_name
       const { data: companyMatches } = await supabaseAdmin
         .from("party_company")
         .select("party_id")
-        .ilike("company_name", `%${search}%`)
+        .or(companyOr)
         .limit(limit);
 
       const matchedIds = [
@@ -182,10 +199,10 @@ export async function GET(request: NextRequest) {
       ];
 
       if (matchedIds.length > 0) {
-        // Fetch parties by these IDs
+        // Fetch parties by these IDs (same columns as main query)
         let fallbackQuery = supabaseAdmin
           .from("party")
-          .select("*", { count: "exact" })
+          .select(partyColumns, { count: "exact" })
           .in("id", matchedIds);
         
         if (userCompanyId) {
@@ -209,32 +226,27 @@ export async function GET(request: NextRequest) {
 
     const partyIds = parties.map((p: any) => p.id);
 
-    // Fetch related data in parallel
+    // Fetch related data in parallel - only columns needed for buildDirectoryRecord
     const [personData, companyData, clientData, supplierData, subagentData] = await Promise.all([
-      // Person data
       supabaseAdmin
         .from("party_person")
-        .select("*")
+        .select("party_id,title,first_name,last_name,dob,personal_code,citizenship,passport_number,passport_issue_date,passport_expiry_date,passport_issuing_country,passport_full_name,nationality,avatar_url")
         .in("party_id", partyIds),
-      // Company data
       supabaseAdmin
         .from("party_company")
-        .select("*")
+        .select("party_id,company_name,reg_number,legal_address,actual_address")
         .in("party_id", partyIds),
-      // Client roles
       supabaseAdmin
         .from("client_party")
         .select("party_id")
         .in("party_id", partyIds),
-      // Supplier data
       supabaseAdmin
         .from("partner_party")
-        .select("*")
+        .select("party_id")
         .in("party_id", partyIds),
-      // Subagent data
       supabaseAdmin
         .from("subagents")
-        .select("*")
+        .select("party_id,commission_scheme")
         .in("party_id", partyIds),
     ]);
 
@@ -255,22 +267,20 @@ export async function GET(request: NextRequest) {
       filteredParties = parties.filter((p: any) => subagentMap.has(p.id));
     }
 
-    // Apply search filter (including first_name, last_name, company_name) after loading all data
+    // Apply search filter with diacritics, layout, variants (DIR3)
     if (search) {
-      const searchLower = search.toLowerCase();
+      const patterns = getSearchPatterns(search);
       filteredParties = filteredParties.filter((p: any) => {
-        const matchesDisplayName = p.display_name?.toLowerCase().includes(searchLower);
-        const matchesEmail = p.email?.toLowerCase().includes(searchLower);
-        const matchesPhone = p.phone?.toLowerCase().includes(searchLower);
+        const matchesDisplayName = matchesSearch(p.display_name, patterns);
+        const matchesEmail = matchesSearch(p.email, patterns);
+        const matchesPhone = matchesSearch(p.phone, patterns);
         
-        // Check person data (first_name, last_name)
         const person = personMap.get(p.id);
-        const matchesFirstName = person?.first_name?.toLowerCase().includes(searchLower);
-        const matchesLastName = person?.last_name?.toLowerCase().includes(searchLower);
+        const matchesFirstName = matchesSearch(person?.first_name, patterns);
+        const matchesLastName = matchesSearch(person?.last_name, patterns);
         
-        // Check company_name from party_company
         const company = companyMap.get(p.id);
-        const matchesCompanyName = company?.company_name?.toLowerCase().includes(searchLower);
+        const matchesCompanyName = matchesSearch(company?.company_name, patterns);
         
         return matchesDisplayName || matchesEmail || matchesPhone || 
                matchesFirstName || matchesLastName || matchesCompanyName;

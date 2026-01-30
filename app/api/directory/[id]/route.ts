@@ -52,6 +52,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.passportIssuingCountry = row.passport_issuing_country || undefined;
     record.passportFullName = row.passport_full_name || undefined;
     record.nationality = row.nationality || undefined;
+    record.avatarUrl = row.avatar_url || undefined;
   }
 
   // Company fields
@@ -66,9 +67,12 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   record.phone = row.phone || undefined;
   record.email = row.email || undefined;
 
-  // Supplier details - no additional fields needed
+  // Supplier details
   if (row.is_supplier) {
-    record.supplierExtras = {};
+    record.supplierExtras = {
+      serviceAreas: row.service_areas || undefined,
+      commissions: row.supplier_commissions || undefined,
+    };
   }
 
   // Subagent details
@@ -361,6 +365,18 @@ export async function PUT(
     if (updates.phone !== undefined) {
       partyUpdates.phone = (typeof updates.phone === 'string' && updates.phone.trim()) ? updates.phone.trim() : null;
     }
+    // Country
+    if (updates.country !== undefined) {
+      partyUpdates.country = updates.country || null;
+    }
+    // Supplier service areas
+    if (updates.supplierExtras?.serviceAreas !== undefined) {
+      partyUpdates.service_areas = updates.supplierExtras.serviceAreas || null;
+    }
+    // Supplier commissions
+    if (updates.supplierExtras?.commissions !== undefined) {
+      partyUpdates.supplier_commissions = updates.supplierExtras.commissions || null;
+    }
     partyUpdates.updated_at = new Date().toISOString();
 
     console.log("[Directory PUT] Updating party:", {
@@ -490,7 +506,8 @@ export async function PUT(
                             updates.personalCode !== undefined || updates.citizenship !== undefined;
     const hasPassportFields = updates.passportNumber !== undefined || updates.passportIssueDate !== undefined ||
                               updates.passportExpiryDate !== undefined || updates.passportIssuingCountry !== undefined ||
-                              updates.passportFullName !== undefined || updates.nationality !== undefined;
+                              updates.passportFullName !== undefined || updates.nationality !== undefined ||
+                              updates.avatarUrl !== undefined;
     
     if (partyType === "person" || hasPersonFields || hasPassportFields) {
       const personUpdates: any = {};
@@ -506,6 +523,7 @@ export async function PUT(
       if (updates.passportExpiryDate !== undefined) personUpdates.passport_expiry_date = updates.passportExpiryDate || null;
       if (updates.passportIssuingCountry !== undefined) personUpdates.passport_issuing_country = updates.passportIssuingCountry || null;
       if (updates.passportFullName !== undefined) personUpdates.passport_full_name = updates.passportFullName || null;
+      if (updates.avatarUrl !== undefined) personUpdates.avatar_url = updates.avatarUrl || null;
       
       // Nationality - only include if migration has been run (column exists)
       // If column doesn't exist, we'll retry without it
@@ -552,6 +570,31 @@ export async function PUT(
             { status: 500 }
           );
         }
+        
+        // Update display_name in party table if firstName or lastName changed
+        if (updates.firstName !== undefined || updates.lastName !== undefined) {
+          // Fetch current person data to build display_name
+          const { data: personData } = await supabaseAdmin
+            .from("party_person")
+            .select("first_name, last_name")
+            .eq("party_id", id)
+            .single();
+          
+          if (personData) {
+            const newDisplayName = [personData.first_name, personData.last_name]
+              .filter(Boolean)
+              .join(" ");
+            
+            if (newDisplayName) {
+              await supabaseAdmin
+                .from("party")
+                .update({ display_name: newDisplayName })
+                .eq("id", id);
+              
+              console.log("[Directory PUT] Updated display_name:", { id, newDisplayName });
+            }
+          }
+        }
       }
     }
 
@@ -571,6 +614,16 @@ export async function PUT(
 
       if (companyError) {
         console.error("Error updating company:", companyError);
+      }
+      
+      // Update display_name in party table if companyName changed
+      if (updates.companyName) {
+        await supabaseAdmin
+          .from("party")
+          .update({ display_name: updates.companyName })
+          .eq("id", id);
+        
+        console.log("[Directory PUT] Updated display_name for company:", { id, newDisplayName: updates.companyName });
       }
     }
 

@@ -9,8 +9,12 @@ export interface PassportData {
   passportExpiryDate?: string; // YYYY-MM-DD
   passportIssuingCountry?: string;
   passportFullName?: string;
+  firstName?: string;  // Given name(s) - from MRZ
+  lastName?: string;  // Surname - from MRZ
   dob?: string; // YYYY-MM-DD (can be updated from passport)
   nationality?: string;
+  avatarUrl?: string; // Photo extracted from passport
+  personalCode?: string; // Record No / Запис N (персональный код)
 }
 
 interface PassportDetailsInputProps {
@@ -27,17 +31,16 @@ export default function PassportDetailsInput({
   const [isUploading, setIsUploading] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [textInput, setTextInput] = useState("");
-  const [showTextInput, setShowTextInput] = useState(false);
+  const [parseWarning, setParseWarning] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
-  // Handle paste from clipboard (Ctrl+V)
+  // Handle paste from clipboard (Ctrl+V) - works globally
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
-      if (readonly || !pasteAreaRef.current?.contains(e.target as Node)) return;
+      if (readonly) return;
       
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -50,6 +53,7 @@ export default function PassportDetailsInput({
           if (file) {
             await handleFileUpload(file);
           }
+          return;
         }
       }
     };
@@ -70,25 +74,53 @@ export default function PassportDetailsInput({
     const isPDF = file.type === "application/pdf";
     
     if (!isImage && !isPDF) {
-      setParseError("Please upload an image or PDF file");
+      setParseError("Please upload a PDF file");
+      return;
+    }
+
+    if (isImage) {
+      // Show preview and upload as avatar
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setUploadedImage(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+      
+      // Upload image as avatar
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const response = await fetch("/api/upload-avatar", {
+          method: "POST",
+          body: formData,
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          onChange({ ...data, avatarUrl: result.url });
+          setParseError("Photo saved. Please fill in passport details manually or upload PDF for automatic parsing.");
+        } else {
+          setParseError("Image uploaded but could not be saved. Please upload PDF for automatic parsing.");
+        }
+      } catch (err) {
+        console.error("Avatar upload error:", err);
+        setParseError("Failed to save image. Please fill in details manually.");
+      } finally {
+        setIsUploading(false);
+      }
+      
+      setIsEditing(true); // Open edit mode for manual input
       return;
     }
 
     setIsUploading(true);
     setParseError(null);
+    setParseWarning(null);
 
     try {
-      if (isPDF) {
-        await parsePDFWithAI(file);
-      } else {
-        // For images, show preview and parse
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setUploadedImage(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-        await parseImageWithAI(file);
-      }
+      await parsePDF(file);
     } catch (err) {
       console.error("Upload error:", err);
       setParseError("Failed to process file");
@@ -113,122 +145,34 @@ export default function PassportDetailsInput({
     }
   };
 
-  // Parse PDF with AI
-  const parsePDFWithAI = async (file: File) => {
+  // Parse PDF (regex-based, no AI)
+  const parsePDF = async (file: File) => {
     setIsParsing(true);
     setParseError(null);
     
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("type", "pdf");
       
-      const response = await fetch("/api/ai/parse-passport", {
+      const response = await fetch("/api/parse-passport-mrz", {
         method: "POST",
         body: formData,
       });
       
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to parse PDF");
-      }
-      
       const result = await response.json();
       
-      if (result.passport) {
+      if (response.ok && result.passport) {
         onChange(result.passport);
         setParseError(null);
+        setParseWarning(result.photoError ? `Photo not extracted: ${result.photoError}` : null);
       } else {
-        setParseError("Could not extract passport information from PDF");
+        setParseError(result.error || "Could not parse passport. Please fill in manually.");
+        setIsEditing(true); // Open edit mode for manual input
       }
     } catch (err) {
       console.error("PDF parse error:", err);
       setParseError(err instanceof Error ? err.message : "Failed to parse PDF");
-    } finally {
-      setIsParsing(false);
-    }
-  };
-
-  // Parse image with AI
-  const parseImageWithAI = async (file: File) => {
-    setIsParsing(true);
-    setParseError(null);
-
-    try {
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(",")[1]);
-        };
-        reader.readAsDataURL(file);
-      });
-
-      const response = await fetch("/api/ai/parse-passport", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: base64,
-          mimeType: file.type,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to parse image");
-      }
-
-      const result = await response.json();
-      
-      if (result.passport) {
-        onChange(result.passport);
-        setParseError(null);
-      } else {
-        setParseError("Could not extract passport information from image");
-      }
-    } catch (err) {
-      console.error("Image parse error:", err);
-      setParseError(err instanceof Error ? err.message : "Failed to parse image");
-    } finally {
-      setIsParsing(false);
-    }
-  };
-
-  // Parse text with AI
-  const parseTextWithAI = async () => {
-    if (!textInput.trim()) {
-      setParseError("Please enter passport text");
-      return;
-    }
-
-    setIsParsing(true);
-    setParseError(null);
-
-    try {
-      const response = await fetch("/api/ai/parse-passport", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: textInput }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to parse text");
-      }
-
-      const result = await response.json();
-      
-      if (result.passport) {
-        onChange(result.passport);
-        setParseError(null);
-        setTextInput("");
-        setShowTextInput(false);
-      } else {
-        setParseError("Could not extract passport information from text");
-      }
-    } catch (err) {
-      console.error("Text parse error:", err);
-      setParseError(err instanceof Error ? err.message : "Failed to parse text");
+      setIsEditing(true);
     } finally {
       setIsParsing(false);
     }
@@ -257,20 +201,25 @@ export default function PassportDetailsInput({
             className="hidden"
           />
           
-          {uploadedImage ? (
+          {(uploadedImage || data.avatarUrl) ? (
             <div className="space-y-3">
               <img
-                src={uploadedImage}
+                src={uploadedImage || data.avatarUrl}
                 alt="Passport preview"
                 className="max-h-48 mx-auto rounded border border-gray-200"
               />
-              <button
-                type="button"
-                onClick={() => setUploadedImage(null)}
-                className="text-sm text-gray-600 hover:text-gray-900"
-              >
-                Remove image
-              </button>
+              {!readonly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadedImage(null);
+                    if (data.avatarUrl) onChange({ ...data, avatarUrl: undefined });
+                  }}
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Remove
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -287,17 +236,17 @@ export default function PassportDetailsInput({
                   strokeLinejoin="round"
                 />
               </svg>
-              <div>
+              <div className="space-y-2">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading || isParsing}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                  className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
                 >
-                  {isUploading || isParsing ? "Processing..." : "Upload passport image or PDF"}
+                  {isUploading || isParsing ? "Processing..." : "Upload PDF or Image"}
                 </button>
-                <p className="text-xs text-gray-500 mt-1">
-                  or drag and drop, or paste (Ctrl+V)
+                <p className="text-xs text-gray-500">
+                  or drag & drop, or <strong>Ctrl+V</strong> to paste
                 </p>
               </div>
             </div>
@@ -305,54 +254,16 @@ export default function PassportDetailsInput({
         </div>
       )}
 
-      {/* Text Input Toggle */}
-      {!readonly && !showTextInput && (
-        <button
-          type="button"
-          onClick={() => setShowTextInput(true)}
-          className="text-sm text-gray-600 hover:text-gray-900"
-        >
-          Or paste text directly →
-        </button>
-      )}
-
-      {/* Text Input */}
-      {!readonly && showTextInput && (
-        <div className="space-y-2">
-          <textarea
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Paste passport text here..."
-            rows={4}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-          />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={parseTextWithAI}
-              disabled={isParsing || !textInput.trim()}
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {isParsing ? "Parsing..." : "Parse Text"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowTextInput(false);
-                setTextInput("");
-              }}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Error Message */}
       {parseError && (
         <div className="rounded bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800">
           {parseError}
+        </div>
+      )}
+      {/* Warning (e.g. photo not extracted) */}
+      {parseWarning && (
+        <div className="rounded bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+          {parseWarning}
         </div>
       )}
 
@@ -373,6 +284,16 @@ export default function PassportDetailsInput({
 
         {isEditing || readonly ? (
           <div className="grid grid-cols-2 gap-3">
+            {data.avatarUrl && (
+              <div className="col-span-2 flex items-center gap-3">
+                <img
+                  src={data.avatarUrl}
+                  alt="Passport photo"
+                  className="h-20 w-20 rounded-full object-cover border border-gray-200"
+                />
+                <span className="text-xs text-gray-500">Photo extracted from passport</span>
+              </div>
+            )}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Passport Number</label>
               <input
@@ -447,6 +368,16 @@ export default function PassportDetailsInput({
           </div>
         ) : (
           <div className="space-y-2 text-sm">
+            {data.avatarUrl && (
+              <div className="flex items-center gap-3">
+                <img
+                  src={data.avatarUrl}
+                  alt="Passport photo"
+                  className="h-16 w-16 rounded-full object-cover border border-gray-200"
+                />
+                <span className="text-gray-500">Photo</span>
+              </div>
+            )}
             {data.passportNumber && (
               <div>
                 <span className="text-gray-500">Passport Number:</span>{" "}

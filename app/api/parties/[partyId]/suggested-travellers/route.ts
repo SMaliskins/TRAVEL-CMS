@@ -109,13 +109,13 @@ export async function GET(
           party:party_id (
             id,
             display_name,
+            phone,
             party_person (
               first_name,
               last_name,
               title,
               dob,
-              personal_code,
-              phone
+              personal_code
             )
           )
         `)
@@ -126,7 +126,7 @@ export async function GET(
       return (travellers || []).map((t) => {
         // Handle both single object and array return from Supabase join
         const partyRaw = t.party as unknown;
-        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string; phone: string }[] } | null;
+        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string }[] } | null;
         const person = party?.party_person?.[0];
         
         return {
@@ -136,7 +136,7 @@ export async function GET(
           title: person?.title || "Mr",
           dob: person?.dob || null,
           personalCode: person?.personal_code || null,
-          contactNumber: person?.phone || null,
+          contactNumber: party?.phone || null,
         };
       });
     }
@@ -176,13 +176,13 @@ export async function GET(
         party:party_id (
           id,
           display_name,
+          phone,
           party_person (
             first_name,
             last_name,
             title,
             dob,
-            personal_code,
-            phone
+            personal_code
           )
         )
       `)
@@ -197,7 +197,7 @@ export async function GET(
       allTravellers.forEach((t) => {
         // Handle both single object and array return from Supabase join
         const partyRaw = t.party as unknown;
-        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string; phone: string }[] } | null;
+        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string }[] } | null;
         const person = party?.party_person?.[0];
         
         const existing = frequencyMap.get(t.party_id);
@@ -213,7 +213,7 @@ export async function GET(
               title: person?.title || "Mr",
               dob: person?.dob || null,
               personalCode: person?.personal_code || null,
-              contactNumber: person?.phone || null,
+              contactNumber: party?.phone || null,
             }
           });
         }

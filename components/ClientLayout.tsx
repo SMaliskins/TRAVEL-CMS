@@ -6,14 +6,11 @@ import TopBar from "./TopBar";
 import TabBar from "./TabBar";
 import AuthGuard from "./AuthGuard";
 
-// Pages that should not show sidebar/topbar
-const NO_LAYOUT_PATHS = ["/login"];
-
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
-  // Check if current path should hide the layout
-  const hideLayout = NO_LAYOUT_PATHS.some((path) => pathname?.startsWith(path));
+  // Pages that should not show sidebar/topbar (exact match for / to avoid matching all paths)
+  const hideLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login");
 
   return (
     <AuthGuard>

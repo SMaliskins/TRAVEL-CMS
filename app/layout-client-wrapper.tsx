@@ -9,9 +9,6 @@ import { TabsProvider } from "@/contexts/TabsContext";
 const RAIL_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
 
-// Pages that should not have sidebar margins
-const NO_LAYOUT_PATHS = ["/login"];
-
 // Function to apply layout styles immediately
 function applyLayoutStyles(mode: string, skipLayout: boolean) {
   const mainWrapper = document.getElementById("main-content-wrapper");
@@ -38,8 +35,8 @@ export default function LayoutClientWrapper({
   const { mode, isClient } = useSidebar();
   const pathname = usePathname();
   
-  // Check if current path should skip layout styles
-  const skipLayout = NO_LAYOUT_PATHS.some((path) => pathname?.startsWith(path));
+  // Pages that should not have sidebar margins (exact match for / to avoid matching all paths)
+  const skipLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login");
 
   // Apply styles immediately on mount and when mode changes
   useLayoutEffect(() => {

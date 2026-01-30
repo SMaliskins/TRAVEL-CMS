@@ -1,24 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Dynamic import for pdf-parse to avoid ESM issues
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdf = require("pdf-parse");
-    const data = await pdf(buffer);
-    return data.text || "";
-  } catch (err) {
-    console.error("PDF extraction error:", err);
-    throw err;
-  }
-}
-
 /**
  * AI-powered passport parsing
  * 
  * Supports:
  * - Image upload (base64 or FormData)
- * - PDF upload (FormData) - extracts text first, then parses
+ * - PDF upload (FormData) - sent directly to GPT-4o (works for scanned/image-based PDFs, Ukrainian passports, etc.)
  * - Text parsing (JSON body)
  * 
  * Expected FormData:
@@ -37,11 +24,16 @@ interface PassportData {
   passportExpiryDate?: string; // YYYY-MM-DD
   passportIssuingCountry?: string;
   passportFullName?: string;
+  firstName?: string;  // Given name(s) - from MRZ line 2 or visual zone
+  lastName?: string;   // Surname - from MRZ line 1 (before <<) or visual zone
   dob?: string; // YYYY-MM-DD
   nationality?: string;
 }
 
 const SYSTEM_PROMPT = `You are a passport document parser. Extract passport information from images of passport pages, passport scans, or PDFs.
+
+Passport MRZ (Machine Readable Zone) format: Line 1 = Surname<<Given Names (e.g. SMITH<<JOHN MICHAEL means lastName=SMITH, firstName=JOHN MICHAEL).
+Visual zone may show "Surname / Given names" or "Last name / First name" - use that order.
 
 Return a JSON object with this structure:
 {
@@ -51,6 +43,8 @@ Return a JSON object with this structure:
     "passportExpiryDate": "2030-01-14",
     "passportIssuingCountry": "US",
     "passportFullName": "SMITH JOHN MICHAEL",
+    "firstName": "JOHN MICHAEL",
+    "lastName": "SMITH",
     "dob": "1985-05-20",
     "nationality": "US"
   }
@@ -58,8 +52,11 @@ Return a JSON object with this structure:
 
 Rules:
 - Dates in YYYY-MM-DD format
-- passportIssuingCountry should be 2-letter ISO country code (e.g., "US", "GB", "DE")
-- passportFullName should be exactly as shown in passport (may include middle names)
+- passportIssuingCountry should be 2-letter ISO country code (e.g., "US", "GB", "DE", "UA" for Ukraine)
+- passportFullName: full name exactly as shown in passport
+- Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), etc. Parse Cyrillic names correctly.
+- firstName: given name(s) - from MRZ line 2 or visual "First name" / "Given names"
+- lastName: surname/family name - from MRZ line 1 (before <<) or visual "Surname" / "Last name"
 - dob is the date of birth from the passport
 - nationality should be 2-letter ISO country code
 - If you cannot determine a value, omit it or use empty string
@@ -70,6 +67,7 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get("content-type") || "";
     
     let imageBase64: string | null = null;
+    let pdfBase64: string | null = null;
     let mimeType: string = "image/png";
     let textContent: string | null = null;
     let isPDF = false;
@@ -90,18 +88,9 @@ export async function POST(request: NextRequest) {
       isPDF = file.type === "application/pdf";
       
       if (isPDF) {
-        // Extract text from PDF using pdf-parse
-        try {
-          const buffer = await file.arrayBuffer();
-          textContent = await extractPdfText(Buffer.from(buffer));
-          console.log("Extracted PDF text:", textContent?.substring(0, 500));
-        } catch (pdfError) {
-          console.error("PDF parsing error:", pdfError);
-          return NextResponse.json(
-            { error: "Failed to extract text from PDF. Please try pasting the text directly.", passport: null },
-            { status: 400 }
-          );
-        }
+        // Send PDF directly to GPT-4o (native PDF support - works for scanned/image-based PDFs, Ukrainian passports, etc.)
+        const buffer = await file.arrayBuffer();
+        pdfBase64 = Buffer.from(buffer).toString("base64");
       } else if (file.type.startsWith("image/")) {
         const buffer = await file.arrayBuffer();
         imageBase64 = Buffer.from(buffer).toString("base64");
@@ -153,9 +142,8 @@ export async function POST(request: NextRequest) {
             content: `Parse this passport text and extract all passport information:\n\n${textContent}`,
           },
         ];
-      } else if (isPDF) {
-        // PDF parsing - GPT-4V can process PDFs as images
-        // For complex PDFs, consider extracting text first
+      } else if (isPDF && pdfBase64) {
+        // PDF parsing - GPT-4o native PDF support (works for scanned/image-based PDFs, Ukrainian passports, etc.)
         messages = [
           {
             role: "system",
@@ -165,14 +153,15 @@ export async function POST(request: NextRequest) {
             role: "user",
             content: [
               {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${imageBase64}`,
+                type: "file",
+                file: {
+                  filename: "passport.pdf",
+                  file_data: `data:application/pdf;base64,${pdfBase64}`,
                 },
               },
               {
                 type: "text",
-                text: "This is a PDF document containing passport information. Extract all passport details from it. Return JSON only.",
+                text: "Extract all passport information from this PDF document. Return JSON only.",
               },
             ],
           },
@@ -258,6 +247,8 @@ export async function POST(request: NextRequest) {
               passportExpiryDate: formatDate(passport.passportExpiryDate),
               passportIssuingCountry: passport.passportIssuingCountry || undefined,
               passportFullName: passport.passportFullName || undefined,
+              firstName: passport.firstName || undefined,
+              lastName: passport.lastName || undefined,
               dob: formatDate(passport.dob),
               nationality: passport.nationality || undefined,
             },

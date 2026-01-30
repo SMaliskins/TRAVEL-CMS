@@ -1,4 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { logAiUsage } from "@/lib/aiUsageLogger";
+import { requireModule } from "@/lib/modules/checkModule";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+async function getAuthInfo(request: NextRequest): Promise<{ userId: string; companyId: string } | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  
+  const token = authHeader.replace("Bearer ", "");
+  const authClient = createClient(supabaseUrl, supabaseAnonKey);
+  const { data, error } = await authClient.auth.getUser(token);
+  if (error || !data?.user) return null;
+  
+  const userId = data.user.id;
+  const adminClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userId)
+    .single();
+  
+  if (!profile?.company_id) return null;
+  return { userId, companyId: profile.company_id };
+}
 
 // Dynamic import for pdf-parse to avoid ESM issues
 async function extractPdfText(buffer: Buffer): Promise<string> {
@@ -62,53 +90,75 @@ interface FlightSegment {
   arrivalStatus: "scheduled" | "on_time" | "delayed" | "cancelled" | "landed";
 }
 
-const SYSTEM_PROMPT = `You are a flight itinerary parser. Extract flight information from images of tickets, boarding passes, booking confirmations, or PDFs.
+const SYSTEM_PROMPT = `You are a flight itinerary parser for a travel agency CRM. Extract ALL flight and booking information from images of tickets, boarding passes, booking confirmations, emails, or PDFs.
 
 Return a JSON object with this structure:
 {
+  "booking": {
+    "bookingRef": "XYNRKB",
+    "airline": "British Airways",
+    "totalPrice": 420.76,
+    "currency": "EUR",
+    "ticketNumbers": ["125-2227796422"],
+    "passengers": [
+      { "name": "Frederic Piano", "ticketNumber": "125-2227796422" }
+    ],
+    "cabinClass": "economy",
+    "refundPolicy": "non_ref",
+    "changeFee": null,
+    "baggage": "1 cabin bag, 1 small handbag"
+  },
   "segments": [
     {
-      "flightNumber": "LX348",
-      "airline": "SWISS",
-      "departure": "GVA",
-      "departureCity": "Geneva",
-      "departureCountry": "CH",
+      "flightNumber": "BA353",
+      "airline": "British Airways",
+      "departure": "NCE",
+      "departureCity": "Nice",
+      "departureCountry": "FR",
       "arrival": "LHR",
       "arrivalCity": "London",
       "arrivalCountry": "GB",
-      "departureDate": "2026-01-06",
-      "departureTimeScheduled": "15:55",
-      "arrivalDate": "2026-01-06",
-      "arrivalTimeScheduled": "16:40",
-      "duration": "1h 45m",
+      "departureDate": "2026-01-25",
+      "departureTimeScheduled": "07:35",
+      "arrivalDate": "2026-01-25",
+      "arrivalTimeScheduled": "08:55",
+      "duration": "2h 20m",
       "departureTerminal": "1",
-      "arrivalTerminal": "2",
-      "cabinClass": "business",
-      "bookingClass": "Z",
-      "bookingRef": "ZBBVXE",
-      "ticketNumber": "7242796062303",
-      "baggage": "2PC",
-      "seat": "07A",
-      "passengerName": "VELINSKI/ANNA MRS",
-      "aircraft": "AIRBUS A220-300"
+      "arrivalTerminal": "5",
+      "cabinClass": "economy",
+      "bookingClass": "Y",
+      "baggage": "1 cabin bag"
     }
   ]
 }
 
 Rules:
+- Extract EVERYTHING: booking reference, ticket numbers, prices, passenger names, baggage allowance
 - Use IATA airport codes (3 letters) for departure/arrival
+- Use ISO country codes (2 letters) for countries
 - Dates in YYYY-MM-DD format
 - Times in HH:mm format (24-hour)
 - If arrival is next day, use the correct arrival date
-- Calculate duration from times if not explicitly shown
-- Extract terminal info if visible
-- cabinClass should be lowercase: "economy", "premium_economy", "business", or "first"
-- bookingClass is the fare class letter (Y, Z, C, F, etc.)
-- passengerName in LASTNAME/FIRSTNAME format if possible
-- If you cannot determine a value, omit it or use empty string
+- Calculate duration from times if not shown
+- cabinClass: "economy", "premium_economy", "business", or "first"
+- refundPolicy: "non_ref" (non-refundable), "refundable" (with conditions), "fully_ref" (fully refundable)
+- Look for keywords: "Nonref", "Non-refundable", "Refundable", "Free cancellation"
+- Extract total price with taxes
+- Match ticket numbers to passenger names if possible
 - Only return valid JSON, no other text`;
 
 export async function POST(request: NextRequest) {
+  // Get auth info for usage logging and module check
+  const authInfo = await getAuthInfo(request);
+  
+  // Check if company has ai_parsing module (skip in development for easier testing)
+  if (authInfo && process.env.NODE_ENV === "production") {
+    const moduleError = await requireModule(authInfo.companyId, "ai_parsing");
+    if (moduleError) {
+      return NextResponse.json({ error: moduleError.error }, { status: moduleError.status });
+    }
+  }
+  
   try {
     const contentType = request.headers.get("content-type") || "";
     
@@ -116,6 +166,7 @@ export async function POST(request: NextRequest) {
     let mimeType: string = "image/png";
     let textContent: string | null = null;
     let isPDF = false;
+    let inputType: "pdf" | "image" | "text" = "text";
 
     // Handle FormData (file upload)
     if (contentType.includes("multipart/form-data")) {
@@ -133,6 +184,7 @@ export async function POST(request: NextRequest) {
       isPDF = file.type === "application/pdf";
       
       if (isPDF) {
+        inputType = "pdf";
         // Extract text from PDF using pdf-parse
         try {
           const buffer = await file.arrayBuffer();
@@ -148,6 +200,7 @@ export async function POST(request: NextRequest) {
       } else if (file.type.startsWith("image/")) {
         const buffer = await file.arrayBuffer();
         imageBase64 = Buffer.from(buffer).toString("base64");
+        inputType = "image";
       } else {
         return NextResponse.json(
           { error: "Unsupported file type. Please upload an image or PDF." },
@@ -270,6 +323,22 @@ export async function POST(request: NextRequest) {
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || "";
+      const usage = data.usage || {};
+
+      // Log AI usage for billing
+      if (authInfo) {
+        await logAiUsage({
+          companyId: authInfo.companyId,
+          userId: authInfo.userId,
+          operation: "parse_flight",
+          model: "gpt-4o",
+          inputTokens: usage.prompt_tokens || 0,
+          outputTokens: usage.completion_tokens || 0,
+          totalTokens: usage.total_tokens || 0,
+          success: true,
+          metadata: { inputType },
+        });
+      }
 
       // Parse JSON from response
       try {
@@ -277,12 +346,16 @@ export async function POST(request: NextRequest) {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
+          
+          // Extract booking-level info
+          const booking = parsed.booking || {};
+          
           const segments: FlightSegment[] = (parsed.segments || []).map(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (seg: any, index: number) => ({
               id: `seg-${Date.now()}-${index}`,
               flightNumber: seg.flightNumber || "",
-              airline: seg.airline || "",
+              airline: seg.airline || booking.airline || "",
               departure: seg.departure || "",
               departureCity: seg.departureCity || "",
               departureCountry: seg.departureCountry || "",
@@ -298,11 +371,11 @@ export async function POST(request: NextRequest) {
               duration: seg.duration || "",
               departureTerminal: seg.departureTerminal || "",
               arrivalTerminal: seg.arrivalTerminal || "",
-              cabinClass: seg.cabinClass || "",
+              cabinClass: seg.cabinClass || booking.cabinClass || "",
               bookingClass: seg.bookingClass || "",
-              bookingRef: seg.bookingRef || "",
+              bookingRef: seg.bookingRef || booking.bookingRef || "",
               ticketNumber: seg.ticketNumber || "",
-              baggage: seg.baggage || "",
+              baggage: seg.baggage || booking.baggage || "",
               seat: seg.seat || "",
               passengerName: seg.passengerName || "",
               aircraft: seg.aircraft || "",
@@ -311,7 +384,21 @@ export async function POST(request: NextRequest) {
             })
           );
 
-          return NextResponse.json({ segments });
+          return NextResponse.json({ 
+            segments,
+            booking: {
+              bookingRef: booking.bookingRef || "",
+              airline: booking.airline || "",
+              totalPrice: booking.totalPrice || null,
+              currency: booking.currency || "EUR",
+              ticketNumbers: booking.ticketNumbers || [],
+              passengers: booking.passengers || [],
+              cabinClass: booking.cabinClass || "economy",
+              refundPolicy: booking.refundPolicy || "non_ref",
+              changeFee: booking.changeFee || null,
+              baggage: booking.baggage || "",
+            }
+          });
         }
       } catch (parseErr) {
         console.error("Failed to parse AI response:", parseErr, "Content:", content);
@@ -319,10 +406,22 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ 
         error: "Could not extract flight information",
-        segments: [] 
+        segments: [],
+        booking: null
       });
     } catch (aiError) {
       console.error("OpenAI API call failed:", aiError);
+      // Log failed usage
+      if (authInfo) {
+        await logAiUsage({
+          companyId: authInfo.companyId,
+          userId: authInfo.userId,
+          operation: "parse_flight",
+          model: "gpt-4o",
+          success: false,
+          errorMessage: aiError instanceof Error ? aiError.message : "AI service unavailable",
+        });
+      }
       return NextResponse.json(
         { error: "AI service unavailable", segments: [] },
         { status: 503 }
@@ -330,6 +429,17 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error("Parse flight itinerary error:", err);
+    // Log failed usage
+    if (authInfo) {
+      await logAiUsage({
+        companyId: authInfo.companyId,
+        userId: authInfo.userId,
+        operation: "parse_flight",
+        model: "gpt-4o",
+        success: false,
+        errorMessage: err instanceof Error ? err.message : "Internal server error",
+      });
+    }
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

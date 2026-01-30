@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useDirectoryStore } from "@/lib/directory/directoryStore";
 import DirectoryForm, { DirectoryFormHandle } from "@/components/DirectoryForm";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -135,88 +136,34 @@ export default function NewDirectoryPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto w-full max-w-[95vw] space-y-6">
-        {/* PageHeader */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">New Record</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {isDirty && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 shadow-sm opacity-0 animate-[fadeIn_0.3s_ease-in-out_forwards]">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-600"></span>
-                Unsaved changes
-              </span>
-            )}
-            {saveError && (
-              <span className="text-sm text-red-600">{saveError}</span>
-            )}
-            {saveSuccess && savedAt && (
-              <span className="flex items-center gap-1.5 opacity-0 animate-[fadeInZoom_0.2s_ease-in-out_forwards] text-sm font-medium text-green-600">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Saved at {formatSavedTime(savedAt)}
-              </span>
-            )}
-            <button
-              onClick={handleCancel}
-              className="rounded-lg border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-200 hover:border-gray-400 hover:bg-gray-50 hover:shadow-md"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!canSave}
-              className={`flex items-center gap-2 rounded-lg border px-6 py-2 text-sm font-medium shadow-sm transition-all duration-200 ${
-                saveSuccess
-                  ? "border-green-500 bg-green-50 text-green-700 hover:shadow-md"
-                  : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:shadow-sm"
-              }`}
-              style={isSaving ? { cursor: "wait" } : {}}
-            >
-              {isSaving ? (
-                <>
-                  <svg
-                    className="h-4 w-4 animate-spin"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Saving…
-                </>
-              ) : saveSuccess ? (
-                <>
-                  <span>Saved</span>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </>
-              ) : (
-                "Save"
+        {/* PageHeader - Settings style with buttons */}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">New Record</h1>
+              <p className="text-sm text-gray-500">Create a new contact in directory</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Link href="/directory" className="text-sm text-blue-600 hover:text-blue-700">
+                ← Back to Directory
+              </Link>
+              {isDirty && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-600"></span>
+                  Unsaved
+                </span>
               )}
-            </button>
-            <button
-              onClick={handleSaveAndClose}
-              disabled={!canSave}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white shadow-md transition-all duration-200 hover:bg-blue-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-md"
-              style={isSaving ? { cursor: "wait" } : {}}
-            >
-              Save & Close
-            </button>
+              {saveSuccess && (
+                <span className="text-sm text-green-600">Saved!</span>
+              )}
+              <button
+                onClick={handleSaveAndClose}
+                disabled={!canSave}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </div>
 

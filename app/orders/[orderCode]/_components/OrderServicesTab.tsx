@@ -20,7 +20,7 @@ interface Service {
   payer: string;
   servicePrice: number;
   clientPrice: number;
-  resStatus: "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
+  resStatus: "draft" | "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr?: string;
   ticketNr?: string;
   assignedTravellerIds: string[];

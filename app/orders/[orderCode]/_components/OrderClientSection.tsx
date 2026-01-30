@@ -42,6 +42,7 @@ interface OrderClientSectionProps {
   amountTotal?: number;
   amountPaid?: number;
   orderType?: string;
+  initialEditingField?: "client" | "itinerary" | "dates" | null;
   onUpdate: (updates: Partial<{
     client_display_name: string;
     client_party_id: string;
@@ -50,6 +51,7 @@ interface OrderClientSectionProps {
     date_to: string;
     order_type: string;
   }>) => void;
+  onClose?: () => void;
 }
 
 // Get default city from localStorage or fallback to Riga
@@ -108,18 +110,29 @@ export default function OrderClientSection({
   amountTotal = 0,
   amountPaid = 0,
   orderType,
+  initialEditingField,
   onUpdate,
+  onClose,
 }: OrderClientSectionProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   
-  // Which field is being edited (double-click to edit)
-  const [editingField, setEditingField] = useState<string | null>(null);
+  // Which field is being edited (double-click to edit, or from initialEditingField)
+  // Map client/itinerary/dates to "itinerary" since they share the same editor
+  const mappedInitialField = initialEditingField ? "itinerary" : null;
+  const [editingField, setEditingField] = useState<string | null>(mappedInitialField);
+  
+  // Set initial editing field when opened from header
+  useEffect(() => {
+    if (initialEditingField) {
+      setEditingField("itinerary"); // All header fields use the itinerary editor
+    }
+  }, [initialEditingField]);
 
   // Parse origin, destinations, and return city from countriesCities
   // Format: "origin:Riga, Latvia|Rome, Italy; Barcelona, Spain|return:Riga, Latvia"
   // If no return specified, defaults to origin
-  const parsedRoute = useMemo(() => {
+  const parsedItinerary = useMemo(() => {
     if (!countriesCities) return { origin: null, destinations: [], returnCity: null };
     
     let originCity: CityWithCountry | null = null;
@@ -182,9 +195,9 @@ export default function OrderClientSection({
   // Edit states
   const [editClientId, setEditClientId] = useState<string | null>(clientPartyId || null);
   const [editClientName, setEditClientName] = useState(clientDisplayName || "");
-  const [editOrigin, setEditOrigin] = useState<CityWithCountry | null>(parsedRoute.origin);
-  const [editDestinations, setEditDestinations] = useState<CityWithCountry[]>(parsedRoute.destinations);
-  const [editReturnCity, setEditReturnCity] = useState<CityWithCountry | null>(parsedRoute.returnCity);
+  const [editOrigin, setEditOrigin] = useState<CityWithCountry | null>(parsedItinerary.origin);
+  const [editDestinations, setEditDestinations] = useState<CityWithCountry[]>(parsedItinerary.destinations);
+  const [editReturnCity, setEditReturnCity] = useState<CityWithCountry | null>(parsedItinerary.returnCity);
   const [returnToOrigin, setReturnToOrigin] = useState(true); // Toggle for "same as origin"
   const [editDateFrom, setEditDateFrom] = useState<string | undefined>(dateFrom || undefined);
   const [editDateTo, setEditDateTo] = useState<string | undefined>(dateTo || undefined);
@@ -218,12 +231,12 @@ export default function OrderClientSection({
     // Reset edit states before editing
     setEditClientId(clientPartyId || null);
     setEditClientName(clientDisplayName || "");
-    setEditOrigin(parsedRoute.origin);
-    setEditDestinations(parsedRoute.destinations);
-    setEditReturnCity(parsedRoute.returnCity);
+    setEditOrigin(parsedItinerary.origin);
+    setEditDestinations(parsedItinerary.destinations);
+    setEditReturnCity(parsedItinerary.returnCity);
     // Check if return is same as origin
     setReturnToOrigin(
-      parsedRoute.returnCity?.city === parsedRoute.origin?.city
+      parsedItinerary.returnCity?.city === parsedItinerary.origin?.city
     );
     setEditDateFrom(dateFrom || undefined);
     setEditDateTo(dateTo || undefined);
@@ -251,7 +264,11 @@ export default function OrderClientSection({
         // Save origin to client history
         saveClientOrigin(editClientId, editOrigin);
       }
-      formattedCities += editDestinations.map(c => `${c.city}, ${c.country}`).join("; ");
+      // Deduplicate destinations before saving
+      const uniqueDestinations = editDestinations.filter((city, idx, arr) => 
+        arr.findIndex(c => c.city.toLowerCase() === city.city.toLowerCase()) === idx
+      );
+      formattedCities += uniqueDestinations.map(c => `${c.city}, ${c.country}`).join("; ");
       
       // Add return city
       const returnCityToSave = returnToOrigin ? editOrigin : editReturnCity;
@@ -344,17 +361,17 @@ export default function OrderClientSection({
   // All cities for map (origin + destinations + return)
   const allCitiesForMap = useMemo(() => {
     const cities: CityWithCountry[] = [];
-    if (parsedRoute.origin) cities.push(parsedRoute.origin);
-    cities.push(...parsedRoute.destinations);
+    if (parsedItinerary.origin) cities.push(parsedItinerary.origin);
+    cities.push(...parsedItinerary.destinations);
     // Add return city if different from last destination
-    if (parsedRoute.returnCity) {
+    if (parsedItinerary.returnCity) {
       const lastCity = cities[cities.length - 1];
-      if (!lastCity || lastCity.city !== parsedRoute.returnCity.city) {
-        cities.push(parsedRoute.returnCity);
+      if (!lastCity || lastCity.city !== parsedItinerary.returnCity.city) {
+        cities.push(parsedItinerary.returnCity);
       }
     }
     return cities;
-  }, [parsedRoute]);
+  }, [parsedItinerary]);
 
   // Render editable field or display value
   const renderField = (
@@ -418,117 +435,55 @@ export default function OrderClientSection({
     if (!dateFrom || !dateTo) return null;
     const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const nights = days - 1;
-    const daysWord = days === 1 ? 'день' : days > 1 && days < 5 ? 'дня' : 'дней';
-    const nightsWord = nights === 1 ? 'ночь' : nights > 1 && nights < 5 ? 'ночи' : 'ночей';
+    const daysWord = days === 1 ? 'day' : 'days';
+    const nightsWord = nights === 1 ? 'night' : 'nights';
     return ` (${days} ${daysWord} / ${nights} ${nightsWord})`;
   }, [dateFrom, dateTo]);
 
   // Filter unique destinations by city name
   const uniqueDestinations = useMemo(() => {
     const seen = new Set<string>();
-    return parsedRoute.destinations.filter(city => {
+    return parsedItinerary.destinations.filter(city => {
       const key = city.city.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [parsedRoute.destinations]);
+  }, [parsedItinerary.destinations]);
 
   return (
     <div className="rounded-2xl bg-white/80 backdrop-blur-xl p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50">
-      {/* Layout: Client info left, Map right */}
+      {/* Simplified: Route & Map only (client info moved to page header) */}
       <div className="grid grid-cols-1 gap-4 mb-4">
-        {/* Left: Client + Route */}
+        {/* Route Section */}
         <div className="space-y-3">
-          {/* Compact Header Row: Client + Type */}
-          <div className="flex items-center justify-between pb-3 border-b border-gray-200/60">
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Client Name - editable */}
-              {renderField(
-                "client",
-                "Client",
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-lg font-semibold tracking-tight text-gray-900">
-                    {clientDisplayName || <span className="text-gray-400 italic font-normal">No client</span>}
-                  </h2>
-                  {clientPhone && (
-                    <a
-                      href={`tel:${clientPhone}`}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                      title={clientPhone}
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                      <span className="hidden sm:inline">{clientPhone}</span>
-                    </a>
-                  )}
-                  {clientEmail && (
-                    <a
-                      href={`mailto:${clientEmail}`}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                      title={clientEmail}
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      <span className="hidden lg:inline truncate max-w-[150px]">{clientEmail}</span>
-                    </a>
-                  )}
-                </div>,
-                <PartySelect
-                  value={editClientId}
-                  onChange={(id, displayName) => {
-                    setEditClientId(id);
-                    setEditClientName(displayName);
-                  }}
-                  roleFilter="client"
-                  initialDisplayName={editClientName}
-                />
-              )}
-              {/* Order Type Badge - compact */}
-              {renderField(
-                "orderType",
-                "Order Type",
-                <span 
-                  className="px-2 py-0.5 text-[10px] font-semibold bg-blue-100/80 text-blue-800 rounded-md cursor-pointer uppercase tracking-wide"
-                  title="Double-click to edit"
-                >
-                  {ORDER_TYPES.find(t => t.value === orderType)?.label || orderType}
-                </span>,
-                <select
-                  value={editOrderType}
-                  onChange={(e) => setEditOrderType(e.target.value)}
-                  className="text-xs border border-gray-300 rounded px-2 py-1"
-                  aria-label="Order Type"
-                >
-                  {ORDER_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+          {/* Section Title */}
+          <div className="flex items-center justify-between pb-2 border-b border-gray-200/60">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
+              Route & Dates
+            </h3>
           </div>
 
-          {/* Compact Route + Dates - ONE unified block, no duplicates */}
-          {(parsedRoute.origin || uniqueDestinations.length > 0 || dateFrom) && (
+          {/* Compact Itinerary - ONE unified block, no duplicates */}
+          {(parsedItinerary.origin || uniqueDestinations.length > 0 || dateFrom) && (
             <div>
               {renderField(
-                "route",
-                "Route & Dates",
+                "itinerary",
+                "Itinerary",
                 <div className="flex items-center gap-3 flex-wrap">
-                  {/* Route - compact inline, unique destinations only */}
-                  {(parsedRoute.origin || uniqueDestinations.length > 0) && (
+                  {/* Itinerary - compact inline, unique destinations only */}
+                  {(parsedItinerary.origin || uniqueDestinations.length > 0) && (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {parsedRoute.origin && (
+                      {parsedItinerary.origin && (
                         <>
                           <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
-                            {parsedRoute.origin.countryCode && (
-                              <span className="text-base">{countryCodeToFlag(parsedRoute.origin.countryCode)}</span>
+                            {parsedItinerary.origin.countryCode && (
+                              <span className="text-base">{countryCodeToFlag(parsedItinerary.origin.countryCode)}</span>
                             )}
-                            {parsedRoute.origin.city}
+                            {parsedItinerary.origin.city}
                           </span>
                           <span className="text-gray-400 text-xs">→</span>
                         </>
@@ -541,19 +496,19 @@ export default function OrderClientSection({
                             )}
                             {city.city}
                           </span>
-                          {(idx < uniqueDestinations.length - 1 || (parsedRoute.returnCity && parsedRoute.origin && parsedRoute.returnCity.city !== parsedRoute.origin.city)) && (
+                          {(idx < uniqueDestinations.length - 1 || (parsedItinerary.returnCity && parsedItinerary.origin && parsedItinerary.returnCity.city !== parsedItinerary.origin.city)) && (
                             <span className="text-gray-400 text-xs mx-1">→</span>
                           )}
                         </span>
                       ))}
-                      {parsedRoute.returnCity && parsedRoute.origin && parsedRoute.returnCity.city !== parsedRoute.origin.city && (
+                      {parsedItinerary.returnCity && parsedItinerary.origin && parsedItinerary.returnCity.city !== parsedItinerary.origin.city && (
                         <>
                           <span className="text-gray-400 text-xs">→</span>
                           <span className="flex items-center gap-1 text-base font-semibold text-gray-700">
-                            {parsedRoute.returnCity.countryCode && (
-                              <span className="text-base">{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
+                            {parsedItinerary.returnCity.countryCode && (
+                              <span className="text-base">{countryCodeToFlag(parsedItinerary.returnCity.countryCode)}</span>
                             )}
-                            {parsedRoute.returnCity.city}
+                            {parsedItinerary.returnCity.city}
                           </span>
                         </>
                       )}

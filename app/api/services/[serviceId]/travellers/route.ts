@@ -81,13 +81,13 @@ export async function GET(
         party:traveller_id (
           id,
           display_name,
+          phone,
           party_person (
             first_name,
             last_name,
             title,
             dob,
-            personal_code,
-            phone
+            personal_code
           )
         )
       `)
@@ -99,9 +99,34 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch travellers" }, { status: 500 });
     }
 
-    const travellerIds = (serviceTravellers || []).map(st => st.traveller_id);
+    console.log("[GET /api/services/travellers] serviceId:", serviceId, "found:", serviceTravellers?.length, "records");
 
-    return NextResponse.json({ travellerIds });
+    const travellerIds = (serviceTravellers || []).map(st => st.traveller_id);
+    
+    // Build travellers with names for Edit Service
+    const travellers = (serviceTravellers || []).map(st => {
+      const partyRaw = st.party as unknown;
+      const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { 
+        id: string; 
+        display_name: string; 
+        party_person: { first_name: string; last_name: string }[] 
+      } | null;
+      const person = party?.party_person?.[0];
+      
+      const firstName = person?.first_name || "";
+      const lastName = person?.last_name || "";
+      const name = [firstName, lastName].filter(Boolean).join(" ") || party?.display_name || "Unknown";
+      
+      return {
+        id: st.traveller_id,
+        name,
+        firstName,
+        lastName,
+      };
+    });
+
+    console.log("[GET] Returning travellers:", travellers.length, travellers);
+    return NextResponse.json({ travellerIds, travellers });
   } catch (error) {
     console.error("Service travellers GET error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -139,32 +164,65 @@ export async function PUT(
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
     }
 
-    // Delete existing assignments
+    console.log("[PUT /api/services/travellers] serviceId:", serviceId, "travellerIds:", travellerIds);
+
+    // Validate that all travellerIds exist in party table
+    if (travellerIds.length > 0) {
+      const { data: validParties } = await supabaseAdmin
+        .from("party")
+        .select("id")
+        .in("id", travellerIds)
+        .eq("company_id", auth.companyId);
+
+      console.log("[PUT] Valid parties found:", validParties?.length, "of", travellerIds.length);
+
+      const validIds = new Set((validParties || []).map(p => p.id));
+      const invalidIds = travellerIds.filter((id: string) => !validIds.has(id));
+      
+      if (invalidIds.length > 0) {
+        console.log("[PUT] Skipping invalid traveller IDs (not in party):", invalidIds);
+      }
+      
+      // Filter to only valid IDs
+      const filteredTravellerIds = travellerIds.filter((id: string) => validIds.has(id));
+      console.log("[PUT] Filtered travellerIds:", filteredTravellerIds);
+      
+      // Delete existing assignments
+      await supabaseAdmin
+        .from("order_service_travellers")
+        .delete()
+        .eq("service_id", serviceId)
+        .eq("company_id", auth.companyId);
+
+      // Insert new assignments with valid IDs only
+      if (filteredTravellerIds.length > 0) {
+        const insertData = filteredTravellerIds.map((travellerId: string) => ({
+          company_id: auth.companyId,
+          service_id: serviceId,
+          traveller_id: travellerId,
+        }));
+
+        const { error: insertError } = await supabaseAdmin
+          .from("order_service_travellers")
+          .insert(insertData);
+
+        if (insertError) {
+          console.error("Error inserting service travellers:", insertError);
+          return NextResponse.json({ error: "Failed to update travellers" }, { status: 500 });
+        }
+      }
+
+      return NextResponse.json({ success: true, travellerIds: filteredTravellerIds });
+    }
+
+    // Delete existing assignments if no travellers
     await supabaseAdmin
       .from("order_service_travellers")
       .delete()
       .eq("service_id", serviceId)
       .eq("company_id", auth.companyId);
 
-    // Insert new assignments
-    if (travellerIds.length > 0) {
-      const insertData = travellerIds.map((travellerId: string) => ({
-        company_id: auth.companyId,
-        service_id: serviceId,
-        traveller_id: travellerId,
-      }));
-
-      const { error: insertError } = await supabaseAdmin
-        .from("order_service_travellers")
-        .insert(insertData);
-
-      if (insertError) {
-        console.error("Error inserting service travellers:", insertError);
-        return NextResponse.json({ error: "Failed to update travellers" }, { status: 500 });
-      }
-    }
-
-    return NextResponse.json({ success: true, travellerIds });
+    return NextResponse.json({ success: true, travellerIds: [] });
   } catch (error) {
     console.error("Service travellers PUT error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -208,17 +266,28 @@ export async function PATCH(
         .in("traveller_id", removeTravellerIds);
     }
 
-    // Add new travellers (upsert to avoid duplicates)
+    // Add new travellers (validate first)
     if (Array.isArray(addTravellerIds) && addTravellerIds.length > 0) {
-      const insertData = addTravellerIds.map((travellerId: string) => ({
-        company_id: auth.companyId,
-        service_id: serviceId,
-        traveller_id: travellerId,
-      }));
+      // Validate IDs exist in party
+      const { data: validParties } = await supabaseAdmin
+        .from("party")
+        .select("id")
+        .in("id", addTravellerIds)
+        .eq("company_id", auth.companyId);
 
-      await supabaseAdmin
-        .from("order_service_travellers")
-        .upsert(insertData, { onConflict: "service_id,traveller_id" });
+      const validIds = (validParties || []).map(p => p.id);
+      
+      if (validIds.length > 0) {
+        const insertData = validIds.map((travellerId: string) => ({
+          company_id: auth.companyId,
+          service_id: serviceId,
+          traveller_id: travellerId,
+        }));
+
+        await supabaseAdmin
+          .from("order_service_travellers")
+          .upsert(insertData, { onConflict: "service_id,traveller_id" });
+      }
     }
 
     // Return updated list
@@ -228,9 +297,9 @@ export async function PATCH(
       .eq("service_id", serviceId)
       .eq("company_id", auth.companyId);
 
-    const travellerIds = (updatedTravellers || []).map(st => st.traveller_id);
+    const resultIds = (updatedTravellers || []).map(st => st.traveller_id);
 
-    return NextResponse.json({ success: true, travellerIds });
+    return NextResponse.json({ success: true, travellerIds: resultIds });
   } catch (error) {
     console.error("Service travellers PATCH error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

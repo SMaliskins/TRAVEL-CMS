@@ -74,6 +74,34 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    // Auto-add main client to order_travellers if not exists
+    console.log("Order data:", { orderId: order.id, clientPartyId: order.client_party_id });
+    
+    if (order.client_party_id) {
+      // Check if main client already exists
+      const { data: existingRecords } = await supabaseAdmin
+        .from("order_travellers")
+        .select("id")
+        .eq("order_id", order.id)
+        .eq("party_id", order.client_party_id);
+
+      console.log("Check existing main client:", { existingRecords });
+
+      if (!existingRecords || existingRecords.length === 0) {
+        const { data: inserted, error: insertError } = await supabaseAdmin
+          .from("order_travellers")
+          .insert({
+            company_id: auth.companyId,
+            order_id: order.id,
+            party_id: order.client_party_id,
+            is_main_client: true,
+          })
+          .select();
+        
+        console.log("Insert main client result:", { inserted, insertError });
+      }
+    }
+
     // Fetch order travellers with party details
     const { data: travellers, error } = await supabaseAdmin
       .from("order_travellers")
@@ -85,18 +113,21 @@ export async function GET(
         party:party_id (
           id,
           display_name,
+          phone,
+          email,
           party_person (
             first_name,
             last_name,
             title,
             dob,
-            personal_code,
-            phone
+            personal_code
           )
         )
       `)
       .eq("order_id", order.id)
       .eq("company_id", auth.companyId);
+
+    console.log("Fetched travellers:", { count: travellers?.length, travellers, error });
 
     if (error) {
       console.error("Error fetching travellers:", error);
@@ -107,7 +138,7 @@ export async function GET(
     const formattedTravellers = (travellers || []).map((t) => {
       // Handle both single object and array return from Supabase join
       const partyRaw = t.party as unknown;
-      const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string; phone: string }[] } | null;
+      const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string }[] } | null;
       const person = party?.party_person?.[0];
       
       return {
@@ -117,7 +148,7 @@ export async function GET(
         title: person?.title || "Mr",
         dob: person?.dob || null,
         personalCode: person?.personal_code || null,
-        contactNumber: person?.phone || null,
+        contactNumber: party?.phone || null,
         isMainClient: t.is_main_client || t.party_id === order.client_party_id,
       };
     });

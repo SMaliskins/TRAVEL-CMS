@@ -355,6 +355,12 @@ export function searchCities(query: string): City[] {
 }
 
 // Get city by name
+export function getCityByIATA(iataCode: string): City | undefined {
+  if (!iataCode) return undefined;
+  const code = iataCode.toUpperCase();
+  return CITIES.find(city => city.iataCode?.toUpperCase() === code);
+}
+
 export function getCityByName(name: string): City | undefined {
   return CITIES.find(
     (city) => city.name.toLowerCase() === name.toLowerCase()

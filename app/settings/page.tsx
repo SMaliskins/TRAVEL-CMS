@@ -1,36 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useFontScale } from "@/hooks/useFontScale";
+import { useFontScale, SCALE_PRESETS, FONT_PRESETS } from "@/hooks/useFontScale";
 
 const SETTINGS_SECTIONS = [
   { name: "Company", href: "/settings/company", icon: "🏢", description: "Company profile, licenses, banking, regional settings" },
   { name: "Users", href: "/settings/users", icon: "👥", description: "User management and roles" },
+  { name: "Billing", href: "/settings/billing", icon: "💳", description: "Subscription, upgrade plan, manage billing" },
   { name: "Profile", href: "/settings/profile", icon: "👤", description: "Your personal settings" },
+  { name: "Travel Services", href: "/settings/travel-services", icon: "✈️", description: "Manage travel service categories and VAT rates" },
+  { name: "Accessibility", href: "/settings/accessibility", icon: "🔤", description: "Customize font size and font family" },
 ];
 
 export default function SettingsPage() {
-  const {
-    scale,
-    setScaleFromSlider,
-    getSliderValue,
-    MIN_SCALE,
-    MAX_SCALE,
-    DEFAULT_SCALE,
-    isClient,
-  } = useFontScale();
-
-  const sliderValue = getSliderValue();
-  const scalePercentage = Math.round(scale * 100);
-
-  if (!isClient) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="bg-gray-50 p-6">
       <div className="space-y-6">
@@ -40,7 +22,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Settings Navigation */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {SETTINGS_SECTIONS.map((section) => (
             <Link
               key={section.href}
@@ -56,49 +38,6 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        {/* Accessibility Section */}
-        <div className="rounded-lg bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Accessibility
-            </h2>
-          </div>
-
-          <div className="px-6 py-6">
-            <div className="max-w-md">
-              {/* Font Scale */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Font Scale
-                  </label>
-                  <span className="text-sm text-gray-500">
-                    {scalePercentage}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={sliderValue}
-                  onChange={(e) =>
-                    setScaleFromSlider(parseInt(e.target.value, 10))
-                  }
-                  className="w-full accent-blue-600"
-                />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
-                  <span>{Math.round(MIN_SCALE * 100)}%</span>
-                  <span>{Math.round(DEFAULT_SCALE * 100)}% (default)</span>
-                  <span>{Math.round(MAX_SCALE * 100)}%</span>
-                </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  Adjust the font size across the application. This setting is
-                  saved in your browser.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
