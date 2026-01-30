@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-01-27] CODE WRITER — Package Tour logic in AddServiceModal ✅
+
+**Task:** PKG-TOUR-ADD | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- Перенесена логика Package Tour из EditServiceModalNew в AddServiceModal
+- Layout: Hotel, Stars, Room, Meal, Transfer, Additional — при выборе категории Package Tour
+- Зелёная подсветка (parsedFields) полей после парсинга Coral Travel
+- applyParsedTourData заполняет hotelName, starRating, roomType, mealPlan, transferType, additionalServices
+- Payload при создании tour: hotelName, hotelStarRating, hotelRoom, hotelBoard, mealPlanText, transferType, additionalServices
+- Зелёная подсветка для Deposit Due, Final Due, Payment Terms, Ref Nr
+
+**Результат:** Add и Edit — одинаковая форма для Package Tour (правило 6.10)
+
+**Файл:** `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+
+---
+
 ## [2026-01-26 18:00] CODE WRITER — Boarding Pass + Services Enhancements ✅
 
 **Task:** BP-UX-FIXES + SVC-ENHANCEMENTS | **Status:** IN PROGRESS

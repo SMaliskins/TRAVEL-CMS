@@ -61,9 +61,16 @@ export interface ServiceData {
   paymentTerms?: string | null;
   // Hotel-specific
   hotelName?: string;
+  hotelStarRating?: string | null;
+  hotelRoom?: string | null;
+  hotelBoard?: string | null;
+  mealPlanText?: string | null;
   hotelAddress?: string;
   hotelPhone?: string;
   hotelEmail?: string;
+  // Tour-specific
+  transferType?: string | null;
+  additionalServices?: string | null;
   // Transfer-specific
   pickupLocation?: string;
   dropoffLocation?: string;
@@ -214,6 +221,14 @@ export default function AddServiceModal({
   const [isParsingTour, setIsParsingTour] = useState(false);
   const [isDraggingTour, setIsDraggingTour] = useState(false);
   const tourParseInputRef = useRef<HTMLInputElement>(null);
+  const [parsedFields, setParsedFields] = useState<Set<string>>(new Set());
+  // Tour-specific: hotel star, room, meal, transfer, additional
+  const [hotelStarRating, setHotelStarRating] = useState("");
+  const [hotelRoom, setHotelRoom] = useState("");
+  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive">("room_only");
+  const [mealPlanText, setMealPlanText] = useState("");
+  const [transferType, setTransferType] = useState("");
+  const [additionalServices, setAdditionalServices] = useState("");
   
   // Payment deadline fields
   const [paymentDeadlineDeposit, setPaymentDeadlineDeposit] = useState<string>("");
@@ -726,22 +741,61 @@ export default function AddServiceModal({
 
   // Tour (Package Tour) AI parsing - apply parsed data to form
   const applyParsedTourData = useCallback((p: Record<string, unknown>) => {
+    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" => {
+      const p2 = (plan || "").toUpperCase();
+      if (p2 === "RO" || p2 === "ROOM ONLY") return "room_only";
+      if (p2 === "BB" || p2 === "BED AND BREAKFAST") return "breakfast";
+      if (p2 === "HB" || p2 === "HALF BOARD") return "half_board";
+      if (p2 === "FB" || p2 === "FULL BOARD") return "full_board";
+      if (p2 === "AI" || p2 === "UAI" || p2 === "ALL INCLUSIVE" || p2 === "ULTRA ALL INCLUSIVE") return "all_inclusive";
+      return "all_inclusive";
+    };
+    const fields = new Set<string>();
+    if (p.direction && typeof p.direction === "string") {
+      setServiceName(String(p.direction).trim());
+      fields.add("serviceName");
+    } else if ((p.accommodation && typeof p.accommodation === "object") || p.flights) {
+      const a = p.accommodation && typeof p.accommodation === "object" ? p.accommodation as Record<string, unknown> : null;
+      const dep = a?.arrivalDate ? String(a.arrivalDate).slice(0, 10) : "";
+      const ret = a?.departureDate ? String(a.departureDate).slice(0, 10) : "";
+      if (p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
+        const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
+        const first = segs[0];
+        const last = segs[segs.length - 1];
+        const route = first && last ? `${first.departure || ""}-${last.arrival || ""}` : "";
+        const dep2 = dep || (first?.departureDate || "").slice(0, 10);
+        const ret2 = ret || (last?.arrivalDate || "").slice(0, 10);
+        const dates = dep2 && ret2 ? `${dep2.slice(8, 10)}.${dep2.slice(5, 7)}-${ret2.slice(8, 10)}.${ret2.slice(5, 7)}` : "";
+        if (route || dates) {
+          setServiceName([route, dates].filter(Boolean).join(" ").trim());
+          fields.add("serviceName");
+        }
+      }
+    }
     if (p.accommodation && typeof p.accommodation === "object") {
       const a = p.accommodation as Record<string, unknown>;
-      if (a.hotelName) setHotelName(String(a.hotelName));
-      if (a.arrivalDate) setDateFrom(String(a.arrivalDate));
-      if (a.departureDate) setDateTo(String(a.departureDate));
+      if (a.hotelName) { setHotelName(String(a.hotelName)); fields.add("hotelName"); }
+      if (a.starRating) { setHotelStarRating(String(a.starRating)); fields.add("hotelStarRating"); }
+      if (a.roomType) { setHotelRoom(String(a.roomType)); fields.add("hotelRoom"); }
+      if (a.mealPlan) {
+        const exact = String(a.mealPlan).trim();
+        setMealPlanText(exact);
+        setHotelBoard(mapMeal(exact));
+        fields.add("hotelBoard");
+      }
+      if (a.arrivalDate) { setDateFrom(String(a.arrivalDate)); fields.add("dateFrom"); }
+      if (a.departureDate) { setDateTo(String(a.departureDate)); fields.add("dateTo"); }
     }
-    if (p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
-      const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
-      const first = segs[0];
-      const last = segs[segs.length - 1];
-      const route = first && last ? `${first.departure || ""}-${last.arrival || ""}` : "";
-      const a = p.accommodation && typeof p.accommodation === "object" ? p.accommodation as Record<string, unknown> : null;
-      const dep = a?.arrivalDate ? String(a.arrivalDate).slice(0, 10) : (first?.departureDate || "").slice(0, 10);
-      const ret = a?.departureDate ? String(a.departureDate).slice(0, 10) : (last?.arrivalDate || "").slice(0, 10);
-      const dates = dep && ret ? `${dep.slice(8, 10)}.${dep.slice(5, 7)}-${ret.slice(8, 10)}.${ret.slice(5, 7)}` : "";
-      if (route || dates) setServiceName([route, dates].filter(Boolean).join(" ").trim());
+    if (p.transfers && typeof p.transfers === "object" && (p.transfers as Record<string, unknown>).type) {
+      setTransferType(String((p.transfers as Record<string, unknown>).type));
+      fields.add("transferType");
+    }
+    if (Array.isArray(p.additionalServices) && p.additionalServices.length) {
+      setAdditionalServices(p.additionalServices.map((s: unknown) => {
+        const o = s && typeof s === "object" ? s as Record<string, unknown> : {};
+        return `${o.description || ""}${o.price != null ? ` (${o.price} EUR)` : ""}`.trim();
+      }).filter(Boolean).join("\n"));
+      fields.add("additionalServices");
     }
     if (p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
       const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
@@ -762,24 +816,33 @@ export default function AddServiceModal({
         departureStatus: "scheduled",
         arrivalStatus: "scheduled",
       })));
+      fields.add("flightSegments");
     }
-    if (p.pricing && typeof p.pricing === "object" && (p.pricing as Record<string, unknown>).totalPrice) {
-      const total = (p.pricing as Record<string, unknown>).totalPrice;
-      setClientPrice(String(total));
-      setServicePrice(String(total));
+    if (p.pricing && typeof p.pricing === "object") {
+      const pr = p.pricing as Record<string, unknown>;
+      const total = pr.totalPrice ?? pr.packagePrice ?? pr.cost;
+      if (total != null) {
+        setClientPrice(String(total));
+        setServicePrice(String(total));
+        fields.add("clientPrice");
+        fields.add("servicePrice");
+      }
     }
     if (p.paymentTerms && typeof p.paymentTerms === "object") {
       const pt = p.paymentTerms as Record<string, unknown>;
-      if (pt.depositDueDate) setPaymentDeadlineDeposit(String(pt.depositDueDate));
-      if (pt.finalDueDate) setPaymentDeadlineFinal(String(pt.finalDueDate));
+      if (pt.depositDueDate) { setPaymentDeadlineDeposit(String(pt.depositDueDate)); fields.add("paymentDeadlineDeposit"); }
+      if (pt.finalDueDate) { setPaymentDeadlineFinal(String(pt.finalDueDate)); fields.add("paymentDeadlineFinal"); }
       if (pt.depositPercent != null && pt.finalPercent != null) {
         setPaymentTerms(`${pt.depositPercent}% deposit, ${pt.finalPercent}% final`);
+        fields.add("paymentTerms");
       }
     }
     if (p.operator && typeof p.operator === "object" && (p.operator as Record<string, unknown>).name) {
       setSupplierName(String((p.operator as Record<string, unknown>).name));
+      fields.add("supplierName");
     }
-    if (p.bookingRef) setRefNr(String(p.bookingRef));
+    if (p.bookingRef) { setRefNr(String(p.bookingRef)); fields.add("refNr"); }
+    setParsedFields(fields);
   }, []);
 
   const isAcceptableTourFile = useCallback((file: File): boolean => {
@@ -944,8 +1007,15 @@ export default function AddServiceModal({
         payload.changeFee = parseFloat(changeFee) || null;
       }
 
-      // Tour (Package Tour): commission + agent discount + commission_amount for pricing (persist for orders)
+      // Tour (Package Tour): hotel fields + commission + agent discount
       if (categoryType === "tour") {
+        payload.hotelName = hotelName || null;
+        payload.hotelStarRating = hotelStarRating || null;
+        payload.hotelRoom = hotelRoom || null;
+        payload.hotelBoard = hotelBoard || null;
+        payload.mealPlanText = mealPlanText?.trim() || null;
+        payload.transferType = transferType?.trim() || null;
+        payload.additionalServices = additionalServices?.trim() || null;
         const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
         payload.commissionName = comm?.name ?? null;
         payload.commissionRate = comm?.rate ?? null;
@@ -1293,14 +1363,14 @@ export default function AddServiceModal({
                 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
-                    {categoryType === "flight" ? "Route *" : "Name *"}
+                    {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
                   </label>
                   <input
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "hotel" ? "Hotel name" : "Description"}
-                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : categoryType === "hotel" ? "Hotel name" : "Description"}
+                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
 
@@ -1313,6 +1383,88 @@ export default function AddServiceModal({
                     onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
                   />
                 </div>
+                
+                {/* Tour: Hotel + Stars in one row */}
+                {categoryType === "tour" && (
+                  <div className="grid grid-cols-[1fr_4rem] gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel</label>
+                      <input
+                        type="text"
+                        value={hotelName}
+                        onChange={(e) => setHotelName(e.target.value)}
+                        placeholder="Hotel name"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Stars</label>
+                      <input
+                        type="text"
+                        value={hotelStarRating}
+                        onChange={(e) => setHotelStarRating(e.target.value)}
+                        placeholder="5*"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tour: Room + Meal in one row */}
+                {categoryType === "tour" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
+                      <input
+                        type="text"
+                        value={hotelRoom}
+                        onChange={(e) => setHotelRoom(e.target.value)}
+                        placeholder="Club Superior"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Meal</label>
+                      <select
+                        value={hotelBoard}
+                        onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                      >
+                        <option value="room_only">RO</option>
+                        <option value="breakfast">BB</option>
+                        <option value="half_board">HB</option>
+                        <option value="full_board">FB</option>
+                        <option value="all_inclusive">AI/UAI</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tour: Transfer + Additional */}
+                {categoryType === "tour" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Transfer</label>
+                      <input
+                        type="text"
+                        value={transferType}
+                        onChange={(e) => setTransferType(e.target.value)}
+                        placeholder="Group / Individual / —"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Additional</label>
+                      <textarea
+                        value={additionalServices}
+                        onChange={(e) => setAdditionalServices(e.target.value)}
+                        placeholder="Extra services"
+                        rows={2}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                      />
+                    </div>
+                  </>
+                )}
                 
                 {/* Cabin Class + Change Fee - for Flight in main section */}
                 {categoryType === "flight" ? (
@@ -1366,7 +1518,7 @@ export default function AddServiceModal({
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parties</h4>
                 
-                <div>
+                <div className={categoryType === "tour" && parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   <PartySelect
                     value={supplierPartyId}
@@ -1457,7 +1609,7 @@ export default function AddServiceModal({
                             setServicePrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div>
@@ -1520,7 +1672,7 @@ export default function AddServiceModal({
                             setClientPrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("clientPrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                     </div>
@@ -1671,13 +1823,13 @@ export default function AddServiceModal({
                 
                 <div className={categoryType === "flight" ? "grid grid-cols-2 gap-2" : ""}>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}</label>
                     <input
                       type="text"
                       value={refNr}
                       onChange={(e) => setRefNr(e.target.value)}
                       placeholder="Booking ref"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 ${parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
                     />
                   </div>
                   
@@ -1803,7 +1955,7 @@ export default function AddServiceModal({
                           type="date"
                           value={paymentDeadlineDeposit}
                           onChange={(e) => setPaymentDeadlineDeposit(e.target.value)}
-                          className="w-full min-w-[120px] rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -1812,7 +1964,7 @@ export default function AddServiceModal({
                           type="date"
                           value={paymentDeadlineFinal}
                           onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className="w-full min-w-[120px] rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"}`}
                         />
                       </div>
                     </div>
@@ -1823,7 +1975,7 @@ export default function AddServiceModal({
                         value={paymentTerms}
                         onChange={(e) => setPaymentTerms(e.target.value)}
                         placeholder="e.g., 30% deposit, 70% 14 days before"
-                        className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("paymentTerms") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"}`}
                       />
                     </div>
                   </div>
@@ -1845,10 +1997,10 @@ export default function AddServiceModal({
             )}
           </div>
 
-          {/* Flight Schedule - show parsed segments */}
-          {categoryType === "flight" && flightSegments.length > 0 && (
-            <div className="mt-3 p-3 bg-sky-50 rounded-lg border border-sky-200">
-              <h4 className="text-xs font-semibold text-sky-700 uppercase tracking-wide mb-2">Flight Schedule</h4>
+          {/* Flight Schedule - show parsed segments (Flight or Tour) */}
+          {(categoryType === "flight" || categoryType === "tour") && flightSegments.length > 0 && (
+            <div className={`mt-3 p-3 rounded-lg border ${parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
+              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
               <div className="space-y-2">
                 {flightSegments.map((seg, idx) => {
                   // Calculate time between segments
