@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
+import HotelSuggestInput from "@/components/HotelSuggestInput";
+import ClientMultiSelectDropdown from "@/components/ClientMultiSelectDropdown";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
@@ -199,6 +201,19 @@ export default function AddServiceModal({
   const [hotelAddress, setHotelAddress] = useState("");
   const [hotelPhone, setHotelPhone] = useState("");
   const [hotelEmail, setHotelEmail] = useState("");
+  const [hotelBedType, setHotelBedType] = useState<"king_queen" | "twin" | "not_guaranteed">("not_guaranteed");
+  const [hotelPreferences, setHotelPreferences] = useState({
+    earlyCheckIn: false,
+    lateCheckIn: false,
+    higherFloor: false,
+    kingSizeBed: false,
+    honeymooners: false,
+    silentRoom: false,
+    roomsNextTo: "",
+    parking: false,
+    freeText: "",
+  });
+  const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct">("gds");
   
   // Transfer-specific fields
   const [pickupLocation, setPickupLocation] = useState("");
@@ -1004,12 +1019,25 @@ export default function AddServiceModal({
         travellerIds: [],
       };
       
-      // Add hotel-specific fields
+      // Add hotel-specific fields (same as Edit Service)
       if (showHotelFields) {
-        payload.hotelName = hotelName;
-        payload.hotelAddress = hotelAddress;
-        payload.hotelPhone = hotelPhone;
-        payload.hotelEmail = hotelEmail;
+        payload.hotelName = hotelName || null;
+        payload.hotelAddress = hotelAddress || null;
+        payload.hotelPhone = hotelPhone || null;
+        payload.hotelEmail = hotelEmail || null;
+        payload.hotelRoom = hotelRoom || null;
+        payload.hotelBoard = hotelBoard || null;
+        payload.hotelBedType = hotelBedType || null;
+        payload.hotelEarlyCheckIn = hotelPreferences.earlyCheckIn;
+        payload.hotelLateCheckIn = hotelPreferences.lateCheckIn;
+        payload.hotelHigherFloor = hotelPreferences.higherFloor;
+        payload.hotelKingSizeBed = hotelPreferences.kingSizeBed;
+        payload.hotelHoneymooners = hotelPreferences.honeymooners;
+        payload.hotelSilentRoom = hotelPreferences.silentRoom;
+        payload.hotelRoomsNextTo = hotelPreferences.roomsNextTo || null;
+        payload.hotelParking = hotelPreferences.parking;
+        payload.hotelPreferencesFreeText = hotelPreferences.freeText || null;
+        payload.supplierBookingType = supplierBookingType || null;
       }
       
       // Add transfer-specific fields
@@ -1572,33 +1600,101 @@ export default function AddServiceModal({
                 
                 <div className={categoryType === "tour" && parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect
-                    value={supplierPartyId}
-                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
-                    roleFilter="supplier"
-                  />
+                  {categoryType === "hotel" ? (
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-0.5">Booking Type</label>
+                        <select
+                          value={supplierBookingType}
+                          onChange={(e) => {
+                            const newType = e.target.value as "gds" | "direct";
+                            setSupplierBookingType(newType);
+                            if (newType === "direct" && hotelName.trim()) {
+                              setSupplierName(hotelName.trim());
+                            }
+                          }}
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        >
+                          <option value="gds">GDS</option>
+                          <option value="direct">Direct booking</option>
+                        </select>
+                      </div>
+                      {supplierBookingType === "direct" ? (
+                        <div className="flex gap-1">
+                          <div className="flex-1">
+                            <PartySelect
+                              value={supplierPartyId}
+                              onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                              roleFilter="supplier"
+                              initialDisplayName={supplierName || hotelName}
+                            />
+                          </div>
+                          {!supplierPartyId && hotelName.trim() && (
+                            <button
+                              type="button"
+                              onClick={() => alert(`Add "${hotelName}" to directory as supplier?`)}
+                              className="px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                              title="Add supplier to directory"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <PartySelect
+                          value={supplierPartyId}
+                          onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                          roleFilter="supplier"
+                          initialDisplayName={supplierName}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <PartySelect
+                      value={supplierPartyId}
+                      onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                      roleFilter="supplier"
+                    />
+                  )}
                 </div>
                 
                 <div>
                   <div className="flex items-center justify-between mb-0.5">
                     <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
-                    <button type="button" onClick={addClient} className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add</button>
+                    <ClientMultiSelectDropdown
+                      onAddClients={(toAdd) => setClients(prev => {
+                        const existing = prev.filter(c => c.id);
+                        const next = [...existing, ...toAdd];
+                        return next.length > 0 ? next : [{ id: null, name: "" }];
+                      })}
+                      existingClientIds={clients.map(c => c.id).filter((id): id is string => id !== null)}
+                    />
                   </div>
-                  <div className="space-y-1.5">
-                    {clients.map((client, index) => {
-                      // Find ticket for this client
+                  {/* Selected clients as chips (default from order + added from directory dropdown) */}
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {clients.filter(c => c.id || c.name).map((client, index) => {
                       const ticket = ticketNumbers.find(t => t.clientId === client.id);
+                      const displayName = client.name || (index === 0 ? defaultClientName : "") || "-";
                       return (
-                        <div key={index} className="flex gap-1 items-center">
-                          <div className="flex-1">
-                            <PartySelect
-                              key={`client-${client.id || index}`}
-                              value={client.id}
-                              onChange={(id, name) => updateClient(index, id, name)}
-                              initialDisplayName={client.name || (index === 0 ? defaultClientName : "")}
-                            />
-                          </div>
-                          {/* Ticket Nr field for Flight - shown next to client */}
+                        <div key={client.id || index} className="flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-sm">
+                            {displayName}
+                            {clients.filter(c => c.id || c.name).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || ""));
+                                  if (idx >= 0) removeClient(idx);
+                                }}
+                                className="text-gray-400 hover:text-red-600"
+                                aria-label={`Remove ${displayName}`}
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </span>
                           {showTicketNr && categoryType === "flight" && client.id && (
                             <input
                               type="text"
@@ -1612,19 +1708,15 @@ export default function AddServiceModal({
                                 }
                               }}
                               placeholder="Ticket"
-                              className="w-28 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
-                          )}
-                          {clients.length > 1 && (
-                            <button type="button" onClick={() => removeClient(index)} className="px-1.5 text-red-400 hover:text-red-600">
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
                           )}
                         </div>
                       );
                     })}
+                    {clients.filter(c => c.id || c.name).length === 0 && (
+                      <span className="text-xs text-gray-400">No clients — use &quot;+ Add from directory&quot; above</span>
+                    )}
                   </div>
                 </div>
                 
@@ -1940,7 +2032,7 @@ export default function AddServiceModal({
                   
                   {/* Refund Policy - hidden for Tour */}
                   {categoryType !== "tour" && (
-                    <div className={categoryType === "flight" ? "" : "col-span-2"}>
+                    <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
                       <select
                         value={refundPolicy}
@@ -2237,21 +2329,110 @@ export default function AddServiceModal({
 
           {/* Category-specific fields - Collapsible sections */}
           {showHotelFields && (
-            <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+            <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
+                <HotelSuggestInput
+                  value={hotelName}
+                  onChange={setHotelName}
+                  onHotelSelected={(d) => {
+                    setHotelName(d.name);
+                    if (d.address) setHotelAddress(d.address);
+                    if (d.phone) setHotelPhone(d.phone);
+                    if (d.email) setHotelEmail(d.email);
+                    setServiceName(d.name);
+                  }}
+                  placeholder="Search hotel by name..."
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <div>
-                  <input type="text" value={hotelName} onChange={(e) => setHotelName(e.target.value)} placeholder="Hotel name" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
+                  <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                  <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                    <option value="room_only">Room only</option>
+                    <option value="breakfast">Breakfast</option>
+                    <option value="half_board">Half board</option>
+                    <option value="full_board">Full board</option>
+                    <option value="all_inclusive">All inclusive</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>
+                  <select value={hotelBedType} onChange={(e) => setHotelBedType(e.target.value as typeof hotelBedType)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                    <option value="king_queen">King/Queen</option>
+                    <option value="twin">Twin</option>
+                    <option value="not_guaranteed">Not guaranteed</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
                   <input type="text" value={hotelAddress} onChange={(e) => setHotelAddress(e.target.value)} placeholder="Address" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
                   <input type="tel" value={hotelPhone} onChange={(e) => setHotelPhone(e.target.value)} placeholder="Phone" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Email</label>
                   <input type="email" value={hotelEmail} onChange={(e) => setHotelEmail(e.target.value)} placeholder="Email" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
                 </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Preferences</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    Early check-in
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    Late check-in
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    Higher floor
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.kingSizeBed} onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    King size bed
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.honeymooners} onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    Honeymooners
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.silentRoom} onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    Silent room
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="checkbox" checked={hotelPreferences.parking} onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                    Parking
+                  </label>
+                </div>
+                <div className="mb-2">
+                  <input type="text" value={hotelPreferences.roomsNextTo} onChange={(e) => setHotelPreferences(prev => ({ ...prev, roomsNextTo: e.target.value }))} placeholder="Rooms next to..." className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                </div>
+                <div>
+                  <textarea value={hotelPreferences.freeText} onChange={(e) => setHotelPreferences(prev => ({ ...prev, freeText: e.target.value }))} placeholder="Additional preferences (free text)" rows={2} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                </div>
+                <button type="button" onClick={() => {
+                  const preferencesList = Object.entries(hotelPreferences).filter(([key, value]) => key !== "roomsNextTo" && key !== "freeText" && value === true).map(([key]) => key.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ");
+                  const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:\n\nRoom: ${hotelRoom || "Not specified"}\nBoard: ${hotelBoard}\nBed Type: ${hotelBedType}\nPreferences: ${preferencesList || "None"}${hotelPreferences.roomsNextTo ? `\nRooms next to: ${hotelPreferences.roomsNextTo}` : ""}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ""}`;
+                  alert(`Message to hotel:\n\n${message}\n\n(Will be saved to Communication tab)`);
+                }} className="w-full px-3 py-2 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
+                  📧 Send to Hotel
+                </button>
               </div>
             </div>
           )}
