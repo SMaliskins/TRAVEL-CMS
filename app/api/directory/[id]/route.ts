@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
 import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
+import { normalizePhoneForSave } from "@/utils/phone";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -43,6 +44,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.title = row.title || undefined;
     record.firstName = row.first_name || undefined;
     record.lastName = row.last_name || undefined;
+    record.gender = row.gender || undefined;
     record.dob = row.dob || undefined;
     record.personalCode = row.personal_code || undefined;
     record.citizenship = row.citizenship || undefined;
@@ -54,6 +56,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.passportFullName = row.passport_full_name || undefined;
     record.nationality = row.nationality || undefined;
     record.avatarUrl = row.avatar_url || undefined;
+    record.isAlienPassport = row.is_alien_passport === true;
   }
 
   // Company fields
@@ -67,6 +70,10 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   // Common fields
   record.phone = row.phone || undefined;
   record.email = row.email || undefined;
+
+  // Audit
+  if (row.created_by) record.createdById = row.created_by;
+  if (row.updated_by) record.updatedById = row.updated_by;
 
   // Supplier details
   if (row.is_supplier) {
@@ -267,6 +274,49 @@ export async function GET(
       ...subagentData.data,
     });
 
+    // Resolve created_by / updated_by to display names (user_profiles first, then profiles)
+    const auditUserIds = [record.createdById, record.updatedById].filter(Boolean) as string[];
+    const byId = new Map<string, string>();
+    if (auditUserIds.length > 0) {
+      const uniq = [...new Set(auditUserIds)];
+      const { data: userProfiles } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, first_name, last_name")
+        .in("id", uniq);
+      (userProfiles || []).forEach((p: { id: string; first_name: string | null; last_name: string | null }) => {
+        const name = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+        if (name) byId.set(p.id, name);
+      });
+      const missing = uniq.filter((id) => !byId.has(id));
+      if (missing.length > 0) {
+        const { data: profiles } = await supabaseAdmin
+          .from("profiles")
+          .select("user_id, display_name")
+          .in("user_id", missing);
+        (profiles || []).forEach((p: { user_id: string; display_name: string | null }) => {
+          const name = (p.display_name || "").trim();
+          if (name) byId.set(p.user_id, name);
+        });
+      }
+      // Fallback: resolve name from auth (user_metadata or email) so "by" never shows as "by —"
+      const stillMissing = uniq.filter((id) => !byId.has(id));
+      for (const uid of stillMissing) {
+        const { data: authData } = await supabaseAdmin.auth.admin.getUserById(uid);
+        if (authData?.user) {
+          const meta = authData.user.user_metadata;
+          const name =
+            meta?.full_name ||
+            meta?.name ||
+            [meta?.first_name, meta?.last_name].filter(Boolean).join(" ").trim() ||
+            authData.user.email?.trim() ||
+            null;
+          if (name) byId.set(uid, name);
+        }
+      }
+      if (record.createdById) record.createdByDisplayName = byId.get(record.createdById) || undefined;
+      if (record.updatedById) record.updatedByDisplayName = byId.get(record.updatedById) || undefined;
+    }
+
     console.log("[Directory GET] Built record:", {
       id: record.id,
       type: record.type,
@@ -364,7 +414,8 @@ export async function PUT(
       partyUpdates.email = (typeof updates.email === 'string' && updates.email.trim()) ? updates.email.trim() : null;
     }
     if (updates.phone !== undefined) {
-      partyUpdates.phone = (typeof updates.phone === 'string' && updates.phone.trim()) ? updates.phone.trim() : null;
+      const raw = typeof updates.phone === 'string' ? updates.phone.trim() : '';
+      partyUpdates.phone = raw ? normalizePhoneForSave(raw) || null : null;
     }
     // Country
     if (updates.country !== undefined) {
@@ -379,6 +430,8 @@ export async function PUT(
       partyUpdates.supplier_commissions = updates.supplierExtras.commissions || null;
     }
     partyUpdates.updated_at = new Date().toISOString();
+    const user = await getCurrentUser(request);
+    if (user) partyUpdates.updated_by = user.id;
 
     console.log("[Directory PUT] Updating party:", {
       id,
@@ -503,18 +556,19 @@ export async function PUT(
     
     // Check if we need to update person table (including passport fields)
     const hasPersonFields = updates.firstName !== undefined || updates.lastName !== undefined || 
-                            updates.title !== undefined || updates.dob !== undefined || 
+                            updates.title !== undefined || updates.gender !== undefined || updates.dob !== undefined || 
                             updates.personalCode !== undefined || updates.citizenship !== undefined;
     const hasPassportFields = updates.passportNumber !== undefined || updates.passportIssueDate !== undefined ||
                               updates.passportExpiryDate !== undefined || updates.passportIssuingCountry !== undefined ||
                               updates.passportFullName !== undefined || updates.nationality !== undefined ||
-                              updates.avatarUrl !== undefined;
+                              updates.avatarUrl !== undefined || updates.isAlienPassport !== undefined;
     
     if (partyType === "person" || hasPersonFields || hasPassportFields) {
       const personUpdates: any = {};
       if (updates.title !== undefined) personUpdates.title = updates.title;
       if (updates.firstName !== undefined) personUpdates.first_name = updates.firstName;
       if (updates.lastName !== undefined) personUpdates.last_name = updates.lastName;
+      if (updates.gender !== undefined) personUpdates.gender = updates.gender || null;
       if (updates.dob !== undefined) personUpdates.dob = updates.dob;
       if (updates.personalCode !== undefined) personUpdates.personal_code = updates.personalCode;
       if (updates.citizenship !== undefined) personUpdates.citizenship = updates.citizenship;
@@ -525,7 +579,8 @@ export async function PUT(
       if (updates.passportIssuingCountry !== undefined) personUpdates.passport_issuing_country = updates.passportIssuingCountry || null;
       if (updates.passportFullName !== undefined) personUpdates.passport_full_name = updates.passportFullName || null;
       if (updates.avatarUrl !== undefined) personUpdates.avatar_url = updates.avatarUrl || null;
-      
+      if (updates.isAlienPassport !== undefined) personUpdates.is_alien_passport = updates.isAlienPassport === true;
+
       // Nationality - only include if migration has been run (column exists)
       // If column doesn't exist, we'll retry without it
       const nationalityValue = updates.nationality !== undefined ? updates.nationality || null : undefined;
@@ -786,6 +841,34 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .single();
+    const userCompanyId = profile?.company_id;
+    if (!userCompanyId) {
+      return NextResponse.json({ error: "Company not found" }, { status: 403 });
+    }
+
+    const { data: party, error: fetchErr } = await supabaseAdmin
+      .from("party")
+      .select("id, company_id")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !party || party.company_id !== userCompanyId) {
+      return NextResponse.json(
+        { error: "Party not found or access denied" },
+        { status: 404 }
+      );
+    }
 
     // Delete party (cascade will delete related records)
     const { error } = await supabaseAdmin
