@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
+import { generateEmbedding } from "@/lib/embeddings";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Get current user from auth header
@@ -172,46 +173,73 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If search provided and no results from display_name, try searching in party_person and party_company
+    // Semantic search fallback when search is provided and OPENAI is configured
+    let semanticPartyIds: string[] = [];
+    if (search && search.trim().length >= 2 && process.env.OPENAI_API_KEY && userCompanyId) {
+      try {
+        const embedding = await generateEmbedding(search.trim());
+        const { data: semanticRows } = await supabaseAdmin.rpc("search_party_semantic", {
+          query_embedding: embedding,
+          p_company_id: userCompanyId,
+          match_limit: limit,
+          match_threshold: 0.3,
+        });
+        semanticPartyIds = (semanticRows || []).map((r: { party_id: string }) => r.party_id);
+      } catch (e) {
+        console.warn("Semantic search failed:", e);
+      }
+    }
+
+    // If search provided and no results from display_name, try person/company + semantic fallback
     if (search && (!parties || parties.length === 0)) {
       const patterns = getSearchPatterns(search).slice(0, 3).map((p) => p.replace(/[%,]/g, ""));
       const searchTerms = patterns.length > 0 ? patterns : [search.replace(/[%,]/g, "")];
       const personOr = searchTerms.flatMap((p) => [`first_name.ilike.%${p}%`, `last_name.ilike.%${p}%`]).join(",");
       const companyOr = searchTerms.map((p) => `company_name.ilike.%${p}%`).join(",");
-      
-      // Search in party_person by first_name or last_name
       const { data: personMatches } = await supabaseAdmin
         .from("party_person")
         .select("party_id")
         .or(personOr)
         .limit(limit);
-      
-      // Search in party_company by company_name
       const { data: companyMatches } = await supabaseAdmin
         .from("party_company")
         .select("party_id")
         .or(companyOr)
         .limit(limit);
-
       const matchedIds = [
         ...(personMatches || []).map((p: { party_id: string }) => p.party_id),
         ...(companyMatches || []).map((c: { party_id: string }) => c.party_id),
+        ...semanticPartyIds,
       ];
-
-      if (matchedIds.length > 0) {
-        // Fetch parties by these IDs (same columns as main query)
+      const allIds = [...new Set(matchedIds)];
+      if (allIds.length > 0) {
         let fallbackQuery = supabaseAdmin
           .from("party")
           .select(partyColumns, { count: "exact" })
-          .in("id", matchedIds);
-        
+          .in("id", allIds);
         if (userCompanyId) {
           fallbackQuery = fallbackQuery.eq("company_id", userCompanyId);
         }
-        
         const { data: fallbackParties, count: fallbackCount } = await fallbackQuery;
         parties = fallbackParties || [];
         count = fallbackCount || 0;
+      }
+    } else if (semanticPartyIds.length > 0 && parties && parties.length < limit) {
+      const existingIds = new Set((parties || []).map((p: any) => p.id));
+      const extraIds = semanticPartyIds.filter((id) => !existingIds.has(id));
+      if (extraIds.length > 0) {
+        let extraQuery = supabaseAdmin
+          .from("party")
+          .select(partyColumns)
+          .in("id", extraIds.slice(0, limit - (parties?.length || 0)));
+        if (userCompanyId) {
+          extraQuery = extraQuery.eq("company_id", userCompanyId);
+        }
+        const { data: extraParties } = await extraQuery;
+        if (extraParties?.length) {
+          parties = [...(parties || []), ...extraParties];
+          count = (count || 0) + extraParties.length;
+        }
       }
     }
 
