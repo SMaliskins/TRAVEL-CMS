@@ -76,47 +76,40 @@ export async function GET(
         }
       }
       
-      // Parse order code: 0014-26-sm -> ["0014", "26", "sm"]
-      const parts = orderCode.split('-');
-      if (parts.length >= 3) {
-        const [orderNumber, yearCode, code] = parts; // orderNumber = "0014", yearCode = "26"
-        
-        // Get current year (last 2 digits)
-        const currentYear = new Date().getFullYear().toString().slice(-2);
-        
-        // Get all invoices for this company in current year to find max number
-        // Format: INV-0014-26-SM-219157
-        // We need to find max number for invoices with same company_id and year
-        const { data: invoices } = await supabaseAdmin
-          .from("invoices")
-          .select("invoice_number")
-          .eq("company_id", order.company_id);
-        
-        let maxNum = 0;
-        if (invoices) {
-          invoices.forEach((inv: any) => {
-            // Match format: INV-XXXX-YY-INITIALS-NNNNNN where YY matches current year
-            const match = inv.invoice_number?.match(/INV-\d{4}-(\d{2})-[A-Z]+-(\d+)/);
-            if (match) {
-              const invoiceYear = match[1];
-              const num = parseInt(match[2], 10);
-              // Only count invoices from current year
-              if (invoiceYear === currentYear && num > maxNum) {
-                maxNum = num;
-              }
-            }
-          });
-        }
-        const nextNum = (maxNum + 1).toString().padStart(4, '0');
-        return NextResponse.json({ 
-          nextInvoiceNumber: `INV-${orderNumber}-${currentYear}-${userInitials}-${nextNum}` 
+      // New format: 001626-SM-0132 (6 digits = seq+year, initials, 4 digits = seq for >1000/year)
+      const currentYear = new Date().getFullYear().toString().slice(-2);
+      
+      const { data: invoices } = await supabaseAdmin
+        .from("invoices")
+        .select("invoice_number")
+        .eq("company_id", order.company_id);
+      
+      let maxSeq = 0;
+      if (invoices) {
+        invoices.forEach((inv: any) => {
+          // Match new format: NNNNYY-SS-NNNN (e.g. 001626-SM-0132)
+          const matchNew = inv.invoice_number?.match(/^(\d{6})-[A-Z]+-(\d{4})$/);
+          if (matchNew) {
+            const yearPart = matchNew[1].slice(-2);
+            const seq = parseInt(matchNew[2], 10);
+            if (yearPart === currentYear && seq > maxSeq) maxSeq = seq;
+          }
+          // Legacy format: INV-XXXX-YY-INITIALS-NNNN
+          const matchLegacy = inv.invoice_number?.match(/INV-\d{4}-(\d{2})-[A-Z]+-(\d+)/);
+          if (matchLegacy) {
+            const invoiceYear = matchLegacy[1];
+            const num = parseInt(matchLegacy[2], 10);
+            if (invoiceYear === currentYear && num > maxSeq) maxSeq = num;
+          }
         });
       }
-      // Fallback
-      const currentYear = new Date().getFullYear().toString().slice(-2);
-      const fallbackNum = Date.now().toString().slice(-4);
+      
+      const nextSeq = maxSeq + 1;
+      const seqPadded4 = nextSeq.toString().padStart(4, '0');
+      const seqYear6 = seqPadded4 + currentYear; // NNNN + YY = 6 digits
+      
       return NextResponse.json({ 
-        nextInvoiceNumber: `INV-${orderCode.replace(/\//g, '-').toUpperCase()}-${currentYear}-${userInitials}-${fallbackNum}` 
+        nextInvoiceNumber: `${seqYear6}-${userInitials}-${seqPadded4}` 
       });
     }
 
@@ -297,7 +290,7 @@ export async function POST(
       tax_amount: tax_amount || 0,
       total: total || 0,
       notes: notes || "",
-      status: "draft",
+      status: "issued",
       is_credit: body.is_credit || false,
     };
 

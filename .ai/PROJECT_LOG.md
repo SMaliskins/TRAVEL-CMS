@@ -5,7 +5,324 @@
 
 ---
 
-## [2026-01-30] Add Service — Package Tour layout = Edit Service ✅
+## [2026-01-30] CODE WRITER — Invoices: PDF fix, номер счёта, логотип, processed ✅
+
+**Task:** Invoices System Improvement (план) | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Finances PDF** — handleExportPDF использует invoice.order_code в URL вместо [orderCode]; передача invoice в handler
+2. **Номер счёта** — новый формат 001626-SM-0132 (6 цифр = seq+year, initials, 4 цифры seq); поддержка legacy INV-*
+3. **PDF логотип** — убраны border, border-radius; INVOICE крупно в правом верхнем углу
+4. **InvoiceList processed** — добавлен статус processed в getStatusLabel, getStatusColor, getStatusBadge, Invoice interface
+
+**Файлы:** app/finances/invoices/page.tsx, app/api/orders/[orderCode]/invoices/route.ts, app/api/orders/[orderCode]/invoices/[invoiceId]/pdf/route.ts, app/orders/[orderCode]/_components/InvoiceList.tsx
+
+**Результат:** Build OK. Готово к QA.
+
+---
+
+## [2026-01-30] CODE WRITER — TabBar, TabsContext, Lead Passenger avatar ✅
+
+**Task:** Tab preview → tooltip, instant tab switch, Lead Passenger avatar | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **TabBar** — убрано превью заявок при hover; только title (tooltip) с tab.title + subtitle + dates
+2. **TabsContext** — prefetch всех путей вкладок для мгновенного переключения; router.push(..., { scroll: false })
+3. **Lead Passenger avatar** — рядом с именем клиента: аватар из party_person.avatar_url (32×32) или инициалы; API GET/PATCH возвращает client_avatar_url
+
+**Файлы:** components/TabBar.tsx, contexts/TabsContext.tsx, app/orders/[orderCode]/page.tsx, app/api/orders/[orderCode]/route.ts
+
+**Результат:** Принято. Закладки без превью, только tooltip; переключение моментальное; аватар клиента рядом с Lead Passenger.
+
+---
+
+## [2026-01-30] CODE WRITER — Order: Auto dates, Destination from flights, Itinerary filter ✅
+
+**Task:** Dates from services, Destination from flights, Itinerary service filter | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Auto dates (date_from, date_to)** — OrderServicesBlock вычисляет min/max дат из всех активных сервисов; onInferDates вызывает PATCH order; обновление только при изменении
+2. **Destination from flights** — handleInferDestination расширен: из flight_segments извлекаются arrival IATA → getCityByIATA → city+country; объединение с hotel destinations
+3. **Itinerary filter by services** — рядом с выбором клиентов добавлен select по типу сервиса (Flight, Hotel, Transfer и т.д.); показываются только категории, присутствующие в заявке (availableCategories из services)
+
+**Файлы:** app/orders/[orderCode]/page.tsx, app/orders/[orderCode]/_components/OrderServicesBlock.tsx, app/orders/[orderCode]/_components/ItineraryTimeline.tsx
+
+**Результат:** Принято. Даты заказа проставляются автоматически от первого до последнего сервиса; Destination определяется из полётов (куда летим); фильтр Itinerary показывает только категории из заявки.
+
+---
+
+## [2026-01-30] CODE WRITER — Search: Cyrillic as Latin (wrong layout) ✅
+
+**Task:** Search understands Cyrillic as Latin | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **lib/directory/searchNormalize.ts** — CYRILLIC_TO_LATIN_LAYOUT (ЙЦУКЕН): Ф→A, Т→N, Е→T, Д→L, Н→Y и т.д.; getSearchPatterns добавляет вариант «неправильной раскладки» при вводе кириллицы
+2. **lib/stores/filterOrders.ts** — queryText, clientLastName, country используют getSearchPatterns + matchesSearch; поиск заказов понимает кириллицу как латиницу
+
+**Файлы:** lib/directory/searchNormalize.ts, lib/stores/filterOrders.ts
+
+**Результат:** Принято. Поиск (Directory, Orders) понимает ввод кириллицей как латиницу — без конвертации поля, только при поиске/фильтрации.
+
+---
+
+## [2026-01-30] CODE WRITER — Passport + Address UI improvements ✅
+
+**Task:** Passport parsing, country, address icons | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Passport parsing** — SYSTEM_PROMPT: буква в букву, цифра в цифру; сохранение диакритики (ā, ē, š, ž); soft sign ь → apostrophe; Title Case (пропись + заглавные первые)
+2. **transliterateCyrillic** — Ь, ь → apostrophe (')
+3. **Country parsing** — BLR в ISO_ALPHA3_TO_COUNTRY; COUNTRY_NAME_ALIASES; resolveCountryCode для Belarus и вариантов названий
+4. **Kadriye** — добавлена в cities.ts (Turkey)
+5. **MapPin icon** — булавка для адреса в ItineraryTimeline, AddServiceModal, EditServiceModalNew, HotelSuggestInput
+6. **Country flag** — флаг страны рядом с адресом; getCountryCodeFromName в countries.ts; ItineraryTimeline (извлечение страны из адреса), HotelSuggestInput
+
+**Файлы:** app/api/ai/parse-passport/route.ts, utils/transliterateCyrillic.ts, lib/data/countries.ts, lib/data/cities.ts, components/PassportDetailsInput.tsx, ItineraryTimeline.tsx, AddServiceModal.tsx, EditServiceModalNew.tsx, HotelSuggestInput.tsx
+
+**Результат:** Паспорт: точное копирование + диакритика; страны парсятся (Belarus и др.); адрес с иконкой булавки; флаг страны рядом с адресом.
+
+---
+
+## [2026-01-31] CODE WRITER — Hotel API: room categories + meal plans ✅
+
+**Task:** Hotel API room/meal | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **lib/ratehawk/client.ts** — RateHawkHotelContent расширен: room_groups (name из name_struct.main_name), meal_types из metapolicy_struct.meal; getHotelContent парсит raw API response
+2. **HotelSuggestInput** — HotelDetails: roomOptions, mealOptions; onHotelSelected передаёт их из hotel-content API
+3. **AddServiceModal / EditServiceModalNew** — state hotelRoomOptions, hotelMealOptions; Room input с datalist (room-options); Board datalist дополнен mealOptions из API
+4. Исправлены TypeScript: categoryType === "hotel" → "tour" в non-hotel Parties block (Add/Edit)
+
+**Файлы:** lib/ratehawk/client.ts, components/HotelSuggestInput.tsx, AddServiceModal.tsx, EditServiceModalNew.tsx
+
+**Результат:** При выборе отеля из RateHawk в Room и Board появляются подсказки из API (room_groups, meal types).
+
+---
+
+## [2026-01-30] CODE WRITER — Send to Hotel + Order Log (START)
+
+**Task:** SEND-TO-HOTEL | **Status:** START
+**Agent:** Code Writer | **Complexity:** 🟠 Medium
+
+**План:**
+1. Migration order_communications — таблица для лога коммуникаций
+2. API POST send-to-hotel — отправка email + запись в Log
+3. API GET communications — для вкладки Log
+4. Send to Hotel modal — форма с To, Subject, Message
+5. Log tab — отображение записей (дата, тип to Supplier, текст)
+
+---
+
+## [2026-01-30] CODE WRITER — order_communications migration ✅
+
+**Task:** SEND-TO-HOTEL | **Status:** SUCCESS (step 1)
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. Создана миграция `migrations/add_order_communications.sql`
+2. Таблица: order_id, service_id (nullable), company_id, type (to_supplier/from_supplier/to_client/from_client/other), recipient_email, subject, body, sent_at, sent_by, email_sent, created_at
+3. Индексы: order_id, service_id, company_id, sent_at, type
+4. RLS: SELECT/INSERT по company_id через profiles
+
+**Файл:** `migrations/add_order_communications.sql`
+
+**Next:** API POST send-to-hotel
+
+---
+
+## [2026-01-30] CODE WRITER — Order page: sticky tabs + Itinerary + Map ✅
+
+**Task:** ORDER-STICKY-UI | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟢 Low
+
+**Действия:**
+1. **Sticky tabs (Services, Finance, Documents, etc.)** — горизонтальные вкладки заказа липкие (sticky top-24); всегда видны при прокрутке; убрано вертикальное меню (перекрывало таблицу)
+2. **Sticky Itinerary** — плашка Itinerary (заголовок + выбор клиентов) липкая (top-36, ниже вкладок); весь блок Itinerary + Map sticky при прокрутке
+3. **Sticky Map** — карта липкая (top-36); выравнивание по верху с Itinerary (items-start)
+
+**Файлы:** `app/orders/[orderCode]/page.tsx`, `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`, `app/orders/[orderCode]/_components/ItineraryTimeline.tsx`
+
+**Результат:** Принято. Вкладки, Itinerary и Map остаются на виду при прокрутке; таблица не двигается.
+
+---
+
+## [2026-01-30] CODE WRITER — Merge Contact: подтверждение + восстановление архивных ✅
+
+**Task:** MERGE-CONTACT-FIX | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **MergeContactModal:** добавлен шаг подтверждения перед merge; явный текст «Выбранный контакт будет архивирован; [текущий] останется»; блок «Confirm merge» с кнопками Cancel / Yes, merge
+2. **Directory:** кнопка «Show archived» — показывает только inactive контакты; кнопка «Restore» для каждого архивного контакта (PUT isActive: true)
+3. **Восстановление Pricite Irina:** через UI — Show archived → найти контакт → Restore
+
+**Файлы:** `components/MergeContactModal.tsx`, `app/directory/page.tsx`
+
+**Результат:** Принято. Подтверждение перед merge снижает риск ошибки; архивные контакты можно просмотреть и восстановить.
+
+---
+
+## [2026-01-31] CODE WRITER — Clients by Citizenship: Pie chart + Other ✅
+
+**Task:** DIRECTORY-PIE-CHART | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟢 Low
+
+**Действия:**
+1. **Clients by Nationality → Clients by Citizenship** — переименован заголовок
+2. **Pie diagram** — список заменён на круговую диаграмму (recharts PieChart); donut-стиль, Tooltip, Legend
+3. **Много стран** — топ-7 стран + срез «Other (N more)» для остальных; максимум 8 сегментов
+
+**Файлы:** `app/directory/page.tsx`, `package.json` (recharts)
+
+**Результат:** Принято. Pie chart для Clients by Citizenship; при большом числе стран — группировка в Other.
+
+---
+
+## [2026-01-31] CODE WRITER — Boarding Pass: hover + Ctrl+V без клика ✅
+
+**Task:** BP-PASTE-HOVER | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟢 Low
+
+**Действия:**
+1. **Paste по hover** — навести курсор на поле +BP и нажать Ctrl+V; клик не нужен
+2. **Реализация** — document-level paste listener; mousemove отслеживает позицию; при paste проверяем elementFromPoint — если курсор над зоной BP, обрабатываем вставку (image/PDF)
+
+**Файлы:** `components/BoardingPassUpload.tsx`
+
+**Результат:** Принято. Hover + Ctrl+V для вставки boarding pass; click — выбор файла; drag — drop.
+
+---
+
+## [2026-01-31] CODE WRITER — Passport parse UX + phone/email clear fix ✅
+
+**Task:** PASSPORT-UX-PHONE-FIX | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Паспорт: зелёная подсветка сразу после парсинга** — `setIsEditing(true)` в PassportDetailsInput после успешного parse; форма раскрывается и показывает зелёные поля (как Package Tour)
+2. **Паспорт: "Unsaved" после парсинга** — checkDirty в DirectoryForm теперь учитывает passportData (passportNumber, dates, passportFullName, nationality); бейдж "Unsaved" появляется сразу после парсинга
+3. **Phone/email не очищались** — при удалении телефона/email и Save форма отправляла `undefined` (ключ опускался из JSON) → API не обновлял поле. Теперь всегда отправляем `phone` и `email` ("" при пустом) → API ставит null в БД
+
+**Файлы:** `components/PassportDetailsInput.tsx`, `components/DirectoryForm.tsx`
+
+**Результат:** Принято. Зелёные поля после парсинга; "Unsaved" напоминает сохранить; phone/email корректно очищаются в БД.
+
+---
+
+## [2026-01-31] CODE WRITER — Формат дат dd.mm.yyyy + правило в проект ✅
+
+**Task:** DATE-FORMAT-RULE | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Замена `input type="date"` на SingleDatePicker** — все поля даты теперь показывают dd.mm.yyyy (точка вместо /)
+2. **Файлы:** PassportDetailsInput, DirectoryForm, DirectorySearchPopover, AddServiceModal, EditServiceModalNew, InvoiceCreator, FlightItineraryInput
+3. **Правило в проект:** добавлено 6.11 / 11 «Формат дат — dd.mm.yyyy» и запрет №13 в cursorrules.mdc и NEW_PROJECT_RULES.md
+
+**Принцип:** НЕ использовать `input type="date"` (браузер показывает dd/mm/yyyy по локали). Использовать SingleDatePicker и formatDateDDMMYYYY.
+
+**Файлы:** `components/PassportDetailsInput.tsx`, `components/DirectoryForm.tsx`, `components/DirectorySearchPopover.tsx`, `components/FlightItineraryInput.tsx`, `app/orders/[orderCode]/_components/AddServiceModal.tsx`, `app/orders/[orderCode]/_components/EditServiceModalNew.tsx`, `app/orders/[orderCode]/_components/InvoiceCreator.tsx`, `.cursor/rules/cursorrules.mdc`, `.ai/NEW_PROJECT_RULES.md`
+
+**Результат:** Все даты в формате dd.mm.yyyy; правило зафиксировано в проекте.
+
+---
+
+## [2026-01-31] CODE WRITER — Cabin class, passport highlight, LV/EE, dates, build fixes ✅
+
+**Task:** CABIN-PASSPORT-LVEE-DATES | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Cabin class:** при нераспознанном классе — Economy по умолчанию; `cabinClassGuessed` в ParsedBooking; красная подсветка (guessed), зелёная (parsed) в AddServiceModal/EditServiceModalNew
+2. **Паспорт:** подсветка распознанных полей зелёным (parsedFields) в PassportDetailsInput
+3. **LV/EE паспорта:** SYSTEM_PROMPT — поддержка š, č, ā (LV), ä, ö, ü (EE), ą, č (LT); Issuing Country/Citizenship/Personal Code для LV/EE; без кириллицы
+4. **Даты:** dd.mm.yyyy (точка) — finances/invoices, ItineraryTimeline, orders/page
+5. **extractPassportPhoto:** unpdf 1.4.0 использует `data: Uint8ClampedArray`, не `buffer` — исправлено
+6. **parseMrz:** type cast `as unknown as Record<string, unknown>` для ParseResult
+
+**Файлы:** `lib/flights/airlineParsers.ts`, `AddServiceModal.tsx`, `EditServiceModalNew.tsx`, `PassportDetailsInput.tsx`, `app/api/ai/parse-passport/route.ts`, `utils/dateFormat.ts`, `app/finances/invoices/page.tsx`, `ItineraryTimeline.tsx`, `app/orders/[orderCode]/page.tsx`, `lib/passport/extractPassportPhoto.ts`, `lib/passport/parseMrz.ts`
+
+**Результат:** Build проходит успешно.
+
+---
+
+## [2026-01-31] CODE WRITER — Add Service: category picker + fixed category in header ✅
+
+**Task:** ADD-SVC-CATEGORY-PICKER | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. OrderServicesBlock: кнопка "Add Service" открывает dropdown с категориями; выбор категории → AddServiceModal с preselectedCategoryId
+2. AddServiceModal: prop preselectedCategoryId, loadCategories использует его; убран select категории; заголовок "Add Service — Flight"
+3. EditServiceModalNew: убран select категории; заголовок "Edit Service — Flight"
+
+**Принципы:** ADD_EDIT_SERVICE_SYNC соблюдён; payload, парсинг, useEffects без изменений.
+
+**Файлы:** OrderServicesBlock.tsx, AddServiceModal.tsx, EditServiceModalNew.tsx
+
+**Next:** QA verification
+
+---
+
+## [2026-01-30] CODE WRITER — Passport: Latin only + AI-only parsing ✅
+
+**Task:** PASSPORT-LATIN-AI | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- Паспорт: использовать латиницу из формата «Кириллица / Latin» (extractLatinFromPassportFormat), не транслитерировать
+- AI prompt: явно указано брать Latin после /
+- Отключён `/api/parse-passport-mrz` (410 Gone) — только AI для картинок и PDF
+- PassportDetailsInput, API, utils — ensureLatin через extractLatinFromPassportFormat
+
+**Результат:** Парсинг паспортов только через AI; имена — латиница из паспорта (часть после /).
+
+**Файлы:** `utils/transliterateCyrillic.ts`, `app/api/ai/parse-passport/route.ts`, `app/api/parse-passport-mrz/route.ts`, `components/PassportDetailsInput.tsx`, `lib/passport/parsePassportText.ts`
+
+---
+
+## [2026-01-31] CODE WRITER — Split services fix ✅
+
+**Task:** SPLIT-SVC-FIX | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Simple
+
+**Действия:**
+- Fix "Failed to create split services": company_id fallback из order, safe defaults для vat_rate, cabin_class, price_type, refund_policy, JSONB
+- Улучшены сообщения об ошибках (details, hint, code) в API и UI
+- Миграция `add_split_columns_order_services.sql` — split_group_id, split_index, split_total
+
+**Результат:** Выполнено и принято. Split services работает после применения миграции.
+
+**Файлы:** `app/api/orders/[orderCode]/services/[serviceId]/split/route.ts`, `SplitServiceModal.tsx`, `SplitModalMulti.tsx`, `migrations/add_split_columns_order_services.sql`
+
+---
+
+## [2026-01-31] Add Service — Hotel fields = Edit Service ✅
+
+**Task:** HOTEL-ADD-FIELDS | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- Add Service для Hotel: те же поля что в Edit Service
+- Room, Board, Bed Type (King/Queen, Twin, Not guaranteed)
+- Preferences: Early/Late check-in, Higher floor, King size bed, Honeymooners, Silent room, Parking
+- Rooms next to, Additional preferences (free text), Send to Hotel button
+- Supplier: Booking Type (GDS/Direct) для Hotel
+- Payload: hotelRoom, hotelBoard, hotelBedType, hotelEarlyCheckIn, hotelHigherFloor и т.д.
+
+**Результат:** Add Service и Edit Service — одинаковые поля для Hotel.
+
+**Файл:** `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+
+---
+
+## [2026-01-31] Add Service — Package Tour layout = Edit Service ✅
 
 **Task:** PKG-TOUR-ADD-LAYOUT | **Status:** SUCCESS — принято
 **Agent:** Code Writer | **Complexity:** 🟡 Medium

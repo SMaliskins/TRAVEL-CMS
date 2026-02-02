@@ -9,7 +9,7 @@ interface Invoice {
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
+  status: 'issued' | 'issued_sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -92,12 +92,18 @@ export default function FinancesInvoicesPage() {
     }
   };
 
-  const handleExportPDF = async (invoiceId: string) => {
+  const handleExportPDF = async (invoice: Invoice) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/orders/[orderCode]/invoices/${invoiceId}/pdf`, {
+      const orderCode = invoice.order_code;
+      if (!orderCode) {
+        alert('Order not found for this invoice');
+        return;
+      }
+
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoice.id}/pdf`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -108,15 +114,18 @@ export default function FinancesInvoicesPage() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `invoice-${invoiceId}.pdf`;
+        a.download = `invoice-${invoice.invoice_number || invoice.id}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'Failed to export PDF');
       }
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      alert('PDF export feature coming soon!');
+      alert('Failed to export PDF');
     }
   };
 
@@ -126,23 +135,27 @@ export default function FinancesInvoicesPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB');
+    const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
+    if (isNaN(date.getTime())) return "-";
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
   };
 
   const getStatusBadge = (status: Invoice['status']) => {
-    const styles = {
-      draft: 'bg-gray-100 text-gray-700',
-      sent: 'bg-blue-100 text-blue-700',
+    const styles: Record<string, string> = {
+      issued: 'bg-gray-100 text-gray-700',
+      issued_sent: 'bg-blue-100 text-blue-700',
       paid: 'bg-green-100 text-green-700',
       cancelled: 'bg-red-100 text-red-700',
       overdue: 'bg-orange-100 text-orange-700',
       processed: 'bg-purple-100 text-purple-700',
     };
 
-    const labels = {
-      draft: 'Draft',
-      sent: 'Sent',
+    const labels: Record<string, string> = {
+      issued: 'Issued',
+      issued_sent: 'Issued & Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
@@ -150,7 +163,7 @@ export default function FinancesInvoicesPage() {
     };
 
     return (
-      <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || styles.draft}`}>
+      <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || styles.issued}`}>
         {labels[status] || status}
       </span>
     );
@@ -174,7 +187,7 @@ export default function FinancesInvoicesPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-2">
         <span className="text-sm text-gray-700">Filter:</span>
-        {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
+        {(['all', 'issued', 'issued_sent', 'paid', 'overdue', 'processed'] as const).map((status) => (
           <button
             key={status}
             onClick={() => setFilterStatus(status)}
@@ -184,7 +197,7 @@ export default function FinancesInvoicesPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+            {status === 'all' ? 'All' : status === 'issued_sent' ? 'Issued & Sent' : status.charAt(0).toUpperCase() + status.slice(1)}
           </button>
         ))}
       </div>
@@ -235,7 +248,7 @@ export default function FinancesInvoicesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleExportPDF(invoice.id)}
+                        onClick={() => handleExportPDF(invoice)}
                         className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
                         title="Export PDF"
                       >

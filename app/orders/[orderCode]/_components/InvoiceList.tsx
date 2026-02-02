@@ -7,12 +7,13 @@ interface Invoice {
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue';
+  status: 'issued' | 'issued_sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
   total: number;
   subtotal: number;
   tax_amount: number;
   client_name: string;
   payer_name?: string | null;
+  payer_email?: string | null;
   notes: string | null;
   created_at?: string;
   invoice_items: Array<{
@@ -112,20 +113,22 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   };
 
   const getStatusBadge = (status: Invoice['status']) => {
-    const styles = {
-      draft: 'bg-gray-100 text-gray-700 border-gray-300',
-      sent: 'bg-blue-100 text-blue-700 border-blue-300',
+    const styles: Record<string, string> = {
+      issued: 'bg-gray-100 text-gray-700 border-gray-300',
+      issued_sent: 'bg-blue-100 text-blue-700 border-blue-300',
       paid: 'bg-green-100 text-green-700 border-green-300',
       cancelled: 'bg-red-100 text-red-700 border-red-300',
       overdue: 'bg-orange-100 text-orange-700 border-orange-300',
+      processed: 'bg-purple-100 text-purple-700 border-purple-300',
     };
 
-    const labels = {
-      draft: 'Draft',
-      sent: 'Sent',
+    const labels: Record<string, string> = {
+      issued: 'Issued',
+      issued_sent: 'Issued & Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
+      processed: 'Processed',
     };
 
     return (
@@ -268,23 +271,25 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   }
 
   const getStatusLabel = (status: Invoice['status']) => {
-    const labels: Record<Invoice['status'], string> = {
-      draft: 'Draft',
-      sent: 'Sent',
+    const labels: Record<string, string> = {
+      issued: 'Issued',
+      issued_sent: 'Issued & Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
+      processed: 'Processed',
     };
     return labels[status] || status;
   };
 
   const getStatusColor = (status: Invoice['status']) => {
-    const colors: Record<Invoice['status'], string> = {
-      draft: 'text-gray-600',
-      sent: 'text-blue-600',
+    const colors: Record<string, string> = {
+      issued: 'text-gray-600',
+      issued_sent: 'text-blue-600',
       paid: 'text-green-600',
       cancelled: 'text-red-600',
       overdue: 'text-orange-600',
+      processed: 'text-purple-600',
     };
     return colors[status] || 'text-gray-600';
   };

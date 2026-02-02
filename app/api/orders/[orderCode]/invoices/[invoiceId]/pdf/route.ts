@@ -110,22 +110,22 @@ function generateInvoiceHTML(invoice: any, companyLogoUrl: string | null = null)
   <div class="header">
     <div style="display: flex; align-items: start; gap: 15px;">
       ${companyLogoUrl ? `
-        <div style="width: 64px; height: 64px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
+        <div style="width: 64px; height: 64px; overflow: hidden; flex-shrink: 0;">
           <img src="${companyLogoUrl}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
         </div>
       ` : `
-        <div style="width: 64px; height: 64px; border: 1px solid #ddd; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999; flex-shrink: 0;">
+        <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999; flex-shrink: 0;">
           Logo
         </div>
       `}
-      <div>
-        <div class="invoice-title">${invoice.is_credit ? 'CREDIT NOTE' : 'INVOICE'}</div>
-        ${invoice.is_credit ? '<div style="color: green; font-size: 12px;">Refund / Credit</div>' : ''}
-      </div>
     </div>
-    <div class="invoice-number">
-      <div style="font-size: 11px; color: #666;">Invoice #</div>
-      <div style="font-weight: bold;">${invoice.invoice_number}</div>
+    <div style="text-align: right; flex: 1;">
+      <div class="invoice-title" style="font-size: 28px; font-weight: bold; margin-bottom: 8px;">${invoice.is_credit ? 'CREDIT NOTE' : 'INVOICE'}</div>
+      ${invoice.is_credit ? '<div style="color: green; font-size: 12px;">Refund / Credit</div>' : ''}
+      <div class="invoice-number" style="margin-top: 8px;">
+        <div style="font-size: 11px; color: #666;">Invoice #</div>
+        <div style="font-weight: bold;">${invoice.invoice_number}</div>
+      </div>
     </div>
   </div>
 
@@ -217,13 +217,6 @@ function generateInvoiceHTML(invoice: any, companyLogoUrl: string | null = null)
       ` : ''}
     </div>
   ` : '')}
-
-  ${invoice.notes ? `
-    <div class="notes">
-      <strong>Notes:</strong><br>
-      ${invoice.notes}
-    </div>
-  ` : ''}
 
   <div style="margin-top: 40px; text-align: center; color: #999; font-size: 11px;">
     Thank you for your business!
