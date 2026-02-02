@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
-import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -712,9 +711,6 @@ export async function PUT(
       ...supplierData.data,
       ...subagentData.data,
     });
-
-    // Upsert party embedding for semantic search (non-blocking)
-    upsertPartyEmbedding(id).catch((e) => console.warn("[PUT] upsertPartyEmbedding:", e));
 
     return NextResponse.json({ record });
   } catch (error: unknown) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -249,8 +248,6 @@ export async function POST(
         .from("order_service_travellers")
         .insert(travellerInserts);
     }
-
-    upsertOrderServiceEmbedding(service.id).catch((e) => console.warn("[POST services] upsertOrderServiceEmbedding:", e));
 
     return NextResponse.json({
       service: {
