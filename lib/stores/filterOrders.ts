@@ -27,21 +27,31 @@ export interface OrderRow {
   dueDate?: string;
 }
 
+export interface FilterOrdersOptions {
+  /** Order codes from semantic search - when provided with queryText, include these orders even if text doesn't match */
+  semanticOrderCodes?: string[];
+}
+
 /**
  * Filter orders based on search state
  */
 export function filterOrders(
   orders: OrderRow[],
-  searchState: OrdersSearchState
+  searchState: OrdersSearchState,
+  options?: FilterOrdersOptions
 ): OrderRow[] {
+  const { semanticOrderCodes = [] } = options || {};
+  const semanticSet = new Set(semanticOrderCodes);
+
   return orders.filter((order) => {
     // Query text search (case-insensitive, searches in orderId, client name, refNr if exists)
+    // When semanticOrderCodes provided, also include orders whose orderId is in that set
     if (searchState.queryText) {
       const query = searchState.queryText.toLowerCase();
       const matchesOrderId = order.orderId.toLowerCase().includes(query);
       const matchesClient = order.client.toLowerCase().includes(query);
-      // Note: refNr would need to be added to OrderRow interface if it exists
-      if (!matchesOrderId && !matchesClient) {
+      const matchesSemantic = semanticSet.size > 0 && semanticSet.has(order.orderId);
+      if (!matchesOrderId && !matchesClient && !matchesSemantic) {
         return false;
       }
     }

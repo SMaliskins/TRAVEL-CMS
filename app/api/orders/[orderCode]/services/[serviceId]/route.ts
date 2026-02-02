@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 
 /**
  * PATCH /api/orders/[orderCode]/services/[serviceId]
@@ -64,6 +65,8 @@ export async function PATCH(
         { status: 500 }
       );
     }
+
+    upsertOrderServiceEmbedding(serviceId).catch((e) => console.warn("[PATCH service] upsertOrderServiceEmbedding:", e));
 
     return NextResponse.json({ service });
   } catch (err) {

@@ -10,6 +10,7 @@ export default function DirectoryPage() {
   const router = useRouter();
   const [records, setRecords] = useState<DirectoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [filters, setFilters] = useState(() => directorySearchStore.getState());
 
   // Subscribe to search store changes
@@ -56,20 +57,47 @@ export default function DirectoryPage() {
       }
     };
     
-    loadRecords();
+        loadRecords();
   }, [filters]);
+
+  const handleSyncSearch = async () => {
+    try {
+      setSyncing(true);
+      const res = await fetchWithAuth("/api/embeddings/sync-party", { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Sync failed");
+      }
+      const data = await res.json();
+      alert(`Synced ${data?.synced ?? 0} party embeddings.`);
+    } catch (e) {
+      console.error("Sync search failed:", e);
+      alert(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-6 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Directory</h1>
-          <button
-            onClick={() => router.push("/directory/new")}
-            className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
-          >
-            New Record
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSyncSearch}
+              disabled={syncing}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {syncing ? "Syncing..." : "Sync search"}
+            </button>
+            <button
+              onClick={() => router.push("/directory/new")}
+              className="rounded-lg bg-black px-6 py-2 text-white transition-colors hover:bg-gray-800"
+            >
+              New Record
+            </button>
+          </div>
         </div>
 
         {loading ? (
