@@ -5,6 +5,36 @@
 
 ---
 
+## [2026-01-30] Add Service — клиенты в Travellers ✅
+
+**Task:** Travellers при создании сервиса | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟢 Micro
+
+**Действия:**
+- API POST /api/orders/[orderCode]/services: если `travellerIds` пустой, но передан `clientPartyId`, использовать основного клиента как единственного traveller (effectiveTravellerIds); в ответе возвращать effectiveTravellerIds
+- AddServiceModal: при формировании payload, если в `clients` нет id, но есть primaryClient.id — добавить его в travellerIds
+
+**Результат:** При создании сервиса клиент (из заказа или выбранный в форме) всегда попадает в колонку Travellers.
+
+**Файлы:** `app/api/orders/[orderCode]/services/route.ts`, `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+
+---
+
+## [2026-01-30] Audit: created_by/updated_by — auth fallback, "by —" when unknown ✅
+
+**Task:** Audit display | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟢 Micro
+
+**Действия:**
+- API GET /api/directory/[id]: fallback для created_by/updated_by — если имени нет в user_profiles/profiles, резолв из auth (user_metadata или email) через supabaseAdmin.auth.admin.getUserById
+- DirectoryForm: всегда показывать строку «by …» под датой (created/updated); при отсутствии имени — «by —»
+
+**Результат:** Пользователь, создавший/обновивший контакт, отображается по имени или email; при неизвестном — явно «by —».
+
+**Файлы:** `app/api/directory/[id]/route.ts`, `components/DirectoryForm.tsx`
+
+---
+
 ## [2026-01-30] Add Service — Package Tour layout = Edit Service ✅
 
 **Task:** PKG-TOUR-ADD-LAYOUT | **Status:** SUCCESS — принято

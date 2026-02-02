@@ -9,6 +9,7 @@ import ClientMultiSelectDropdown from "@/components/ClientMultiSelectDropdown";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import type { SupplierCommission } from "@/lib/types/directory";
 
 interface AddServiceModalProps {
@@ -240,7 +241,7 @@ export default function AddServiceModal({
   // Tour-specific: hotel star, room, meal, transfer, additional
   const [hotelStarRating, setHotelStarRating] = useState("");
   const [hotelRoom, setHotelRoom] = useState("");
-  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive">("room_only");
+  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">("room_only");
   const [mealPlanText, setMealPlanText] = useState("");
   const [transferType, setTransferType] = useState("");
   const [additionalServices, setAdditionalServices] = useState("");
@@ -758,14 +759,15 @@ export default function AddServiceModal({
 
   // Tour (Package Tour) AI parsing - apply parsed data to form
   const applyParsedTourData = useCallback(async (p: Record<string, unknown>) => {
-    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" => {
+    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
       const p2 = (plan || "").toUpperCase();
       if (p2 === "RO" || p2 === "ROOM ONLY") return "room_only";
       if (p2 === "BB" || p2 === "BED AND BREAKFAST") return "breakfast";
       if (p2 === "HB" || p2 === "HALF BOARD") return "half_board";
       if (p2 === "FB" || p2 === "FULL BOARD") return "full_board";
-      if (p2 === "AI" || p2 === "UAI" || p2 === "ALL INCLUSIVE" || p2 === "ULTRA ALL INCLUSIVE") return "all_inclusive";
-      return "all_inclusive";
+      if (p2 === "UAI" || p2 === "ULTRA ALL INCLUSIVE") return "uai";
+      if (p2 === "AI" || p2 === "ALL INCLUSIVE") return "all_inclusive";
+      return "room_only";
     };
     const fields = new Set<string>();
     if (p.direction && typeof p.direction === "string") {
@@ -1016,7 +1018,12 @@ export default function AddServiceModal({
         refNr,
         ticketNr: showTicketNr ? (categoryType === "flight" ? ticketNumbers.map(t => t.ticketNr).join(", ") : ticketNr) : "",
         ticketNumbers: categoryType === "flight" ? ticketNumbers : undefined,
-        travellerIds: [],
+        // Travellers = selected clients (party IDs). If none selected, use primary client so CLIENT always appears in TRAVELLERS
+        travellerIds: (() => {
+          const ids = [...new Set(clients.filter(c => c.id).map(c => c.id as string))];
+          if (ids.length === 0 && primaryClient?.id) ids.push(primaryClient.id);
+          return ids;
+        })(),
       };
       
       // Add hotel-specific fields (same as Edit Service)
@@ -1514,7 +1521,8 @@ export default function AddServiceModal({
                         <option value="breakfast">BB</option>
                         <option value="half_board">HB</option>
                         <option value="full_board">FB</option>
-                        <option value="all_inclusive">AI/UAI</option>
+                        <option value="all_inclusive">AI</option>
+                        <option value="uai">UAI</option>
                       </select>
                     </div>
                   </div>
@@ -2208,12 +2216,7 @@ export default function AddServiceModal({
                     }
                   }
                   
-                  // Format date for display
-                  const formatDate = (dateStr: string) => {
-                    if (!dateStr) return "";
-                    const date = new Date(dateStr);
-                    return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-                  };
+                  const formatDate = (dateStr: string) => (dateStr ? formatDateDDMMYYYY(dateStr) : "");
                   
                   return (
                     <div key={seg.id || idx}>
@@ -2360,7 +2363,8 @@ export default function AddServiceModal({
                     <option value="breakfast">Breakfast</option>
                     <option value="half_board">Half board</option>
                     <option value="full_board">Full board</option>
-                    <option value="all_inclusive">All inclusive</option>
+                    <option value="all_inclusive">AI (All inclusive)</option>
+                    <option value="uai">UAI (Ultra All Inclusive)</option>
                   </select>
                 </div>
                 <div>
