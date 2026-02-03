@@ -21,6 +21,7 @@ import { getCityByName, getCityByIATA } from "@/lib/data/cities";
 import ItineraryTabs from "./ItineraryTabs";
 import SmartHintRow from "./SmartHintRow";
 import ItineraryTimeline, { SelectedBoardingPass } from "./ItineraryTimeline";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { 
   getRefundPolicyBadge, 
   getDeadlineUrgency, 
@@ -137,7 +138,8 @@ function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: strin
     breakfast: "Breakfast",
     half_board: "Half Board",
     full_board: "Full Board",
-    all_inclusive: "All Inclusive",
+    all_inclusive: "AI",
+    uai: "UAI",
   };
   const board = s.mealPlanText?.trim()
     ? toTitleCase(s.mealPlanText.trim())
@@ -146,6 +148,72 @@ function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: strin
       : null;
   if (board) parts.push(board);
   return parts.length > 0 ? parts.join(" · ").replace(/\* · /g, "*· ") : toTitleCase(fallback);
+}
+
+// Fallback when API is unavailable (same names/types as AddServiceModal)
+const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_rate?: number }[] = [
+  { id: "fallback-flight", name: "Flight", type: "flight", vat_rate: 0 },
+  { id: "fallback-hotel", name: "Hotel", type: "hotel", vat_rate: 21 },
+  { id: "fallback-transfer", name: "Transfer", type: "transfer", vat_rate: 21 },
+  { id: "fallback-tour", name: "Package Tour", type: "tour", vat_rate: 21 },
+  { id: "fallback-insurance", name: "Insurance", type: "insurance", vat_rate: 21 },
+  { id: "fallback-visa", name: "Visa", type: "visa", vat_rate: 21 },
+  { id: "fallback-rent_a_car", name: "Rent a Car", type: "rent_a_car", vat_rate: 21 },
+  { id: "fallback-cruise", name: "Cruise", type: "cruise", vat_rate: 21 },
+  { id: "fallback-other", name: "Other", type: "other", vat_rate: 21 },
+];
+
+function ChooseServiceTypeModal({
+  categories,
+  onSelect,
+  onClose,
+}: {
+  categories: { id: string; name: string; type?: string; vat_rate?: number }[];
+  onSelect: (categoryId: string, category?: { id: string; name: string; type?: string; vat_rate?: number }) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-xl bg-white shadow-xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">What service are you adding?</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            aria-label="Close"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => onSelect(cat.id, cat)}
+              className="flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800"
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface OrderServicesBlockProps {
@@ -180,6 +248,14 @@ export default function OrderServicesBlock({
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showChooseCategoryModal, setShowChooseCategoryModal] = useState(false);
+  const [addServiceCategoryId, setAddServiceCategoryId] = useState<string | null>(null);
+  const [addServiceCategoryType, setAddServiceCategoryType] = useState<string | null>(null);
+  const [addServiceCategoryName, setAddServiceCategoryName] = useState<string | null>(null);
+  const [addServiceCategoryVatRate, setAddServiceCategoryVatRate] = useState<number | null>(null);
+  // Preloaded categories so "What service?" opens with final names (no substitution)
+  const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
+  const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   
@@ -1000,16 +1076,54 @@ export default function OrderServicesBlock({
     fetchTravellers();
   }, [fetchServices, fetchTravellers]);
 
+  // Preload categories so "What service?" opens with final names (no substitution)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+          return;
+        }
+        const res = await fetch("/api/travel-service-categories", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          credentials: "include",
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const list = (data.categories || []).filter((c: { is_active?: boolean }) => c.is_active !== false);
+          if (list.length > 0) {
+            setServiceCategories(list.map((c: { id: string; name: string; type?: string; vat_rate?: number }) => ({
+              id: c.id,
+              name: c.name,
+              type: typeof c.type === "string" ? c.type.toLowerCase() : "other",
+              vat_rate: typeof c.vat_rate === "number" ? c.vat_rate : 21,
+            })));
+          } else {
+            setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+          }
+        } else {
+          setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+        }
+      } catch {
+        if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // When categories load and user had clicked Add Service, open chooser
+  useEffect(() => {
+    if (serviceCategories.length > 0 && pendingOpenChooseModal) {
+      setPendingOpenChooseModal(false);
+      setShowChooseCategoryModal(true);
+    }
+  }, [serviceCategories.length, pendingOpenChooseModal]);
+
   // Handle new service added
   const handleServiceAdded = (service: ServiceData) => {
-    console.log('🔍 handleServiceAdded received:', {
-      id: service.id,
-      clientPartyId: service.clientPartyId,
-      clientName: service.clientName,
-      payerPartyId: service.payerPartyId,
-      payerName: service.payerName,
-    });
-    
     const newService: Service = {
       id: service.id,
       dateFrom: service.dateFrom || "",
@@ -1030,14 +1144,9 @@ export default function OrderServicesBlock({
       ticketNr: service.ticketNr || "",
       assignedTravellerIds: service.travellerIds || [],
     };
-    
-    console.log('✅ newService created:', {
-      id: newService.id,
-      client: newService.client,
-      clientPartyId: newService.clientPartyId,
-    });
-    
     setServices(prev => [...prev, newService]);
+    // Refresh travellers so new clients appear in TRAVELLERS column (they're added to order_travellers by API)
+    fetchTravellers();
   };
 
   const selectedService = services.find((s) => s.id === modalServiceId);
@@ -1093,19 +1202,6 @@ export default function OrderServicesBlock({
     const index = Math.abs(hash) % colors.length;
     return colors[index];
   };
-  const formatDateDDMMYYYY = (dateString: string) => {
-    try {
-      const date = new Date(dateString + "T00:00:00");
-      if (isNaN(date.getTime())) return "-";
-      const day = String(date.getDate()).padStart(2, "0");
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
-    } catch {
-      return "-";
-    }
-  };
-
   const getDateRangeKey = (service: Service) => {
     const startDate = formatDateDDMMYYYY(service.dateFrom);
     const endDate = service.dateTo
@@ -1286,14 +1382,69 @@ export default function OrderServicesBlock({
 
   if (isLoading) {
     return (
-      <div className="rounded-lg bg-white shadow-sm p-6">
-        <div className="text-center text-gray-500">Loading services...</div>
+      <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+        <style>{`
+          @keyframes services-skeleton-shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
+          .services-skeleton-cell {
+            background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+            background-size: 200% 100%;
+            animation: services-skeleton-shimmer 1.2s ease-in-out infinite;
+          }
+        `}</style>
+        <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📋</span>
+            <h2 className="text-base font-semibold text-gray-900">Services</h2>
+          </div>
+        </div>
+        <div className="px-3 py-2 border-b border-gray-100">
+          <div className="h-8 rounded-md services-skeleton-cell w-48" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="w-20 px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="min-w-[180px] px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell mx-auto w-4" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-32" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-24" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
+                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-12" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
 
   return (
     <>
+      <style>{`
+        @keyframes services-row-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .services-row-in {
+          opacity: 0;
+          animation: services-row-in 0.35s ease-out forwards;
+        }
+      `}</style>
       {/* Vertical layout: Services on top, Map below */}
       <div className="space-y-4">
         {/* Services table */}
@@ -1325,7 +1476,13 @@ export default function OrderServicesBlock({
               {hideCancelled ? "Show" : "Hide"} Cancelled
             </button>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+              if (serviceCategories.length > 0) {
+                setShowChooseCategoryModal(true);
+              } else {
+                setPendingOpenChooseModal(true);
+              }
+            }}
               className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1399,7 +1556,9 @@ export default function OrderServicesBlock({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {sortedGroupKeys.map((groupKey) => {
+              {(() => {
+                let serviceRowIndex = 0;
+                return sortedGroupKeys.map((groupKey) => {
                 const groupServices = groupedServices[groupKey].sort((a, b) => {
                   // Sort within group: category, then name
                   const categoryCompare = a.category.localeCompare(b.category);
@@ -1450,12 +1609,14 @@ export default function OrderServicesBlock({
                         const splitGroupColor = service.splitGroupId ? getSplitGroupColor(service.splitGroupId) : null;
 
 
+                        const rowDelay = serviceRowIndex++ * 40;
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
+                            className={`services-row-in group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
                               service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
                             }`}
+                            style={{ animationDelay: `${rowDelay}ms` }}
                             onDoubleClick={(e) => {
                               e.stopPropagation();
                               console.log('🔍 DoubleClick triggered on row! Service ID:', service.id);
@@ -1697,7 +1858,8 @@ export default function OrderServicesBlock({
                       })}
                   </React.Fragment>
                 );
-              })}
+              });
+              })()}
             </tbody>
           </table>
         </div>
@@ -1816,6 +1978,22 @@ export default function OrderServicesBlock({
         />
       )}
 
+      {showChooseCategoryModal && (
+        <ChooseServiceTypeModal
+          categories={serviceCategories.length > 0 ? serviceCategories : CHOOSE_CATEGORY_FALLBACK}
+          onSelect={(categoryId, category) => {
+            setAddServiceCategoryId(categoryId);
+            setAddServiceCategoryType(category?.type ?? null);
+            setAddServiceCategoryName(category?.name ?? null);
+            setAddServiceCategoryVatRate(category?.vat_rate ?? null);
+            setShowChooseCategoryModal(false);
+            // Open add modal next tick so category type/name/vat state is committed before first paint
+            setTimeout(() => setShowAddModal(true), 0);
+          }}
+          onClose={() => setShowChooseCategoryModal(false)}
+        />
+      )}
+
       {showAddModal && (
         <AddServiceModal
           orderDateFrom={orderDateFrom}
@@ -1823,7 +2001,17 @@ export default function OrderServicesBlock({
           orderCode={orderCode}
           defaultClientId={defaultClientId}
           defaultClientName={defaultClientName}
-          onClose={() => setShowAddModal(false)}
+          initialCategoryId={addServiceCategoryId ?? undefined}
+          initialCategoryType={addServiceCategoryType ?? undefined}
+          initialCategoryName={addServiceCategoryName ?? undefined}
+          initialVatRate={addServiceCategoryVatRate ?? undefined}
+          onClose={() => {
+            setShowAddModal(false);
+            setAddServiceCategoryId(null);
+            setAddServiceCategoryType(null);
+            setAddServiceCategoryName(null);
+            setAddServiceCategoryVatRate(null);
+          }}
           onServiceAdded={handleServiceAdded}
         />
       )}

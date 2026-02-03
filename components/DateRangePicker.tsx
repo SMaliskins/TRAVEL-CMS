@@ -9,6 +9,8 @@ interface DateRangePickerProps {
   from: string | undefined;
   to: string | undefined;
   onChange: (from: string | undefined, to: string | undefined) => void;
+  /** Optional class for the trigger button (e.g. parsed highlight) */
+  triggerClassName?: string;
 }
 
 export default function DateRangePicker({
@@ -16,6 +18,7 @@ export default function DateRangePicker({
   from,
   to,
   onChange,
+  triggerClassName,
 }: DateRangePickerProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [tempStart, setTempStart] = useState<string | undefined>(() => from);
@@ -117,7 +120,7 @@ export default function DateRangePicker({
       <button
         type="button"
         onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-left text-sm focus:border-black focus:outline-none"
+        className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-left text-sm focus:border-black focus:outline-none ${triggerClassName ?? ""}`}
       >
         {displayValue}
       </button>

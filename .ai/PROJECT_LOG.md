@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-01-30] Add Service — Package Tour: одна форма с первого кадра, парсинг, красная обводка ✅
+
+**Task:** Add Service Package Tour UX | **Status:** SUCCESS — принято
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- При выборе категории из «What service?» передаются initialCategoryId, initialCategoryType, initialCategoryName, initialVatRate; при categoryLocked loadCategories не вызывается — форма не перерисовывается вторым рендером
+- OrderServicesBlock: категории с type и vat_rate, открытие Add Service через setTimeout(0) после выбора; AddServiceModal получает initialVatRate и задаёт vatRate из пропа при categoryLocked
+- Парсинг дат: зелёная обводка только у поля дат (DateRangePicker triggerClassName), у Supplier — только у строки выбора поставщика; Supplier в parsedFields только при непустом operatorName
+- Красная обводка везде, где парсер пытался заполнить поле, но значение пусто: serviceName, dates, hotel/room/meal, transfer, additionalServices, supplier, pricing, refNr, payment terms, flightSegments
+
+**Результат:** Add Service — Package Tour открывается сразу правильной формой (без «первая → вторая»); даты и Supplier подсвечиваются точечно; не спарсенные поля — красной обводкой.
+
+**Файлы:** `app/orders/[orderCode]/_components/AddServiceModal.tsx`, `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`, `components/DateRangePicker.tsx`
+
+---
+
 ## [2026-01-30] Add Service — клиенты в Travellers ✅
 
 **Task:** Travellers при создании сервиса | **Status:** SUCCESS
