@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Invoice {
   id: string;
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'issued' | 'issued_sent' | 'processed';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -70,14 +71,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
     return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
-  };
+  const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
 
   // Extract short number from invoice number (e.g., "00965" from "0633/25-SM-00965")
   const getShortNumber = (invoiceNumber: string): string => {
@@ -156,34 +150,47 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       const response = await fetch(
         `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`
       );
-      
+
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to generate PDF' }));
         alert(`Failed to export PDF: ${error.error || 'Unknown error'}`);
         return;
       }
 
-      // Get HTML and convert to PDF using browser print
-      const html = await response.text();
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(html);
-        printWindow.document.close();
-        printWindow.onload = () => {
-          printWindow.print();
-        };
-      } else {
-        // Fallback: download HTML
-        const blob = new Blob([html], { type: 'text/html' });
+      const contentType = response.headers.get('Content-Type') || '';
+      const isPdf = contentType.includes('application/pdf');
+
+      if (isPdf) {
+        const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${invoice.invoice_number}.html`;
+        a.download = `${String(invoice.invoice_number).replace(/\s+/g, '-')}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
-        alert('✅ Invoice HTML downloaded. Use browser print to save as PDF.');
+      } else {
+        const html = await response.text();
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(html);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            printWindow.print();
+          };
+        } else {
+          const blob = new Blob([html], { type: 'text/html' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${invoice.invoice_number}.html`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+          alert('✅ Invoice HTML downloaded. Use browser print to save as PDF.');
+        }
       }
     } catch (error: any) {
       console.error('Error exporting PDF:', error);
@@ -225,6 +232,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       }
 
       alert('✅ Invoice email sent successfully!');
+      loadInvoices();
     } catch (error: any) {
       console.error('Error sending email:', error);
       alert(`Failed to send email: ${error.message || 'Unknown error'}`);
@@ -232,14 +240,16 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   };
 
   const handleCancelInvoice = async (invoiceId: string) => {
-    if (!confirm('Are you sure you want to cancel this invoice? Services will be unlocked.')) {
-      return;
-    }
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return;
+
+    const isPaid = invoice.status === 'paid';
+    const confirmMsg = isPaid
+      ? `Cancel this invoice? Payment €${invoice.total.toFixed(2)} will be moved to the order deposit and services will be unlocked.`
+      : 'Are you sure you want to cancel this invoice? Services will be unlocked.';
+    if (!confirm(confirmMsg)) return;
 
     try {
-      const invoice = invoices.find(inv => inv.id === invoiceId);
-      if (!invoice) return;
-
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -251,7 +261,12 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
 
       if (!response.ok) throw new Error('Failed to cancel invoice');
 
-      alert('✅ Invoice cancelled. Services unlocked.');
+      const data = await response.json().catch(() => ({}));
+      const moved = typeof data.paymentMovedToDeposit === 'number' ? data.paymentMovedToDeposit : 0;
+      const successMsg = moved > 0
+        ? `Invoice cancelled. Payment €${moved.toFixed(2)} moved to order deposit. Services unlocked.`
+        : 'Invoice cancelled. Services unlocked.';
+      alert(`✅ ${successMsg}`);
       loadInvoices();
     } catch (error) {
       console.error('Error cancelling invoice:', error);
@@ -274,6 +289,9 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
+      issued: 'Issued',
+      issued_sent: 'Sent',
+      processed: 'Processed',
     };
     return labels[status] || status;
   };
@@ -285,6 +303,9 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       paid: 'text-green-600',
       cancelled: 'text-red-600',
       overdue: 'text-orange-600',
+      issued: 'text-gray-600',
+      issued_sent: 'text-blue-600',
+      processed: 'text-purple-600',
     };
     return colors[status] || 'text-gray-600';
   };

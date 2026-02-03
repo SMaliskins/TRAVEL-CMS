@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Invoice {
   id: string;
@@ -92,31 +93,40 @@ export default function FinancesInvoicesPage() {
     }
   };
 
-  const handleExportPDF = async (invoiceId: string) => {
+  const handleExportPDF = async (invoiceId: string, orderCode: string | null | undefined) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
+      if (!orderCode) {
+        alert('Order code not found for this invoice. Cannot export PDF.');
+        return;
+      }
 
-      const response = await fetch(`/api/orders/[orderCode]/invoices/${invoiceId}/pdf`, {
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
       if (response.ok) {
+        const contentType = response.headers.get('Content-Type') || '';
+        const isPdf = contentType.includes('application/pdf');
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `invoice-${invoiceId}.pdf`;
+        a.download = isPdf ? `invoice-${invoiceId}.pdf` : `invoice-${invoiceId}.html`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'Failed to export PDF');
       }
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      alert('PDF export feature coming soon!');
+      alert('Failed to export PDF. Please try again.');
     }
   };
 
@@ -124,11 +134,7 @@ export default function FinancesInvoicesPage() {
     return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB');
-  };
+  const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
 
   const getStatusBadge = (status: Invoice['status']) => {
     const styles = {
@@ -235,7 +241,7 @@ export default function FinancesInvoicesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleExportPDF(invoice.id)}
+                        onClick={() => handleExportPDF(invoice.id, invoice.order_code)}
                         className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
                         title="Export PDF"
                       >

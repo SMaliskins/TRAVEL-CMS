@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Service {
   id: string;
@@ -180,12 +181,11 @@ export default function InvoiceCreator({
   }>>([]);
   
   // Update editable services and payer info when current services change (for multiple payers)
+  // Invoice service name = Name from service (always s.name)
   useEffect(() => {
     setEditableServices(currentServices.map(s => ({
       ...s,
-      editableName: ((s as { category?: string; hotelName?: string }).category === "Hotel" || (s as { category?: string; hotelName?: string }).category === "Tour" || (s as { category?: string; hotelName?: string }).category === "Package Tour") && (s as { hotelName?: string }).hotelName
-        ? (s as { hotelName?: string }).hotelName!
-        : s.name,
+      editableName: s.name,
       editablePrice: s.clientPrice,
       editableClient: s.client || "",
     })));
@@ -235,7 +235,6 @@ export default function InvoiceCreator({
     }
   }, [currentServices, currentPayerIndex, payerGroups]);
   
-  const [notes, setNotes] = useState("");
   const [taxRate, setTaxRate] = useState(0);
 
   // Payment terms - with % support
@@ -245,11 +244,34 @@ export default function InvoiceCreator({
   const [finalPaymentAmount, setFinalPaymentAmount] = useState<number | null>(null);
   const [finalPaymentDate, setFinalPaymentDate] = useState<string>("");
   const [isFinalPaymentManual, setIsFinalPaymentManual] = useState(false);
+  const depositDateInputRef = useRef<HTMLInputElement>(null);
+  const finalPaymentDateInputRef = useRef<HTMLInputElement>(null);
+  const [showTypePopover, setShowTypePopover] = useState(false);
+  const typePopoverRef = useRef<HTMLDivElement>(null);
+
+  // Close type popover on click outside (not on trigger or popover)
+  useEffect(() => {
+    if (!showTypePopover) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (typePopoverRef.current?.contains(target) || target.closest("[data-type-trigger]")) return;
+      setShowTypePopover(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showTypePopover]);
 
   // Load invoice number on mount
   useEffect(() => {
     generateInvoiceNumber().then(setInvoiceNumber);
   }, [orderCode]);
+
+  // Default deposit date to today on mount (once)
+  useEffect(() => {
+    const d = new Date();
+    const today = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    setDepositDate((prev) => (prev ? prev : today));
+  }, []);
 
   // Load company info from settings
   useEffect(() => {
@@ -338,9 +360,12 @@ export default function InvoiceCreator({
   }, [depositValue, depositType, total]);
   
   const calculatedFinalPayment = useMemo(() => {
-    if (calculatedDeposit === null) return null;
+    if (calculatedDeposit === null) return total > 0 ? Math.round(total * 100) / 100 : null;
     return Math.round((total - calculatedDeposit) * 100) / 100;
   }, [calculatedDeposit, total]);
+
+  // When deposit is %, final payment % = 100 - deposit %
+  const finalPaymentPercent = depositType === 'percent' && depositValue != null ? 100 - depositValue : null;
   
   // Update final payment when deposit changes (only if not manually edited)
   useEffect(() => {
@@ -367,16 +392,59 @@ export default function InvoiceCreator({
     return amount < 0 ? `-${formatted}` : formatted;
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString + "T00:00:00");
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
-  };
+  const formatDate = (dateString: string) => formatDateDDMMYYYY(dateString || null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Payment terms per service: category, sum, payment terms text
+  const paymentTermsByService = useMemo(() => {
+    return currentServices
+      .filter((s) => s.paymentTerms?.trim())
+      .map((s) => ({
+        category: s.category || "Service",
+        name: s.name,
+        sum: s.clientPrice,
+        paymentTerms: s.paymentTerms!.trim(),
+      }));
+  }, [currentServices]);
+
+  // Service with largest sum (for default deposit/full from its payment terms)
+  const serviceWithLargestSum = useMemo(() => {
+    if (currentServices.length === 0) return null;
+    return currentServices.reduce((a, b) => (a.clientPrice >= b.clientPrice ? a : b));
+  }, [currentServices]);
+
+  // Earliest service start date for Final Payment Date presets
+  const earliestServiceDate = useMemo(() => {
+    const dates = editableServices.map((s) => s.dateFrom).filter(Boolean) as string[];
+    if (dates.length === 0) return null;
+    return dates.sort()[0];
+  }, [editableServices]);
+
+  // Full Payment: no deposit, so remainder is 100% of total
+  const isFullPayment = Boolean(total > 0 && (calculatedDeposit == null || calculatedDeposit === 0));
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = setTimeout(() => setToastMessage(null), 3000);
+    return () => clearTimeout(t);
+  }, [toastMessage]);
+
+  // Default deposit from service with largest sum (parse "10% deposit, 90% final") — once when services have terms
+  const defaultDepositFromServicesApplied = React.useRef(false);
+  useEffect(() => {
+    const svc = serviceWithLargestSum;
+    if (!svc?.paymentTerms?.trim() || defaultDepositFromServicesApplied.current) return;
+    const terms = svc.paymentTerms.trim();
+    const percentMatch = terms.match(/(\d+)\s*%\s*deposit/i) || terms.match(/deposit\s*(\d+)\s*%/i);
+    const pct = percentMatch ? parseInt(percentMatch[1], 10) : null;
+    if (pct != null && !isNaN(pct) && pct >= 0 && pct <= 100) {
+      setDepositType("percent");
+      setDepositValue(pct);
+      defaultDepositFromServicesApplied.current = true;
+    }
+  }, [serviceWithLargestSum]);
 
   const createInvoiceForServices = async (services: typeof editableServices, payerInfo: {
     name: string;
@@ -425,7 +493,6 @@ export default function InvoiceCreator({
         final_payment_date: (finalPaymentDate && finalPaymentDate.trim() !== '') ? finalPaymentDate : null,
         status: 'draft',
         is_credit: servicesTotal < 0,
-        notes,
         items: services.map((s) => ({
           service_id: s.id,
           service_name: s.editableName,
@@ -528,12 +595,10 @@ export default function InvoiceCreator({
               }
             }
             
-            // Map services for this group
+            // Map services for this group (service name = Name from service)
             const groupServices = group.services.map(s => ({
               ...s,
-              editableName: ((s as { category?: string; hotelName?: string }).category === "Hotel" || (s as { category?: string; hotelName?: string }).category === "Tour" || (s as { category?: string; hotelName?: string }).category === "Package Tour") && (s as { hotelName?: string }).hotelName
-                ? (s as { hotelName?: string }).hotelName!
-                : s.name,
+              editableName: s.name,
               editablePrice: s.clientPrice,
               editableClient: s.client || "",
             }));
@@ -594,7 +659,6 @@ export default function InvoiceCreator({
             final_payment_date: (finalPaymentDate && finalPaymentDate.trim() !== '') ? finalPaymentDate : null,
             status: 'draft',
             is_credit: isCredit,
-            notes,
             items: editableServices.map((s) => ({
               service_id: s.id,
               service_name: s.editableName,
@@ -613,9 +677,11 @@ export default function InvoiceCreator({
           throw new Error(error.error || 'Failed to create invoice');
         }
 
-        alert('✅ Invoice created successfully!');
+        setToastMessage('Invoice created successfully!');
         onSuccess?.();
-        onClose();
+        setTimeout(() => {
+          onClose();
+        }, 1500);
       }
     } catch (error: any) {
       console.error('Error creating invoice:', error);
@@ -629,8 +695,15 @@ export default function InvoiceCreator({
   const a4AspectRatio = 210 / 297;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-      {/* LEFT PANEL: Only Payment Terms and Notes */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full relative">
+      {toastMessage && (
+        <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none">
+          <div className="bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
+            {toastMessage}
+          </div>
+        </div>
+      )}
+      {/* LEFT PANEL: Payment Terms */}
       <div className="space-y-4 overflow-y-auto pr-2">
         <div className="flex items-center justify-between">
           <div>
@@ -690,128 +763,294 @@ export default function InvoiceCreator({
 
         {/* Payment Terms - with % support */}
         <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">Payment Terms</h3>
-          
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Deposit Type</label>
-            <select
-              value={depositType}
-              onChange={(e) => {
-                setDepositType(e.target.value as 'amount' | 'percent');
-                setDepositValue(null);
-              }}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="amount">Amount (€)</option>
-              <option value="percent">Percentage (%)</option>
-            </select>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Deposit {depositType === 'percent' ? '(%)' : '(€)'}
+          <h3 className="text-base font-semibold text-gray-900">Payment Terms</h3>
+          <p className="text-sm text-gray-600">
+            Payment terms are taken from the selected services and shown as a reference for setting the deposit and final payment.
+          </p>
+          {paymentTermsByService.length > 0 && (
+            <div className="text-sm text-gray-600 bg-gray-50 rounded px-2 py-2 border border-gray-100 space-y-1.5">
+              {paymentTermsByService.map((item, i) => (
+                <div key={i}>
+                  <span className="font-medium text-gray-700">{item.category}: {item.name}</span>
+                  <span className="text-gray-500 ml-1">€{item.sum.toLocaleString("en-US", { minimumFractionDigits: 2 })} — {item.paymentTerms}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-sm text-gray-600">
+            Based on the payment terms above, we suggest the following payment plan:
+          </p>
+
+          {/* Deposit row: narrow amount; type in parentheses (double-click to change), then date */}
+          <div className="grid grid-cols-[minmax(0,0.5fr)_minmax(200px,1fr)] gap-4 items-start">
+            <div className="flex flex-col gap-1 relative">
+              <label className="block text-sm font-medium text-gray-700">
+                Deposit{" "}
+                <span
+                  data-type-trigger
+                  role="button"
+                  tabIndex={0}
+                  title="Double-click to change type"
+                  onDoubleClick={() => setShowTypePopover((s) => !s)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowTypePopover((s) => !s); } }}
+                  className="cursor-pointer select-none rounded px-1 py-0.5 border border-transparent hover:border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                >
+                  ({depositType === "percent" ? "%" : "€"})
+                </span>
               </label>
-              <input
-                type="number"
-                step={depositType === 'percent' ? "0.1" : "0.01"}
-                value={depositValue || ""}
-                onChange={(e) => setDepositValue(e.target.value ? parseFloat(e.target.value) : null)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
+              {showTypePopover && (
+                <div
+                  ref={typePopoverRef}
+                  className="absolute left-0 top-8 z-20 mt-0.5 rounded border border-gray-200 bg-white py-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    onClick={() => { setDepositType("percent"); setDepositValue(null); setShowTypePopover(false); }}
+                    className="block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
+                  >
+                    Percentage (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setDepositType("amount"); setDepositValue(null); setShowTypePopover(false); }}
+                    className="block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
+                  >
+                    Amount (€)
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="number"
+                  step={depositType === 'percent' ? "0.1" : "0.01"}
+                  value={depositValue || ""}
+                  onChange={(e) => setDepositValue(e.target.value ? parseFloat(e.target.value) : null)}
+                  className="w-16 max-w-[72px] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
               {calculatedDeposit !== null && (
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-sm text-gray-500">
                   = {formatCurrency(calculatedDeposit)}
                 </p>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Deposit Date</label>
-              <input
-                type="date"
-                value={depositDate}
-                onChange={(e) => setDepositDate(e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Deposit Date</label>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    ref={depositDateInputRef}
+                    type="date"
+                    value={depositDate}
+                    onChange={(e) => setDepositDate(e.target.value)}
+                    className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                    aria-label="Deposit Date"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => depositDateInputRef.current?.showPicker?.()}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm text-left text-gray-900 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-[120px] shrink-0 flex items-center justify-between"
+                  >
+                    <span>{depositDate ? formatDateDDMMYYYY(depositDate) : "dd.mm.yyyy"}</span>
+                    <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {[0, 1, 2].map((days) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + days);
+                    const yyyy = d.getFullYear();
+                    const mm = String(d.getMonth() + 1).padStart(2, "0");
+                    const dd = String(d.getDate()).padStart(2, "0");
+                    const value = `${yyyy}-${mm}-${dd}`;
+                    const label = days === 0 ? "Today" : days === 1 ? "Tomorrow" : "Day after";
+                    return (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setDepositDate(value)}
+                        className={`px-2 py-1 text-sm rounded border transition-colors ${
+                          depositDate === value
+                            ? "bg-blue-100 border-blue-300 text-blue-800"
+                            : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Final Payment Amount (€)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={isFinalPaymentManual ? (finalPaymentAmount || "") : (calculatedFinalPayment || "")}
-                onChange={(e) => {
-                  const value = e.target.value ? parseFloat(e.target.value) : null;
-                  setFinalPaymentAmount(value);
-                  setIsFinalPaymentManual(true);
-                  
-                  // If user changes final payment, recalculate deposit
-                  if (value !== null && total > 0) {
-                    const newDeposit = Math.round((total - value) * 100) / 100;
-                    if (newDeposit >= 0) {
-                      setDepositValue(newDeposit);
-                      setDepositType('amount');
-                    }
-                  }
-                }}
-                onBlur={() => {
-                  // If user clears the field, reset to auto-calculated
-                  if (finalPaymentAmount === null && calculatedFinalPayment !== null) {
-                    setIsFinalPaymentManual(false);
-                    setFinalPaymentAmount(calculatedFinalPayment);
-                  }
-                }}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              {calculatedFinalPayment !== null && !isFinalPaymentManual && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Auto-calculated: {formatCurrency(calculatedFinalPayment)}
-                </p>
+          {/* Final Payment row: % when deposit is %, else € (same type as deposit) */}
+          <div className="grid grid-cols-[minmax(0,0.5fr)_minmax(200px,1fr)] gap-4 items-start">
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isFullPayment ? (
+                  "Full Payment (100%)"
+                ) : (
+                  <>
+                    {depositType === "percent" ? "Final Payment " : "Final Payment Amount "}
+                    <span
+                      data-type-trigger
+                      role="button"
+                      tabIndex={0}
+                      title="Double-click to change type"
+                      onDoubleClick={() => setShowTypePopover((s) => !s)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowTypePopover((s) => !s); } }}
+                      className="cursor-pointer select-none rounded px-1 py-0.5 border border-transparent hover:border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                    >
+                      ({depositType === "percent" ? "%" : "€"})
+                    </span>
+                  </>
+                )}
+              </label>
+              {depositType === 'percent' ? (
+                <>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={100}
+                    value={finalPaymentPercent != null ? finalPaymentPercent : ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "" || raw === undefined) {
+                        setDepositValue(null);
+                        return;
+                      }
+                      const v = parseFloat(raw);
+                      if (!isNaN(v) && v >= 0 && v <= 100) setDepositValue(100 - v);
+                    }}
+                    className="w-16 max-w-[72px] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  {calculatedFinalPayment != null && (
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      = {formatCurrency(calculatedFinalPayment)}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={isFinalPaymentManual ? (finalPaymentAmount ?? "") : (calculatedFinalPayment ?? "")}
+                    onChange={(e) => {
+                      const value = e.target.value ? parseFloat(e.target.value) : null;
+                      setFinalPaymentAmount(value);
+                      setIsFinalPaymentManual(true);
+                      if (value !== null && total > 0) {
+                        const newDeposit = Math.round((total - value) * 100) / 100;
+                        if (newDeposit >= 0) {
+                          setDepositValue(newDeposit);
+                          setDepositType('amount');
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      if (finalPaymentAmount === null && calculatedFinalPayment !== null) {
+                        setIsFinalPaymentManual(false);
+                        setFinalPaymentAmount(calculatedFinalPayment);
+                      }
+                    }}
+                    className="w-24 max-w-[100px] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  {calculatedFinalPayment !== null && !isFinalPaymentManual && (
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Auto-calculated: {formatCurrency(calculatedFinalPayment)}
+                    </p>
+                  )}
+                </>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Final Payment Date</label>
-              <input
-                type="date"
-                value={finalPaymentDate}
-                onChange={(e) => setFinalPaymentDate(e.target.value)}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+            <div className="min-w-0">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isFullPayment ? "Full Payment Date" : "Final Payment Date"}
+              </label>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    ref={finalPaymentDateInputRef}
+                    type="date"
+                    value={finalPaymentDate}
+                    onChange={(e) => setFinalPaymentDate(e.target.value)}
+                    className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                    aria-label={isFullPayment ? "Full Payment Date" : "Final Payment Date"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { const el = finalPaymentDateInputRef.current; (el as HTMLInputElement & { showPicker?: () => void })?.showPicker?.() ?? el?.click(); }}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm text-left text-gray-900 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-[120px] shrink-0 flex items-center justify-between"
+                  >
+                    <span>{finalPaymentDate ? formatDateDDMMYYYY(finalPaymentDate) : "dd.mm.yyyy"}</span>
+                    <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  </button>
+                </div>
+                {earliestServiceDate && (() => {
+                  const start = new Date(earliestServiceDate + "T00:00:00");
+                  const addDays = (d: Date, days: number) => {
+                    const out = new Date(d);
+                    out.setDate(out.getDate() - days);
+                    return out;
+                  };
+                  const toYMD = (d: Date) =>
+                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                  const oneMonth = addDays(start, 32);
+                  const twoWeeks = addDays(start, 16);
+                  return (
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setFinalPaymentDate(toYMD(oneMonth))}
+                        className="px-2 py-1 text-sm rounded border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
+                      >
+                        1 month before
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFinalPaymentDate(toYMD(twoWeeks))}
+                        className="px-2 py-1 text-sm rounded border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
+                      >
+                        2 weeks before
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
           
-          {calculatedDeposit !== null && calculatedFinalPayment !== null && (
+          {total > 0 && (calculatedFinalPayment !== null || isFullPayment) && (
             <div className="pt-2 border-t">
-              <div className="text-xs text-gray-600">
+              <div className="text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>Total:</span>
                   <span className="font-semibold">{formatCurrency(total)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Deposit:</span>
-                  <span className="font-semibold">{formatCurrency(calculatedDeposit)}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Remaining:</span>
-                  <span>{formatCurrency(calculatedFinalPayment)}</span>
-                </div>
+                {calculatedDeposit != null && calculatedDeposit > 0 && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Deposit:</span>
+                      <span className="font-semibold">{formatCurrency(calculatedDeposit)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span>Remaining:</span>
+                      <span>{formatCurrency(calculatedFinalPayment ?? 0)}</span>
+                    </div>
+                  </>
+                )}
+                {isFullPayment && (
+                  <div className="flex justify-between font-semibold">
+                    <span>Full Payment:</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
-        </div>
-
-        {/* Notes */}
-        <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
-          <h3 className="text-sm font-semibold text-gray-900">Notes</h3>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={4}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          />
         </div>
 
         {/* Actions */}
@@ -1072,7 +1311,7 @@ export default function InvoiceCreator({
             </div>
 
             {/* Payment Terms - Below Totals, hide Due Date if Payment Terms exist */}
-            {(calculatedDeposit || isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment) ? (
+            {(calculatedDeposit || isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment) || isFullPayment ? (
               <div className="mb-6 bg-amber-50 rounded-lg p-4 border border-amber-200">
                 <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Payment Terms</h4>
                 <div className="space-y-1.5 text-xs">
@@ -1086,7 +1325,7 @@ export default function InvoiceCreator({
                 )}
                 {(isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment) && finalPaymentDate && (
                   <div className="flex justify-between text-gray-700">
-                    <span>Final Payment:</span>
+                    <span>{isFullPayment ? "Full Payment:" : "Final Payment:"}</span>
                     <span className="font-semibold">
                       {formatCurrency(isFinalPaymentManual ? (finalPaymentAmount || 0) : (calculatedFinalPayment || 0))} by {formatDate(finalPaymentDate)}
                     </span>
@@ -1126,20 +1365,6 @@ export default function InvoiceCreator({
                   )}
                 </div>
               )
-            )}
-
-            {/* Notes - Editable (only show if has content) */}
-            {notes.trim() && (
-              <div className="mb-6 border-t border-gray-200 pt-4">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Notes</h4>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
-                  className="w-full text-xs text-gray-700 bg-transparent border border-dashed border-gray-300 rounded focus:border-blue-500 focus:outline-none p-2 resize-none"
-                  placeholder="Additional notes or payment terms..."
-                />
-              </div>
             )}
 
             {/* Footer */}
