@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-01-30] Directory: архив, поиск, Merge, Actions меню ✅
+
+**Task:** Directory UX + semantic search + merge fix | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- Карточка контакта: бейдж «Archived» и кнопка «Restore from archive» при `isActive === false`; после архивирования остаёмся на карточке (без редиректа)
+- Список директории: в рабочем списке не показывать архивированных/merged — в fallback и semantic-extra запросах применён тот же фильтр по status (active / inactive, archived)
+- Поиск: раскладка QWERTY↔JCUKEN (кириллица/латиница по клавишам), варианты опечаток по соседним клавишам (getKeyboardTypoVariants), диакритика для ILIKE (prīcīte); семантика: 2–3 варианта запроса (getSemanticQueryVariants), батч generateEmbeddings, объединение party_id, порог 0.25 для коротких запросов
+- Directory: кнопки Merge, Archive, Import contacts объединены в одну «Actions» с выпадающим меню
+- Merge API: при архивации источника ставим `status: "inactive"` (enum party_status не содержит `archived`) — исправлена ошибка «Failed to archive source contact»
+
+**Файлы:** `app/directory/page.tsx`, `app/directory/[id]/page.tsx`, `app/api/directory/route.ts`, `app/api/directory/merge/route.ts`, `lib/directory/searchNormalize.ts`, `lib/embeddings.ts`, `app/api/search/semantic/party/route.ts`, `app/api/search/semantic/order-service/route.ts`
+
+---
+
 ## [2026-01-30] Add Service — Package Tour: одна форма с первого кадра, парсинг, красная обводка ✅
 
 **Task:** Add Service Package Tour UX | **Status:** SUCCESS — принято

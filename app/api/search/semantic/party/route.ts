@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateEmbedding } from "@/lib/embeddings";
+import { normalizeQueryForSemantic } from "@/lib/directory/searchNormalize";
 import { createClient } from "@supabase/supabase-js";
 
 async function getCurrentUser(request: NextRequest) {
@@ -41,7 +42,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "query is required" }, { status: 400 });
     }
 
-    const embedding = await generateEmbedding(query);
+    const semanticQuery = normalizeQueryForSemantic(query);
+    const embedding = await generateEmbedding(semanticQuery || query);
 
     const { data, error } = await supabaseAdmin.rpc("search_party_semantic", {
       query_embedding: embedding,

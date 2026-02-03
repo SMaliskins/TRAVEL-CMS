@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
-import { generateEmbedding } from "@/lib/embeddings";
-import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
+import { generateEmbeddings } from "@/lib/embeddings";
+import { getSearchPatterns, getSemanticQueryVariants, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -137,8 +137,14 @@ export async function GET(request: NextRequest) {
       query = query.eq("party_type", type);
     }
 
-    if (status && (status === "active" || status === "inactive" || status === "blocked")) {
-      query = query.eq("status", status);
+    // By default return only active contacts (archived visible only when status=archived explicitly)
+    const effectiveStatus = status && status.trim() ? status : "active";
+    if (effectiveStatus === "active") {
+      query = query.eq("status", "active");
+    } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+      query = query.eq("status", effectiveStatus);
+    } else if (effectiveStatus === "archived") {
+      query = query.in("status", ["inactive", "archived"]);
     }
 
     // NOTE: Role filter is applied AFTER fetching related data
@@ -148,7 +154,7 @@ export async function GET(request: NextRequest) {
     // Apply search filter: diacritics, layout transliteration, name variants (DIR3)
     if (search) {
       const patterns = getSearchPatterns(search);
-      const safePatterns = patterns.slice(0, 5).map((p) => p.replace(/[%,]/g, "")); // Limit and sanitize
+      const safePatterns = patterns.slice(0, 20).map((p) => p.replace(/[%,]/g, "")); // Include keyboard-typo variants
       if (safePatterns.length === 1) {
         query = query.ilike("display_name", `%${safePatterns[0]}%`);
       } else if (safePatterns.length > 1) {
@@ -173,18 +179,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Semantic search fallback when search is provided and OPENAI is configured
+    // Semantic search: 2–3 query variants (normalized + typo corrections), merge results
     let semanticPartyIds: string[] = [];
     if (search && search.trim().length >= 2 && process.env.OPENAI_API_KEY && userCompanyId) {
       try {
-        const embedding = await generateEmbedding(search.trim());
-        const { data: semanticRows } = await supabaseAdmin.rpc("search_party_semantic", {
-          query_embedding: embedding,
-          p_company_id: userCompanyId,
-          match_limit: limit,
-          match_threshold: 0.3,
-        });
-        semanticPartyIds = (semanticRows || []).map((r: { party_id: string }) => r.party_id);
+        const variants = getSemanticQueryVariants(search, 3).filter(Boolean);
+        if (variants.length === 0) variants.push(search.trim());
+        const embeddings = await generateEmbeddings(variants);
+        const threshold = (search.trim().length < 25 ? 0.25 : 0.3);
+        const allIds = new Set<string>();
+        for (const embedding of embeddings) {
+          const { data: semanticRows } = await supabaseAdmin.rpc("search_party_semantic", {
+            query_embedding: embedding,
+            p_company_id: userCompanyId,
+            match_limit: limit,
+            match_threshold: threshold,
+          });
+          (semanticRows || []).forEach((r: { party_id: string }) => allIds.add(r.party_id));
+        }
+        semanticPartyIds = Array.from(allIds);
       } catch (e) {
         console.warn("Semantic search failed:", e);
       }
@@ -192,7 +205,7 @@ export async function GET(request: NextRequest) {
 
     // If search provided and no results from display_name, try person/company + semantic fallback
     if (search && (!parties || parties.length === 0)) {
-      const patterns = getSearchPatterns(search).slice(0, 3).map((p) => p.replace(/[%,]/g, ""));
+      const patterns = getSearchPatterns(search).slice(0, 10).map((p) => p.replace(/[%,]/g, ""));
       const searchTerms = patterns.length > 0 ? patterns : [search.replace(/[%,]/g, "")];
       const personOr = searchTerms.flatMap((p) => [`first_name.ilike.%${p}%`, `last_name.ilike.%${p}%`]).join(",");
       const companyOr = searchTerms.map((p) => `company_name.ilike.%${p}%`).join(",");
@@ -220,6 +233,14 @@ export async function GET(request: NextRequest) {
         if (userCompanyId) {
           fallbackQuery = fallbackQuery.eq("company_id", userCompanyId);
         }
+        // Same status filter as main list: working directory = only active; archive view = inactive/archived
+        if (effectiveStatus === "active") {
+          fallbackQuery = fallbackQuery.eq("status", "active");
+        } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+          fallbackQuery = fallbackQuery.eq("status", effectiveStatus);
+        } else if (effectiveStatus === "archived") {
+          fallbackQuery = fallbackQuery.in("status", ["inactive", "archived"]);
+        }
         const { data: fallbackParties, count: fallbackCount } = await fallbackQuery;
         parties = fallbackParties || [];
         count = fallbackCount || 0;
@@ -234,6 +255,14 @@ export async function GET(request: NextRequest) {
           .in("id", extraIds.slice(0, limit - (parties?.length || 0)));
         if (userCompanyId) {
           extraQuery = extraQuery.eq("company_id", userCompanyId);
+        }
+        // Same status filter: do not add archived/merged to working directory
+        if (effectiveStatus === "active") {
+          extraQuery = extraQuery.eq("status", "active");
+        } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+          extraQuery = extraQuery.eq("status", effectiveStatus);
+        } else if (effectiveStatus === "archived") {
+          extraQuery = extraQuery.in("status", ["inactive", "archived"]);
         }
         const { data: extraParties } = await extraQuery;
         if (extraParties?.length) {
