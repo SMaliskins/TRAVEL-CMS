@@ -6,6 +6,7 @@ interface SplitPart {
   serviceAmount?: number;
   payerName: string;
   payerPartyId?: string;
+  travellerIds?: string[];
 }
 
 export async function POST(
@@ -170,26 +171,34 @@ export async function POST(
       );
     }
 
-    // Copy order_service_travellers to each new service
-    if (originalTravellers && originalTravellers.length > 0 && createdServices) {
+    // Assign travellers to each new service: use part.travellerIds when provided, else copy all original
+    const originalTravellerIds = (originalTravellers || [])
+      .map((t) => t.traveller_id)
+      .filter(Boolean) as string[];
+    if (createdServices && (originalTravellerIds.length > 0 || parts.some((p) => p.travellerIds?.length))) {
       const travellerInserts: Array<{ company_id: string; service_id: string; traveller_id: string }> = [];
-      for (const svc of createdServices) {
-        for (const t of originalTravellers) {
-          if (t.traveller_id) {
+      createdServices.forEach((svc, index) => {
+        const part = parts[index];
+        const ids =
+          part.travellerIds && part.travellerIds.length > 0
+            ? part.travellerIds
+            : originalTravellerIds;
+        for (const tid of ids) {
+          if (tid) {
             travellerInserts.push({
               company_id: originalService.company_id,
               service_id: svc.id,
-              traveller_id: t.traveller_id,
+              traveller_id: tid,
             });
           }
         }
-      }
+      });
       if (travellerInserts.length > 0) {
         const { error: travellerError } = await supabaseAdmin
           .from("order_service_travellers")
           .insert(travellerInserts);
         if (travellerError) {
-          console.error("Error copying travellers to split services:", travellerError);
+          console.error("Error assigning travellers to split services:", travellerError);
         }
       }
     }

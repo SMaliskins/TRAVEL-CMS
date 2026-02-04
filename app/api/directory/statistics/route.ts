@@ -40,11 +40,12 @@ export async function GET(request: NextRequest) {
 
     console.log("[Statistics] Fetching stats for company_id:", companyId);
 
-    // First, get all party IDs for this company
+    // First, get active party IDs only (exclude archived/inactive)
     const { data: parties, error: partiesError } = await supabaseAdmin
       .from("party")
       .select("id")
-      .eq("company_id", companyId);
+      .eq("company_id", companyId)
+      .eq("status", "active");
 
     if (partiesError) {
       console.error("[Statistics] Error fetching parties:", partiesError);
@@ -110,13 +111,13 @@ export async function GET(request: NextRequest) {
     const clientPartyIds = (clientParties || []).map((cp: { party_id: string }) => cp.party_id);
     const supplierPartyIds = (supplierParties || []).map((sp: { party_id: string }) => sp.party_id);
 
-    // Fetch nationality and country aggregates in parallel (second batch)
+    // Fetch nationality from party_person (clients who are persons) and country from party (suppliers)
     const [clientPartyRows, supplierPartyRows] = await Promise.all([
       clientPartyIds.length > 0
         ? supabaseAdmin
-            .from("party")
+            .from("party_person")
             .select("nationality")
-            .in("id", clientPartyIds)
+            .in("party_id", clientPartyIds)
             .not("nationality", "is", null)
             .then(({ data }) => data || [])
         : Promise.resolve([]),

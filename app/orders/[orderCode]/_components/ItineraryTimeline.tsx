@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Itinerary Timeline — утверждённый layout для перелётов (Flight и Tour Package):
+ * Itinerary Timeline — approved layout for flights (Flight and Tour Package):
  * Flight number, airline, class, baggage, route (dep→arr + times + terminals),
  * duration, PNR, traveller, +BP button, status (Flight departed / Check-in countdown).
- * Tour Package с flight segments отображается тем же layout.
- * См. .ai/specs/itinerary-flight-layout-approved.md
+ * Tour Package with flight segments uses the same layout.
+ * See .ai/specs/itinerary-flight-layout-approved.md
  */
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getCheckinUrl, isCheckinAvailable } from "@/lib/flights/airlineCheckin";
 import CheckinCountdown from "@/components/CheckinCountdown";
 import BoardingPassUpload from "@/components/BoardingPassUpload";
@@ -199,10 +200,9 @@ const categoryIcons: Record<string, string> = {
   Other: "📌",
 };
 
-// Format date as DD.MM
+// Format date as dd.mm.yyyy (project standard)
 function formatDateShort(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
+  return formatDateDDMMYYYY(dateStr);
 }
 
 // Timeline event structure
@@ -228,7 +228,7 @@ interface TimelineEvent {
   duration?: string;
   cabinClass?: string;
   baggage?: string;
-  arrivalNextDay?: boolean; // Прилёт на след. день
+  arrivalNextDay?: boolean; // Arrival on next day
   // Client info for flights
   bookingRef?: string;
   ticketNumbers?: TicketNumber[];
@@ -285,7 +285,7 @@ function getTravellerSurnames(
 // Convert services to timeline events
 function servicesToEvents(services: TimelineService[], travellers: Traveller[]): TimelineEvent[] {
   const events: TimelineEvent[] = [];
-  const seenSegmentKeys = new Set<string>(); // Дедупликация: parent + change могут иметь одни сегменты
+  const seenSegmentKeys = new Set<string>(); // Deduplication: parent and change may share same segments
   const seenSplitGroupHotelIds = new Set<string>();
   const seenSplitGroupTransferIds = new Set<string>();
   const seenSplitGroupOtherIds = new Set<string>();
@@ -329,16 +329,16 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
         });
       }
     } else if (service.category === "Flight" || (service as { serviceType?: string }).serviceType === "change" || (((service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour") && service.flightSegments && service.flightSegments.length > 0)) {
-      // Flight или Tour Package с flight segments — один и тот же утверждённый layout
+      // Flight or Tour Package with flight segments — same approved layout
       const firstFlightNumber = service.flightSegments?.[0]?.flightNumber || "";
       const checkinUrl = getCheckinUrl(firstFlightNumber);
-      const flightIcon = categoryIcons.Flight; // ✈️ для всех перелётов (Flight и Tour Package)
+      const flightIcon = categoryIcons.Flight; // ✈️ for all flights (Flight and Tour Package)
       
       // If we have flight segments, create an event for each segment
       if (service.flightSegments && service.flightSegments.length > 0) {
         for (const rawSeg of service.flightSegments) {
           const segment = normalizeSegment(rawSeg as Record<string, unknown>);
-          // Дедупликация: parent (res_status changed) и Change service могут иметь одни сегменты
+          // Deduplication: parent (res_status changed) and Change service may share same segments
           const segmentKey = `${segment.departureDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
           if (seenSegmentKeys.has(segmentKey)) continue;
           seenSegmentKeys.add(segmentKey);
@@ -406,7 +406,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
           boardingPasses: service.boardingPasses,
         });
       }
-      // Tour Package: отель check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate for splitted)
+      // Tour Package: hotel check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate for splitted)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
       if (isTour && service.dateFrom && service.dateTo) {
         if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) {
@@ -452,7 +452,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
         travellerSurnames: travellerSurnames || undefined,
       });
     } else {
-      // Tour Package без flight segments: только отель check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate)
+      // Tour Package without flight segments: hotel check-in 13:00-14:00, check-out 11:00-12:00 only (deduplicate)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
       if (isTour && service.dateFrom && service.dateTo) {
         if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) {
@@ -535,13 +535,22 @@ export default function ItineraryTimeline({
   selectedBoardingPasses = [],
   onToggleBoardingPassSelection,
 }: ItineraryTimelineProps) {
-  const events = servicesToEvents(services, travellers);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
+    return cats.sort((a, b) => a.localeCompare(b));
+  }, [services]);
+
+  const servicesFilteredByCategory = selectedCategory
+    ? services.filter((s) => s.category === selectedCategory)
+    : services;
+  const events = servicesToEvents(servicesFilteredByCategory, travellers);
   const groupedByDate = groupByDate(events);
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
     new Date(a).getTime() - new Date(b).getTime()
   );
   
-  // Filter travellers based on selection
   const displayTravellers = selectedTravellerId 
     ? travellers.filter(t => t.id === selectedTravellerId)
     : travellers;
@@ -575,8 +584,8 @@ export default function ItineraryTimeline({
             <span className="text-lg">📅</span>
             <h2 className="text-base font-semibold text-gray-900">Itinerary</h2>
           </div>
-          {travellers.length > 0 && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {travellers.length > 0 && (
               <select
                 value={selectedTravellerId || "all"}
                 onChange={(e) => onSelectTraveller?.(e.target.value === "all" ? null : e.target.value)}
@@ -590,8 +599,24 @@ export default function ItineraryTimeline({
                   </option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+            {categories.length > 0 && (
+              <select
+                value={selectedCategory ?? "all"}
+                onChange={(e) => setSelectedCategory(e.target.value === "all" ? null : e.target.value)}
+                className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                title="Filter by category"
+                aria-label="Filter itinerary by category"
+              >
+                <option value="all">All categories ({categories.length})</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {categoryIcons[cat] ? `${categoryIcons[cat]} ${cat}` : cat}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       </div>
 
@@ -681,7 +706,7 @@ export default function ItineraryTimeline({
                               )}
                               <span className="font-bold ml-1">{event.arrivalTime}</span>
                               {event.arrivalNextDay && (
-                                <span className="text-amber-600 text-[10px] font-medium ml-1" title="Прилёт на следующий день">+1</span>
+                                <span className="text-amber-600 text-[10px] font-medium ml-1" title="Arrival next day">+1</span>
                               )}
                               {event.arrivalTerminal && (
                                 <span className="text-gray-400 text-[10px]">{event.arrivalTerminal.toLowerCase().startsWith("terminal") ? event.arrivalTerminal : `T${event.arrivalTerminal}`}</span>
@@ -829,7 +854,7 @@ export default function ItineraryTimeline({
         })}
       </div>
 
-      {/* Ремарка: время check-in/check-out может различаться — только при наличии отеля в Itinerary */}
+      {/* Note: check-in/check-out times may vary — shown only when hotel is present in Itinerary */}
       {events.some(e => e.type === 'hotel_checkin' || e.type === 'hotel_checkout') && (
         <div className="border-t border-gray-200 px-4 py-2 bg-gray-50">
           <p className="text-xs text-gray-500 italic">

@@ -44,11 +44,11 @@ export default function ChecklistPanel({ orderCode }: ChecklistPanelProps) {
     fetchServices();
   }, [orderCode]);
 
-  // Динамически генерируем список проблем из реальных данных
+  // Build issue list from real data
   const issues = useMemo(() => {
     const items: ChecklistItem[] = [];
 
-    // Проверяем отсутствие Ticket Nr для флайтов
+    // Check for missing Ticket Nr on flights
     const missingTickets = services.filter(
       (s) => s.category === 'Flight' && !s.ticket_nr
     );
@@ -62,7 +62,7 @@ export default function ChecklistPanel({ orderCode }: ChecklistPanelProps) {
       });
     }
 
-    // TODO: Добавить другие проверки (Payment pending, etc.)
+    // TODO: Add more checks (Payment pending, etc.)
 
     return items;
   }, [services]);
@@ -71,13 +71,13 @@ export default function ChecklistPanel({ orderCode }: ChecklistPanelProps) {
     e.preventDefault();
 
     if (item.serviceId && item.fieldName) {
-      // Находим строку сервиса в таблице
+      // Find service row in table
       const serviceRow = document.querySelector(
         `[data-service-id="${item.serviceId}"]`
       );
 
       if (serviceRow) {
-        // Открываем Edit Modal через double-click
+        // Open Edit Modal via double-click
         const clickEvent = new MouseEvent('dblclick', {
           bubbles: true,
           cancelable: true,
@@ -85,7 +85,7 @@ export default function ChecklistPanel({ orderCode }: ChecklistPanelProps) {
         });
         serviceRow.dispatchEvent(clickEvent);
 
-        // После открытия модала, фокусируем нужное поле
+        // After modal opens, focus the target field
         setTimeout(() => {
           const fieldInput = document.querySelector<HTMLInputElement>(
             `input[name="${item.fieldName}"], input[placeholder*="Ticket"]`
@@ -94,12 +94,12 @@ export default function ChecklistPanel({ orderCode }: ChecklistPanelProps) {
             fieldInput.focus();
             fieldInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
-        }, 300); // Даем время на открытие модала
+        }, 300); // Allow time for modal to open
       }
     }
   };
 
-  // Если нет проблем или загрузка — панель не отображается
+  // Hide panel when no issues or still loading
   if (loading || issues.length === 0) return null;
 
   return (

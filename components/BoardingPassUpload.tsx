@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import ContentModal from "@/components/ContentModal";
 
 interface BoardingPass {
   id: string;
@@ -40,6 +41,7 @@ export default function BoardingPassUpload({
   const [showPreview, setShowPreview] = useState(false);
   const [previewPass, setPreviewPass] = useState<BoardingPass | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -138,7 +140,7 @@ export default function BoardingPassUpload({
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } catch {
-        window.open(pass.fileUrl, "_blank");
+        setContentModal({ url: pass.fileUrl, title: pass.fileName || "Boarding pass" });
       }
     }
   }, []);
@@ -209,7 +211,7 @@ export default function BoardingPassUpload({
       
       if (method === "whatsapp") {
         alert(`Files downloaded: ${fileNames}\n\nOpen WhatsApp and attach the downloaded files.`);
-        window.open("https://web.whatsapp.com/", "_blank");
+        setContentModal({ url: "https://web.whatsapp.com/", title: "WhatsApp" });
       } else {
         // Email - open mailto with just subject, user will attach files
         window.location.href = `mailto:?subject=${encodeURIComponent(`Boarding Pass - ${flightNumber}`)}`;
@@ -382,6 +384,14 @@ export default function BoardingPassUpload({
             </div>
           </div>
         )}
+      {contentModal && (
+        <ContentModal
+          isOpen
+          onClose={() => setContentModal(null)}
+          title={contentModal.title}
+          url={contentModal.url}
+        />
+      )}
       </>
     );
   }
@@ -389,6 +399,14 @@ export default function BoardingPassUpload({
   // No passes yet - upload button
   return (
     <>
+      {contentModal && (
+        <ContentModal
+          isOpen
+          onClose={() => setContentModal(null)}
+          title={contentModal.title}
+          url={contentModal.url}
+        />
+      )}
       {fileInput}
       <div
         onClick={() => fileInputRef.current?.click()}

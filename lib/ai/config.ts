@@ -1,8 +1,8 @@
 /**
  * AI Module Configuration
- * 
- * Централизованная конфигурация AI для Travel CMS
- * Поддерживает OpenAI, Anthropic, и локальные модели
+ *
+ * Centralized AI configuration for Travel CMS.
+ * Supports OpenAI, Anthropic, and local models.
  */
 
 export type AIProvider = "openai" | "anthropic" | "local";
@@ -15,9 +15,9 @@ export interface AIConfig {
   temperature: number;
 }
 
-// Конфигурации для разных задач
+// Configs for different task types
 export const AI_CONFIGS = {
-  // Парсинг изображений (требуется vision)
+  // Image parsing (requires vision)
   vision: {
     provider: "openai" as AIProvider,
     model: "gpt-4o",
@@ -25,7 +25,7 @@ export const AI_CONFIGS = {
     temperature: 0.1,
   },
   
-  // Быстрые задачи (извлечение данных, классификация)
+  // Fast tasks (data extraction, classification)
   fast: {
     provider: "openai" as AIProvider,
     model: "gpt-4o-mini",
@@ -33,7 +33,7 @@ export const AI_CONFIGS = {
     temperature: 0.2,
   },
   
-  // Сложные задачи (генерация текста, анализ)
+  // Complex tasks (text generation, analysis)
   complex: {
     provider: "openai" as AIProvider,
     model: "gpt-4o",
@@ -41,7 +41,7 @@ export const AI_CONFIGS = {
     temperature: 0.7,
   },
   
-  // Чат-ассистент
+  // Chat assistant
   chat: {
     provider: "openai" as AIProvider,
     model: "gpt-4o",
@@ -50,7 +50,7 @@ export const AI_CONFIGS = {
   },
 };
 
-// Получить API ключ для провайдера
+// Get API key for provider
 export function getAPIKey(provider: AIProvider): string | undefined {
   switch (provider) {
     case "openai":
@@ -62,18 +62,18 @@ export function getAPIKey(provider: AIProvider): string | undefined {
   }
 }
 
-// Проверить доступность AI
+// Check AI availability
 export function isAIAvailable(configKey: keyof typeof AI_CONFIGS): boolean {
   const config = AI_CONFIGS[configKey];
   return !!getAPIKey(config.provider);
 }
 
-// Список доступных AI функций
+// List of available AI features
 export const AI_FEATURES = {
-  // Уже реализовано
+  // Implemented
   FLIGHT_ITINERARY_PARSING: "flight_itinerary_parsing",
   
-  // Планируется
+  // Planned
   DOCUMENT_PARSING: "document_parsing",
   EMAIL_PARSING: "email_parsing",
   CHAT_ASSISTANT: "chat_assistant",

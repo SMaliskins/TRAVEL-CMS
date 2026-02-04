@@ -1,10 +1,10 @@
 /**
  * AI Task: Suggest Services
- * 
- * Автоматические предложения сервисов на основе:
- * - Маршрута
- * - Существующих сервисов
- * - Исторических данных
+ *
+ * Automatic service suggestions based on:
+ * - Route
+ * - Existing services
+ * - Historical data
  */
 
 import { aiJSON } from "../client";
@@ -70,7 +70,7 @@ Prioritize:
 - low: Nice to have`;
 
 /**
- * Получить предложения сервисов
+ * Get service suggestions
  */
 export async function suggestServices(
   context: OrderContext
@@ -99,7 +99,7 @@ Suggest additional services for this trip.`;
 }
 
 /**
- * Предложить время трансфера на основе рейса
+ * Suggest transfer time based on flight
  */
 export async function suggestTransferTime(
   flightInfo: {
@@ -110,7 +110,7 @@ export async function suggestTransferTime(
   destination: string
 ): Promise<{ suggestedTime: string; note: string }> {
   if (flightInfo.type === "arrival") {
-    // +15-30 минут после посадки
+    // +15-30 minutes after landing
     const [hours, minutes] = flightInfo.time.split(":").map(Number);
     const pickupMinutes = minutes + 30;
     const pickupHours = hours + Math.floor(pickupMinutes / 60);
@@ -121,7 +121,7 @@ export async function suggestTransferTime(
       note: `Pickup at ${flightInfo.airport} approximately 30 minutes after landing`,
     };
   } else {
-    // -2ч 10мин до вылета
+    // -2h 10min before departure
     const [hours, minutes] = flightInfo.time.split(":").map(Number);
     let pickupHours = hours - 2;
     let pickupMinutes = minutes - 10;

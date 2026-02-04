@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { DirectoryRecord } from "@/lib/types/directory";
 import DirectoryForm, { DirectoryFormHandle } from "@/components/DirectoryForm";
+import AvatarUpload from "@/components/AvatarUpload";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import ConfirmModal from "@/components/ConfirmModal";
 import MergeContactModal from "@/components/MergeContactModal";
@@ -23,6 +24,8 @@ export default function DirectoryDetailPage() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
   const formRef = useRef<DirectoryFormHandle | null>(null);
 
@@ -170,6 +173,51 @@ export default function DirectoryDetailPage() {
     formRef.current?.submit(true);
   };
 
+  const handleConfirmArchive = async () => {
+    if (!record?.id) return;
+    setIsDeleting(true);
+    setUiError(null);
+    try {
+      const response = await fetchWithAuth(`/api/directory/${record.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to archive contact");
+      }
+      setShowArchiveConfirm(false);
+      setRecord((prev) => (prev ? { ...prev, isActive: false } : null));
+    } catch (err) {
+      setUiError(err instanceof Error ? err.message : "Failed to archive contact");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!record?.id) return;
+    setIsDeleting(true);
+    setUiError(null);
+    try {
+      const response = await fetchWithAuth(`/api/directory/${record.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to restore contact");
+      }
+      setRecord((prev) => (prev ? { ...prev, isActive: true } : null));
+    } catch (err) {
+      setUiError(err instanceof Error ? err.message : "Failed to restore contact");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -191,6 +239,8 @@ export default function DirectoryDetailPage() {
       if (e.key === "Escape") {
         if (showCancelConfirm) {
           setShowCancelConfirm(false);
+        } else if (showArchiveConfirm) {
+          setShowArchiveConfirm(false);
         } else if (isDirty) {
           handleCancel();
         }
@@ -199,7 +249,7 @@ export default function DirectoryDetailPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFormValid, isSaving, isDirty, showCancelConfirm]);
+  }, [isFormValid, isSaving, isDirty, showCancelConfirm, showArchiveConfirm]);
 
   const formatSavedTime = (date: Date) => {
     return date.toLocaleTimeString("en-US", {
@@ -222,6 +272,19 @@ export default function DirectoryDetailPage() {
     ? `${record.firstName || ""} ${record.lastName || ""}`.trim() || "N/A"
     : record.companyName || "N/A";
 
+  const ageFromDob = (dob: string | undefined): number | null => {
+    if (!dob) return null;
+    const birth = new Date(dob + "T00:00:00");
+    if (isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 0 ? age : null;
+  };
+
+  const personAge = record.type === "person" ? ageFromDob(record.dob) : null;
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto w-full max-w-[95vw] space-y-6">
@@ -229,26 +292,54 @@ export default function DirectoryDetailPage() {
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {record.type === "person" && record.avatarUrl ? (
-                <img
-                  src={record.avatarUrl}
-                  alt=""
-                  className="h-16 w-16 rounded-full object-cover border-2 border-gray-200"
+              {record.type === "person" ? (
+                <AvatarUpload
+                  avatarUrl={record.avatarUrl}
+                  placeholder={record.firstName?.[0] || record.lastName?.[0] || "?"}
+                  onAvatarChange={(url) => setRecord((prev) => (prev ? { ...prev, avatarUrl: url } : null))}
+                  size="lg"
                 />
               ) : (
-                <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl text-gray-500 font-medium">
-                  {record.type === "person" ? (record.firstName?.[0] || record.lastName?.[0] || "?") : (record.companyName?.[0] || "?")}
+                <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl text-gray-500 font-medium flex-shrink-0">
+                  {record.companyName?.[0] || "?"}
                 </div>
               )}
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">{displayName}</h1>
-                <p className="text-sm text-gray-500">Edit contact details</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold text-gray-900">
+                    {displayName}
+                    {personAge !== null && (
+                      <span className="ml-2 text-base font-normal text-gray-500">
+                        ({personAge} years)
+                      </span>
+                    )}
+                  </h1>
+                  {record.isActive === false && (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-100 px-2.5 py-0.5 text-sm font-medium text-amber-800"
+                      title="Contact is archived"
+                    >
+                      Archived
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Link href="/directory" className="text-sm text-blue-600 hover:text-blue-700">
+              <button
+                onClick={handleCancel}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
                 ← Back to Directory
-              </Link>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMergeModal(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                aria-label="Merge this contact into another"
+              >
+                ⇄ Merge contacts
+              </button>
               {isDirty && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-600"></span>
@@ -259,11 +350,18 @@ export default function DirectoryDetailPage() {
                 <span className="text-sm text-green-600">Saved!</span>
               )}
               <button
+                onClick={handleSave}
+                disabled={!canSave}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+              <button
                 onClick={handleSaveAndClose}
                 disabled={!canSave}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
               >
-                {isSaving ? "Saving..." : "Save Changes"}
+                {isSaving ? "Saving..." : "Save & Back to Directory"}
               </button>
             </div>
           </div>
@@ -300,6 +398,29 @@ export default function DirectoryDetailPage() {
           saveSuccess={saveSuccess}
         />
 
+        <div className="mt-4 flex justify-end gap-2">
+          {record.isActive === false ? (
+            <button
+              type="button"
+              onClick={handleRestore}
+              disabled={isDeleting}
+              className="inline-flex items-center gap-2 rounded-lg border border-green-300 bg-white px-4 py-2 text-sm font-medium text-green-800 shadow-sm hover:bg-green-50 disabled:opacity-50"
+              aria-label="Restore this contact from archive"
+            >
+              {isDeleting ? "Restoring…" : "Restore from archive"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowArchiveConfirm(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 shadow-sm hover:bg-amber-50"
+              aria-label="Archive this contact"
+            >
+              Archive
+            </button>
+          )}
+        </div>
+
         {/* Merge Contact Modal */}
         <MergeContactModal
           isOpen={showMergeModal}
@@ -316,6 +437,18 @@ export default function DirectoryDetailPage() {
           title="Discard changes?"
           message="You have unsaved changes. Are you sure you want to leave this page?"
           confirmText="Discard"
+          cancelText="Cancel"
+        />
+
+        {/* Archive Contact Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showArchiveConfirm}
+          onCancel={() => !isDeleting && setShowArchiveConfirm(false)}
+          onConfirm={handleConfirmArchive}
+          title="Archive contact?"
+          message="This contact will be moved to archive and hidden from the main list. They will remain as client or payer in all orders, services and invoices."
+          confirmText={isDeleting ? "Archiving..." : "Archive"}
+          confirmDisabled={isDeleting}
           cancelText="Cancel"
         />
       </div>

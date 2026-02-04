@@ -1,10 +1,10 @@
 /**
  * AI Task: Parse Email
- * 
- * Извлекает информацию о бронированиях из email:
- * - Подтверждения бронирования
- * - Изменения рейсов
- * - Отмены
+ *
+ * Extracts booking information from email:
+ * - Booking confirmations
+ * - Flight changes
+ * - Cancellations
  */
 
 import { aiJSON } from "../client";
@@ -78,7 +78,7 @@ Dates in YYYY-MM-DD format. Times in HH:mm format.
 Extract multiple bookings if email contains several.`;
 
 /**
- * Парсинг email с бронированием
+ * Parse booking email
  */
 export async function parseEmail(emailContent: string): Promise<ParseEmailResult> {
   const result = await aiJSON<{
@@ -101,7 +101,7 @@ export async function parseEmail(emailContent: string): Promise<ParseEmailResult
 }
 
 /**
- * Определить тип email
+ * Classify email type
  */
 export async function classifyEmail(
   subject: string,

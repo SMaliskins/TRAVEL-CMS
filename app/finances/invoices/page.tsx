@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Invoice {
   id: string;
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'issued' | 'issued_sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -92,29 +93,29 @@ export default function FinancesInvoicesPage() {
     }
   };
 
-  const handleExportPDF = async (invoice: Invoice) => {
+  const handleExportPDF = async (invoiceId: string, orderCode: string | null | undefined) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
-      const orderCode = invoice.order_code;
       if (!orderCode) {
-        alert('Order not found for this invoice');
+        alert('Order code not found for this invoice. Cannot export PDF.');
         return;
       }
 
-      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoice.id}/pdf`, {
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
 
       if (response.ok) {
+        const contentType = response.headers.get('Content-Type') || '';
+        const isPdf = contentType.includes('application/pdf');
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `invoice-${invoice.invoice_number || invoice.id}.pdf`;
+        a.download = isPdf ? `invoice-${invoiceId}.pdf` : `invoice-${invoiceId}.html`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -125,7 +126,7 @@ export default function FinancesInvoicesPage() {
       }
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF');
+      alert('Failed to export PDF. Please try again.');
     }
   };
 
@@ -133,29 +134,21 @@ export default function FinancesInvoicesPage() {
     return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
-    if (isNaN(date.getTime())) return "-";
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
-  };
+  const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
 
   const getStatusBadge = (status: Invoice['status']) => {
-    const styles: Record<string, string> = {
-      issued: 'bg-gray-100 text-gray-700',
-      issued_sent: 'bg-blue-100 text-blue-700',
+    const styles = {
+      draft: 'bg-gray-100 text-gray-700',
+      sent: 'bg-blue-100 text-blue-700',
       paid: 'bg-green-100 text-green-700',
       cancelled: 'bg-red-100 text-red-700',
       overdue: 'bg-orange-100 text-orange-700',
       processed: 'bg-purple-100 text-purple-700',
     };
 
-    const labels: Record<string, string> = {
-      issued: 'Issued',
-      issued_sent: 'Issued & Sent',
+    const labels = {
+      draft: 'Draft',
+      sent: 'Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
@@ -163,7 +156,7 @@ export default function FinancesInvoicesPage() {
     };
 
     return (
-      <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || styles.issued}`}>
+      <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || styles.draft}`}>
         {labels[status] || status}
       </span>
     );
@@ -187,7 +180,7 @@ export default function FinancesInvoicesPage() {
       {/* Filters */}
       <div className="mb-4 flex items-center gap-2">
         <span className="text-sm text-gray-700">Filter:</span>
-        {(['all', 'issued', 'issued_sent', 'paid', 'overdue', 'processed'] as const).map((status) => (
+        {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
           <button
             key={status}
             onClick={() => setFilterStatus(status)}
@@ -197,7 +190,7 @@ export default function FinancesInvoicesPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {status === 'all' ? 'All' : status === 'issued_sent' ? 'Issued & Sent' : status.charAt(0).toUpperCase() + status.slice(1)}
+            {status.charAt(0).toUpperCase() + status.slice(1)}
           </button>
         ))}
       </div>
@@ -248,7 +241,7 @@ export default function FinancesInvoicesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleExportPDF(invoice)}
+                        onClick={() => handleExportPDF(invoice.id, invoice.order_code)}
                         className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
                         title="Export PDF"
                       >

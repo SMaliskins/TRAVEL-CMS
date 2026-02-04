@@ -7,7 +7,7 @@
  * - Transfer all invoices (payer_party_id)
  * - Transfer order_travellers (party_id)
  * - Merge roles (client_party, partner_party, subagents) from source into target
- * - Archive source party (status=archived)
+ * - Archive source party (status=inactive; DB enum has active/inactive/blocked only)
  *
  * Body: { sourcePartyId: string; targetPartyId: string }
  */
@@ -160,10 +160,10 @@ export async function POST(request: NextRequest) {
       await supabase.from("subagents").insert({ party_id: targetPartyId });
     }
 
-    // 6. Archive source party
+    // 6. Archive source party (use "inactive" — party_status enum has active/inactive/blocked only)
     const { error: archiveErr } = await supabase
       .from("party")
-      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .update({ status: "inactive", updated_at: new Date().toISOString() })
       .eq("id", sourcePartyId);
 
     if (archiveErr) {

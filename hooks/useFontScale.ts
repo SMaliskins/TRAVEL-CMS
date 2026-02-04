@@ -8,11 +8,11 @@ const FONT_STORAGE_KEY = "ui-font-family";
 
 // Scale presets (5 options)
 export const SCALE_PRESETS = [
-  { value: 0.8, label: "Compact", description: "Максимум информации" },
-  { value: 0.9, label: "Small", description: "Меньше стандартного" },
-  { value: 1.0, label: "Default", description: "Стандартный размер" },
-  { value: 1.1, label: "Large", description: "Комфортный для чтения" },
-  { value: 1.2, label: "Extra Large", description: "Максимальный размер" },
+  { value: 0.8, label: "Compact", description: "Maximum information density" },
+  { value: 0.9, label: "Small", description: "Smaller than default" },
+  { value: 1.0, label: "Default", description: "Standard size" },
+  { value: 1.1, label: "Large", description: "Comfortable for reading" },
+  { value: 1.2, label: "Extra Large", description: "Largest size" },
 ] as const;
 
 // Font family presets (using CSS variables from next/font)

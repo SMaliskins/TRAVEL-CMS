@@ -5,6 +5,8 @@ import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import TabBar from "./TabBar";
 import AuthGuard from "./AuthGuard";
+import UrlModalProvider from "./UrlModalProvider";
+import { ToastProvider } from "@/contexts/ToastContext";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -13,6 +15,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const hideLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login");
 
   return (
+    <ToastProvider>
+    <UrlModalProvider>
     <AuthGuard>
       {hideLayout ? (
         // Login page - no sidebar/topbar, no padding
@@ -33,6 +37,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </>
       )}
     </AuthGuard>
+    </UrlModalProvider>
+    </ToastProvider>
   );
 }
 

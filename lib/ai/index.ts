@@ -1,26 +1,26 @@
 /**
  * AI Module for Travel CMS
- * 
- * Централизованный модуль для всех AI функций
- * 
- * Использование:
- * 
+ *
+ * Centralized module for all AI features.
+ *
+ * Usage:
+ *
  * ```ts
  * import { ai } from "@/lib/ai";
- * 
- * // Парсинг билетов
+ *
+ * // Parse flight tickets
  * const result = await ai.parseFlightItinerary(imageBase64, "image/png");
- * 
- * // Парсинг документов
+ *
+ * // Parse documents
  * const passport = await ai.parseDocument(imageBase64, "image/jpeg");
- * 
- * // Парсинг email
+ *
+ * // Parse email
  * const booking = await ai.parseEmail(emailContent);
- * 
- * // Предложения сервисов
+ *
+ * // Service suggestions
  * const suggestions = await ai.suggestServices({ destinations, dateFrom, dateTo, ... });
- * 
- * // Перевод
+ *
+ * // Translation
  * const translated = await ai.translateText("Hello", "ru");
  * ```
  */
