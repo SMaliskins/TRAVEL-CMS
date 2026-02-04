@@ -1,10 +1,10 @@
 /**
  * AI Task: Translate Text
- * 
- * Перевод текста для:
- * - Клиентской коммуникации
- * - Документов
- * - Интерфейса
+ *
+ * Text translation for:
+ * - Client communication
+ * - Documents
+ * - UI
  */
 
 import { aiQuickPrompt } from "../client";
@@ -39,7 +39,7 @@ const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
 };
 
 /**
- * Перевести текст
+ * Translate text
  */
 export async function translateText(
   text: string,
@@ -64,7 +64,7 @@ Only return the translated text, nothing else.`;
 }
 
 /**
- * Определить язык текста
+ * Detect text language
  */
 export async function detectLanguage(
   text: string
@@ -85,7 +85,7 @@ export async function detectLanguage(
 }
 
 /**
- * Перевести email шаблон
+ * Translate email template
  */
 export async function translateEmailTemplate(
   template: string,

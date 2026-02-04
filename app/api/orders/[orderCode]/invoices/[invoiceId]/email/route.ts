@@ -49,17 +49,32 @@ export async function POST(
       );
     }
 
+    const orderRow = Array.isArray(invoice?.orders) ? invoice.orders[0] : invoice?.orders;
+    const companyId = orderRow?.company_id ?? null;
+
     let companyLogoUrl: string | null = null;
-    if (invoice?.orders?.company_id) {
+    let companyInfo: { name: string; address?: string | null; regNr?: string | null; vatNr?: string | null; bankName?: string | null; bankAccount?: string | null; bankSwift?: string | null } | null = null;
+    if (companyId) {
       const { data: company } = await supabaseAdmin
         .from("companies")
-        .select("logo_url")
-        .eq("id", invoice.orders.company_id)
+        .select("*")
+        .eq("id", companyId)
         .single();
-      companyLogoUrl = company?.logo_url ?? null;
+      if (company) {
+        companyLogoUrl = (company as { logo_url?: string | null }).logo_url ?? null;
+        companyInfo = {
+          name: (company as { name?: string; legal_name?: string }).name || (company as { legal_name?: string }).legal_name || "",
+          address: (company as { address?: string; legal_address?: string; operating_address?: string }).address || (company as { legal_address?: string }).legal_address || (company as { operating_address?: string }).operating_address || null,
+          regNr: (company as { registration_number?: string; reg_nr?: string }).registration_number ?? (company as { reg_nr?: string }).reg_nr ?? null,
+          vatNr: (company as { vat_number?: string; vat_nr?: string }).vat_number ?? (company as { vat_nr?: string }).vat_nr ?? null,
+          bankName: (company as { bank_name?: string }).bank_name ?? null,
+          bankAccount: (company as { bank_account?: string }).bank_account ?? null,
+          bankSwift: (company as { swift_code?: string; bank_swift?: string }).swift_code ?? (company as { bank_swift?: string }).bank_swift ?? null,
+        };
+      }
     }
 
-    const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl);
+    const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo);
     const emailSubject = subject?.trim() || `Invoice ${invoice.invoice_number}`;
     const emailHtml =
       (message?.trim()

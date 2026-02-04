@@ -1,5 +1,5 @@
 /**
- * AI Tasks - Готовые AI функции для Travel CMS
+ * AI Tasks — ready-to-use AI functions for Travel CMS
  */
 
 export { parseFlightItinerary } from "./parseFlightItinerary";

@@ -7,6 +7,7 @@ import DateRangePicker from '@/components/DateRangePicker';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
 import type { SupplierCommission } from '@/lib/types/directory';
@@ -55,7 +56,7 @@ interface Service {
   hotelStarRating?: string;
   transferType?: string;
   additionalServices?: string;
-  hotelBoard?: "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive";
+  hotelBoard?: "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai";
   hotelBedType?: "king_queen" | "twin" | "not_guaranteed";
   hotelEarlyCheckIn?: boolean;
   hotelLateCheckIn?: boolean;
@@ -132,11 +133,25 @@ export default function EditServiceModalNew({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Categories from API - load on mount from Travel Services
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  // Categories: fallback immediately so form opens with correct layout (same as Add when categoryLocked)
+  const guessTypeFromService = (): CategoryType => {
+    const t = service.categoryType as CategoryType | undefined;
+    if (t && t !== "other") return t;
+    const lower = (service.category || "").toLowerCase();
+    if (lower.includes("flight") || lower.includes("ticket") || lower.includes("авиа")) return "flight";
+    if (lower.includes("hotel") || lower.includes("отель") || lower.includes("гостиница")) return "hotel";
+    if (lower.includes("transfer") || lower.includes("трансфер")) return "transfer";
+    if (lower.includes("tour") || lower.includes("тур") || lower.includes("package")) return "tour";
+    if (lower.includes("insurance") || lower.includes("страхов")) return "insurance";
+    if (lower.includes("visa") || lower.includes("виза")) return "visa";
+    if (lower.includes("rent") || lower.includes("car") || lower.includes("авто") || lower.includes("аренда")) return "rent_a_car";
+    if (lower.includes("cruise") || lower.includes("круиз")) return "cruise";
+    return "other";
+  };
+  const [categories, setCategories] = useState<ServiceCategory[]>(FALLBACK_CATEGORIES);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(service.categoryId || null);
-  const [categoryType, setCategoryType] = useState<CategoryType>(service.categoryType || 'other');
+  const [categoryType, setCategoryType] = useState<CategoryType>(guessTypeFromService());
   
   // Change/Cancel modals
   const [showChangeModal, setShowChangeModal] = useState(false);
@@ -243,13 +258,13 @@ export default function EditServiceModalNew({
   const [hotelStarRating, setHotelStarRating] = useState(service.hotelStarRating || "");
   const [transferType, setTransferType] = useState(service.transferType || "");
   const [additionalServices, setAdditionalServices] = useState(service.additionalServices || "");
-  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive">(
+  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">(
     (service.hotelBoard as any) || "room_only"
   );
   const [mealPlanText, setMealPlanText] = useState<string>(() => {
     if ((service as { mealPlanText?: string }).mealPlanText?.trim()) return (service as { mealPlanText?: string }).mealPlanText!.trim();
     const b = (service.hotelBoard as any) || "room_only";
-    const labels: Record<string, string> = { room_only: "RO", breakfast: "BB", half_board: "HB", full_board: "FB", all_inclusive: "AI/UAI" };
+    const labels: Record<string, string> = { room_only: "RO", breakfast: "BB", half_board: "HB", full_board: "FB", all_inclusive: "AI", uai: "UAI" };
     return labels[b] || b;
   });
   const [hotelBedType, setHotelBedType] = useState<"king_queen" | "twin" | "not_guaranteed">(
@@ -294,6 +309,8 @@ export default function EditServiceModalNew({
   const [tourPasteText, setTourPasteText] = useState("");
   const tourParseInputRef = useRef<HTMLInputElement>(null);
   const [parsedFields, setParsedFields] = useState<Set<string>>(new Set());
+  /** Fields parser returned but value empty or not applied — show red outline (mirror Add) */
+  const [parseAttemptedButEmpty, setParseAttemptedButEmpty] = useState<Set<string>>(new Set());
   const [depositPercent, setDepositPercent] = useState<string>("");
   const [finalPercent, setFinalPercent] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
@@ -413,19 +430,7 @@ export default function EditServiceModalNew({
     return Math.round(val * 100) / 100;
   };
 
-  // Tour: when commission loads (supplierCommissions or persisted), fix Marge if wrong
-  useEffect(() => {
-    if (categoryType !== "tour") return;
-    if (pricingLastEditedRef.current) return;
-    const cost = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
-    const commissionAmount = getCommissionAmount(cost);
-    if (commissionAmount <= 0) return;
-    const discountAmount = getAgentDiscountAmount(cost);
-    const margeCalculated = Math.round(((cost - discountAmount) - (cost - commissionAmount)) * 100) / 100;
-    setMarge(margeCalculated.toFixed(2));
-  }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, service.commissionAmount]);
-
-  // Tour: recalc only when user edits Pricing; skip on open (ref === null)
+  // Tour: recalc only when user edits Pricing; skip on open (ref === null) — same as Add
   useEffect(() => {
     if (categoryType !== "tour") return;
     if (!pricingLastEditedRef.current) return;
@@ -450,6 +455,7 @@ export default function EditServiceModalNew({
     const margeCalculated = Math.round(((cost - discountAmount) - (cost - commissionAmount)) * 100) / 100;
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
     setMarge(margeCalculated.toFixed(2));
+    // At this point we already returned when lastEdited === "sale", so update clientPrice and clear ref (same as Add)
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
   }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
@@ -566,41 +572,46 @@ export default function EditServiceModalNew({
     loadCategories();
   }, [loadCategories]);
 
-  // Map meal plan abbreviation to hotel_board
-  const mapMealPlanToBoard = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" => {
+  // Map meal plan abbreviation to hotel_board (AI and UAI are different: AI = All Inclusive, UAI = Ultra All Inclusive)
+  const mapMealPlanToBoard = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
     const p = (plan || "").toUpperCase();
     if (p === "RO" || p === "ROOM ONLY") return "room_only";
     if (p === "BB" || p === "BED AND BREAKFAST") return "breakfast";
     if (p === "HB" || p === "HALF BOARD") return "half_board";
     if (p === "FB" || p === "FULL BOARD") return "full_board";
-    if (p === "AI" || p === "UAI" || p === "ALL INCLUSIVE" || p === "ULTRA ALL INCLUSIVE") return "all_inclusive";
-    return "all_inclusive"; // default
+    if (p === "UAI" || p === "ULTRA ALL INCLUSIVE") return "uai";
+    if (p === "AI" || p === "ALL INCLUSIVE") return "all_inclusive";
+    return "room_only";
   };
 
   const applyParsedTourData = useCallback(async (p: Record<string, unknown>) => {
-    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" => {
+    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
       const p2 = (plan || "").toUpperCase();
       if (p2 === "RO" || p2 === "ROOM ONLY") return "room_only";
       if (p2 === "BB" || p2 === "BED AND BREAKFAST") return "breakfast";
       if (p2 === "HB" || p2 === "HALF BOARD") return "half_board";
       if (p2 === "FB" || p2 === "FULL BOARD") return "full_board";
-      if (p2 === "AI" || p2 === "UAI" || p2 === "ALL INCLUSIVE" || p2 === "ULTRA ALL INCLUSIVE") return "all_inclusive";
-      return "all_inclusive";
+      if (p2 === "UAI" || p2 === "ULTRA ALL INCLUSIVE") return "uai";
+      if (p2 === "AI" || p2 === "ALL INCLUSIVE") return "all_inclusive";
+      return "room_only";
     };
     const fields = new Set<string>();
+    const attemptedEmpty = new Set<string>();
     if (p.direction && typeof p.direction === "string") {
       setServiceName(String(p.direction).trim());
       fields.add("serviceName");
-    } else if (p.accommodation && typeof p.accommodation === "object") {
-      const a = p.accommodation as Record<string, unknown>;
-      const dep = a.arrivalDate ? String(a.arrivalDate).slice(0, 10) : "";
-      const ret = a.departureDate ? String(a.departureDate).slice(0, 10) : "";
+    } else if ((p.accommodation && typeof p.accommodation === "object") || p.flights) {
+      const a = p.accommodation && typeof p.accommodation === "object" ? p.accommodation as Record<string, unknown> : null;
+      const dep = a?.arrivalDate ? String(a.arrivalDate).slice(0, 10) : "";
+      const ret = a?.departureDate ? String(a.departureDate).slice(0, 10) : "";
       if (p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
         const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
         const first = segs[0];
         const last = segs[segs.length - 1];
         const route = first && last ? `${first.departure || ""}-${last.arrival || ""}` : "";
-        const dates = dep && ret ? `${dep.slice(8, 10)}.${dep.slice(5, 7)}-${ret.slice(8, 10)}.${ret.slice(5, 7)}` : "";
+        const dep2 = dep || (first?.departureDate || "").slice(0, 10);
+        const ret2 = ret || (last?.arrivalDate || "").slice(0, 10);
+        const dates = dep2 && ret2 ? `${dep2.slice(8, 10)}.${dep2.slice(5, 7)}-${ret2.slice(8, 10)}.${ret2.slice(5, 7)}` : "";
         if (route || dates) {
           setServiceName([route, dates].filter(Boolean).join(" ").trim());
           fields.add("serviceName");
@@ -652,6 +663,18 @@ export default function EditServiceModalNew({
         arrivalStatus: "scheduled" as const,
       })));
       fields.add("flightSegments");
+      if (segs.length > 0) {
+        const first = segs[0];
+        const last = segs[segs.length - 1];
+        if (first?.departureDate && !fields.has("dateFrom")) {
+          setDateFrom(String(first.departureDate).slice(0, 10));
+          fields.add("dateFrom");
+        }
+        if (last?.arrivalDate && !fields.has("dateTo")) {
+          setDateTo(String(last.arrivalDate).slice(0, 10));
+          fields.add("dateTo");
+        }
+      }
     }
     if (p.pricing && typeof p.pricing === "object") {
       const pr = p.pricing as Record<string, unknown>;
@@ -659,7 +682,6 @@ export default function EditServiceModalNew({
       if (total != null) {
         setClientPrice(String(total));
         setServicePrice(String(total));
-        fields.add("clientPrice");
         fields.add("servicePrice");
       }
     }
@@ -671,11 +693,53 @@ export default function EditServiceModalNew({
       if (pt.finalPercent != null) { setFinalPercent(String(pt.finalPercent)); fields.add("finalPercent"); }
       setPaymentTerms(`${pt.depositPercent ?? 0}% deposit, ${pt.finalPercent ?? 100}% final`);
     }
-    if (p.operator && typeof p.operator === "object" && (p.operator as Record<string, unknown>).name) {
-      setSupplierName(String((p.operator as Record<string, unknown>).name));
+    const operatorName =
+      (p.operator && typeof p.operator === "object" && (p.operator as Record<string, unknown>).name != null)
+        ? String((p.operator as Record<string, unknown>).name).trim()
+        : (p.detectedOperator != null && typeof p.detectedOperator === "string")
+          ? String(p.detectedOperator).trim()
+          : "";
+    if (operatorName.length > 0) {
+      setSupplierName(operatorName);
       fields.add("supplierName");
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const res = await fetch(
+            `/api/directory?role=supplier&search=${encodeURIComponent(operatorName)}&limit=1`,
+            { headers: { Authorization: `Bearer ${session.access_token}` }, credentials: "include" }
+          );
+          if (res.ok) {
+            const json = await res.json();
+            const first = json?.data?.[0];
+            if (first?.id) setSupplierPartyId(first.id);
+          }
+        }
+      } catch {}
+    } else if (p.operator != null || p.detectedOperator != null) {
+      attemptedEmpty.add("supplierName");
     }
-    if (p.bookingRef) { setRefNr(String(p.bookingRef)); fields.add("refNr"); }
+    if (p.bookingRef) { const v = String(p.bookingRef).trim(); if (v) { setRefNr(v); fields.add("refNr"); } else { attemptedEmpty.add("refNr"); } }
+    if ((p.direction != null || p.accommodation || p.flights) && !fields.has("serviceName")) attemptedEmpty.add("serviceName");
+    if (p.accommodation && typeof p.accommodation === "object") {
+      if (!fields.has("hotelName")) attemptedEmpty.add("hotelName");
+      if (!fields.has("hotelStarRating")) attemptedEmpty.add("hotelStarRating");
+      if (!fields.has("hotelRoom")) attemptedEmpty.add("hotelRoom");
+      if (!fields.has("hotelBoard")) attemptedEmpty.add("hotelBoard");
+    }
+    if ((p.accommodation || p.flights) && !fields.has("dateFrom")) attemptedEmpty.add("dateFrom");
+    if ((p.accommodation || p.flights) && !fields.has("dateTo")) attemptedEmpty.add("dateTo");
+    if (p.flights != null && typeof p.flights === "object" && !fields.has("flightSegments")) attemptedEmpty.add("flightSegments");
+    if (p.transfers != null && !fields.has("transferType")) attemptedEmpty.add("transferType");
+    if (p.additionalServices != null && !fields.has("additionalServices")) attemptedEmpty.add("additionalServices");
+    if (p.pricing != null && typeof p.pricing === "object" && !fields.has("servicePrice")) attemptedEmpty.add("servicePrice");
+    if (p.paymentTerms != null && typeof p.paymentTerms === "object") {
+      const pt = p.paymentTerms as Record<string, unknown>;
+      if (!fields.has("paymentDeadlineDeposit")) attemptedEmpty.add("paymentDeadlineDeposit");
+      if (!fields.has("paymentDeadlineFinal")) attemptedEmpty.add("paymentDeadlineFinal");
+      if (!fields.has("depositPercent")) attemptedEmpty.add("depositPercent");
+      if (!fields.has("finalPercent")) attemptedEmpty.add("finalPercent");
+    }
     if (Array.isArray(p.travellers) && p.travellers.length > 0) {
       const travellers = p.travellers
         .map((t: unknown) => {
@@ -713,13 +777,37 @@ export default function EditServiceModalNew({
             if (clientEntries.length > 0) {
               setClients(clientEntries);
               fields.add("clients");
+            } else {
+              attemptedEmpty.add("clients");
             }
+          } else {
+            attemptedEmpty.add("clients");
           }
         } catch (err) {
           console.error("Find-or-create travellers error:", err);
+          attemptedEmpty.add("clients");
         }
       }
+    } else if (Array.isArray(p.travellers) && p.travellers.length > 0 && !fields.has("clients")) {
+      attemptedEmpty.add("clients");
     }
+    setResStatus((prev) => (prev === "draft" ? "booked" : prev));
+    let parsedDateFrom: string | null = null;
+    if (p.accommodation && typeof p.accommodation === "object") {
+      const a = p.accommodation as Record<string, unknown>;
+      if (a.arrivalDate) parsedDateFrom = String(a.arrivalDate).slice(0, 10);
+    }
+    if (!parsedDateFrom && p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
+      const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
+      if (segs.length > 0 && segs[0].departureDate) parsedDateFrom = String(segs[0].departureDate).slice(0, 10);
+    }
+    if (parsedDateFrom && (fields.has("paymentDeadlineDeposit") || fields.has("depositPercent"))) {
+      const dep = new Date(parsedDateFrom);
+      const now = new Date();
+      const monthsDiff = (dep.getTime() - now.getTime()) / (30.44 * 24 * 60 * 60 * 1000);
+      if (monthsDiff >= 4) setPriceType("ebd");
+    }
+    setParseAttemptedButEmpty(attemptedEmpty);
     setParsedFields(fields);
   }, []);
 
@@ -750,7 +838,7 @@ export default function EditServiceModalNew({
         setParseError(data.error || "Could not parse document.");
         return;
       }
-      await applyParsedTourData(data.parsed);
+      await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
     } catch (err) {
       console.error("Parse package tour error:", err);
       setParseError("Failed to parse document.");
@@ -779,7 +867,7 @@ export default function EditServiceModalNew({
         setParseError(data.error || "Could not parse text.");
         return;
       }
-      await applyParsedTourData(data.parsed);
+      await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
       setShowTourPasteInput(false);
       setTourPasteText("");
     } catch (err) {
@@ -804,15 +892,10 @@ export default function EditServiceModalNew({
     return 'other';
   };
 
-  // Derive category name, type and VAT from selected category BY ID
+  // When categories available: sync VAT only (category/type already from service — avoid form flash)
   useEffect(() => {
     const matched = categories.find(c => c.id === categoryId);
-    if (matched) {
-      setCategory(matched.name);
-      const rawType = (matched as { type?: string }).type ?? "other";
-      setCategoryType((typeof rawType === "string" ? rawType.toLowerCase() : "other") as CategoryType);
-      setVatRate(matched.vat_rate);
-    }
+    if (matched && matched.vat_rate != null) setVatRate(matched.vat_rate);
   }, [categoryId, categories]);
 
   // Tour: init depositPercent/finalPercent from paymentTerms on open
@@ -1331,7 +1414,9 @@ export default function EditServiceModalNew({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-900">Edit Service</h2>
+            <h2 className="text-base font-semibold text-gray-900">
+              Edit Service{category ? ` — ${category}` : ""}
+            </h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1599,25 +1684,7 @@ export default function EditServiceModalNew({
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Basic Info</h4>
                 
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Category *</label>
-                  <select
-                    value={categoryId ?? ""}
-                    onChange={(e) => setCategoryId(e.target.value || null)}
-                    disabled={categoriesLoading}
-                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-70"
-                    aria-label="Category"
-                  >
-                    {categoriesLoading ? (
-                      <option value="">Loading...</option>
-                    ) : (
-                      categories.filter(c => c.is_active).map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))
-                    )}
-                  </select>
-                </div>
-                
+                {/* Category only in header "Edit Service — {category}" (mirror Add) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
@@ -1627,7 +1694,7 @@ export default function EditServiceModalNew({
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
                     placeholder={categoryType === "flight" ? "25.01 RIX-FRA-NCE / 02.02 NCE-FRA-RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : "Description"}
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
 
@@ -1638,6 +1705,7 @@ export default function EditServiceModalNew({
                     from={dateFrom}
                     to={dateTo}
                     onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                    triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                   />
                 </div>
                 
@@ -1651,7 +1719,7 @@ export default function EditServiceModalNew({
                         value={hotelName}
                         onChange={(e) => setHotelName(e.target.value)}
                         placeholder="Hotel name"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -1661,7 +1729,7 @@ export default function EditServiceModalNew({
                         value={hotelStarRating}
                         onChange={(e) => setHotelStarRating(e.target.value)}
                         placeholder="5*"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                   </div>
@@ -1677,7 +1745,7 @@ export default function EditServiceModalNew({
                         value={hotelRoom}
                         onChange={(e) => setHotelRoom(e.target.value)}
                         placeholder="Club Superior"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelRoom") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -1685,13 +1753,14 @@ export default function EditServiceModalNew({
                       <select
                         value={hotelBoard}
                         onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelBoard") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       >
                         <option value="room_only">RO</option>
                         <option value="breakfast">BB</option>
                         <option value="half_board">HB</option>
                         <option value="full_board">FB</option>
-                        <option value="all_inclusive">AI/UAI</option>
+                        <option value="all_inclusive">AI</option>
+                        <option value="uai">UAI</option>
                       </select>
                     </div>
                   </div>
@@ -1707,7 +1776,7 @@ export default function EditServiceModalNew({
                         value={transferType}
                         onChange={(e) => setTransferType(e.target.value)}
                         placeholder="Group / Individual / —"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("transferType") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -1717,7 +1786,7 @@ export default function EditServiceModalNew({
                         onChange={(e) => setAdditionalServices(e.target.value)}
                         placeholder="Extra services"
                         rows={2}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${parseAttemptedButEmpty.has("additionalServices") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                   </>
@@ -1782,7 +1851,7 @@ export default function EditServiceModalNew({
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parties</h4>
                 
-                <div className={parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
+                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   {categoryType === "hotel" ? (
                     <div className="space-y-2">
@@ -1849,7 +1918,7 @@ export default function EditServiceModalNew({
                   )}
                 </div>
                 
-                <div>
+                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
                   <div className="flex items-center justify-between mb-0.5">
                     <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
                     <button type="button" onClick={addClient} className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add</button>
@@ -1931,7 +2000,7 @@ export default function EditServiceModalNew({
                             setServicePrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div>
@@ -2155,7 +2224,7 @@ export default function EditServiceModalNew({
                       value={refNr}
                       onChange={(e) => setRefNr(e.target.value)}
                       placeholder="Booking ref"
-                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                     />
                   </div>
                   
@@ -2367,7 +2436,7 @@ export default function EditServiceModalNew({
                           type="date"
                           value={paymentDeadlineDeposit}
                           onChange={(e) => setPaymentDeadlineDeposit(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2379,7 +2448,7 @@ export default function EditServiceModalNew({
                           value={depositPercent}
                           onChange={(e) => setDepositPercent(e.target.value)}
                           placeholder="10"
-                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("depositPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2388,7 +2457,7 @@ export default function EditServiceModalNew({
                           type="date"
                           value={paymentDeadlineFinal}
                           onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2400,7 +2469,7 @@ export default function EditServiceModalNew({
                           value={finalPercent}
                           onChange={(e) => setFinalPercent(e.target.value)}
                           placeholder="90"
-                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("finalPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                     </div>
@@ -2479,7 +2548,8 @@ export default function EditServiceModalNew({
                     <option value="breakfast">Breakfast</option>
                     <option value="half_board">Half board</option>
                     <option value="full_board">Full board</option>
-                    <option value="all_inclusive">All inclusive</option>
+                    <option value="all_inclusive">AI (All inclusive)</option>
+                    <option value="uai">UAI (Ultra All Inclusive)</option>
                   </select>
                 </div>
                 <div>
@@ -2649,8 +2719,8 @@ ${message}
 
           {/* Flight Schedule - show parsed segments */}
           {showFlightItinerary && flightSegments.length > 0 && (
-            <div className={`mt-3 p-3 rounded-lg border ${parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
-              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
+            <div className={`mt-3 p-3 rounded-lg border ${parseAttemptedButEmpty.has("flightSegments") ? "bg-red-50 border-red-200 ring-2 ring-red-300" : parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
+              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parseAttemptedButEmpty.has("flightSegments") ? "text-red-700" : parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
               <div className="space-y-2">
                 {flightSegments.map((seg, idx) => {
                   // Calculate time between segments
@@ -2702,11 +2772,7 @@ ${message}
                     }
                   }
                   
-                  const formatDate = (dateStr: string) => {
-                    if (!dateStr) return "";
-                    const date = new Date(dateStr);
-                    return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-                  };
+                  const formatDate = (dateStr: string) => (dateStr ? formatDateDDMMYYYY(dateStr) : "");
                   
                   return (
                     <div key={seg.id || idx}>

@@ -1,7 +1,7 @@
 /**
  * AI Task: Parse Flight Itinerary
- * 
- * Извлекает информацию о рейсах из изображений билетов или текста
+ *
+ * Extracts flight information from ticket images or text
  */
 
 import { aiVision, aiJSON } from "../client";
@@ -62,7 +62,7 @@ Rules:
 - Return empty segments array if no flight info found`;
 
 /**
- * Парсинг изображения билета
+ * Parse ticket image
  */
 export async function parseFlightItinerary(
   imageBase64: string,
@@ -113,7 +113,7 @@ export async function parseFlightItinerary(
 }
 
 /**
- * Парсинг текста с рейсами
+ * Parse text containing flight details
  */
 export async function parseFlightText(text: string): Promise<ParseFlightResult> {
   const result = await aiJSON<{ segments: FlightSegmentParsed[] }>(

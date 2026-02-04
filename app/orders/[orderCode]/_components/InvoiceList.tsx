@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import ContentModal from "@/components/ContentModal";
+import { useToast } from "@/contexts/ToastContext";
 
 interface Invoice {
   id: string;
@@ -39,6 +41,10 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hideCancelled, setHideCancelled] = useState(false);
+  const { showToast } = useToast();
+  const [cancelConfirm, setCancelConfirm] = useState<{ invoiceId: string; message: string } | null>(null);
+  const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
+  const [printPreviewTitle, setPrintPreviewTitle] = useState<string | null>(null);
 
   const loadInvoices = async () => {
     try {
@@ -133,13 +139,13 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   const handleViewInvoice = (invoiceId: string) => {
     setViewingInvoiceId(invoiceId);
     // TODO: Open view-only modal
-    alert('View invoice modal — implementation in progress');
+    showToast("error", "View invoice modal — implementation in progress");
   };
 
   const handleEditInvoice = (invoiceId: string) => {
     setEditingInvoiceId(invoiceId);
     // TODO: Open edit modal
-    alert('Edit invoice modal — implementation in progress');
+    showToast("error", "Edit invoice modal — implementation in progress");
   };
 
   const handleExportPDF = async (invoiceId: string) => {
@@ -153,7 +159,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to generate PDF' }));
-        alert(`Failed to export PDF: ${error.error || 'Unknown error'}`);
+        showToast("error", `Failed to export PDF: ${error.error || "Unknown error"}`);
         return;
       }
 
@@ -172,29 +178,12 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
         window.URL.revokeObjectURL(url);
       } else {
         const html = await response.text();
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(html);
-          printWindow.document.close();
-          printWindow.onload = () => {
-            printWindow.print();
-          };
-        } else {
-          const blob = new Blob([html], { type: 'text/html' });
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${invoice.invoice_number}.html`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(url);
-          alert('✅ Invoice HTML downloaded. Use browser print to save as PDF.');
-        }
+        setPrintPreviewTitle(invoice.invoice_number);
+        setPrintPreviewHtml(html);
       }
     } catch (error: any) {
       console.error('Error exporting PDF:', error);
-      alert(`Failed to export PDF: ${error.message || 'Unknown error'}`);
+      showToast("error", `Failed to export PDF: ${error.message || "Unknown error"}`);
     }
   };
 
@@ -227,27 +216,34 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to send email' }));
-        alert(`Failed to send email: ${error.error || 'Unknown error'}`);
+        showToast("error", `Failed to send email: ${error.error || "Unknown error"}`);
         return;
       }
 
-      alert('✅ Invoice email sent successfully!');
+      showToast("success", "Invoice email sent successfully!");
       loadInvoices();
     } catch (error: any) {
       console.error('Error sending email:', error);
-      alert(`Failed to send email: ${error.message || 'Unknown error'}`);
+      showToast("error", `Failed to send email: ${error.message || "Unknown error"}`);
     }
   };
 
-  const handleCancelInvoice = async (invoiceId: string) => {
+  const openCancelConfirm = (invoiceId: string) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     if (!invoice) return;
-
     const isPaid = invoice.status === 'paid';
-    const confirmMsg = isPaid
+    const message = isPaid
       ? `Cancel this invoice? Payment €${invoice.total.toFixed(2)} will be moved to the order deposit and services will be unlocked.`
       : 'Are you sure you want to cancel this invoice? Services will be unlocked.';
-    if (!confirm(confirmMsg)) return;
+    setCancelConfirm({ invoiceId, message });
+  };
+
+  const handleCancelInvoiceConfirm = async () => {
+    if (!cancelConfirm) return;
+    const { invoiceId } = cancelConfirm;
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    setCancelConfirm(null);
+    if (!invoice) return;
 
     try {
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}`, {
@@ -266,11 +262,11 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       const successMsg = moved > 0
         ? `Invoice cancelled. Payment €${moved.toFixed(2)} moved to order deposit. Services unlocked.`
         : 'Invoice cancelled. Services unlocked.';
-      alert(`✅ ${successMsg}`);
+      showToast("success", successMsg);
       loadInvoices();
     } catch (error) {
       console.error('Error cancelling invoice:', error);
-      alert('Failed to cancel invoice');
+      showToast("error", "Failed to cancel invoice");
     }
   };
 
@@ -311,7 +307,42 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {cancelConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
+            <p id="cancel-invoice-title" className="text-gray-900 mb-4">{cancelConfirm.message}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelConfirm(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelInvoiceConfirm}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {printPreviewHtml && (
+        <ContentModal
+          isOpen={true}
+          onClose={() => {
+            setPrintPreviewHtml(null);
+            setPrintPreviewTitle(null);
+          }}
+          title={printPreviewTitle ? `Invoice ${printPreviewTitle}` : "Print preview"}
+          htmlContent={printPreviewHtml}
+          showPrintButton
+        />
+      )}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">Invoices and payment paypapers</h2>
         <div className="flex items-center gap-2">
@@ -404,7 +435,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
                               {invoice.created_at ? formatDate(invoice.created_at) : formatDate(invoice.invoice_date)}
                             </td>
                             <td className="py-2 px-3">
-                              <div className="flex items-center justify-center gap-1">
+                              <div className="flex items-center justify-center gap-1 flex-wrap">
                                 <button
                                   onClick={() => handleExportPDF(invoice.id)}
                                   className="px-2 py-1 text-xs text-blue-600 hover:text-blue-700"
@@ -419,6 +450,15 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
                                 >
                                   ✉️
                                 </button>
+                                {invoice.status !== 'cancelled' && (
+                                  <button
+                                    onClick={() => openCancelConfirm(invoice.id)}
+                                    className="px-2 py-1 text-xs text-red-600 hover:text-red-700 hover:underline"
+                                    title="Cancel invoice"
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>

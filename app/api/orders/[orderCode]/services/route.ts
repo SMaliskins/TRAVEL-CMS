@@ -168,6 +168,7 @@ export async function GET(
         refNr: s.ref_nr || "",
         ticketNr: s.ticket_nr || "",
         travellerIds: travellerMap[s.id] || [],
+        invoice_id: (s as { invoice_id?: string | null }).invoice_id ?? null,
         splitGroupId: (s as { split_group_id?: string | null }).split_group_id ?? null,
         flightSegments: Array.isArray(row.flight_segments) ? row.flight_segments : [],
         ticketNumbers: Array.isArray(row.ticket_numbers) ? row.ticket_numbers : [],

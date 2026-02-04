@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface ChartDataPoint {
   date: string; // YYYY-MM-DD
@@ -79,11 +80,8 @@ export default function ProfitOrdersChart({
     return chartPadding.left + (index / (data.length - 1 || 1)) * availableWidth;
   };
 
-  // Format date for display (dd)
-  const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr + "T00:00:00");
-    return String(date.getDate()).padStart(2, "0");
-  };
+  // Format date for display (dd.mm.yyyy)
+  const formatDate = (dateStr: string): string => formatDateDDMMYYYY(dateStr);
 
   // Format currency
   const formatCurrency = (value: number): string => {

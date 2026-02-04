@@ -10,6 +10,7 @@
     "test:passport": "node scripts/test-passport-parser.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
     "@napi-rs/canvas": "^0.1.89",
     "@nwpr/airport-codes": "^3.0.3",
     "@react-google-maps/api": "^2.20.8",
@@ -26,6 +27,7 @@
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-leaflet": "^5.0.0",
+    "recharts": "^3.7.0",
     "sharp": "^0.34.5",
     "stripe": "^20.3.0",
     "unpdf": "^1.4.0",

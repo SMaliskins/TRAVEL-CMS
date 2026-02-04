@@ -227,9 +227,15 @@ export default function AddServiceModal({
   
   // Track which field was last edited to determine calculation direction
   const pricingLastEditedRef = useRef<'cost' | 'marge' | 'sale' | 'agent' | 'commission' | null>(null);
-  const [vatRate, setVatRate] = useState<number>(() =>
-    categoryLocked && initialVatRate != null && !Number.isNaN(Number(initialVatRate)) ? Number(initialVatRate) : 0
-  ); // Default 0%, can be 21%
+  const [vatRate, setVatRate] = useState<number>(() => {
+    if (categoryLocked && initialVatRate != null && !Number.isNaN(Number(initialVatRate))) {
+      const v = Number(initialVatRate);
+      // Package Tour: VAT always >0 (country settings); fallback 21
+      if (initialCategoryType === "tour" && v === 0) return 21;
+      return v;
+    }
+    return 0;
+  }); // Default 0%, can be 21%
   // Draft for Flight/Hotel, Booked for others
   const [resStatus, setResStatus] = useState<ServiceData["resStatus"]>("draft");
   const [refNr, setRefNr] = useState("");
@@ -416,20 +422,31 @@ export default function AddServiceModal({
     if (categoryType !== "tour" || !supplierPartyId) {
       setSupplierCommissions([]);
       setSelectedCommissionIndex(-1);
+    } else {
+      loadSupplierCommissions();
     }
-  }, [categoryType, supplierPartyId]);
+  }, [categoryType, supplierPartyId, loadSupplierCommissions]);
 
   // Derive category name, type and VAT from selected category BY ID (single source of truth: categoryId)
-  // When API categories load we sync name/type so the correct form (e.g. Package Tour) is shown
+  // Package Tour: VAT always >0 (country/settings); fallback 21 if category has 0
   useEffect(() => {
     const matched = categories.find(c => c.id === categoryId);
     if (matched) {
       setCategory(matched.name);
       const rawType = (matched as { type?: string }).type ?? "other";
       setCategoryType((typeof rawType === "string" ? rawType.toLowerCase() : "other") as CategoryType);
-      setVatRate(matched.vat_rate);
+      const v = matched.vat_rate;
+      const isTour = (typeof rawType === "string" ? rawType.toLowerCase() : "") === "tour";
+      setVatRate(isTour && (v == null || v === 0) ? 21 : v);
     }
   }, [categoryId, categories]);
+
+  // Package Tour: VAT always >0 (e.g. Latvia 21%); enforce when category gave 0 or initial state was 0
+  useEffect(() => {
+    if (categoryType === "tour" && vatRate === 0) {
+      setVatRate(21);
+    }
+  }, [categoryType, vatRate]);
 
   // Store ticket numbers by index to preserve when client changes
   const ticketNumbersRef = useRef<string[]>([]);
@@ -930,7 +947,7 @@ export default function AddServiceModal({
       if (total != null) {
         setClientPrice(String(total));
         setServicePrice(String(total));
-        fields.add("clientPrice");
+        // Only Cost (€) is parsed; Sale (€) is not — system doesn't know final client price
         fields.add("servicePrice");
       }
     }
@@ -951,6 +968,21 @@ export default function AddServiceModal({
     if (operatorName.length > 0) {
       setSupplierName(operatorName);
       fields.add("supplierName");
+      // Resolve supplier party by name so commission can load
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const res = await fetch(
+            `/api/directory?role=supplier&search=${encodeURIComponent(operatorName)}&limit=1`,
+            { headers: { Authorization: `Bearer ${session.access_token}` }, credentials: "include" }
+          );
+          if (res.ok) {
+            const json = await res.json();
+            const first = json?.data?.[0];
+            if (first?.id) setSupplierPartyId(first.id);
+          }
+        }
+      } catch {}
     } else if (p.operator != null || p.detectedOperator != null) {
       attemptedEmpty.add("supplierName");
     }
@@ -970,7 +1002,6 @@ export default function AddServiceModal({
     if (p.additionalServices != null && !fields.has("additionalServices")) attemptedEmpty.add("additionalServices");
     if (p.pricing != null && typeof p.pricing === "object") {
       if (!fields.has("servicePrice")) attemptedEmpty.add("servicePrice");
-      if (!fields.has("clientPrice")) attemptedEmpty.add("clientPrice");
     }
     if (p.paymentTerms != null && typeof p.paymentTerms === "object") {
       const pt = p.paymentTerms as Record<string, unknown>;
@@ -1021,12 +1052,37 @@ export default function AddServiceModal({
                 setPayerName(clientEntries[0].name);
               }
               fields.add("clients");
+            } else {
+              attemptedEmpty.add("clients");
             }
+          } else {
+            attemptedEmpty.add("clients");
           }
         } catch (err) {
           console.error("Find-or-create travellers error:", err);
+          attemptedEmpty.add("clients");
         }
       }
+    } else if (Array.isArray(p.travellers) && p.travellers.length > 0 && !fields.has("clients")) {
+      attemptedEmpty.add("clients");
+    }
+    // Parsed document => at least Booked
+    setResStatus((prev) => (prev === "draft" ? "booked" : prev));
+    // Deposit + departure >4 months => Early booking
+    let parsedDateFrom: string | null = null;
+    if (p.accommodation && typeof p.accommodation === "object") {
+      const a = p.accommodation as Record<string, unknown>;
+      if (a.arrivalDate) parsedDateFrom = String(a.arrivalDate).slice(0, 10);
+    }
+    if (!parsedDateFrom && p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
+      const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
+      if (segs.length > 0 && segs[0].departureDate) parsedDateFrom = String(segs[0].departureDate).slice(0, 10);
+    }
+    if (parsedDateFrom && (fields.has("paymentDeadlineDeposit") || fields.has("depositPercent"))) {
+      const dep = new Date(parsedDateFrom);
+      const now = new Date();
+      const monthsDiff = (dep.getTime() - now.getTime()) / (30.44 * 24 * 60 * 60 * 1000);
+      if (monthsDiff >= 4) setPriceType("ebd");
     }
     setParseAttemptedButEmpty(attemptedEmpty);
     setParsedFields(fields);
@@ -1176,13 +1232,17 @@ export default function AddServiceModal({
         payload.linkedFlightId = linkedFlightId;
       }
       
-      // Add flight-specific fields
+      // Add flight-specific fields (Flight category and Package Tour can have flight schedule)
       if (categoryType === "flight") {
         payload.cabinClass = cabinClass;
         payload.baggage = baggage;
         if (flightSegments.length > 0) {
           payload.flightSegments = flightSegments;
         }
+      }
+      if (categoryType === "tour" && flightSegments.length > 0) {
+        payload.flightSegments = flightSegments;
+        if (linkedFlightId) payload.linkedFlightId = linkedFlightId;
       }
       
       // Add payment deadline fields
@@ -1794,7 +1854,7 @@ export default function AddServiceModal({
                   )}
                 </div>
                 
-                <div>
+                <div className={categoryType === "tour" && (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "")}>
                   <div className="flex items-center justify-between mb-0.5">
                     <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
                     <ClientMultiSelectDropdown
@@ -1952,7 +2012,7 @@ export default function AddServiceModal({
                             setClientPrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("clientPrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("clientPrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
                     </div>

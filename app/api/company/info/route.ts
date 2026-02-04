@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
       bankAccount: company.bank_account || "",
       bankSwift: company.bank_swift || "",
       logoUrl: company.logo_url || null,
+      defaultCurrency: company.default_currency || "EUR",
     });
   } catch (error: any) {
     console.error("Error in GET /api/company/info:", error);

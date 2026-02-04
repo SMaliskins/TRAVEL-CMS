@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 
 interface Service {
   id: string;
@@ -138,11 +139,7 @@ export default function CancelServiceModal({
     }
   };
   
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.');
-  };
+  const formatDate = (dateStr: string) => formatDateDDMMYYYY(dateStr || null);
   
   const clientPriceNum = parseFloat(clientPrice) || 0;
   const isCredit = clientPriceNum < 0;

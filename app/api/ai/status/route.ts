@@ -3,8 +3,8 @@ import { AI_CONFIGS, getAPIKey, AI_FEATURES } from "@/lib/ai/config";
 
 /**
  * GET /api/ai/status
- * 
- * Возвращает статус AI модуля и доступные функции
+ *
+ * Returns AI module status and available features.
  */
 export async function GET() {
   const providers = {

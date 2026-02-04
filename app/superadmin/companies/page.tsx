@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Company {
   id: string;
@@ -178,7 +179,7 @@ export default function CompaniesPage() {
                     {getStatusBadge(company)}
                   </td>
                   <td className="px-6 py-4 text-slate-600 text-sm">
-                    {new Date(company.createdAt).toLocaleDateString()}
+                    {formatDateDDMMYYYY(company.createdAt)}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <a

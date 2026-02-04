@@ -65,8 +65,14 @@ export function showCheckinNotification(data: {
   });
 
   notification.onclick = () => {
-    window.open(data.checkinUrl, "_blank");
     notification.close();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("open-url-in-modal", {
+          detail: { url: data.checkinUrl, title: "Check-in" },
+        })
+      );
+    }
   };
 }
 

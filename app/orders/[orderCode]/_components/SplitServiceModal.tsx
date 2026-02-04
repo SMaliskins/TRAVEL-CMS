@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Service {
   id: string;
@@ -29,16 +30,38 @@ interface Party {
   isFromOrder?: boolean;
 }
 
+interface Traveller {
+  id: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
 interface SplitPart {
   clientAmount: number;
   serviceAmount: number;
   payerName: string;
   payerPartyId?: string;
+  travellerIds: string[];
+}
+
+export interface SuggestedTravellerGroup {
+  id: string;
+  name: string;
+  travellers: Traveller[];
 }
 
 interface SplitServiceModalProps {
   service: Service;
   orderCode: string;
+  /** Travellers assigned to this service (initial split) */
+  travellers: Traveller[];
+  /** All travellers in the order (pool for Smart add) */
+  orderTravellers?: Traveller[];
+  /** Order main client party id (for suggested-travellers API) */
+  mainClientId?: string | null;
+  /** Refetch order travellers after adding from directory */
+  onTravellersRefetch?: () => void;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -53,6 +76,10 @@ const normalizeDecimal = (value: string): number => {
 export default function SplitServiceModal({
   service,
   orderCode,
+  travellers,
+  orderTravellers = [],
+  mainClientId,
+  onTravellersRefetch,
   onClose,
   onSuccess,
 }: SplitServiceModalProps) {
@@ -71,25 +98,71 @@ export default function SplitServiceModal({
   const [showAddPayerModal, setShowAddPayerModal] = useState(false);
   const [newPayerName, setNewPayerName] = useState("");
   
+  // Default traveller split: first half to part 0, rest to part 1
+  const defaultTravellerSplit = (): [string[], string[]] => {
+    const ids = travellers.map((t) => t.id);
+    if (ids.length === 0) return [[], []];
+    const mid = Math.ceil(ids.length / 2);
+    return [ids.slice(0, mid), ids.slice(mid)];
+  };
+  const [defaultT0, defaultT1] = defaultTravellerSplit();
+
   const [parts, setParts] = useState<SplitPart[]>([
-    { 
+    {
       clientAmount: service.clientPrice / 2,
       serviceAmount: service.servicePrice / 2,
       payerName: "",
       payerPartyId: undefined,
+      travellerIds: defaultT0,
     },
-    { 
+    {
       clientAmount: service.clientPrice / 2,
       serviceAmount: service.servicePrice / 2,
       payerName: "",
       payerPartyId: undefined,
+      travellerIds: defaultT1,
     },
   ]);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestedGroups, setSuggestedGroups] = useState<SuggestedTravellerGroup[]>([]);
 
   // ESC key handler
   useEscapeKey(onClose);
+
+  // Fetch suggested travellers (often with main client in other orders)
+  useEffect(() => {
+    if (!mainClientId) {
+      setSuggestedGroups([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/parties/${encodeURIComponent(mainClientId)}/suggested-travellers`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          credentials: "include",
+        });
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          const groups = (data.suggestedGroups || []).map((g: { id: string; name: string; travellers: Array<{ id: string; firstName?: string; lastName?: string }> }) => ({
+            id: g.id,
+            name: g.name,
+            travellers: (g.travellers || []).map((t: { id: string; firstName?: string; lastName?: string }) => ({
+              id: t.id,
+              firstName: t.firstName,
+              lastName: t.lastName,
+            })),
+          }));
+          setSuggestedGroups(groups);
+        }
+      } catch (_) {
+        if (!cancelled) setSuggestedGroups([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mainClientId]);
 
   // Fetch parties list
   const fetchParties = async () => {
@@ -230,6 +303,7 @@ export default function SplitServiceModal({
         serviceAmount: remainingService > 0 ? remainingService : 0,
         payerName: "",
         payerPartyId: undefined,
+        travellerIds: [],
       },
     ]);
   };
@@ -250,6 +324,8 @@ export default function SplitServiceModal({
         payerPartyId: value,
         payerName: party?.display_name || "",
       };
+    } else if (field === "travellerIds") {
+      newParts[index] = { ...newParts[index], travellerIds: Array.isArray(value) ? value : [] };
     } else if (field === "clientAmount") {
       newParts[index] = {
         ...newParts[index],
@@ -338,6 +414,7 @@ const handleSplit = async () => {
               serviceAmount: p.serviceAmount,
               payerName: p.payerName,
               payerPartyId: p.payerPartyId,
+              travellerIds: p.travellerIds,
             }))
           }),
         }
@@ -400,7 +477,7 @@ const handleSplit = async () => {
                 <div className="col-span-2">
                   <span className="font-medium text-gray-700">Dates:</span>
                   <span className="ml-2 text-gray-900">
-                    {new Date(service.dateFrom).toLocaleDateString()} - {new Date(service.dateTo || service.dateFrom).toLocaleDateString()}
+                    {formatDateDDMMYYYY(service.dateFrom)} - {formatDateDDMMYYYY(service.dateTo || service.dateFrom)}
                   </span>
                 </div>
               )}
@@ -437,7 +514,7 @@ const handleSplit = async () => {
                   <div className="flex items-start gap-3">
                     <div className="flex-shrink-0 text-sm font-medium text-gray-500">#{index + 1}</div>
                     
-                    <div className="flex-1 grid grid-cols-3 gap-3">
+                    <div className="flex-1 grid grid-cols-4 gap-3">
                       {/* Payer Combobox */}
                       <PayerCombobox
                         parties={parties}
@@ -449,6 +526,17 @@ const handleSplit = async () => {
                           setNewPayerName(name);
                           setShowAddPayerModal(true);
                         }}
+                      />
+
+                      {/* Travellers: in order + suggested + search (active only) */}
+                      <TravellersSelect
+                        orderTravellers={orderTravellers}
+                        suggestedGroups={suggestedGroups}
+                        orderCode={orderCode}
+                        onTravellersRefetch={onTravellersRefetch}
+                        selectedIds={part.travellerIds}
+                        onChange={(ids) => updatePart(index, "travellerIds", ids)}
+                        label="Travellers"
                       />
 
                       {/* Client Amount */}
@@ -467,9 +555,9 @@ const handleSplit = async () => {
                             // Remove all non-numeric except first dot
                             val = val.replace(/[^0-9.]/g, '');
                             // Keep only first dot
-                            const parts = val.split('.');
-                            if (parts.length > 2) {
-                              val = parts[0] + '.' + parts.slice(1).join('');
+                            const partsVal = val.split('.');
+                            if (partsVal.length > 2) {
+                              val = partsVal[0] + '.' + partsVal.slice(1).join('');
                             }
                             // Store as string during editing, convert for calculations
                             updatePart(index, "clientAmount", val);
@@ -569,6 +657,229 @@ const handleSplit = async () => {
         />
       )}
     </>
+  );
+}
+
+// Travellers multi-select: In order + Suggested (smart add) + Directory search (active only)
+function TravellersSelect({
+  orderTravellers,
+  suggestedGroups,
+  orderCode,
+  onTravellersRefetch,
+  selectedIds,
+  onChange,
+  label,
+}: {
+  orderTravellers: Traveller[];
+  suggestedGroups: SuggestedTravellerGroup[];
+  orderCode: string;
+  onTravellersRefetch?: () => void;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  label?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Traveller[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [addedFromSearch, setAddedFromSearch] = useState<Traveller[]>([]);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const suggestedFlat = useMemo(() => suggestedGroups.flatMap((g) => g.travellers), [suggestedGroups]);
+  const allTravellersForDisplay = useMemo(() => {
+    const byId = new Map<string, Traveller>();
+    orderTravellers.forEach((t) => byId.set(t.id, t));
+    suggestedFlat.forEach((t) => byId.set(t.id, t));
+    addedFromSearch.forEach((t) => byId.set(t.id, t));
+    return Array.from(byId.values());
+  }, [orderTravellers, suggestedFlat, addedFromSearch]);
+
+  const toggleTraveller = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const displayName = (t: Traveller) =>
+    t.name?.trim() || [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id;
+  const initials = (t: Traveller) => {
+    const name = displayName(t);
+    if (!name) return t.id.slice(0, 2).toUpperCase();
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return parts[0].slice(0, 2).toUpperCase();
+  };
+
+  const addFromSearch = async (t: Traveller) => {
+    onChange([...selectedIds, t.id]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/travellers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        credentials: "include",
+        body: JSON.stringify({ partyId: t.id }),
+      });
+      setAddedFromSearch((prev) => (prev.some((x) => x.id === t.id) ? prev : [...prev, t]));
+      onTravellersRefetch?.();
+    } catch (_) {
+      // keep selection; refetch may not run
+    }
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    setIsSearching(true);
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `/api/directory?search=${encodeURIComponent(searchQuery)}&limit=10`,
+          { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, credentials: "include" }
+        );
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          const list = (data.data || []).filter((r: { type?: string }) => r.type === "person").map((r: { id: string; firstName?: string; lastName?: string }) => ({
+            id: r.id,
+            firstName: r.firstName,
+            lastName: r.lastName,
+          }));
+          setSearchResults(list);
+        }
+      } catch (_) {
+        if (!cancelled) setSearchResults([]);
+      } finally {
+        if (!cancelled) setIsSearching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [searchQuery]);
+
+  const visibleIds = selectedIds.slice(0, 3);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <label className="block text-xs font-medium text-gray-700 mb-1">{label || "Travellers"}</label>
+      <div
+        className="min-h-[34px] w-full rounded border border-gray-300 px-2 py-1.5 flex items-center gap-0.5 flex-wrap cursor-pointer hover:bg-gray-50"
+        onClick={() => setIsOpen((o) => !o)}
+      >
+        <div className="flex items-center gap-0.5">
+          {visibleIds.map((travellerId) => {
+            const t = allTravellersForDisplay.find((x) => x.id === travellerId);
+            if (!t) return (
+              <div key={travellerId} className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs text-gray-600" title={travellerId}>
+                ?
+              </div>
+            );
+            return (
+              <div
+                key={t.id}
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-800"
+                title={displayName(t)}
+              >
+                {initials(t)}
+              </div>
+            );
+          })}
+          {selectedIds.length > 3 && (
+            <span className="text-xs text-gray-500">+{selectedIds.length - 3}</span>
+          )}
+        </div>
+        <span className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 text-xs" aria-hidden>
+          ▼
+        </span>
+      </div>
+      {isOpen && (
+        <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200 max-h-64 overflow-auto min-w-[220px]">
+          {/* Search directory (returns only active) */}
+          <div className="p-2 border-b border-gray-100">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search directory..."
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Search directory for traveller"
+            />
+          </div>
+          {searchQuery.length >= 2 && (
+            <div className="border-b border-gray-100 p-1">
+              {isSearching ? (
+                <div className="px-2 py-1 text-sm text-gray-500">Searching...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="px-2 py-1 text-sm text-gray-500">No contacts found</div>
+              ) : (
+                searchResults.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => addFromSearch(t)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-green-50 text-left rounded"
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-800">
+                      {initials(t)}
+                    </span>
+                    <span>{displayName(t)}</span>
+                    <span className="text-xs text-green-600 ml-auto">+ Add</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+          {/* In this order */}
+          {orderTravellers.length > 0 && (
+            <div className="p-1 border-b border-gray-100">
+              <div className="px-2 py-1 text-xs font-medium text-gray-500 uppercase">In this order</div>
+              {orderTravellers.map((t) => (
+                <label key={t.id} className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">
+                  <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleTraveller(t.id)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-800">{initials(t)}</span>
+                  <span>{displayName(t)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {/* Suggested (often with client in other orders) */}
+          {suggestedGroups.map((group) => (
+            group.travellers.length > 0 && (
+              <div key={group.id} className="p-1 border-b border-gray-100 last:border-b-0">
+                <div className="px-2 py-1 text-xs font-medium text-gray-500">{group.name}</div>
+                {group.travellers.map((t) => (
+                  <label key={t.id} className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => toggleTraveller(t.id)} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-800">{initials(t)}</span>
+                    <span>{displayName(t)}</span>
+                  </label>
+                ))}
+              </div>
+            )
+          ))}
+          {orderTravellers.length === 0 && suggestedGroups.every((g) => !g.travellers.length) && !searchQuery && (
+            <div className="px-3 py-2 text-sm text-gray-500">Search or add from directory</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

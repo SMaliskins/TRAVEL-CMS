@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface CalendarEvent {
   date: string; // YYYY-MM-DD
@@ -135,11 +136,7 @@ export default function CalendarWithDots({
       {selectedDate && selectedDateEvents.length > 0 && (
         <div className="mt-4 space-y-2 border-t border-gray-200 pt-4">
           <h4 className="text-sm font-medium text-gray-700">
-            {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
+            {formatDateDDMMYYYY(selectedDate)}
           </h4>
           {selectedDateEvents.map((event, idx) => (
             <button

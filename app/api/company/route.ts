@@ -123,6 +123,7 @@ export async function PATCH(request: NextRequest) {
       // Regional Settings
       "default_currency", "date_format", "document_language", "timezone", "city_label",
       "show_order_source",
+      "invoice_languages",
       // Additional
       "working_hours", "emergency_contact", "invoice_prefix",
       "default_payment_terms"

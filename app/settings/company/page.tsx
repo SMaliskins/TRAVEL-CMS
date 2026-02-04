@@ -143,6 +143,7 @@ interface Company {
   emergency_contact?: string;
   invoice_prefix?: string;
   default_payment_terms?: number;
+  invoice_languages?: string[];
 }
 
 export default function CompanySettingsPage() {
@@ -843,6 +844,34 @@ export default function CompanySettingsPage() {
           {/* Financial */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Financial</h2>
+
+            {/* Invoice languages */}
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Invoice languages</h3>
+              <p className="text-xs text-gray-500 mb-2">Languages available when creating an invoice. At least one must be selected.</p>
+              <div className="flex flex-wrap gap-3">
+                {LANGUAGES.map((lang) => {
+                  const list: string[] = Array.isArray(formData.invoice_languages) ? formData.invoice_languages : (formData.invoice_languages ? [formData.invoice_languages as unknown as string] : ["en"]);
+                  const checked = list.includes(lang.value);
+                  return (
+                    <label key={lang.value} className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked ? list.filter((c) => c !== lang.value) : [...list, lang.value];
+                          if (next.length === 0) return;
+                          setFormData({ ...formData, invoice_languages: next });
+                        }}
+                        disabled={readonly}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">{lang.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
             
             {/* Tax Settings */}
             <div className="mb-6 pb-6 border-b border-gray-200">

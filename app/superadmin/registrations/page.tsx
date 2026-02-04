@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Registration {
   id: string;
@@ -184,7 +185,7 @@ export default function RegistrationsPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-slate-500">
-                      {new Date(reg.submittedAt).toLocaleDateString()}
+                      {formatDateDDMMYYYY(reg.submittedAt)}
                     </p>
                     {activeTab === "pending" && (
                       <button

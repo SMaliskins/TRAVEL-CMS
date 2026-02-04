@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Plan {
   id: string;
@@ -200,9 +201,9 @@ export default function BillingPage() {
                 {subscription.currentPeriodEnd && (
                   <p className="text-sm text-gray-500 mt-2">
                     {subscription.cancelAtPeriodEnd ? (
-                      <>Cancels at end of period: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
+                      <>Cancels at end of period: {formatDateDDMMYYYY(subscription.currentPeriodEnd)}</>
                     ) : (
-                      <>Next billing: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
+                      <>Next billing: {formatDateDDMMYYYY(subscription.currentPeriodEnd)}</>
                     )}
                   </p>
                 )}

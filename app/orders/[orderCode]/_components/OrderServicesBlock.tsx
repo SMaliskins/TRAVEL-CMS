@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/contexts/ToastContext";
 import { supabase } from "@/lib/supabaseClient";
 import AssignedTravellersModal from "./AssignedTravellersModal";
 import AddServiceModal, { ServiceData } from "./AddServiceModal";
@@ -12,6 +13,7 @@ import SplitServiceModal from "./SplitServiceModal";
 import SplitModalMulti from "./SplitModalMulti";
 import MergeServicesModal from "./MergeServicesModal";
 import ConfirmModal from "@/components/ConfirmModal";
+import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
@@ -269,6 +271,8 @@ export default function OrderServicesBlock({
   
   // Traveller filter for itinerary tabs
   const [selectedTravellerId, setSelectedTravellerId] = useState<string | null>(null);
+  // In-app content modal (URL in iframe) instead of window.open
+  const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
   
   // Filter services based on cancelled filter and selected traveller
   const visibleServices = useMemo(() => {
@@ -284,11 +288,11 @@ export default function OrderServicesBlock({
     return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
   }, [visibleServices]);
   
-  // Also filter out cancelled services from selectedServiceIds when they become cancelled
+  // Filter out cancelled and invoiced services from selectedServiceIds (can't invoice again while invoice is active)
   useEffect(() => {
     setSelectedServiceIds(prev => prev.filter(id => {
       const service = services.find(s => s.id === id);
-      return service && service.resStatus !== 'cancelled';
+      return service && service.resStatus !== 'cancelled' && !service.invoice_id;
     }));
   }, [services]);
   
@@ -516,7 +520,7 @@ export default function OrderServicesBlock({
       
       if (method === "whatsapp") {
         alert(`Files downloaded: ${fileNames}\n\nOpen WhatsApp and attach the downloaded files.`);
-        window.open("https://web.whatsapp.com/", "_blank");
+        setContentModal({ url: "https://web.whatsapp.com/", title: "WhatsApp" });
       } else {
         const flights = selectedBoardingPasses.map(p => p.flightNumber).filter((v, i, a) => a.indexOf(v) === i).join(", ");
         window.location.href = `mailto:?subject=${encodeURIComponent(`Boarding Passes - ${flights}`)}`;
@@ -1636,14 +1640,14 @@ export default function OrderServicesBlock({
                               <div className="flex items-center justify-center gap-1">
                                 {service.invoice_id ? (
                                   <div className="flex items-center justify-center">
-                                    {/* Clickable Invoice Icon */}
+                                    {/* Invoiced: show icon, link to invoice; cannot select for new invoice while active */}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        window.location.href = `/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`;
+                                        router.push(`/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`);
                                       }}
                                       className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
-                                      title="View invoice"
+                                      title="Invoiced — view invoice (cannot issue another invoice for this service)"
                                     >
                                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1916,7 +1920,7 @@ export default function OrderServicesBlock({
                 }
               }}
               onViewBoardingPass={(pass) => {
-                window.open(pass.fileUrl, "_blank");
+                setContentModal({ url: pass.fileUrl, title: pass.fileName || "Boarding pass" });
               }}
               onDeleteBoardingPass={async (serviceId, passId) => {
                 if (!confirm("Delete this boarding pass?")) return;
@@ -2037,17 +2041,26 @@ export default function OrderServicesBlock({
 
 
       {/* Split Service Modal (Single) */}
-      {splitServiceId && (
-        <SplitServiceModal
-          service={services.find(s => s.id === splitServiceId)!}
-          orderCode={orderCode}
-          onClose={() => setSplitServiceId(null)}
-          onSuccess={() => {
-            fetchServices();
-            setSplitServiceId(null);
-          }}
-        />
-      )}
+      {splitServiceId && (() => {
+        const splitService = services.find(s => s.id === splitServiceId);
+        const serviceTravellerIds = splitService?.assignedTravellerIds ?? [];
+        const travellers = orderTravellers.filter(t => serviceTravellerIds.includes(t.id));
+        return (
+          <SplitServiceModal
+            service={splitService!}
+            orderCode={orderCode}
+            travellers={travellers}
+            orderTravellers={orderTravellers}
+            mainClientId={defaultClientId ?? undefined}
+            onTravellersRefetch={fetchTravellers}
+            onClose={() => setSplitServiceId(null)}
+            onSuccess={() => {
+              fetchServices();
+              setSplitServiceId(null);
+            }}
+          />
+        );
+      })()}
       {/* Split Multi Modal */}
       {splitMultiModalOpen && (
         <SplitModalMulti
@@ -2128,25 +2141,37 @@ export default function OrderServicesBlock({
                   // Filter out cancelled services before passing to onIssueInvoice
                   const selectedServicesData = services
                     .filter(s => selectedServiceIds.includes(s.id) && s.resStatus !== 'cancelled')
-                    .map(s => ({
-                      id: s.id,
-                      name: s.name,
-                      clientPrice: s.clientPrice,
-                      category: s.category,
-                      dateFrom: s.dateFrom,
-                      dateTo: s.dateTo,
-                      client: s.client,
-                      clientPartyId: s.clientPartyId,
-                      payer: s.payer,
-                      payerPartyId: s.payerPartyId,
-                      paymentDeadlineDeposit: s.paymentDeadlineDeposit,
-                      paymentDeadlineFinal: s.paymentDeadlineFinal,
-                      paymentTerms: s.paymentTerms,
-                      resStatus: s.resStatus, // Add resStatus for filtering cancelled services
-                    }));
+                    .map(s => {
+                      const clientNames = (s.assignedTravellerIds?.length && orderTravellers.length)
+                        ? orderTravellers
+                            .filter((t) => s.assignedTravellerIds!.includes(t.id))
+                            .map((t) => `${(t.firstName || "").trim()} ${(t.lastName || "").trim()}`.trim())
+                            .filter(Boolean)
+                            .join(", ") || s.client
+                        : s.client;
+                      return {
+                        id: s.id,
+                        name: s.name,
+                        clientPrice: s.clientPrice,
+                        category: s.category,
+                        dateFrom: s.dateFrom,
+                        dateTo: s.dateTo,
+                        client: clientNames,
+                        clientPartyId: s.clientPartyId,
+                        payer: s.payer,
+                        payerPartyId: s.payerPartyId,
+                        paymentDeadlineDeposit: s.paymentDeadlineDeposit,
+                        paymentDeadlineFinal: s.paymentDeadlineFinal,
+                        paymentTerms: s.paymentTerms,
+                        resStatus: s.resStatus,
+                        hotelName: (s as { hotelName?: string | null }).hotelName ?? null,
+                        hotelRoom: (s as { hotelRoom?: string | null }).hotelRoom ?? null,
+                        hotelBoard: (s as { hotelBoard?: string | null }).hotelBoard ?? null,
+                      };
+                    });
                   
                   if (selectedServicesData.length === 0) {
-                    alert('No active services selected. Cancelled services are excluded.');
+                    alert('No active, non-invoiced services selected. Cancelled and already-invoiced services are excluded.');
                     return;
                   }
                   onIssueInvoice(selectedServicesData);
@@ -2333,6 +2358,15 @@ export default function OrderServicesBlock({
             fetchServices();
             fetchTravellers();
           }}
+        />
+      )}
+
+      {contentModal && (
+        <ContentModal
+          isOpen={true}
+          onClose={() => setContentModal(null)}
+          title={contentModal.title}
+          url={contentModal.url}
         />
       )}
       

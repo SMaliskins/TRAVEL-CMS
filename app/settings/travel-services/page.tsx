@@ -397,7 +397,7 @@ export default function TravelServicesPage() {
                   type="text"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="e.g., Авиабилеты, Hotels"
+                  placeholder="e.g., Flights, Hotels"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>

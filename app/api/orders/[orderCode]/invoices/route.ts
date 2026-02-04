@@ -20,6 +20,8 @@ export async function GET(
     
     const { searchParams } = new URL(request.url);
     const getNextNumber = searchParams.get('nextNumber') === 'true';
+    const countParam = searchParams.get('count');
+    const count = countParam ? Math.min(Math.max(1, parseInt(countParam, 10)), 100) : 1;
 
     // Get order ID from order_code
     const { data: order, error: orderError } = await supabaseAdmin
@@ -81,6 +83,7 @@ export async function GET(
       const orderNum3 = isNaN(orderNumRaw) ? "001" : String(Math.max(0, orderNumRaw)).padStart(3, "0").slice(-3);
       const prefix = `${orderNum3}${currentYear}`;
 
+      // Current max sequence from existing invoices (for sync with table + fallback)
       const { data: invoices } = await supabaseAdmin
         .from("invoices")
         .select("invoice_number")
@@ -89,16 +92,14 @@ export async function GET(
       let maxSeq = 0;
       if (invoices) {
         invoices.forEach((inv: { invoice_number?: string }) => {
-          // Format NNNYY-INITIALS-NNNN: last 2 of first 5 = year, last segment = sequence
           const m = inv.invoice_number?.match(/^\d{5}-[A-Z]+-(\d{4})$/);
           if (m) {
-            const yearInNum = inv.invoice_number.slice(3, 5);
+            const yearInNum = inv.invoice_number!.slice(3, 5);
             if (yearInNum === currentYear) {
               const n = parseInt(m[1], 10);
               if (n > maxSeq) maxSeq = n;
             }
           }
-          // Legacy INV-XXXX-YY-INITIALS-NNNN: same year → use last segment as sequence
           const leg = inv.invoice_number?.match(/^INV-\d{4}-(\d{2})-[A-Z]+-(\d+)$/);
           if (leg && leg[1] === currentYear) {
             const n = parseInt(leg[2], 10);
@@ -107,10 +108,35 @@ export async function GET(
         });
       }
 
-      const nextSeq = (maxSeq + 1).toString().padStart(4, "0");
-      const nextInvoiceNumber = `${prefix}-${userInitials}-${nextSeq}`;
+      // Atomic reservation so parallel requests never get the same numbers (RPC locks row)
+      const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc("reserve_invoice_sequences", {
+        p_company_id: order.company_id,
+        p_year: currentYear,
+        p_count: count,
+        p_min_sequence: maxSeq,
+      });
 
-      return NextResponse.json({ nextInvoiceNumber });
+      let start: number;
+      if (rpcError || rpcData == null) {
+        start = maxSeq + 1;
+      } else {
+        // RPC can return scalar, or [n], or [{ reserve_invoice_sequences: n }]
+        const raw = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        const n = typeof raw === "object" && raw !== null && "reserve_invoice_sequences" in raw
+          ? (raw as { reserve_invoice_sequences: number }).reserve_invoice_sequences
+          : Number(raw);
+        start = typeof n === "number" && Number.isInteger(n) && n >= 1 ? n : maxSeq + 1;
+      }
+
+      if (count <= 1) {
+        const nextInvoiceNumber = `${prefix}-${userInitials}-${String(start).padStart(4, "0")}`;
+        return NextResponse.json({ nextInvoiceNumber });
+      }
+      const nextInvoiceNumbers: string[] = [];
+      for (let i = 0; i < count; i++) {
+        nextInvoiceNumbers.push(`${prefix}-${userInitials}-${String(start + i).padStart(4, "0")}`);
+      }
+      return NextResponse.json({ nextInvoiceNumbers });
     }
 
     // Get all invoices for this order
@@ -200,6 +226,7 @@ export async function POST(
       total,
       notes,
     } = body;
+    const { language } = body;
 
     // Validation
     if (!invoice_number || !items || items.length === 0) {
@@ -290,7 +317,7 @@ export async function POST(
       tax_amount: tax_amount || 0,
       total: total || 0,
       notes: notes || "",
-      status: "draft",
+      status: "issued",
       is_credit: body.is_credit || false,
     };
 
@@ -336,6 +363,10 @@ export async function POST(
     } catch (e) {
       // If columns don't exist, we'll catch the error below
       console.warn('Payment terms fields may not exist in database schema', e);
+    }
+
+    if (language !== undefined && language !== null && String(language).trim() !== "") {
+      invoiceData.language = String(language).trim();
     }
 
     const { data: invoice, error: invoiceError } = await supabaseAdmin

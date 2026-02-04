@@ -51,27 +51,30 @@ export async function POST(request: NextRequest) {
     }
 
     if (checkData.phone) {
-      const { data: phoneMatches } = await supabaseAdmin
-        .from("party")
-        .select("id, display_name, phone")
-        .eq("phone", checkData.phone);
+      const normalizedPhone = normalizePhoneForSave(checkData.phone);
+      if (normalizedPhone) {
+        const { data: phoneMatches } = await supabaseAdmin
+          .from("party")
+          .select("id, display_name, phone")
+          .eq("phone", normalizedPhone);
 
       phoneMatches?.forEach((match) => {
-        // Avoid duplicates
-        if (!duplicates.find(d => d.id === match.id)) {
-          duplicates.push({
-            id: match.id,
-            display_name: match.display_name || "",
-            similarity_score: 1.0,
-            match_fields: ["phone"],
-          });
-        } else {
-          const existing = duplicates.find(d => d.id === match.id);
-          if (existing) {
-            existing.match_fields.push("phone");
+          // Avoid duplicates
+          if (!duplicates.find(d => d.id === match.id)) {
+            duplicates.push({
+              id: match.id,
+              display_name: match.display_name || "",
+              similarity_score: 1.0,
+              match_fields: ["phone"],
+            });
+          } else {
+            const existing = duplicates.find(d => d.id === match.id);
+            if (existing) {
+              existing.match_fields.push("phone");
+            }
           }
-        }
-      });
+        });
+      }
     }
 
     if (checkData.personalCode) {

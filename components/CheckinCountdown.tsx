@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { getAirlineCheckinInfo } from "@/lib/flights/airlineCheckin";
+import ContentModal from "@/components/ContentModal";
 
 interface CheckinCountdownProps {
   flightNumber: string;
@@ -81,6 +82,7 @@ export default function CheckinCountdown({
 }: CheckinCountdownProps) {
   const [now, setNow] = useState(() => Date.now());
   const [notificationSent, setNotificationSent] = useState(false);
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
 
   // Extract airline code from flight number
   const airlineCode = flightNumber.match(/^([A-Z]{2})/i)?.[1]?.toUpperCase() || "";
@@ -143,19 +145,28 @@ export default function CheckinCountdown({
 
   if (status === "open" && checkinUrl) {
     return (
-      <a
-        href={checkinUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 hover:bg-green-200"
-      >
-        Check-in NOW
-        {timeRemaining && (
-          <span className="text-green-600 ml-1">
-            (closes in {formatCountdown(timeRemaining)})
-          </span>
+      <>
+        <button
+          type="button"
+          onClick={() => setShowCheckinModal(true)}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 hover:bg-green-200"
+        >
+          Check-in NOW
+          {timeRemaining && (
+            <span className="text-green-600 ml-1">
+              (closes in {formatCountdown(timeRemaining)})
+            </span>
+          )}
+        </button>
+        {showCheckinModal && (
+          <ContentModal
+            isOpen
+            onClose={() => setShowCheckinModal(false)}
+            title="Check-in"
+            url={checkinUrl}
+          />
         )}
-      </a>
+      </>
     );
   }
 

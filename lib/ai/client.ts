@@ -1,10 +1,10 @@
 /**
- * AI Client - Универсальный клиент для работы с AI
- * 
- * Поддерживает:
+ * AI Client — unified client for AI operations.
+ *
+ * Supports:
  * - OpenAI (GPT-4, GPT-4o, GPT-4o-mini)
- * - Anthropic Claude (планируется)
- * - Vision (анализ изображений)
+ * - Anthropic Claude (planned)
+ * - Vision (image analysis)
  * - Structured output (JSON)
  */
 
@@ -44,7 +44,7 @@ export interface AICompletionOptions {
 }
 
 /**
- * Выполнить AI запрос
+ * Execute AI request
  */
 export async function aiComplete(options: AICompletionOptions): Promise<AIResponse> {
   const config = AI_CONFIGS[options.configKey || "fast"];
@@ -158,7 +158,7 @@ async function anthropicComplete(options: {
 }
 
 /**
- * Быстрый текстовый запрос
+ * Quick text prompt
  */
 export async function aiQuickPrompt(
   prompt: string,
@@ -180,7 +180,7 @@ export async function aiQuickPrompt(
 }
 
 /**
- * AI запрос с изображением
+ * AI request with image (vision)
  */
 export async function aiVision(
   imageBase64: string,
@@ -218,7 +218,7 @@ export async function aiVision(
 }
 
 /**
- * AI запрос с ответом в JSON
+ * AI request returning JSON
  */
 export async function aiJSON<T>(
   prompt: string,

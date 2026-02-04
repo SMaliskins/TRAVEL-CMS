@@ -47,6 +47,51 @@ export async function PATCH(
     if (body.date_from !== undefined) updates.date_from = body.date_from;
     if (body.date_to !== undefined) updates.date_to = body.date_to;
 
+    // Tour / Hotel / terms (Edit modal sends snake_case)
+    if (body.hotel_name !== undefined) updates.hotel_name = body.hotel_name;
+    if (body.hotel_star_rating !== undefined) updates.hotel_star_rating = body.hotel_star_rating;
+    if (body.hotel_room !== undefined) updates.hotel_room = body.hotel_room;
+    if (body.hotel_board !== undefined) updates.hotel_board = body.hotel_board;
+    if (body.meal_plan_text !== undefined) updates.meal_plan_text = body.meal_plan_text;
+    if (body.transfer_type !== undefined) updates.transfer_type = body.transfer_type;
+    if (body.additional_services !== undefined) updates.additional_services = body.additional_services;
+    if (body.hotel_address !== undefined) updates.hotel_address = body.hotel_address;
+    if (body.hotel_phone !== undefined) updates.hotel_phone = body.hotel_phone;
+    if (body.hotel_email !== undefined) updates.hotel_email = body.hotel_email;
+    if (body.hotel_bed_type !== undefined) updates.hotel_bed_type = body.hotel_bed_type;
+    if (body.hotel_early_check_in !== undefined) updates.hotel_early_check_in = body.hotel_early_check_in;
+    if (body.hotel_late_check_in !== undefined) updates.hotel_late_check_in = body.hotel_late_check_in;
+    if (body.hotel_higher_floor !== undefined) updates.hotel_higher_floor = body.hotel_higher_floor;
+    if (body.hotel_king_size_bed !== undefined) updates.hotel_king_size_bed = body.hotel_king_size_bed;
+    if (body.hotel_honeymooners !== undefined) updates.hotel_honeymooners = body.hotel_honeymooners;
+    if (body.hotel_silent_room !== undefined) updates.hotel_silent_room = body.hotel_silent_room;
+    if (body.hotel_rooms_next_to !== undefined) updates.hotel_rooms_next_to = body.hotel_rooms_next_to;
+    if (body.hotel_parking !== undefined) updates.hotel_parking = body.hotel_parking;
+    if (body.hotel_preferences_free_text !== undefined) updates.hotel_preferences_free_text = body.hotel_preferences_free_text;
+    if (body.supplier_booking_type !== undefined) updates.supplier_booking_type = body.supplier_booking_type;
+    if (body.payment_deadline_deposit !== undefined) updates.payment_deadline_deposit = body.payment_deadline_deposit;
+    if (body.payment_deadline_final !== undefined) updates.payment_deadline_final = body.payment_deadline_final;
+    if (body.payment_terms !== undefined) updates.payment_terms = body.payment_terms;
+    if (body.price_type !== undefined) updates.price_type = body.price_type;
+    if (body.refund_policy !== undefined) updates.refund_policy = body.refund_policy;
+    if (body.free_cancellation_until !== undefined) updates.free_cancellation_until = body.free_cancellation_until;
+    if (body.cancellation_penalty_amount !== undefined) updates.cancellation_penalty_amount = body.cancellation_penalty_amount;
+    if (body.cancellation_penalty_percent !== undefined) updates.cancellation_penalty_percent = body.cancellation_penalty_percent;
+    if (body.change_fee !== undefined) updates.change_fee = body.change_fee;
+    if (body.commission_name !== undefined) updates.commission_name = body.commission_name;
+    if (body.commission_rate !== undefined) updates.commission_rate = body.commission_rate;
+    if (body.commission_amount !== undefined) updates.commission_amount = body.commission_amount;
+    if (body.agent_discount_value !== undefined) updates.agent_discount_value = body.agent_discount_value;
+    if (body.agent_discount_type !== undefined) updates.agent_discount_type = body.agent_discount_type;
+    if (body.pickup_location !== undefined) updates.pickup_location = body.pickup_location;
+    if (body.dropoff_location !== undefined) updates.dropoff_location = body.dropoff_location;
+    if (body.pickup_time !== undefined) updates.pickup_time = body.pickup_time;
+    if (body.estimated_duration !== undefined) updates.estimated_duration = body.estimated_duration;
+    if (body.linked_flight_id !== undefined) updates.linked_flight_id = body.linked_flight_id;
+    if (body.cabin_class !== undefined) updates.cabin_class = body.cabin_class;
+    if (body.baggage !== undefined) updates.baggage = body.baggage;
+    if (body.flight_segments !== undefined) updates.flight_segments = body.flight_segments;
+
     updates.updated_at = new Date().toISOString();
 
     // Update service
