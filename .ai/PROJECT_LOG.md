@@ -5,6 +5,73 @@
 
 ---
 
+## [2026-01-30] Batch: Toast, модалки, языки счетов, миграции, directory, Ratehawk, reset-password ✅
+
+**Task:** Консолидация фич (toast, modals, invoice language/PDF, migrations, directory, Ratehawk, reset-password) | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- **Toast:** ToastContext + ToastProvider + Toast component; подключение в layout, замена alert на toast где уместно
+- **Модалки:** ConfirmModal, ContentModal, DirectoryMergeModal, MergeSelectedIntoModal, UrlModalProvider — единый стиль и использование по приложению
+- **Счета (invoices):** язык счёта (миграция add_invoice_language_support), генерация PDF/HTML с учётом языка; статусы issued/issued_sent/processed; резервирование номера (add_invoice_sequence_reservation)
+- **Миграции:** add_invoice_language_support, add_invoice_sequence_reservation, add_invoice_statuses_issued, add_company_directory_stats, add_hotel_contact_overrides, add_flight_booking_conditions, add_gender_to_party_person, add_hotel_repeat_guests, add_is_alien_passport_to_party_person, add_order_communications, add_split_columns_order_services, add_supplier_logo_url, add_updated_by_to_party, allow_hotel_board_free_text, fix_hotel_board_constraint и др.
+- **Directory:** статистика компании (companyDirectoryStats), bulk-archive API, Merge/Archive/Import в Actions меню; семантический поиск (варианты + батч)
+- **Final Payment:** пресеты дат (shortcutPresets), узкие поля, подсказки, %/€ в скобках (double-click)
+- **Ratehawk:** API suggest + hotel-content, HotelSuggestInput, hotel contact overrides
+- **Auth:** forgot-password / reset-password страницы, API dev/reset-password, SUPABASE_RESET_PASSWORD_SETUP.md
+- **Прочее:** русские комментарии → английские; утилиты currency, phone, transliterateCyrillic; AvatarUpload, BackLink, PageHeader, FormattedPhoneDisplay, ClientMultiSelectDropdown, ClientSuggestedButton; ClientsByCitizenshipPie
+
+**Результат:** Коммит b414d26 — 121 файл, +8338/−1822 строк.
+
+**Next Step:** —
+
+---
+
+## [2026-01-30] QA — Bulk Invoice: индивидуальные условия, номера, даты ✅
+
+**Task:** Bulk Invoice improvements (payment terms per payer, invoice sequence, SingleDatePicker) | **Status:** SUCCESS
+**Agent:** QA | **Complexity:** 🟡 Medium
+
+**Проверено:**
+- Индивидуальные условия оплаты по плательщику при массовой выписке (paymentTermsByPayerIndex, handleSwitchPayer, termsOverride в API)
+- Уникальные последовательные номера счетов: миграция invoice_sequence + reserve_invoice_sequences, API nextNumber&count, генерация номера перед каждым созданием в bulk
+- SingleDatePicker для Deposit/Final Payment с shortcutPresets и relativeToDate
+- Превью Payment Terms для текущего плательщика (previewTotalForPayer, previewTerms)
+
+**Результат:** Пользователь подтвердил: «работает». SCORE: 9/10.
+
+**Next Step:** —
+
+---
+
+## [2026-01-30] Invoices: аннулирование с переносом оплаты на депозит ✅
+
+**Task:** invoices-system-improvement-plan §15 (Аннулирование) | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+- API PATCH: уменьшение orders.amount_paid только если счёт был paid (wasPaid); возврат paymentMovedToDeposit в ответе
+- UI: подтверждение при отмене — для paid счёта текст с суммой «Payment €X will be moved to order deposit»; после успеха — сообщение с фактической суммой переноса или «Services unlocked»
+- InvoiceList: тип status расширен (issued, issued_sent, processed); метки и цвета для новых статусов
+
+**Файлы:** `app/api/orders/[orderCode]/invoices/[invoiceId]/route.ts`, `app/orders/[orderCode]/_components/InvoiceList.tsx`, `.ai/tasks/invoices-system-improvement-plan.md`
+
+---
+
+## [2026-01-30] Invoices: Client — все клиенты сервиса ✅
+
+**Task:** invoices-system-improvement-plan §5 | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟢 Micro
+
+**Действия:**
+- При создании счёта (Issue Invoice) для каждого выбранного сервиса client формируется из assignedTravellerIds: имена всех travellers заказа (orderTravellers) по ID, через запятую
+- OrderServicesBlock: selectedServicesData.client = список имён из orderTravellers по s.assignedTravellerIds; fallback на s.client если нет travellers
+- invoice_items.service_client по-прежнему одна строка (список имён через запятую); PDF/HTML без изменений
+
+**Файлы:** `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`, `.ai/tasks/invoices-system-improvement-plan.md`
+
+---
+
 ## [2026-01-30] Directory: архив, поиск, Merge, Actions меню ✅
 
 **Task:** Directory UX + semantic search + merge fix | **Status:** SUCCESS
