@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
@@ -1330,6 +1330,9 @@ export default function AddServiceModal({
     }
   };
 
+  const RightWrapper = categoryType === "hotel" ? "div" : React.Fragment;
+  const rightWrapperProps = categoryType === "hotel" ? { className: "md:col-span-1 space-y-3" as const } : {};
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
@@ -1603,11 +1606,120 @@ export default function AddServiceModal({
             </div>
           )}
 
-          {/* Main Grid - 3 columns on desktop */}
+          {/* Main Grid - 3 columns; for Hotel: left 2/3 = Hotel Details (with Dates), right 1/3 = Parties + Pricing */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             
-            {/* Column 1: Basic Info */}
-            <div className="space-y-3">
+            {/* Column 1: For Hotel = Hotel Details (2/3) with Hotel Name, then Dates; else Basic Info */}
+            <div className={`space-y-3 ${categoryType === "hotel" ? "md:col-span-2" : ""}`}>
+              {categoryType === "hotel" ? (
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
+                  <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
+                    <HotelSuggestInput
+                      value={hotelName}
+                      onChange={setHotelName}
+                      onHotelSelected={(d) => {
+                        setHotelName(d.name);
+                        if (d.address) setHotelAddress(d.address);
+                        if (d.phone) setHotelPhone(d.phone);
+                        if (d.email) setHotelEmail(d.email);
+                        setServiceName(d.name);
+                      }}
+                      placeholder="Search hotel by name..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
+                    <DateRangePicker
+                      label=""
+                      from={dateFrom}
+                      to={dateTo}
+                      onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                      triggerClassName="border-amber-300"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
+                      <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                      <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                        <option value="room_only">Room only</option>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="half_board">Half board</option>
+                        <option value="full_board">Full board</option>
+                        <option value="all_inclusive">AI (All inclusive)</option>
+                        <option value="uai">UAI (Ultra All Inclusive)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>
+                      <select value={hotelBedType} onChange={(e) => setHotelBedType(e.target.value as typeof hotelBedType)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                        <option value="king_queen">King/Queen</option>
+                        <option value="twin">Twin</option>
+                        <option value="not_guaranteed">Not guaranteed</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
+                      <input type="text" value={hotelAddress} onChange={(e) => setHotelAddress(e.target.value)} placeholder="Address" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                      <input type="tel" value={hotelPhone} onChange={(e) => setHotelPhone(e.target.value)} placeholder="Phone" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Email</label>
+                      <input type="email" value={hotelEmail} onChange={(e) => setHotelEmail(e.target.value)} placeholder="Email" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Preferences</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Early check-in
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Late check-in
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Higher floor
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.kingSizeBed} onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        King size bed
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.honeymooners} onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Honeymooners
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.silentRoom} onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Silent room
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.parking} onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Parking
+                      </label>
+                    </div>
+                    <div className="mb-2">
+                      <input type="text" value={hotelPreferences.roomsNextTo} onChange={(e) => setHotelPreferences(prev => ({ ...prev, roomsNextTo: e.target.value }))} placeholder="Rooms next to..." className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <textarea value={hotelPreferences.freeText} onChange={(e) => setHotelPreferences(prev => ({ ...prev, freeText: e.target.value }))} placeholder="Additional preferences (free text)" rows={2} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <button type="button" onClick={() => { const preferencesList = Object.entries(hotelPreferences).filter(([key, value]) => key !== "roomsNextTo" && key !== "freeText" && value === true).map(([key]) => key.replace(/([A-Z])/g, " $1").toLowerCase()).join(", "); const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:\n\nRoom: ${hotelRoom || "Not specified"}\nBoard: ${hotelBoard}\nBed Type: ${hotelBedType}\nPreferences: ${preferencesList || "None"}${hotelPreferences.roomsNextTo ? `\nRooms next to: ${hotelPreferences.roomsNextTo}` : ""}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ""}`; alert(`Message to hotel:\n\n${message}\n\n(Will be saved to Communication tab)`); }} className="w-full px-3 py-2 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">📧 Send to Hotel</button>
+                  </div>
+                </div>
+              ) : (
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Basic Info</h4>
                 
@@ -1632,6 +1744,7 @@ export default function AddServiceModal({
                 </div>
                 )}
                 
+                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
@@ -1640,11 +1753,13 @@ export default function AddServiceModal({
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : categoryType === "hotel" ? "Hotel name" : "Description"}
+                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : "Description"}
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
+                )}
 
+                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
                   <DateRangePicker
@@ -1655,6 +1770,7 @@ export default function AddServiceModal({
                     triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                   />
                 </div>
+                )}
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
@@ -1769,7 +1885,7 @@ export default function AddServiceModal({
                       <span className="text-[10px] text-gray-400">+ class diff</span>
                     </div>
                   </>
-                ) : (
+                ) : categoryType !== "hotel" ? (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                     <select
@@ -1782,11 +1898,13 @@ export default function AddServiceModal({
                       ))}
                     </select>
                   </div>
-                )}
+                ) : null}
               </div>
+              )}
             </div>
 
-            {/* Column 2: Parties */}
+            {/* Right side: Parties + Pricing (when Hotel: one column 1/3) */}
+            <RightWrapper {...rightWrapperProps}>
             <div className="space-y-3">
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parties</h4>
@@ -2161,7 +2279,7 @@ export default function AddServiceModal({
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">References</h4>
                 
-                <div className={categoryType === "flight" ? "grid grid-cols-2 gap-2" : ""}>
+                <div className={categoryType === "flight" || categoryType === "hotel" ? "grid grid-cols-2 gap-2" : ""}>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}</label>
                     <input
@@ -2173,8 +2291,8 @@ export default function AddServiceModal({
                     />
                   </div>
                   
-                  {/* Status - for Flight in References section */}
-                  {categoryType === "flight" && (
+                  {/* Status - for Flight and Hotel in References section */}
+                  {(categoryType === "flight" || categoryType === "hotel") && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                       <select
@@ -2344,6 +2462,7 @@ export default function AddServiceModal({
               </div>
               )}
             </div>
+          </RightWrapper>
           </div>
 
           {/* Flight Schedule - show parsed segments (Flight or Tour) */}
@@ -2518,8 +2637,8 @@ export default function AddServiceModal({
             </div>
           )}
 
-          {/* Category-specific fields - Collapsible sections */}
-          {showHotelFields && (
+          {/* Category-specific fields - Hotel Details at top for hotel; show here only for non-hotel (e.g. Tour) */}
+          {showHotelFields && categoryType !== "hotel" && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               

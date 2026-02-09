@@ -85,6 +85,7 @@ interface Service {
   cancellationPenaltyAmount?: number | null;
   cancellationPenaltyPercent?: number | null;
   changeFee?: number | null; // Airline change fee (for Flights)
+  invoice_id?: string | null; // When set, service is on an invoice — client price (Sale) is locked
   // Ticket numbers per client
   ticketNumbers?: { clientId: string; clientName: string; ticketNr: string }[];
   // Tour (Package Tour) pricing
@@ -1676,15 +1677,121 @@ export default function EditServiceModalNew({
             </div>
           )}
 
-          {/* Main Grid - 3 columns */}
+          {/* Main Grid - 3 columns; for Hotel: left 2/3 = Hotel Details (with Dates) + Basic Info hidden, right 1/3 = Parties, Pricing, References */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-3">
             
-            {/* Column 1: Basic Info + Tour details */}
-            <div className="space-y-2">
+            {/* Column 1: For Hotel = Hotel Details (with Dates) in 2/3; else Basic Info + Tour details */}
+            <div className={`space-y-2 ${categoryType === "hotel" ? "md:col-span-2" : ""}`}>
+              {categoryType === "hotel" ? (
+                /* Hotel: Hotel Details at top — Dates under Hotel Name */
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
+                  <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
+                    <input
+                      type="text"
+                      value={hotelName}
+                      onChange={(e) => setHotelName(e.target.value)}
+                      placeholder="Hotel name"
+                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
+                    <DateRangePicker
+                      label=""
+                      from={dateFrom}
+                      to={dateTo}
+                      onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                      triggerClassName="border-amber-300"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
+                      <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                      <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                        <option value="room_only">Room only</option>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="half_board">Half board</option>
+                        <option value="full_board">Full board</option>
+                        <option value="all_inclusive">AI (All inclusive)</option>
+                        <option value="uai">UAI (Ultra All Inclusive)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>
+                      <select value={hotelBedType} onChange={(e) => setHotelBedType(e.target.value as typeof hotelBedType)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                        <option value="king_queen">King/Queen</option>
+                        <option value="twin">Twin</option>
+                        <option value="not_guaranteed">Not guaranteed</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
+                      <input type="text" value={hotelAddress} onChange={(e) => setHotelAddress(e.target.value)} placeholder="Address" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                      <input type="tel" value={hotelPhone} onChange={(e) => setHotelPhone(e.target.value)} placeholder="Phone" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Email</label>
+                      <input type="email" value={hotelEmail} onChange={(e) => setHotelEmail(e.target.value)} placeholder="Email" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Preferences</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Early check-in
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Late check-in
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Higher floor
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.kingSizeBed} onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        King size bed
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.honeymooners} onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Honeymooners
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.silentRoom} onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Silent room
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.parking} onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Parking
+                      </label>
+                    </div>
+                    <div className="mb-2">
+                      <input type="text" value={hotelPreferences.roomsNextTo} onChange={(e) => setHotelPreferences(prev => ({ ...prev, roomsNextTo: e.target.value }))} placeholder="Rooms next to..." className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <textarea value={hotelPreferences.freeText} onChange={(e) => setHotelPreferences(prev => ({ ...prev, freeText: e.target.value }))} placeholder="Additional preferences (free text)" rows={2} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <button type="button" onClick={async () => { const preferencesList = Object.entries(hotelPreferences).filter(([key, value]) => key !== "roomsNextTo" && key !== "freeText" && value === true).map(([key]) => key.replace(/([A-Z])/g, " $1").toLowerCase()).join(", "); const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:\n\nRoom: ${hotelRoom || "Not specified"}\nBoard: ${hotelBoard}\nBed Type: ${hotelBedType}\nPreferences: ${preferencesList || "None"}${hotelPreferences.roomsNextTo ? `\nRooms next to: ${hotelPreferences.roomsNextTo}` : ""}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ""}`; alert(`Message to hotel:\n\n${message}\n\n(Will be saved to Communication tab)`); }} className="w-full px-3 py-2 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">📧 Send to Hotel</button>
+                  </div>
+                </div>
+              ) : (
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Basic Info</h4>
                 
-                {/* Category only in header "Edit Service — {category}" (mirror Add) */}
+                {/* Category only in header "Edit Service — {category}" (mirror Add). For Hotel: no Name (in Hotel Details), no Dates (in Hotel Details) */}
+                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
@@ -1697,7 +1804,9 @@ export default function EditServiceModalNew({
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
+                )}
 
+                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
                   <DateRangePicker
@@ -1708,6 +1817,7 @@ export default function EditServiceModalNew({
                     triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                   />
                 </div>
+                )}
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
@@ -1827,7 +1937,7 @@ export default function EditServiceModalNew({
                       )}
                     </div>
                   </>
-                ) : (
+                ) : categoryType !== "hotel" ? (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                     <div className="flex items-center gap-2">
@@ -1842,11 +1952,17 @@ export default function EditServiceModalNew({
                       </select>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
+            )}
             </div>
 
-            {/* Column 2: Parties */}
+            {/* Right side: Parties + Pricing (when Hotel: one column 1/3; else two columns) */}
+            {(() => {
+              const RightWrapper = categoryType === "hotel" ? "div" : React.Fragment;
+              const rightWrapperProps = categoryType === "hotel" ? { className: "md:col-span-1 space-y-2" as const } : {};
+              return (
+                <RightWrapper {...rightWrapperProps}>
             <div className="space-y-2">
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parties</h4>
@@ -2062,11 +2178,14 @@ export default function EditServiceModalNew({
                           min="0"
                           value={clientPrice}
                           onChange={(e) => {
+                            if (service.invoice_id) return;
                             pricingLastEditedRef.current = "sale";
                             setClientPrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          disabled={!!service.invoice_id}
+                          title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                         />
                       </div>
                     </div>
@@ -2134,11 +2253,14 @@ export default function EditServiceModalNew({
                         min="0"
                         value={clientPrice}
                         onChange={(e) => {
+                          if (service.invoice_id) return;
                           pricingLastEditedRef.current = "sale";
                           setClientPrice(e.target.value);
                         }}
                         placeholder="0.00"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        disabled={!!service.invoice_id}
+                        title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                       />
                     </div>
                   </div>
@@ -2214,7 +2336,7 @@ export default function EditServiceModalNew({
 
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">References</h4>
-                <div className={categoryType === "flight" ? "grid grid-cols-2 gap-2" : ""}>
+                <div className={categoryType === "flight" || categoryType === "hotel" ? "grid grid-cols-2 gap-2" : ""}>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">
                       {categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}
@@ -2228,8 +2350,8 @@ export default function EditServiceModalNew({
                     />
                   </div>
                   
-                  {/* Status - for Flight in References section */}
-                  {categoryType === "flight" && (
+                  {/* Status - for Flight and Hotel in References section */}
+                  {(categoryType === "flight" || categoryType === "hotel") && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                       <select
@@ -2506,10 +2628,13 @@ export default function EditServiceModalNew({
               </div>
               )}
             </div>
+            </RightWrapper>
+            );
+            })()}
           </div>
 
-          {/* Category-specific fields */}
-          {showHotelFields && (
+          {/* Category-specific fields - Hotel Details moved to top left for hotel; only show bottom block for non-hotel */}
+          {showHotelFields && categoryType !== "hotel" && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               
