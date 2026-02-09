@@ -62,8 +62,12 @@ export async function POST(
         .single();
       if (company) {
         companyLogoUrl = (company as { logo_url?: string | null }).logo_url ?? null;
+        const rawName = (company as { name?: string }).name ?? "";
+        const legalName = (company as { legal_name?: string }).legal_name ?? "";
+        const tradingName = (company as { trading_name?: string }).trading_name ?? "";
+        const displayName = legalName || (rawName.trim() !== "Default Company" ? rawName : "") || tradingName || rawName || "";
         companyInfo = {
-          name: (company as { name?: string; legal_name?: string }).name || (company as { legal_name?: string }).legal_name || "",
+          name: displayName,
           address: (company as { address?: string; legal_address?: string; operating_address?: string }).address || (company as { legal_address?: string }).legal_address || (company as { operating_address?: string }).operating_address || null,
           regNr: (company as { registration_number?: string; reg_nr?: string }).registration_number ?? (company as { reg_nr?: string }).reg_nr ?? null,
           vatNr: (company as { vat_number?: string; vat_nr?: string }).vat_number ?? (company as { vat_nr?: string }).vat_nr ?? null,

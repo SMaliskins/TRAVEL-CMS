@@ -208,7 +208,7 @@ export default function SingleDatePicker({
     ];
   }, [relativeToDate]);
 
-  const displayValue = value ? formatDateDDMMYYYY(value) : placeholder;
+  const displayValue = (value ? formatDateDDMMYYYY(value) : placeholder).replace(/\//g, ".");
 
   return (
     <div ref={containerRef} className="relative">

@@ -28,13 +28,30 @@ export async function PATCH(
       );
     }
 
+    const { data: existingService } = await supabaseAdmin
+      .from("order_services")
+      .select("invoice_id")
+      .eq("id", serviceId)
+      .eq("order_id", order.id)
+      .single();
+
+    const isInvoiced = !!existingService?.invoice_id;
+
     // Build update object
     const updates: Record<string, unknown> = {};
 
     if (body.service_name !== undefined) updates.service_name = body.service_name;
     if (body.category !== undefined) updates.category = body.category;
     if (body.service_price !== undefined) updates.service_price = body.service_price;
-    if (body.client_price !== undefined) updates.client_price = body.client_price;
+    if (body.client_price !== undefined) {
+      if (isInvoiced) {
+        return NextResponse.json(
+          { error: "Cannot change amount to pay: service is already on an invoice" },
+          { status: 400 }
+        );
+      }
+      updates.client_price = body.client_price;
+    }
     if (body.res_status !== undefined) updates.res_status = body.res_status;
     if (body.ref_nr !== undefined) updates.ref_nr = body.ref_nr;
     if (body.ticket_nr !== undefined) updates.ticket_nr = body.ticket_nr;

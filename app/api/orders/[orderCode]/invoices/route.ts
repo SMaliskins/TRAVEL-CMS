@@ -283,6 +283,21 @@ export async function POST(
       );
     }
 
+    // Allow reusing invoice number from a cancelled invoice; reject if number is already on an active invoice
+    const { data: existingWithNumber } = await supabaseAdmin
+      .from("invoices")
+      .select("id, status")
+      .eq("company_id", order.company_id)
+      .eq("invoice_number", String(invoice_number).trim())
+      .maybeSingle();
+
+    if (existingWithNumber && existingWithNumber.status !== "cancelled" && existingWithNumber.status !== "replaced") {
+      return NextResponse.json(
+        { error: "Invoice number already in use" },
+        { status: 400 }
+      );
+    }
+
     // Create invoice - build insert object dynamically to handle missing columns
     // Helper function to convert empty strings to null for date fields
     const normalizeDate = (date: any): string | null => {

@@ -34,6 +34,8 @@ import {
   getPriceTypeLabel
 } from "@/lib/services/deadlineCalculator";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
+import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
 interface Traveller {
   id: string;
@@ -118,38 +120,6 @@ interface Service {
   commissionAmount?: number | null;
   agentDiscountValue?: number | null;
   agentDiscountType?: "%" | "€" | null;
-}
-
-function toTitleCase(str: string): string {
-  return str
-    .trim()
-    .split(/\s+/)
-    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
-    .join(" ");
-}
-
-// Format hotel/tour name: Title Case hotel + " 5*" + Title Case room + meal (parsed text for Package Tour, else board labels)
-function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, fallback: string): string {
-  const name = (s.hotelName || "").trim();
-  const parts: string[] = [];
-  if (name) parts.push(toTitleCase(name));
-  if (s.hotelStarRating?.trim()) parts.push(`${s.hotelStarRating.trim().replace(/\*/g, "")}*`);
-  if (s.hotelRoom?.trim()) parts.push(toTitleCase(s.hotelRoom.trim()));
-  const boardLabels: Record<string, string> = {
-    room_only: "Room Only",
-    breakfast: "Breakfast",
-    half_board: "Half Board",
-    full_board: "Full Board",
-    all_inclusive: "AI",
-    uai: "UAI",
-  };
-  const board = s.mealPlanText?.trim()
-    ? toTitleCase(s.mealPlanText.trim())
-    : s.hotelBoard
-      ? boardLabels[String(s.hotelBoard)] || toTitleCase(String(s.hotelBoard))
-      : null;
-  if (board) parts.push(board);
-  return parts.length > 0 ? parts.join(" · ").replace(/\* · /g, "*· ") : toTitleCase(fallback);
 }
 
 // Fallback when API is unavailable (same names/types as AddServiceModal)
@@ -1644,7 +1614,7 @@ export default function OrderServicesBlock({
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        router.push(`/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`);
+                                        router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
                                       }}
                                       className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
                                       title="Invoiced — view invoice (cannot issue another invoice for this service)"
@@ -1692,9 +1662,7 @@ export default function OrderServicesBlock({
                                   </span>
                                 )}
                                 <span>
-                                  {(service.category === "Hotel" || service.category === "Tour" || service.category === "Package Tour")
-                                    ? formatHotelDisplayName(service as { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, service.name)
-                                    : service.name}
+                                  {getServiceDisplayName(service, service.name)}
                                 </span>
                               </div>
                             </td>
@@ -2150,6 +2118,7 @@ export default function OrderServicesBlock({
                             .join(", ") || s.client
                         : s.client;
                       return {
+                        ...s,
                         id: s.id,
                         name: s.name,
                         clientPrice: s.clientPrice,
@@ -2165,8 +2134,10 @@ export default function OrderServicesBlock({
                         paymentTerms: s.paymentTerms,
                         resStatus: s.resStatus,
                         hotelName: (s as { hotelName?: string | null }).hotelName ?? null,
+                        hotelStarRating: (s as { hotelStarRating?: string | null }).hotelStarRating ?? null,
                         hotelRoom: (s as { hotelRoom?: string | null }).hotelRoom ?? null,
                         hotelBoard: (s as { hotelBoard?: string | null }).hotelBoard ?? null,
+                        mealPlanText: (s as { mealPlanText?: string | null }).mealPlanText ?? null,
                       };
                     });
                   

@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-01-30] Itinerary: цвета перелётов и отелей по карте маршрутов ✅
+
+**Task:** Подсветка перелётов цветом маршрута клиента с карты; отели — цветами из не занятых маршрутами | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟢 Micro
+
+**Действия:**
+- ItineraryTimeline: пропсы `travellerIdToColor`, `routeColorsUsed`; `getHotelColors(routeColorsUsed)` для check-in/check-out; левая полоска перелёта — цвет по `ticketNumbers[0].clientId` или `assignedTravellerIds[0]`; отели — `borderLeftColor` из кандидатов, не занятых маршрутами.
+- OrderServicesBlock уже передаёт `travellerIdToColor` и `routeColorsUsed` из `travellerRoutes`.
+- В событие перелёта добавлено `assignedTravellerIds` для fallback цвета до появления билетов.
+
+**Результат:** Перелёты в списке слева совпадают по цвету с маршрутами на карте; отели — двумя отдельными цветами.
+
+**Next Step:** —
+
+---
+
 ## [2026-01-30] Batch: Toast, модалки, языки счетов, миграции, directory, Ratehawk, reset-password ✅
 
 **Task:** Консолидация фич (toast, modals, invoice language/PDF, migrations, directory, Ratehawk, reset-password) | **Status:** SUCCESS

@@ -32,10 +32,15 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     deposit: "Deposit",
     finalPayment: "Final Payment",
     bankingDetails: "Banking Details",
+    beneficiaryName: "Beneficiary name",
     bank: "Bank",
-    account: "Account",
+    account: "IBAN",
     dueDate: "Due Date",
     thankYou: "Thank you for your business!",
+    invoiceNo: "Invoice #",
+    referenceNr: "Reference Nr.",
+    personalCode: "Personal Code",
+    fullPayment: "Full Payment",
   },
   lv: {
     invoice: "RĒKINS",
@@ -58,10 +63,15 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     deposit: "Īres nauda",
     finalPayment: "Galīgais maksājums",
     bankingDetails: "Bankas dati",
+    beneficiaryName: "Saņēmēja nosaukums",
     bank: "Banka",
-    account: "Konts",
+    account: "IBAN",
     dueDate: "Termiņš",
     thankYou: "Paldies par sadarbību!",
+    invoiceNo: "Rēķina nr.",
+    referenceNr: "Ref. nr.",
+    personalCode: "Personas kods",
+    fullPayment: "Pilna apmaksa",
   },
   ru: {
     invoice: "СЧЁТ",
@@ -84,10 +94,15 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     deposit: "Предоплата",
     finalPayment: "Окончательная оплата",
     bankingDetails: "Банковские реквизиты",
+    beneficiaryName: "Наименование получателя",
     bank: "Банк",
-    account: "Счёт",
+    account: "IBAN",
     dueDate: "Срок оплаты",
     thankYou: "Благодарим за сотрудничество!",
+    invoiceNo: "Счёт №",
+    referenceNr: "Реф. №",
+    personalCode: "Персональный код",
+    fullPayment: "Полная оплата",
   },
   de: {
     invoice: "RECHNUNG",
@@ -110,10 +125,15 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     deposit: "Anzahlung",
     finalPayment: "Schlusszahlung",
     bankingDetails: "Bankverbindung",
+    beneficiaryName: "Zahlungsempfänger",
     bank: "Bank",
-    account: "Konto",
+    account: "IBAN",
     dueDate: "Fälligkeitsdatum",
     thankYou: "Vielen Dank für Ihre Zusammenarbeit!",
+    invoiceNo: "Rechnung Nr.",
+    referenceNr: "Ref.-Nr.",
+    personalCode: "Personalausweisnummer",
+    fullPayment: "Restzahlung",
   },
   fr: {
     invoice: "FACTURE",
@@ -136,10 +156,15 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     deposit: "Acompte",
     finalPayment: "Solde",
     bankingDetails: "Coordonnées bancaires",
+    beneficiaryName: "Bénéficiaire",
     bank: "Banque",
-    account: "Compte",
+    account: "IBAN",
     dueDate: "Date d'échéance",
     thankYou: "Merci pour votre confiance !",
+    invoiceNo: "Facture n°",
+    referenceNr: "Réf. n°",
+    personalCode: "Code personnel",
+    fullPayment: "Solde total",
   },
   es: {
     invoice: "FACTURA",
@@ -162,12 +187,23 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     deposit: "Anticipo",
     finalPayment: "Pago final",
     bankingDetails: "Datos bancarios",
+    beneficiaryName: "Beneficiario",
     bank: "Banco",
-    account: "Cuenta",
+    account: "IBAN",
     dueDate: "Fecha de vencimiento",
     thankYou: "¡Gracias por su confianza!",
+    invoiceNo: "Factura n.º",
+    referenceNr: "Ref. n.º",
+    personalCode: "Código personal",
+    fullPayment: "Pago total",
   },
 };
+
+/** Labels for invoice preview/UI by language (same keys as INVOICE_LABELS). */
+export function getInvoiceLabels(lang: string): Record<string, string> {
+  const code = (lang && String(lang).trim().toLowerCase()) || "en";
+  return INVOICE_LABELS[code] || INVOICE_LABELS.en;
+}
 
 /**
  * Generate invoice HTML for PDF/email
@@ -213,22 +249,25 @@ export function generateInvoiceHTML(
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${invoice.invoice_number}</title>
+  <title></title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #333; font-size: 12px; }
-    .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+    @page { size: A4; margin: 5mm; }
+    html, body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #333; font-size: 12px; box-sizing: border-box; }
+    body { margin: 5mm; }
+    * { box-sizing: border-box; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
     .invoice-title { font-size: 32px; font-weight: bold; }
-    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
-    .section { background: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 12px; }
-    .section-title { font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 10px; }
+    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .section { background: #f5f5f5; padding: 12px 15px; border-radius: 5px; font-size: 12px; }
+    .section-title { font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 8px; }
     .section-content { font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }
-    th { text-align: left; padding: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; }
-    td { padding: 10px; border-bottom: 1px solid #eee; font-size: 12px; }
-    .totals { text-align: right; margin-top: 20px; font-size: 12px; }
-    .total-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; }
-    .total-final { font-size: 12px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; margin-top: 10px; }
-    .payment-terms { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
+    th { text-align: left; padding: 8px 10px; background: #f5f5f5; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; }
+    td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
+    .totals-foot td { padding: 4px 10px; font-size: 12px; text-align: right; vertical-align: top; border: none; background: none; }
+    .totals-foot tr.total-final td { font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
+    .payment-terms { background: #fff3cd; padding: 12px 15px; border-radius: 5px; margin: 16px 0; font-size: 12px; }
+    .thank-you { margin-top: 24px; text-align: center; color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -244,17 +283,15 @@ export function generateInvoiceHTML(
         </div>
       `}
     </div>
-    <div style="text-align: right; flex: 1; align-self: flex-start;">
+    <div style="text-align: right; flex: 1;">
       <div class="invoice-title" style="font-size: 32px; font-weight: bold; margin-bottom: 4px; letter-spacing: 0.02em;">${invoice.is_credit ? t.creditNote : t.invoice}</div>
       ${invoice.is_credit ? `<div style="color: green; font-size: 12px;">${t.refundCredit}</div>` : ""}
       <div style="margin-top: 8px; font-size: 12px; font-weight: bold;">${invoice.invoice_number}</div>
+      <div style="margin-top: 4px; font-size: 12px;"><strong>${t.date}:</strong> ${formatDate(invoice.invoice_date)}</div>
     </div>
   </div>
 
-  <div style="margin-bottom: 20px;">
-    <strong>${t.date}:</strong> ${formatDate(invoice.invoice_date)}
-  </div>
-
+  <div class="invoice-body" style="min-height: 400px;">
     <div class="sections">
       <div class="section">
         <div class="section-title">${t.beneficiary}</div>
@@ -294,22 +331,21 @@ export function generateInvoiceHTML(
         </tr>
       `).join("") || `<tr><td colspan="4">${t.noItems}</td></tr>`}
     </tbody>
+    <tfoot class="totals-foot">
+      <tr>
+        <td colspan="3"></td>
+        <td>${t.subtotal}: ${formatCurrency(invoice.subtotal || 0)}</td>
+      </tr>
+      <tr>
+        <td colspan="3"></td>
+        <td>${t.vat} (${invoice.tax_rate || 0}%): ${formatCurrency(invoice.tax_amount || 0)}</td>
+      </tr>
+      <tr class="total-final">
+        <td colspan="3"></td>
+        <td>${t.total}: ${formatCurrency(invoice.total || 0)}</td>
+      </tr>
+    </tfoot>
   </table>
-
-  <div class="totals">
-    <div class="total-row">
-      <span>${t.subtotal}:</span>
-      <span>${formatCurrency(invoice.subtotal || 0)}</span>
-    </div>
-    <div class="total-row">
-      <span>${t.vat} (${invoice.tax_rate || 0}%):</span>
-      <span>${formatCurrency(invoice.tax_amount || 0)}</span>
-    </div>
-    <div class="total-row total-final">
-      <span>${t.total}:</span>
-      <span>${formatCurrency(invoice.total || 0)}</span>
-    </div>
-  </div>
 
   ${(invoice.deposit_amount || invoice.final_payment_amount) ? `
     <div class="payment-terms">
@@ -319,6 +355,7 @@ export function generateInvoiceHTML(
       ${(bankName || bankAccount || bankSwift) ? `
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
           <strong>${t.bankingDetails}</strong><br>
+          ${t.beneficiaryName}: ${beneficiaryName}<br>
           ${bankName ? `${t.bank}: ${bankName}<br>` : ""}
           ${bankAccount ? `${t.account}: ${bankAccount}<br>` : ""}
           ${bankSwift ? `SWIFT: ${bankSwift}` : ""}
@@ -332,6 +369,7 @@ export function generateInvoiceHTML(
       ${(bankName || bankAccount || bankSwift) ? `
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
           <strong>${t.bankingDetails}</strong><br>
+          ${t.beneficiaryName}: ${beneficiaryName}<br>
           ${bankName ? `${t.bank}: ${bankName}<br>` : ""}
           ${bankAccount ? `${t.account}: ${bankAccount}<br>` : ""}
           ${bankSwift ? `SWIFT: ${bankSwift}` : ""}
@@ -340,8 +378,9 @@ export function generateInvoiceHTML(
     </div>
   ` : "")}
 
-  <div style="margin-top: 40px; text-align: center; color: #999; font-size: 12px;">
+  <div class="thank-you">
     ${t.thankYou}
+  </div>
   </div>
 </body>
 </html>

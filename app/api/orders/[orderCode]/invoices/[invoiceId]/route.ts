@@ -9,7 +9,7 @@ export async function PATCH(
   try {
     const { invoiceId } = await params;
     const body = await request.json();
-    const { status } = body;
+    const { status, replaced_by_invoice_id } = body;
 
     if (!status) {
       return NextResponse.json(
@@ -18,8 +18,8 @@ export async function PATCH(
       );
     }
 
-    // Valid statuses
-    const validStatuses = ["draft", "sent", "paid", "cancelled", "overdue", "issued", "issued_sent", "processed"];
+    // Valid statuses (replaced = reissued by another invoice)
+    const validStatuses = ["draft", "sent", "paid", "cancelled", "overdue", "issued", "issued_sent", "processed", "replaced"];
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
         { error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` },
@@ -45,6 +45,9 @@ export async function PATCH(
       status,
       updated_at: new Date().toISOString(),
     };
+    if (status === "replaced" && replaced_by_invoice_id != null) {
+      updatePayload.replaced_by_invoice_id = replaced_by_invoice_id;
+    }
 
     // Update invoice status
     const { data: invoice, error: updateError } = await supabaseAdmin

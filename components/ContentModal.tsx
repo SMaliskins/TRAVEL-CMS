@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, useEffect, useState } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 
 export interface ContentModalProps {
@@ -9,7 +9,7 @@ export interface ContentModalProps {
   title?: string;
   /** Show content from URL in an iframe */
   url?: string;
-  /** Show HTML string (e.g. for print preview). Rendered in iframe with srcdoc. */
+  /** Show HTML string (e.g. for print preview). Rendered in iframe via blob URL for reliable full-document display. */
   htmlContent?: string;
   /** Show Print button (only when htmlContent is set) */
   showPrintButton?: boolean;
@@ -27,16 +27,42 @@ export default function ContentModal({
   className = "",
 }: ContentModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   useEscapeKey(onClose, isOpen);
 
-  const handlePrint = useCallback(() => {
-    const frame = iframeRef.current;
-    if (frame?.contentWindow) {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
+  useEffect(() => {
+    if (!htmlContent || !htmlContent.trim()) {
+      setBlobUrl(null);
+      return;
     }
-  }, []);
+    const blob = new Blob([htmlContent], { type: "text/html; charset=utf-8" });
+    const u = URL.createObjectURL(blob);
+    setBlobUrl(u);
+    return () => {
+      URL.revokeObjectURL(u);
+    };
+  }, [htmlContent]);
+
+  const handlePrint = useCallback(() => {
+    if (!htmlContent?.trim()) return;
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.onafterprint = () => printWindow.close();
+      }, 150);
+    } else {
+      const frame = iframeRef.current;
+      if (frame?.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      }
+    }
+  }, [htmlContent]);
 
   if (!isOpen) return null;
 
@@ -78,23 +104,23 @@ export default function ContentModal({
           </div>
         </div>
         <div
-          className={`min-h-[400px] flex-1 overflow-hidden ${className}`}
+          className={`min-h-[400px] flex-1 overflow-auto ${className}`}
           style={{ height: "70vh" }}
         >
           {hasUrl && (
             <iframe
               src={url}
               title={title || "Content"}
-              className="h-full w-full border-0"
+              className="h-full w-full min-h-[70vh] border-0"
               sandbox="allow-scripts allow-same-origin allow-forms"
             />
           )}
-          {hasHtml && !hasUrl && (
+          {hasHtml && !hasUrl && blobUrl && (
             <iframe
               ref={iframeRef}
-              srcDoc={htmlContent}
+              src={blobUrl}
               title={title || "Preview"}
-              className="h-full w-full border-0"
+              className="h-full w-full min-h-[70vh] border-0"
               sandbox="allow-scripts allow-same-origin"
             />
           )}

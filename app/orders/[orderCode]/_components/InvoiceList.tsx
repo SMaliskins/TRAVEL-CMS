@@ -10,7 +10,7 @@ interface Invoice {
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'issued' | 'issued_sent' | 'processed';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'issued' | 'issued_sent' | 'processed' | 'replaced';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -18,6 +18,7 @@ interface Invoice {
   payer_name?: string | null;
   notes: string | null;
   created_at?: string;
+  replaced_by_invoice_id?: string | null;
   invoice_items: Array<{
     id: string;
     service_name: string;
@@ -288,6 +289,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       issued: 'Issued',
       issued_sent: 'Sent',
       processed: 'Processed',
+      replaced: 'Replaced',
     };
     return labels[status] || status;
   };
@@ -302,6 +304,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       issued: 'text-gray-600',
       issued_sent: 'text-blue-600',
       processed: 'text-purple-600',
+      replaced: 'text-amber-600',
     };
     return colors[status] || 'text-gray-600';
   };
