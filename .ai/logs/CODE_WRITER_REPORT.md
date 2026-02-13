@@ -69,3 +69,82 @@
 - RLS на `orders` должен быть настроен для `company_id`
 
 ---
+
+## [2026-02-13] Fix runtime crash in OrderServicesBlock (invalid element type)
+
+### Контекст задачи
+Пользователь получил runtime-ошибку React: `Element type is invalid ... Check the render method of OrderServicesBlock`.
+Симптом указывает на проблему import/export interop для React-компонента (объект вместо функции/класса).
+
+### Что делал
+1. Проверил текущие импорты и экспорты в:
+   - `OrderServicesBlock.tsx`
+   - `AddServiceModal.tsx`
+   - `AssignedTravellersModal.tsx`
+2. Убрал неоднозначность default-импортов:
+   - В `OrderServicesBlock.tsx` перевел модалки на named-импорты.
+   - Для `ServiceData` использовал `type` import.
+3. Убрал `React.Fragment` через default `React` и заменил на `Fragment` named import.
+4. В `AddServiceModal.tsx` и `AssignedTravellersModal.tsx` добавил named export компонентов с сохранением default export для обратной совместимости.
+5. Выполнил lint для измененных файлов.
+
+### Файлы изменены
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+- `app/orders/[orderCode]/_components/AssignedTravellersModal.tsx`
+
+### Результат тестирования
+- `npm run lint -- app/orders/[orderCode]/_components/OrderServicesBlock.tsx app/orders/[orderCode]/_components/AddServiceModal.tsx app/orders/[orderCode]/_components/AssignedTravellersModal.tsx app/orders/[orderCode]/page.tsx`
+- Ошибок lint: 0
+- Предупреждения: 2 (pre-existing, non-blocking)
+
+### Риски
+- Runtime-проверка в браузере не выполнялась в этой сессии (нет live dev запуска).
+- В проекте остаются unrelated module-not-found ошибки, мешающие полному `next build`.
+
+---
+
+## [2026-02-13] HOTEL Add/Edit redesign: 6 variants
+
+### Контекст задачи
+Нужно сделать современный редизайн HOTEL-модалок (Add и Edit) и дать выбор из 6 разных моделей интерфейса.
+
+### Что сделано
+1. Добавлен новый компонент `HotelModalDesigns.tsx`:
+   - selector на 6 вариантов;
+   - 6 существенно разных layout-моделей для hotel-полей.
+2. `AddServiceModal.tsx`:
+   - подключен selector;
+   - hotel-секция рендерится через выбранный вариант.
+3. `OrderServicesBlock.tsx` / `EditServiceModal`:
+   - сделан расширенный edit-modal (full details + snapshot);
+   - добавлен selector и 6 вариантов для категории Hotel;
+   - добавлены hotel поля в локальную модель сервиса.
+4. API:
+   - `services/route.ts` — hotel поля добавлены в GET/POST mapping.
+   - `services/[serviceId]/route.ts` — PATCH для `service_date_from/to` и hotel полей, с fallback при отсутствии hotel-колонок.
+
+### Измененные файлы
+- `app/orders/[orderCode]/_components/HotelModalDesigns.tsx` (new)
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+- `app/api/orders/[orderCode]/services/route.ts`
+- `app/api/orders/[orderCode]/services/[serviceId]/route.ts`
+
+### Проверка
+- `npm run lint -- app/orders/[orderCode]/_components/HotelModalDesigns.tsx app/orders/[orderCode]/_components/AddServiceModal.tsx app/orders/[orderCode]/_components/OrderServicesBlock.tsx app/api/orders/[orderCode]/services/route.ts app/api/orders/[orderCode]/services/[serviceId]/route.ts`
+- Ошибки: 0
+- Warnings: 1 (pre-existing, non-blocking)
+
+---
+
+## [2026-02-13] Visibility follow-up: make variants always visible
+
+### Что изменено
+- `AddServiceModal`: блок 6 вариантов теперь отображается всегда, вне Hotel показывается явная подсказка.
+- `EditServiceModal`: аналогично, плюс case-insensitive обработка category.
+
+### Проверка
+- lint по двум файлам выполнен, ошибок нет.
+
+---

@@ -134,6 +134,10 @@ export async function GET(
       resStatus: s.res_status || "booked",
       refNr: s.ref_nr || "",
       ticketNr: s.ticket_nr || "",
+      hotelName: s.hotel_name || "",
+      hotelAddress: s.hotel_address || "",
+      hotelPhone: s.hotel_phone || "",
+      hotelEmail: s.hotel_email || "",
       travellerIds: travellerMap[s.id] || [],
     }));
 
@@ -197,6 +201,10 @@ export async function POST(
       res_status: body.resStatus || "booked",
       ref_nr: body.refNr || null,
       ticket_nr: body.ticketNr || null,
+      hotel_name: body.hotelName || null,
+      hotel_address: body.hotelAddress || null,
+      hotel_phone: body.hotelPhone || null,
+      hotel_email: body.hotelEmail || null,
     };
 
     const { data: service, error } = await supabaseAdmin
@@ -267,6 +275,10 @@ export async function POST(
         resStatus: service.res_status,
         refNr: service.ref_nr,
         ticketNr: service.ticket_nr,
+        hotelName: service.hotel_name || "",
+        hotelAddress: service.hotel_address || "",
+        hotelPhone: service.hotel_phone || "",
+        hotelEmail: service.hotel_email || "",
         travellerIds: body.travellerIds || [],
       }
     });

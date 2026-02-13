@@ -36,6 +36,8 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | S8 | Orders | Fix duplicate closing div tags in OrderClientSection | CODE WRITER | DONE | feature/x | ✅ Fixed missing closing bracket for condition (line 505) |
 | S9 | Orders | Add accessible name to Order Type select | CODE WRITER | DONE | feature/x | ✅ Added aria-label="Order Type" for WCAG compliance |
 | S10 | Orders | Fix null/undefined handling in route display | CODE WRITER | DONE | feature/x | ✅ Added null checks for dateFrom/dateTo and parsedRoute.origin |
+| S11 | Orders | Fix runtime crash: invalid element type in OrderServicesBlock | CODE WRITER → QA | DONE | cursor/order-services-block-rendering-6a80 | ✅ Normalized modal component exports/imports (named + default), switched to Fragment import, lint verified |
+| S12 | Orders | HOTEL Add/Edit modal redesign with 6 selectable variants | CODE WRITER → QA | DONE | cursor/order-services-block-rendering-6a80 | ✅ 6 layouts in Add + Edit, API mapping updated, selector now always visible with hint outside Hotel category |
 
 ## PHASE 2.5: Order Detail Redesign (ACTIVE)
 

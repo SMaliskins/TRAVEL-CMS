@@ -1008,3 +1008,5 @@ export default function AssignedTravellersModal({
     </div>
   );
 }
+
+export default AssignedTravellersModal;

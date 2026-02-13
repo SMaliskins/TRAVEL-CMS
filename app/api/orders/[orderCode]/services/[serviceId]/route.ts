@@ -43,19 +43,38 @@ export async function PATCH(
     if (body.client_name !== undefined) updates.client_name = body.client_name;
     if (body.payer_party_id !== undefined) updates.payer_party_id = body.payer_party_id;
     if (body.payer_name !== undefined) updates.payer_name = body.payer_name;
-    if (body.date_from !== undefined) updates.date_from = body.date_from;
-    if (body.date_to !== undefined) updates.date_to = body.date_to;
+    if (body.service_date_from !== undefined) updates.service_date_from = body.service_date_from;
+    if (body.service_date_to !== undefined) updates.service_date_to = body.service_date_to;
+    // Backward compatibility
+    if (body.date_from !== undefined) updates.service_date_from = body.date_from;
+    if (body.date_to !== undefined) updates.service_date_to = body.date_to;
+    if (body.hotel_name !== undefined) updates.hotel_name = body.hotel_name;
+    if (body.hotel_address !== undefined) updates.hotel_address = body.hotel_address;
+    if (body.hotel_phone !== undefined) updates.hotel_phone = body.hotel_phone;
+    if (body.hotel_email !== undefined) updates.hotel_email = body.hotel_email;
 
     updates.updated_at = new Date().toISOString();
 
-    // Update service
-    const { data: service, error: updateError } = await supabaseAdmin
-      .from("order_services")
-      .update(updates)
-      .eq("id", serviceId)
-      .eq("order_id", order.id)
-      .select()
-      .single();
+    const updateService = (payload: Record<string, unknown>) =>
+      supabaseAdmin
+        .from("order_services")
+        .update(payload)
+        .eq("id", serviceId)
+        .eq("order_id", order.id)
+        .select()
+        .single();
+
+    let { data: service, error: updateError } = await updateService(updates);
+
+    // Some environments may not have hotel columns yet.
+    if (updateError?.code === "42703") {
+      const safeUpdates = { ...updates };
+      delete safeUpdates.hotel_name;
+      delete safeUpdates.hotel_address;
+      delete safeUpdates.hotel_phone;
+      delete safeUpdates.hotel_email;
+      ({ data: service, error: updateError } = await updateService(safeUpdates));
+    }
 
     if (updateError) {
       console.error("Update service error:", updateError);

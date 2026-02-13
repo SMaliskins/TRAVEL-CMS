@@ -10,6 +10,11 @@ import { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import type { SupplierCommission } from "@/lib/types/directory";
+import {
+  HotelDesignLayout,
+  HotelVariantSelector,
+  type HotelModalVariant,
+} from "./HotelModalDesigns";
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -125,7 +130,7 @@ const RES_STATUS_OPTIONS: { value: ServiceData["resStatus"]; label: string }[] =
   { value: "cancelled", label: "Cancelled" },
 ];
 
-export default function AddServiceModal({ 
+export function AddServiceModal({ 
   orderCode,
   defaultClientId,
   defaultClientName,
@@ -201,6 +206,7 @@ export default function AddServiceModal({
   const [hotelAddress, setHotelAddress] = useState("");
   const [hotelPhone, setHotelPhone] = useState("");
   const [hotelEmail, setHotelEmail] = useState("");
+  const [hotelModalVariant, setHotelModalVariant] = useState<HotelModalVariant>("v1");
   const [hotelBedType, setHotelBedType] = useState<"king_queen" | "twin" | "not_guaranteed">("not_guaranteed");
   const [hotelPreferences, setHotelPreferences] = useState({
     earlyCheckIn: false,
@@ -519,6 +525,7 @@ export default function AddServiceModal({
   };
 
   // Determine which fields to show based on category
+  const normalizedCategory = category.trim().toLowerCase();
   const showTicketNr = categoryType === "flight";
   const showHotelFields = categoryType === "hotel";
   const showTransferFields = categoryType === "transfer";
@@ -2332,8 +2339,24 @@ export default function AddServiceModal({
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               
+              {/* 6 design variants - always visible */}
+              <div className="space-y-2">
+                <HotelVariantSelector value={hotelModalVariant} onChange={setHotelModalVariant} />
+                <HotelDesignLayout
+                  variant={hotelModalVariant}
+                  mode="add"
+                  fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
+                  onChange={(field, value) => {
+                    if (field === "hotelName") setHotelName(value);
+                    if (field === "hotelAddress") setHotelAddress(value);
+                    if (field === "hotelPhone") setHotelPhone(value);
+                    if (field === "hotelEmail") setHotelEmail(value);
+                  }}
+                />
+              </div>
+              
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name (search)</label>
                 <HotelSuggestInput
                   value={hotelName}
                   onChange={setHotelName}
@@ -2484,3 +2507,5 @@ export default function AddServiceModal({
     </div>
   );
 }
+
+export default AddServiceModal;

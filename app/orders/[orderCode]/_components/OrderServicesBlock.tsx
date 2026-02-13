@@ -1038,6 +1038,10 @@ export default function OrderServicesBlock({
       refNr: service.refNr || "",
       ticketNr: service.ticketNr || "",
       assignedTravellerIds: service.travellerIds || [],
+      hotelName: service.hotelName || "",
+      hotelAddress: service.hotelAddress || "",
+      hotelPhone: service.hotelPhone || "",
+      hotelEmail: service.hotelEmail || "",
     };
     
     console.log('✅ newService created:', {
@@ -1418,7 +1422,7 @@ export default function OrderServicesBlock({
                 const isExpanded = expandedGroups[groupKey] ?? true;
 
                 return (
-                  <React.Fragment key={`group-${groupKey}`}>
+                  <Fragment key={`group-${groupKey}`}>
                     {/* Group header row */}
                     <tr
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
@@ -1704,7 +1708,7 @@ export default function OrderServicesBlock({
                           </React.Fragment>
                         );
                       })}
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </tbody>

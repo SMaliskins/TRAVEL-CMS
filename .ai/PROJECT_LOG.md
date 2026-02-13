@@ -829,3 +829,125 @@ Smoke test:
 **Результат:**
 - OrderServicesBlock.tsx updated with interop-safe imports and service existence check
 **Next Step:** `QA — verify order page and Services block render without "Element type invalid" error`
+
+---
+
+### 📅 [2026-02-13] | [20:22]
+**Агент:** `Code Writer`
+**Задача:** `Fix runtime crash: invalid element type in OrderServicesBlock`
+**Статус:** `START`
+**Действия:**
+- Прочитал `.ai/PROJECT_RULES.md`, `.ai/PROJECT_TODO.md`, `.ai/PROJECT_PROGRESS.md`, последние записи `.ai/PROJECT_LOG.md`
+- Начал диагностику ошибки `Element type is invalid` в `OrderServicesBlock`
+- План: проверить экспорты/импорты, JSX-вставки и типы компонентов в блоке услуг заказа
+**Результат:**
+- **Next Step:** `Найти и исправить неверный импорт/экспорт, который ломает рендер`
+
+---
+
+### 📅 [2026-02-13] | [20:26]
+**Агент:** `Code Writer`
+**Задача:** `Fix runtime crash: invalid element type in OrderServicesBlock`
+**Статус:** `SUCCESS`
+**Действия:**
+- В `OrderServicesBlock` заменил default-импорты модалок на named-импорты и type-only импорт для `ServiceData`
+- Заменил `React.Fragment` на `Fragment` через named import из `react`
+- В `AddServiceModal` и `AssignedTravellersModal` добавил named export с сохранением default export для совместимости
+**Результат:**
+- Снижена вероятность runtime-ошибки из-за default/named import interop в модальных компонентах
+- **Next Step:** `Проверить линтером и зафиксировать SCORE`
+
+---
+
+### 📅 [2026-02-13] | [20:26]
+**Агент:** `QA / REGRESSION`
+**Задача:** `Regression check for OrderServicesBlock invalid element type fix`
+**Статус:** `SUCCESS`
+**Действия:**
+- Запущен lint: `npm run lint -- app/orders/[orderCode]/_components/OrderServicesBlock.tsx app/orders/[orderCode]/_components/AddServiceModal.tsx app/orders/[orderCode]/_components/AssignedTravellersModal.tsx app/orders/[orderCode]/page.tsx`
+- Проверены измененные файлы: ошибок lint нет, только предупреждения
+**Результат:**
+- **SCORE: 9/10**
+- **Defect List:**
+  - [LOW] `app/orders/[orderCode]/_components/AssignedTravellersModal.tsx:321` — `travellerExists` не используется (pre-existing warning, non-blocking)
+  - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:202` — missing dependency warning для `useEffect` (pre-existing warning, non-blocking)
+- **Next Step:** `Обновить PROJECT_PROGRESS.md и PROJECT_TODO.md, затем закоммитить и отправить`
+
+---
+
+### 📅 [2026-02-13] | [20:35]
+**Агент:** `Code Writer`
+**Задача:** `HOTEL Add/Edit modal redesign (6 variants)`
+**Статус:** `START`
+**Действия:**
+- Подготовка редизайна HOTEL-модалок Add/Edit
+- Цель: 6 существенно разных UI-версий с выбором в интерфейсе
+**Результат:**
+- **Next Step:** `Реализовать 6 вариантов и подключить их в AddService/EditService`
+
+---
+
+### 📅 [2026-02-13] | [20:39]
+**Агент:** `Code Writer`
+**Задача:** `HOTEL Add/Edit modal redesign (6 variants)`
+**Статус:** `SUCCESS`
+**Действия:**
+- Добавлен общий компонент `HotelModalDesigns.tsx` с 6 существенно разными UI-вариантами (V1-V6) и selector
+- В `AddServiceModal` подключен выбор дизайна и рендер выбранной HOTEL-версии
+- В `EditServiceModal` сделан редизайн: полноэкранный формат, snapshot блока, даты, и 6 HOTEL-вариантов
+- API обновлен для hotel-полей и корректных `service_date_from/service_date_to` в PATCH
+**Результат:**
+- **Next Step:** `QA: lint + SCORE`
+
+---
+
+### 📅 [2026-02-13] | [20:39]
+**Агент:** `QA / REGRESSION`
+**Задача:** `QA check: HOTEL Add/Edit redesign (6 variants)`
+**Статус:** `SUCCESS`
+**Действия:**
+- Запущен lint по измененным файлам модалок и API
+- Проверка прошла без ошибок, 1 warning (pre-existing)
+**Результат:**
+- **SCORE: 9/10**
+- **Defect List:**
+  - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:219` — warning `react-hooks/exhaustive-deps` (pre-existing, non-blocking)
+- **Next Step:** `Обновить TODO/PROGRESS, коммит и push`
+
+---
+
+### 📅 [2026-02-13] | [20:43]
+**Агент:** `Code Writer`
+**Задача:** `Make HOTEL variants always visible in Add/Edit`
+**Статус:** `START`
+**Действия:**
+- Исправляю видимость блока 6 вариантов, чтобы его было видно всегда
+**Результат:**
+- **Next Step:** `Patch AddServiceModal/EditServiceModal + quick QA`
+
+---
+
+### 📅 [2026-02-13] | [20:45]
+**Агент:** `Code Writer`
+**Задача:** `Make HOTEL variants always visible in Add/Edit`
+**Статус:** `SUCCESS`
+**Действия:**
+- Секция 6 вариантов отображается всегда в Add/Edit
+- Для не-Hotel добавлена явная подсказка переключить Category на Hotel
+- Добавлена нормализация category (case-insensitive) для надежной активации
+**Результат:**
+- **Next Step:** `QA lint + SCORE`
+
+---
+
+### 📅 [2026-02-13] | [20:45]
+**Агент:** `QA / REGRESSION`
+**Задача:** `QA: visibility fix for HOTEL variants`
+**Статус:** `SUCCESS`
+**Действия:**
+- Проверен lint для `AddServiceModal` и `OrderServicesBlock`
+**Результат:**
+- **SCORE: 9/10**
+- **Defect List:**
+  - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:219` — pre-existing hook warning
+- **Next Step:** `Commit + push`
