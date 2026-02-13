@@ -137,3 +137,14 @@
 - Warnings: 1 (pre-existing, non-blocking)
 
 ---
+
+## [2026-02-13] Visibility follow-up: make variants always visible
+
+### Что изменено
+- `AddServiceModal`: блок 6 вариантов теперь отображается всегда, вне Hotel показывается явная подсказка.
+- `EditServiceModal`: аналогично, плюс case-insensitive обработка category.
+
+### Проверка
+- lint по двум файлам выполнен, ошибок нет.
+
+---

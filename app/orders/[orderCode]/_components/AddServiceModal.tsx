@@ -159,15 +159,16 @@ export function AddServiceModal({
     setClients(clients.filter((_, i) => i !== index));
   };
 
-  // Determine which fields to show based on category
-  const showTicketNr = category === "Flight";
-  const showHotelFields = category === "Hotel";
-  const showTransferFields = category === "Transfer";
-  const showFlightItinerary = category === "Flight";
+  // Determine which fields to show based on category (normalized)
+  const normalizedCategory = category.trim().toLowerCase();
+  const showTicketNr = normalizedCategory === "flight";
+  const showHotelFields = normalizedCategory === "hotel";
+  const showTransferFields = normalizedCategory === "transfer";
+  const showFlightItinerary = normalizedCategory === "flight";
   
   // Auto-generate service name from flight segments
   useEffect(() => {
-    if (category === "Flight" && flightSegments.length > 0 && !serviceName) {
+    if (normalizedCategory === "flight" && flightSegments.length > 0 && !serviceName) {
       const route = flightSegments
         .map((s) => s.departure)
         .concat(flightSegments[flightSegments.length - 1]?.arrival || "")
@@ -187,7 +188,7 @@ export function AddServiceModal({
         setDateTo(lastArr);
       }
     }
-  }, [flightSegments, category, serviceName, dateFrom, dateTo]);
+  }, [flightSegments, normalizedCategory, serviceName, dateFrom, dateTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -482,18 +483,18 @@ export function AddServiceModal({
             )}
           </div>
 
-          {/* Hotel-specific fields */}
-          {showHotelFields && (
-            <div className="border-t border-gray-200 pt-4 mt-4">
-              <h3 className="mb-2 text-sm font-semibold text-gray-900">Hotel Details</h3>
-              <p className="mb-3 text-xs text-gray-600">
-                Select one of six design models and compare usability directly in this modal.
-              </p>
-              <div className="space-y-3">
-                <HotelVariantSelector
-                  value={hotelModalVariant}
-                  onChange={setHotelModalVariant}
-                />
+          {/* Hotel variants: always visible, active for Hotel category */}
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            <h3 className="mb-2 text-sm font-semibold text-gray-900">Hotel Details</h3>
+            <p className="mb-3 text-xs text-gray-600">
+              6 design variants are available below. Set Category = Hotel to activate editing.
+            </p>
+            <div className="space-y-3">
+              <HotelVariantSelector
+                value={hotelModalVariant}
+                onChange={setHotelModalVariant}
+              />
+              {showHotelFields ? (
                 <HotelDesignLayout
                   variant={hotelModalVariant}
                   mode="add"
@@ -505,9 +506,13 @@ export function AddServiceModal({
                     if (field === "hotelEmail") setHotelEmail(value);
                   }}
                 />
-              </div>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Switch Category to <strong>Hotel</strong> to view and edit hotel fields in the selected design.
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Flight-specific fields - Itinerary */}
           {showFlightItinerary && (

@@ -484,11 +484,27 @@ function EditServiceModal({
   onClose: () => void;
   onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
 }) {
+  const normalizeCategoryValue = (value: string) => {
+    const normalized = value.trim().toLowerCase();
+    const map: Record<string, string> = {
+      flight: "Flight",
+      hotel: "Hotel",
+      transfer: "Transfer",
+      tour: "Tour",
+      insurance: "Insurance",
+      visa: "Visa",
+      "rent a car": "Rent a Car",
+      cruise: "Cruise",
+      other: "Other",
+    };
+    return map[normalized] || (value.trim() || "Other");
+  };
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(service.name);
-  const [category, setCategory] = useState(service.category);
+  const [category, setCategory] = useState(() => normalizeCategoryValue(service.category));
   const [dateFrom, setDateFrom] = useState(service.dateFrom || "");
   const [dateTo, setDateTo] = useState(service.dateTo || "");
   const [servicePrice, setServicePrice] = useState(service.servicePrice.toString());
@@ -502,8 +518,9 @@ function EditServiceModal({
   const [hotelEmail, setHotelEmail] = useState(service.hotelEmail || "");
   const [hotelModalVariant, setHotelModalVariant] = useState<HotelModalVariant>("v1");
 
-  const isHotel = category === "Hotel";
-  const isFlight = category === "Flight";
+  const normalizedCategory = category.trim().toLowerCase();
+  const isHotel = normalizedCategory === "hotel";
+  const isFlight = normalizedCategory === "flight";
 
   const handleSave = async () => {
     setIsSubmitting(true);
@@ -713,13 +730,16 @@ function EditServiceModal({
             )}
           </div>
 
-          {isHotel && (
-            <div className="space-y-3 border-t border-gray-200 pt-4">
-              <h3 className="text-sm font-semibold text-gray-900">Hotel Details (6 variants)</h3>
-              <HotelVariantSelector
-                value={hotelModalVariant}
-                onChange={setHotelModalVariant}
-              />
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-semibold text-gray-900">Hotel Details (6 variants)</h3>
+            <p className="text-xs text-gray-600">
+              Variants are always visible. Set Category = Hotel to activate field editing.
+            </p>
+            <HotelVariantSelector
+              value={hotelModalVariant}
+              onChange={setHotelModalVariant}
+            />
+            {isHotel ? (
               <HotelDesignLayout
                 variant={hotelModalVariant}
                 mode="edit"
@@ -731,8 +751,12 @@ function EditServiceModal({
                   if (field === "hotelEmail") setHotelEmail(value);
                 }}
               />
-            </div>
-          )}
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Switch Category to <strong>Hotel</strong> to view and edit hotel fields in the selected design.
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">

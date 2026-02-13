@@ -4884,3 +4884,41 @@ Smoke test:
 - **Defect List:**
   - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:219` — warning `react-hooks/exhaustive-deps` (pre-existing, non-blocking)
 - **Next Step:** `Обновить TODO/PROGRESS, коммит и push`
+
+---
+
+### 📅 [2026-02-13] | [20:43]
+**Агент:** `Code Writer`
+**Задача:** `Make HOTEL variants always visible in Add/Edit`
+**Статус:** `START`
+**Действия:**
+- Исправляю видимость блока 6 вариантов, чтобы его было видно всегда
+**Результат:**
+- **Next Step:** `Patch AddServiceModal/EditServiceModal + quick QA`
+
+---
+
+### 📅 [2026-02-13] | [20:45]
+**Агент:** `Code Writer`
+**Задача:** `Make HOTEL variants always visible in Add/Edit`
+**Статус:** `SUCCESS`
+**Действия:**
+- Секция 6 вариантов отображается всегда в Add/Edit
+- Для не-Hotel добавлена явная подсказка переключить Category на Hotel
+- Добавлена нормализация category (case-insensitive) для надежной активации
+**Результат:**
+- **Next Step:** `QA lint + SCORE`
+
+---
+
+### 📅 [2026-02-13] | [20:45]
+**Агент:** `QA / REGRESSION`
+**Задача:** `QA: visibility fix for HOTEL variants`
+**Статус:** `SUCCESS`
+**Действия:**
+- Проверен lint для `AddServiceModal` и `OrderServicesBlock`
+**Результат:**
+- **SCORE: 9/10**
+- **Defect List:**
+  - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:219` — pre-existing hook warning
+- **Next Step:** `Commit + push`
