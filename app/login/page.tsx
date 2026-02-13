@@ -147,19 +147,21 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
 
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setShowReset(true)}
+            className="text-sm font-medium text-blue-600 underline hover:text-blue-700"
+          >
+            Forgot password?
+          </button>
+        </div>
+
         <button
           onClick={handleLogin}
           className="w-full bg-black text-white p-2"
         >
           Login
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowReset(true)}
-          className="w-full py-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
-        >
-          Forgot password?
         </button>
 
         {error && <p className="text-red-600 text-sm">{error}</p>}
