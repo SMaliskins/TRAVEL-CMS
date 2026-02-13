@@ -280,8 +280,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build user message for Anthropic: text or image
-    type ContentBlock = Anthropic.MessageCreateParams.Message["content"][number];
+    // Build user message for Anthropic: text or image (inline type — SDK MessageCreateParams shape varies by version)
+    type ContentBlock =
+      | { type: "text"; text: string }
+      | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
     let userContent: ContentBlock[];
     if (textContent) {
       userContent = [{ type: "text" as const, text: `Parse this Package Tour document:\n\n${textContent}` }];

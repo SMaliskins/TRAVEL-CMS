@@ -1013,7 +1013,7 @@ export default function InvoiceCreator({
           throw new Error(errMsg);
         }
 
-        setToastMessage('Invoice created successfully!');
+        showToast("success", "Invoice created successfully!");
         onSuccess?.();
         setTimeout(() => {
           onClose();

@@ -1744,7 +1744,6 @@ export default function AddServiceModal({
                 </div>
                 )}
                 
-                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
@@ -1757,9 +1756,7 @@ export default function AddServiceModal({
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
-                )}
 
-                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
                   <DateRangePicker
@@ -1770,7 +1767,6 @@ export default function AddServiceModal({
                     triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                   />
                 </div>
-                )}
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
@@ -1885,7 +1881,7 @@ export default function AddServiceModal({
                       <span className="text-[10px] text-gray-400">+ class diff</span>
                     </div>
                   </>
-                ) : categoryType !== "hotel" ? (
+                ) : (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                     <select
@@ -1898,7 +1894,7 @@ export default function AddServiceModal({
                       ))}
                     </select>
                   </div>
-                ) : null}
+                )}
               </div>
               )}
             </div>
@@ -1961,7 +1957,7 @@ export default function AddServiceModal({
                       )}
                     </div>
                   ) : (
-                    <div className={categoryType === "tour" && (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "")}>
+                    <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                       <PartySelect
                         value={supplierPartyId}
                         onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
@@ -1972,7 +1968,7 @@ export default function AddServiceModal({
                   )}
                 </div>
                 
-                <div className={categoryType === "tour" && (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "")}>
+                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <div className="flex items-center justify-between mb-0.5">
                     <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
                     <ClientMultiSelectDropdown

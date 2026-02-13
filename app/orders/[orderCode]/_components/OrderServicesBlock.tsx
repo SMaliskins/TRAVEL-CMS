@@ -530,7 +530,8 @@ export default function OrderServicesBlock({
     const flightServices = activeServices
       .filter(s => {
         const cat = (s.category || "").toLowerCase();
-        return (cat.includes("flight") || cat.includes("tour")) && s.flightSegments && s.flightSegments.length > 0;
+        const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
+        return isFlight && s.flightSegments && s.flightSegments.length > 0;
       })
       .sort((a, b) => {
         const dateA = a.flightSegments?.[0]?.departureDate || a.dateFrom;
@@ -600,6 +601,21 @@ export default function OrderServicesBlock({
     }
     
     if (routePoints.length === 0) {
+      const flightNoSegments = activeServices.filter(s => {
+        const cat = (s.category || "").toLowerCase();
+        const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
+        return isFlight && (!s.flightSegments || s.flightSegments.length === 0) && s.name;
+      });
+      for (const service of flightNoSegments) {
+        const parsed = parseRouteFromName(service.name);
+        if (parsed && parsed.length >= 2) {
+          routePoints.push(parsed[0], parsed[1]);
+          break;
+        }
+      }
+    }
+    
+    if (routePoints.length === 0) {
       const hotelServices = activeServices.filter(s => 
         (s.category === "Hotel" || s.category === "Tour") && s.dateFrom && s.dateTo
       );
@@ -653,6 +669,24 @@ export default function OrderServicesBlock({
     return destinations.map(d => `${d.city}|${d.countryCode || ""}`).join("→");
   };
 
+  // Parse "Origin - Destination" from flight service name (e.g. "03.02 Nice-Côte d'Azur - London Heathrow")
+  const parseRouteFromName = (name: string): CityWithCountry[] | null => {
+    const parts = name.split(/\s*-\s*/).map(p => p.trim());
+    if (parts.length < 2) return null;
+    let originStr = parts[0];
+    const destStr = parts[parts.length - 1];
+    if (originStr.match(/^\d{1,2}\.\d{1,2}\.(?:\d{2})?\d{0,2}\s+/)) {
+      originStr = originStr.replace(/^\d{1,2}\.\d{1,2}\.(?:\d{2})?\d{0,2}\s+/, "").trim();
+    }
+    const originCity = getCityByName(originStr) || (originStr.length <= 4 ? getCityByIATA(originStr) : undefined);
+    const destCity = getCityByName(destStr) || getCityByName(destStr.replace(/\s+(Airport|Heathrow|Airport)$/i, "").trim()) || (destStr.length <= 4 ? getCityByIATA(destStr) : undefined);
+    if (!originCity || !destCity) return null;
+    return [
+      { city: originCity.name, country: originCity.country || "", countryCode: originCity.countryCode, lat: originCity.lat, lng: originCity.lng },
+      { city: destCity.name, country: destCity.country || "", countryCode: destCity.countryCode, lat: destCity.lat, lng: destCity.lng },
+    ];
+  };
+
   // Helper: build full flight route for a traveller
   // Origin (first departure) = where they fly FROM. Destinations = where they go (incl. transits like Frankfurt)
   const buildTravellerRoute = (travellerId: string): CityWithCountry[] => {
@@ -666,7 +700,8 @@ export default function OrderServicesBlock({
     const flightServices = travellerServices
       .filter(s => {
         const cat = (s.category || "").toLowerCase();
-        return (cat.includes("flight") || cat.includes("tour")) && s.flightSegments && s.flightSegments.length > 0;
+        const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
+        return isFlight && s.flightSegments && s.flightSegments.length > 0;
       })
       .sort((a, b) => {
         const dateA = a.flightSegments?.[0]?.departureDate || a.dateFrom;
@@ -830,6 +865,18 @@ export default function OrderServicesBlock({
       destinations: group.destinations,
     }));
   }, [services, orderTravellers, selectedTravellerId]);
+
+  const { travellerIdToColor, routeColorsUsed } = useMemo(() => {
+    const idToColor: Record<string, string> = {};
+    const used: string[] = [];
+    for (const r of travellerRoutes) {
+      used.push(r.color);
+      for (const id of r.travellerId.split(",").map((s) => s.trim()).filter(Boolean)) {
+        idToColor[id] = r.color;
+      }
+    }
+    return { travellerIdToColor: idToColor, routeColorsUsed: used };
+  }, [travellerRoutes]);
   
   // Smart hints state - load from localStorage
   const dismissedHintsKey = React.useMemo(() => `dismissedHints_${orderCode}`, [orderCode]);
@@ -1354,58 +1401,56 @@ export default function OrderServicesBlock({
     setModalServiceId(null);
   };
 
-  if (isLoading) {
-    return (
-      <div className="rounded-lg bg-white shadow-sm overflow-hidden">
-        <style>{`
-          @keyframes services-skeleton-shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-          }
-          .services-skeleton-cell {
-            background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-            background-size: 200% 100%;
-            animation: services-skeleton-shimmer 1.2s ease-in-out infinite;
-          }
-        `}</style>
-        <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-base">📋</span>
-            <h2 className="text-base font-semibold text-gray-900">Services</h2>
-          </div>
-        </div>
-        <div className="px-3 py-2 border-b border-gray-100">
-          <div className="h-8 rounded-md services-skeleton-cell w-48" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-20 px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="min-w-[180px] px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <tr key={i} className="border-b border-gray-100">
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell mx-auto w-4" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-32" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-24" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
-                  <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-12" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  const servicesTableContent = isLoading ? (
+    <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+      <style>{`
+        @keyframes services-skeleton-shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .services-skeleton-cell {
+          background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+          background-size: 200% 100%;
+          animation: services-skeleton-shimmer 1.2s ease-in-out infinite;
+        }
+      `}</style>
+      <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📋</span>
+          <h2 className="text-base font-semibold text-gray-900">Services</h2>
         </div>
       </div>
-    );
-  }
+      <div className="px-3 py-2 border-b border-gray-100">
+        <div className="h-8 rounded-md services-skeleton-cell w-48" />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="w-20 px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="min-w-[180px] px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <tr key={i} className="border-b border-gray-100">
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell mx-auto w-4" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-32" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-24" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-12" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -1419,9 +1464,10 @@ export default function OrderServicesBlock({
           animation: services-row-in 0.35s ease-out forwards;
         }
       `}</style>
-      {/* Vertical layout: Services on top, Map below */}
+      {/* Vertical layout: Services on top, Itinerary + Map below */}
       <div className="space-y-4">
-        {/* Services table */}
+        {/* Services table — skeleton when loading; Itinerary block always rendered below */}
+        {isLoading ? servicesTableContent : (
         <div className="rounded-lg bg-white shadow-sm">
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1836,10 +1882,10 @@ export default function OrderServicesBlock({
           </table>
         </div>
       </div>
+        )}
 
         {/* Itinerary Timeline + Map - side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Left: Itinerary Timeline (2/3) */}
+        <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <ItineraryTimeline
               services={visibleServices.map(s => ({
@@ -1853,6 +1899,8 @@ export default function OrderServicesBlock({
                 supplier: s.supplier,
                 resStatus: s.resStatus,
                 hotelName: s.hotelName,
+                hotelAddress: (s as { hotelAddress?: string }).hotelAddress,
+                hotelPhone: (s as { hotelPhone?: string }).hotelPhone,
                 flightSegments: s.flightSegments,
                 refNr: s.refNr,
                 ticketNumbers: s.ticketNumbers,
@@ -1867,52 +1915,28 @@ export default function OrderServicesBlock({
               onUploadBoardingPass={async (serviceId, file, clientId, flightNumber) => {
                 const client = orderTravellers.find(t => t.id === clientId);
                 const clientName = client ? `${client.firstName} ${client.lastName}` : "Unknown";
-                
                 const formData = new FormData();
                 formData.append("file", file);
                 formData.append("clientId", clientId);
                 formData.append("clientName", clientName);
                 formData.append("flightNumber", flightNumber);
-                
-                const response = await fetch(`/api/services/${serviceId}/boarding-passes`, {
-                  method: "POST",
-                  body: formData,
-                });
-                
-                if (response.ok) {
-                  // Refresh services to get updated boarding passes
-                  fetchServices();
-                } else {
-                  const error = await response.json();
-                  alert(error.error || "Failed to upload boarding pass");
-                }
+                const response = await fetch(`/api/services/${serviceId}/boarding-passes`, { method: "POST", body: formData });
+                if (response.ok) fetchServices();
+                else { const err = await response.json(); alert(err.error || "Failed to upload boarding pass"); }
               }}
-              onViewBoardingPass={(pass) => {
-                setContentModal({ url: pass.fileUrl, title: pass.fileName || "Boarding pass" });
-              }}
+              onViewBoardingPass={(pass) => setContentModal({ url: pass.fileUrl, title: pass.fileName || "Boarding pass" })}
               onDeleteBoardingPass={async (serviceId, passId) => {
                 if (!confirm("Delete this boarding pass?")) return;
-                
-                const response = await fetch(
-                  `/api/services/${serviceId}/boarding-passes?passId=${passId}`,
-                  { method: "DELETE" }
-                );
-                
-                if (response.ok) {
-                  fetchServices();
-                } else {
-                  alert("Failed to delete boarding pass");
-                }
+                const response = await fetch(`/api/services/${serviceId}/boarding-passes?passId=${passId}`, { method: "DELETE" });
+                if (response.ok) fetchServices(); else alert("Failed to delete boarding pass");
               }}
-              onEditService={(serviceId) => {
-                setEditServiceId(serviceId);
-              }}
+              onEditService={(serviceId) => setEditServiceId(serviceId)}
               selectedBoardingPasses={selectedBoardingPasses}
               onToggleBoardingPassSelection={handleToggleBoardingPassSelection}
+              travellerIdToColor={travellerIdToColor}
+              routeColorsUsed={routeColorsUsed}
             />
           </div>
-          
-          {/* Right: Itinerary Map (1/3) */}
           <div className="rounded-lg bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-200 px-3 py-2">
               <div className="flex items-center gap-2">
@@ -1929,9 +1953,7 @@ export default function OrderServicesBlock({
                 className="h-[500px]"
               />
             ) : (
-              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-                No destinations set
-              </div>
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No destinations set</div>
             )}
           </div>
         </div>

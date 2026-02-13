@@ -72,7 +72,7 @@ export async function GET(
 
     if (pdfBuffer && pdfBuffer.length > 0) {
       const filename = `${String(invoice.invoice_number).replace(/\s+/g, "-")}.pdf`;
-      return new NextResponse(pdfBuffer, {
+      return new NextResponse(new Uint8Array(pdfBuffer), {
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `attachment; filename="${filename}"`,

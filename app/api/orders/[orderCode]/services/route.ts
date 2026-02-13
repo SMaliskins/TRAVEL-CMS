@@ -312,6 +312,7 @@ export async function POST(
     if (body.cabinClass !== undefined) serviceData.cabin_class = body.cabinClass || "economy";
     if (body.baggage !== undefined) serviceData.baggage = body.baggage || null;
     if (body.flightSegments !== undefined && Array.isArray(body.flightSegments)) serviceData.flight_segments = body.flightSegments;
+    if (body.ticketNumbers !== undefined && Array.isArray(body.ticketNumbers)) serviceData.ticket_numbers = body.ticketNumbers;
 
     const { data: service, error } = await supabaseAdmin
       .from("order_services")
@@ -392,6 +393,7 @@ export async function POST(
 
     upsertOrderServiceEmbedding(service.id).catch((e) => console.warn("[POST services] upsertOrderServiceEmbedding:", e));
 
+    const inserted = service as { ticket_numbers?: unknown };
     return NextResponse.json({
       service: {
         id: service.id,
@@ -410,6 +412,7 @@ export async function POST(
         resStatus: service.res_status,
         refNr: service.ref_nr,
         ticketNr: service.ticket_nr,
+        ticketNumbers: Array.isArray(inserted.ticket_numbers) ? inserted.ticket_numbers : [],
         travellerIds: effectiveTravellerIds,
       }
     });

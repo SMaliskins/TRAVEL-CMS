@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PartySelect from '@/components/PartySelect';
 import DateRangePicker from '@/components/DateRangePicker';
@@ -1378,6 +1378,7 @@ export default function EditServiceModalNew({
           resStatus,
           refNr,
           ticketNr,
+          ticketNumbers: categoryType === "flight" ? ticketNumbers : undefined,
           dateFrom,
           dateTo,
           // Flight-specific fields
@@ -1791,7 +1792,6 @@ export default function EditServiceModalNew({
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Basic Info</h4>
                 
                 {/* Category only in header "Edit Service — {category}" (mirror Add). For Hotel: no Name (in Hotel Details), no Dates (in Hotel Details) */}
-                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
@@ -1804,9 +1804,7 @@ export default function EditServiceModalNew({
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
-                )}
 
-                {categoryType !== "hotel" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
                   <DateRangePicker
@@ -1817,7 +1815,6 @@ export default function EditServiceModalNew({
                     triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                   />
                 </div>
-                )}
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
@@ -1937,7 +1934,7 @@ export default function EditServiceModalNew({
                       )}
                     </div>
                   </>
-                ) : categoryType !== "hotel" ? (
+                ) : (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                     <div className="flex items-center gap-2">
@@ -1952,7 +1949,7 @@ export default function EditServiceModalNew({
                       </select>
                     </div>
                   </div>
-                ) : null}
+                )}
               </div>
             )}
             </div>
@@ -2634,7 +2631,7 @@ export default function EditServiceModalNew({
           </div>
 
           {/* Category-specific fields - Hotel Details moved to top left for hotel; only show bottom block for non-hotel */}
-          {showHotelFields && categoryType !== "hotel" && (
+          {!showHotelFields && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               

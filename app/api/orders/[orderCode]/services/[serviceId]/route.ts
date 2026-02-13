@@ -55,6 +55,7 @@ export async function PATCH(
     if (body.res_status !== undefined) updates.res_status = body.res_status;
     if (body.ref_nr !== undefined) updates.ref_nr = body.ref_nr;
     if (body.ticket_nr !== undefined) updates.ticket_nr = body.ticket_nr;
+    if (body.ticket_numbers !== undefined && Array.isArray(body.ticket_numbers)) updates.ticket_numbers = body.ticket_numbers;
     if (body.supplier_party_id !== undefined) updates.supplier_party_id = body.supplier_party_id;
     if (body.supplier_name !== undefined) updates.supplier_name = body.supplier_name;
     if (body.client_party_id !== undefined) updates.client_party_id = body.client_party_id;

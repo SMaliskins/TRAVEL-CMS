@@ -100,7 +100,9 @@ function mergePassports(primary: PassportData, secondary: PassportData): Passpor
     const v = secondary[k];
     if (k === "isAlienPassport") {
       merged.isAlienPassport = primary.isAlienPassport === true || secondary.isAlienPassport === true;
-    } else if (v && !merged[k]) merged[k] = v;
+    } else if (typeof v === "string" && v && !merged[k]) {
+      (merged as Record<string, string | undefined>)[k] = v;
+    }
   }
   return merged;
 }
@@ -293,8 +295,8 @@ export async function POST(request: NextRequest) {
           const text = msg.content.find((c) => c.type === "text");
           const textContent2 = text && "text" in text ? text.text : "";
           const jsonMatch2 = textContent2.match(/\{[\s\S]*\}/);
-          if (jsonMatch2) {
-            const parsed = JSON.parse(jsonMatch2);
+          if (jsonMatch2?.[0]) {
+            const parsed = JSON.parse(jsonMatch2[0]);
             const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
             anthropicPassport = normalizePassport(raw || {});
           }
