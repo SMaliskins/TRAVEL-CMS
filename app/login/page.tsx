@@ -9,6 +9,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showReset, setShowReset] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   // Show config error if Supabase not configured
   if (!isSupabaseConfigured) {
@@ -51,6 +54,79 @@ export default function LoginPage() {
     router.push("/dashboard");
   };
 
+  const handleSendResetLink = async () => {
+    if (!email.trim()) {
+      setError("Enter your email");
+      return;
+    }
+    setError("");
+    setIsSendingReset(true);
+
+    try {
+      const redirectTo = typeof window !== "undefined"
+        ? `${window.location.origin}/auth/reset-password`
+        : "/auth/reset-password";
+
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo,
+      });
+
+      if (resetError) throw resetError;
+
+      setResetSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send reset link");
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
+  if (showReset) {
+    return (
+      <div className="flex min-h-screen items-center justify-center relative">
+        <div className="w-full max-w-sm space-y-4">
+          <h1 className="text-2xl font-bold">TRAVEL CMS</h1>
+          <p className="text-sm text-gray-600">Reset password</p>
+
+          {resetSuccess ? (
+            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
+              Reset link sent! Check your email at <strong>{email}</strong>
+            </div>
+          ) : (
+            <>
+              <input
+                className="w-full border p-2"
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <button
+                onClick={handleSendResetLink}
+                disabled={isSendingReset}
+                className="w-full bg-black text-white p-2 disabled:opacity-50"
+              >
+                {isSendingReset ? "Sending..." : "Send reset link"}
+              </button>
+            </>
+          )}
+
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+
+          <button
+            onClick={() => { setShowReset(false); setError(""); setResetSuccess(false); }}
+            className="w-full border border-gray-300 p-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            ← Back to login
+          </button>
+        </div>
+        <div className="absolute bottom-4 left-4 text-xs text-gray-400">
+          v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center relative">
       <div className="w-full max-w-sm space-y-4">
@@ -78,7 +154,15 @@ export default function LoginPage() {
           Login
         </button>
 
-        {error && <p className="text-red-600">{error}</p>}
+        <button
+          type="button"
+          onClick={() => setShowReset(true)}
+          className="w-full text-sm text-gray-600 hover:text-gray-900"
+        >
+          Forgot password?
+        </button>
+
+        {error && <p className="text-red-600 text-sm">{error}</p>}
       </div>
 
       {/* Version display (login page has no sidebar) */}
