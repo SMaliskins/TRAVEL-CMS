@@ -1421,6 +1421,28 @@ export function AddServiceModal({
             </div>
           )}
 
+          {/* 6 Hotel layout variants - always visible at top */}
+          <div className="mb-4 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+            <HotelVariantSelector value={hotelModalVariant} onChange={setHotelModalVariant} />
+            {showHotelFields ? (
+              <HotelDesignLayout
+                variant={hotelModalVariant}
+                mode="add"
+                fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
+                onChange={(field, value) => {
+                  if (field === "hotelName") setHotelName(value);
+                  if (field === "hotelAddress") setHotelAddress(value);
+                  if (field === "hotelPhone") setHotelPhone(value);
+                  if (field === "hotelEmail") setHotelEmail(value);
+                }}
+              />
+            ) : (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-white px-4 py-3 text-sm text-amber-800">
+                Set <strong>Category</strong> to <strong>Hotel</strong> below to use these 6 layout designs.
+              </div>
+            )}
+          </div>
+
           {/* Main Grid - 3 columns on desktop */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             
@@ -2338,22 +2360,6 @@ export function AddServiceModal({
           {showHotelFields && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
-              
-              {/* 6 design variants - always visible */}
-              <div className="space-y-2">
-                <HotelVariantSelector value={hotelModalVariant} onChange={setHotelModalVariant} />
-                <HotelDesignLayout
-                  variant={hotelModalVariant}
-                  mode="add"
-                  fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
-                  onChange={(field, value) => {
-                    if (field === "hotelName") setHotelName(value);
-                    if (field === "hotelAddress") setHotelAddress(value);
-                    if (field === "hotelPhone") setHotelPhone(value);
-                    if (field === "hotelEmail") setHotelEmail(value);
-                  }}
-                />
-              </div>
               
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name (search)</label>
