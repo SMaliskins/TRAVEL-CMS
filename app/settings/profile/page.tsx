@@ -50,6 +50,11 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Reset password via email
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetEmailSuccess, setResetEmailSuccess] = useState(false);
+  const [resetEmailError, setResetEmailError] = useState<string | null>(null);
+
   // Avatar upload
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -263,6 +268,32 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSendResetEmail = async () => {
+    if (!profile?.email) return;
+    setResetEmailError(null);
+    setResetEmailSuccess(false);
+    setIsSendingReset(true);
+
+    try {
+      const redirectTo = typeof window !== "undefined"
+        ? `${window.location.origin}/auth/reset-password`
+        : "/auth/reset-password";
+
+      const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
+        redirectTo,
+      });
+
+      if (error) throw error;
+
+      setResetEmailSuccess(true);
+      setTimeout(() => setResetEmailSuccess(false), 5000);
+    } catch (err) {
+      setResetEmailError(err instanceof Error ? err.message : "Failed to send reset email");
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -447,13 +478,40 @@ export default function ProfilePage() {
             </form>
           </div>
 
-          {/* Column 3: Change Password Form */}
+          {/* Column 3: Change Password & Reset */}
           <div className="rounded-lg bg-white shadow-sm">
             <div className="border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Password</h2>
             </div>
 
-            <form onSubmit={handleChangePassword} className="p-6">
+            <div className="p-6 space-y-6">
+              {/* Reset password via email */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <h3 className="text-sm font-medium text-gray-900 mb-1">Reset password via email</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  Receive a link to set a new password. Sent to <strong>{profile.email}</strong>
+                </p>
+                {resetEmailError && (
+                  <div className="mb-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{resetEmailError}</div>
+                )}
+                {resetEmailSuccess && (
+                  <div className="mb-3 rounded-lg bg-green-50 p-2 text-sm text-green-700">
+                    Reset link sent! Check your email.
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSendResetEmail}
+                  disabled={isSendingReset}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {isSendingReset ? "Sending..." : "Send reset link to email"}
+                </button>
+              </div>
+
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">Change password (current required)</h3>
+            <form onSubmit={handleChangePassword}>
               {passwordError && (
                 <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                   {passwordError}
@@ -519,6 +577,8 @@ export default function ProfilePage() {
                 </button>
               </div>
             </form>
+              </div>
+            </div>
           </div>
         </div>
       </div>
