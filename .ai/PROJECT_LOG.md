@@ -4800,3 +4800,46 @@ Smoke test:
 - [x] Merge commit created
 - [x] Local main branch updated
 - [ ] Push to origin/main (requires user authentication)
+
+---
+
+### 📅 [2026-02-13] | [20:22]
+**Агент:** `Code Writer`
+**Задача:** `Fix runtime crash: invalid element type in OrderServicesBlock`
+**Статус:** `START`
+**Действия:**
+- Прочитал `.ai/PROJECT_RULES.md`, `.ai/PROJECT_TODO.md`, `.ai/PROJECT_PROGRESS.md`, последние записи `.ai/PROJECT_LOG.md`
+- Начал диагностику ошибки `Element type is invalid` в `OrderServicesBlock`
+- План: проверить экспорты/импорты, JSX-вставки и типы компонентов в блоке услуг заказа
+**Результат:**
+- **Next Step:** `Найти и исправить неверный импорт/экспорт, который ломает рендер`
+
+---
+
+### 📅 [2026-02-13] | [20:26]
+**Агент:** `Code Writer`
+**Задача:** `Fix runtime crash: invalid element type in OrderServicesBlock`
+**Статус:** `SUCCESS`
+**Действия:**
+- В `OrderServicesBlock` заменил default-импорты модалок на named-импорты и type-only импорт для `ServiceData`
+- Заменил `React.Fragment` на `Fragment` через named import из `react`
+- В `AddServiceModal` и `AssignedTravellersModal` добавил named export с сохранением default export для совместимости
+**Результат:**
+- Снижена вероятность runtime-ошибки из-за default/named import interop в модальных компонентах
+- **Next Step:** `Проверить линтером и зафиксировать SCORE`
+
+---
+
+### 📅 [2026-02-13] | [20:26]
+**Агент:** `QA / REGRESSION`
+**Задача:** `Regression check for OrderServicesBlock invalid element type fix`
+**Статус:** `SUCCESS`
+**Действия:**
+- Запущен lint: `npm run lint -- app/orders/[orderCode]/_components/OrderServicesBlock.tsx app/orders/[orderCode]/_components/AddServiceModal.tsx app/orders/[orderCode]/_components/AssignedTravellersModal.tsx app/orders/[orderCode]/page.tsx`
+- Проверены измененные файлы: ошибок lint нет, только предупреждения
+**Результат:**
+- **SCORE: 9/10**
+- **Defect List:**
+  - [LOW] `app/orders/[orderCode]/_components/AssignedTravellersModal.tsx:321` — `travellerExists` не используется (pre-existing warning, non-blocking)
+  - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:202` — missing dependency warning для `useEffect` (pre-existing warning, non-blocking)
+- **Next Step:** `Обновить PROJECT_PROGRESS.md и PROJECT_TODO.md, затем закоммитить и отправить`

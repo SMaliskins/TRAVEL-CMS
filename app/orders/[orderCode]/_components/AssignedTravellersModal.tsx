@@ -84,7 +84,7 @@ const suggestedGroups: Array<{
   },
 ];
 
-export default function AssignedTravellersModal({
+export function AssignedTravellersModal({
   service,
   orderTravellers,
   setOrderTravellers,
@@ -836,3 +836,5 @@ export default function AssignedTravellersModal({
     </div>
   );
 }
+
+export default AssignedTravellersModal;

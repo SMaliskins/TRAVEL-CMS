@@ -1,6 +1,6 @@
 # Travel CMS - Project Progress
 
-**Last Updated:** 2026-01-08 00:07 (RUNNER)
+**Last Updated:** 2026-02-13 20:26 (CODE WRITER)
 
 ---
 
@@ -30,7 +30,7 @@
 
 **Phase:** Dashboard Redesign / Feature Development
 
-**Active Branch:** (to be determined)
+**Active Branch:** cursor/order-services-block-rendering-6a80
 
 **Focus:** Dashboard Redesign (Turion Style) - DASH1 in progress
 
@@ -117,6 +117,14 @@ The following changes exist in the working directory and need review/commit deci
 ## Current Blockers
 
 None at this time.
+
+---
+
+## Module Status
+
+| Модуль | Статус | Готовность | Последний лог |
+| :--- | :--- | :--- | :--- |
+| `Orders / OrderServicesBlock` | `Stable` | `96%` | `2026-02-13` |
 
 ---
 

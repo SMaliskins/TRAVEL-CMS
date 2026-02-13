@@ -69,3 +69,37 @@
 - RLS на `orders` должен быть настроен для `company_id`
 
 ---
+
+## [2026-02-13] Fix runtime crash in OrderServicesBlock (invalid element type)
+
+### Контекст задачи
+Пользователь получил runtime-ошибку React: `Element type is invalid ... Check the render method of OrderServicesBlock`.
+Симптом указывает на проблему import/export interop для React-компонента (объект вместо функции/класса).
+
+### Что делал
+1. Проверил текущие импорты и экспорты в:
+   - `OrderServicesBlock.tsx`
+   - `AddServiceModal.tsx`
+   - `AssignedTravellersModal.tsx`
+2. Убрал неоднозначность default-импортов:
+   - В `OrderServicesBlock.tsx` перевел модалки на named-импорты.
+   - Для `ServiceData` использовал `type` import.
+3. Убрал `React.Fragment` через default `React` и заменил на `Fragment` named import.
+4. В `AddServiceModal.tsx` и `AssignedTravellersModal.tsx` добавил named export компонентов с сохранением default export для обратной совместимости.
+5. Выполнил lint для измененных файлов.
+
+### Файлы изменены
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+- `app/orders/[orderCode]/_components/AssignedTravellersModal.tsx`
+
+### Результат тестирования
+- `npm run lint -- app/orders/[orderCode]/_components/OrderServicesBlock.tsx app/orders/[orderCode]/_components/AddServiceModal.tsx app/orders/[orderCode]/_components/AssignedTravellersModal.tsx app/orders/[orderCode]/page.tsx`
+- Ошибок lint: 0
+- Предупреждения: 2 (pre-existing, non-blocking)
+
+### Риски
+- Runtime-проверка в браузере не выполнялась в этой сессии (нет live dev запуска).
+- В проекте остаются unrelated module-not-found ошибки, мешающие полному `next build`.
+
+---

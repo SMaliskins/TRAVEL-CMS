@@ -69,7 +69,7 @@ const RES_STATUS_OPTIONS: { value: ServiceData["resStatus"]; label: string }[] =
   { value: "cancelled", label: "Cancelled" },
 ];
 
-export default function AddServiceModal({ 
+export function AddServiceModal({ 
   orderCode,
   defaultClientId,
   defaultClientName,
@@ -631,3 +631,5 @@ export default function AddServiceModal({
     </div>
   );
 }
+
+export default AddServiceModal;

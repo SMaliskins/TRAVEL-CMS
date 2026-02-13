@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import AssignedTravellersModal from "./AssignedTravellersModal";
-import AddServiceModal, { ServiceData } from "./AddServiceModal";
+import { AssignedTravellersModal } from "./AssignedTravellersModal";
+import { AddServiceModal, type ServiceData } from "./AddServiceModal";
 
 interface Traveller {
   id: string;
@@ -299,7 +299,7 @@ export default function OrderServicesBlock({
                 const isExpanded = expandedGroups[groupKey] ?? true;
 
                 return (
-                  <React.Fragment key={`group-${groupKey}`}>
+                  <Fragment key={`group-${groupKey}`}>
                     {/* Group header row */}
                     <tr
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
@@ -410,7 +410,7 @@ export default function OrderServicesBlock({
                           </tr>
                         );
                       })}
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </tbody>
