@@ -147,15 +147,13 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <div className="py-1">
-          <button
-            type="button"
-            onClick={() => setShowReset(true)}
-            className="text-sm font-medium text-blue-600 underline hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Forgot password?
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowReset(true)}
+          className="w-full py-2 text-center text-sm font-medium text-blue-600 underline hover:text-blue-700 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-colors"
+        >
+          Forgot password?
+        </button>
 
         <button
           onClick={handleLogin}
