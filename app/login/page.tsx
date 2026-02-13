@@ -157,7 +157,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={() => setShowReset(true)}
-          className="w-full text-sm text-gray-600 hover:text-gray-900"
+          className="w-full py-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
         >
           Forgot password?
         </button>
