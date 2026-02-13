@@ -9,6 +9,11 @@ import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } fr
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
+import {
+  HotelDesignLayout,
+  HotelVariantSelector,
+  type HotelModalVariant,
+} from './HotelModalDesigns';
 import type { SupplierCommission } from '@/lib/types/directory';
 
 // Functional types that determine which features are available
@@ -237,6 +242,7 @@ export default function EditServiceModalNew({
   const [hotelAddress, setHotelAddress] = useState(service.hotelAddress || "");
   const [hotelPhone, setHotelPhone] = useState(service.hotelPhone || "");
   const [hotelEmail, setHotelEmail] = useState(service.hotelEmail || "");
+  const [hotelModalVariant, setHotelModalVariant] = useState<HotelModalVariant>("v1");
   
   // Additional hotel fields
   const [hotelRoom, setHotelRoom] = useState(service.hotelRoom || "");
@@ -2443,6 +2449,22 @@ export default function EditServiceModalNew({
           {showHotelFields && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
+              
+              {/* 6 design variants - switch layout style */}
+              <div className="space-y-2">
+                <HotelVariantSelector value={hotelModalVariant} onChange={setHotelModalVariant} />
+                <HotelDesignLayout
+                  variant={hotelModalVariant}
+                  mode="edit"
+                  fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
+                  onChange={(field, value) => {
+                    if (field === "hotelName") setHotelName(value);
+                    if (field === "hotelAddress") setHotelAddress(value);
+                    if (field === "hotelPhone") setHotelPhone(value);
+                    if (field === "hotelEmail") setHotelEmail(value);
+                  }}
+                />
+              </div>
               
               {/* Hotel Name - auto-filled from Name field */}
               <div>
