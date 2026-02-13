@@ -147,11 +147,11 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="py-1">
           <button
             type="button"
             onClick={() => setShowReset(true)}
-            className="text-sm font-medium text-blue-600 underline hover:text-blue-700"
+            className="text-sm font-medium text-blue-600 underline hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             Forgot password?
           </button>
