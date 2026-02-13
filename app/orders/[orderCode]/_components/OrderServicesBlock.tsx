@@ -2,8 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import AssignedTravellersModal from "./AssignedTravellersModal";
-import AddServiceModal, { ServiceData } from "./AddServiceModal";
+// Ensure components are actual functions (fix ESM/CJS interop "got: object" error)
+import AssignedTravellersModalModule from "./AssignedTravellersModal";
+import AddServiceModalModule, { ServiceData } from "./AddServiceModal";
+
+const AssignedTravellersModal = (typeof AssignedTravellersModalModule === "function"
+  ? AssignedTravellersModalModule
+  : (AssignedTravellersModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
+const AddServiceModal = (typeof AddServiceModalModule === "function"
+  ? AddServiceModalModule
+  : (AddServiceModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
 
 interface Traveller {
   id: string;
@@ -441,17 +449,20 @@ export default function OrderServicesBlock({
       )}
 
       {/* Edit Service Modal - simple inline editor */}
-      {editServiceId && (
-        <EditServiceModal
-          service={services.find(s => s.id === editServiceId)!}
-          orderCode={orderCode}
-          onClose={() => setEditServiceId(null)}
-          onServiceUpdated={(updated) => {
-            setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
-            setEditServiceId(null);
-          }}
-        />
-      )}
+      {editServiceId && (() => {
+        const service = services.find((s) => s.id === editServiceId);
+        return service ? (
+          <EditServiceModal
+            service={service}
+            orderCode={orderCode}
+            onClose={() => setEditServiceId(null)}
+            onServiceUpdated={(updated) => {
+              setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
+              setEditServiceId(null);
+            }}
+          />
+        ) : null;
+      })()}
     </>
   );
 }

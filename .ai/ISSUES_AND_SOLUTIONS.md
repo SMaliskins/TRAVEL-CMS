@@ -76,5 +76,16 @@
 
 ---
 
+---
+
+### ⚠️ OrderServicesBlock: "Element type is invalid... got: object"
+
+- **Дата:** 2026-02-13
+- **Симптомы:** React error "Element type is invalid: expected a string or a class/function but got: object" in OrderServicesBlock
+- **Решение:** Add defensive ESM/CJS interop for modal imports; use `typeof X === "function" ? X : X?.default`
+- **Предотвращение:** When importing default exports that may be namespace objects, add interop extraction
+
+---
+
 **Created by:** ARCHITECT  
-**Last Updated:** 2026-01-03
+**Last Updated:** 2026-02-13

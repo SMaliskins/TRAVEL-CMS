@@ -4800,3 +4800,16 @@ Smoke test:
 - [x] Merge commit created
 - [x] Local main branch updated
 - [ ] Push to origin/main (requires user authentication)
+---
+
+### 📅 [2026-02-13] | [20:30]
+**Агент:** `Code Writer`
+**Задача:** `Fix OrderServicesBlock "Element type is invalid: got: object"`
+**Статус:** `SUCCESS`
+**Действия:**
+- Root cause: ESM/CJS interop — default imports (AssignedTravellersModal, AddServiceModal) could resolve to namespace object instead of component function
+- Added defensive extraction: use function when typeof is "function", else use `.default`
+- Added null guard for EditServiceModal when `services.find()` returns undefined
+**Результат:**
+- OrderServicesBlock.tsx updated with interop-safe imports and service existence check
+**Next Step:** `QA — verify order page and Services block render without "Element type invalid" error`
