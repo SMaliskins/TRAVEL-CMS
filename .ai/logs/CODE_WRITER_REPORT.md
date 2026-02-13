@@ -103,3 +103,37 @@
 - В проекте остаются unrelated module-not-found ошибки, мешающие полному `next build`.
 
 ---
+
+## [2026-02-13] HOTEL Add/Edit redesign: 6 variants
+
+### Контекст задачи
+Нужно сделать современный редизайн HOTEL-модалок (Add и Edit) и дать выбор из 6 разных моделей интерфейса.
+
+### Что сделано
+1. Добавлен новый компонент `HotelModalDesigns.tsx`:
+   - selector на 6 вариантов;
+   - 6 существенно разных layout-моделей для hotel-полей.
+2. `AddServiceModal.tsx`:
+   - подключен selector;
+   - hotel-секция рендерится через выбранный вариант.
+3. `OrderServicesBlock.tsx` / `EditServiceModal`:
+   - сделан расширенный edit-modal (full details + snapshot);
+   - добавлен selector и 6 вариантов для категории Hotel;
+   - добавлены hotel поля в локальную модель сервиса.
+4. API:
+   - `services/route.ts` — hotel поля добавлены в GET/POST mapping.
+   - `services/[serviceId]/route.ts` — PATCH для `service_date_from/to` и hotel полей, с fallback при отсутствии hotel-колонок.
+
+### Измененные файлы
+- `app/orders/[orderCode]/_components/HotelModalDesigns.tsx` (new)
+- `app/orders/[orderCode]/_components/AddServiceModal.tsx`
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+- `app/api/orders/[orderCode]/services/route.ts`
+- `app/api/orders/[orderCode]/services/[serviceId]/route.ts`
+
+### Проверка
+- `npm run lint -- app/orders/[orderCode]/_components/HotelModalDesigns.tsx app/orders/[orderCode]/_components/AddServiceModal.tsx app/orders/[orderCode]/_components/OrderServicesBlock.tsx app/api/orders/[orderCode]/services/route.ts app/api/orders/[orderCode]/services/[serviceId]/route.ts`
+- Ошибки: 0
+- Warnings: 1 (pre-existing, non-blocking)
+
+---

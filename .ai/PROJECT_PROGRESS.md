@@ -1,6 +1,6 @@
 # Travel CMS - Project Progress
 
-**Last Updated:** 2026-02-13 20:26 (CODE WRITER)
+**Last Updated:** 2026-02-13 20:39 (CODE WRITER)
 
 ---
 
@@ -124,7 +124,7 @@ None at this time.
 
 | Модуль | Статус | Готовность | Последний лог |
 | :--- | :--- | :--- | :--- |
-| `Orders / OrderServicesBlock` | `Stable` | `96%` | `2026-02-13` |
+| `Orders / OrderServicesBlock` | `Stable` | `99%` | `2026-02-13` |
 
 ---
 

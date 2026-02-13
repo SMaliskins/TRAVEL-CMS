@@ -4843,3 +4843,44 @@ Smoke test:
   - [LOW] `app/orders/[orderCode]/_components/AssignedTravellersModal.tsx:321` — `travellerExists` не используется (pre-existing warning, non-blocking)
   - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:202` — missing dependency warning для `useEffect` (pre-existing warning, non-blocking)
 - **Next Step:** `Обновить PROJECT_PROGRESS.md и PROJECT_TODO.md, затем закоммитить и отправить`
+
+---
+
+### 📅 [2026-02-13] | [20:35]
+**Агент:** `Code Writer`
+**Задача:** `HOTEL Add/Edit modal redesign (6 variants)`
+**Статус:** `START`
+**Действия:**
+- Подготовка редизайна HOTEL-модалок Add/Edit
+- Цель: 6 существенно разных UI-версий с выбором в интерфейсе
+**Результат:**
+- **Next Step:** `Реализовать 6 вариантов и подключить их в AddService/EditService`
+
+---
+
+### 📅 [2026-02-13] | [20:39]
+**Агент:** `Code Writer`
+**Задача:** `HOTEL Add/Edit modal redesign (6 variants)`
+**Статус:** `SUCCESS`
+**Действия:**
+- Добавлен общий компонент `HotelModalDesigns.tsx` с 6 существенно разными UI-вариантами (V1-V6) и selector
+- В `AddServiceModal` подключен выбор дизайна и рендер выбранной HOTEL-версии
+- В `EditServiceModal` сделан редизайн: полноэкранный формат, snapshot блока, даты, и 6 HOTEL-вариантов
+- API обновлен для hotel-полей и корректных `service_date_from/service_date_to` в PATCH
+**Результат:**
+- **Next Step:** `QA: lint + SCORE`
+
+---
+
+### 📅 [2026-02-13] | [20:39]
+**Агент:** `QA / REGRESSION`
+**Задача:** `QA check: HOTEL Add/Edit redesign (6 variants)`
+**Статус:** `SUCCESS`
+**Действия:**
+- Запущен lint по измененным файлам модалок и API
+- Проверка прошла без ошибок, 1 warning (pre-existing)
+**Результат:**
+- **SCORE: 9/10**
+- **Defect List:**
+  - [LOW] `app/orders/[orderCode]/_components/OrderServicesBlock.tsx:219` — warning `react-hooks/exhaustive-deps` (pre-existing, non-blocking)
+- **Next Step:** `Обновить TODO/PROGRESS, коммит и push`

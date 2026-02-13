@@ -4,6 +4,11 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { AssignedTravellersModal } from "./AssignedTravellersModal";
 import { AddServiceModal, type ServiceData } from "./AddServiceModal";
+import {
+  HotelDesignLayout,
+  HotelVariantSelector,
+  type HotelModalVariant,
+} from "./HotelModalDesigns";
 
 interface Traveller {
   id: string;
@@ -30,6 +35,10 @@ interface Service {
   refNr?: string;
   ticketNr?: string;
   assignedTravellerIds: string[];
+  hotelName?: string;
+  hotelAddress?: string;
+  hotelPhone?: string;
+  hotelEmail?: string;
 }
 
 interface OrderServicesBlockProps {
@@ -84,6 +93,10 @@ export default function OrderServicesBlock({
           refNr: s.refNr || "",
           ticketNr: s.ticketNr || "",
           assignedTravellerIds: s.travellerIds || [],
+          hotelName: s.hotelName || "",
+          hotelAddress: s.hotelAddress || "",
+          hotelPhone: s.hotelPhone || "",
+          hotelEmail: s.hotelEmail || "",
         }));
         setServices(mappedServices);
       }
@@ -115,6 +128,10 @@ export default function OrderServicesBlock({
       refNr: service.refNr || "",
       ticketNr: service.ticketNr || "",
       assignedTravellerIds: service.travellerIds || [],
+      hotelName: service.hotelName || "",
+      hotelAddress: service.hotelAddress || "",
+      hotelPhone: service.hotelPhone || "",
+      hotelEmail: service.hotelEmail || "",
     };
     setServices(prev => [...prev, newService]);
   };
@@ -456,7 +473,6 @@ export default function OrderServicesBlock({
   );
 }
 
-// Simple Edit Service Modal
 function EditServiceModal({
   service,
   orderCode,
@@ -470,14 +486,24 @@ function EditServiceModal({
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [name, setName] = useState(service.name);
   const [category, setCategory] = useState(service.category);
+  const [dateFrom, setDateFrom] = useState(service.dateFrom || "");
+  const [dateTo, setDateTo] = useState(service.dateTo || "");
   const [servicePrice, setServicePrice] = useState(service.servicePrice.toString());
   const [clientPrice, setClientPrice] = useState(service.clientPrice.toString());
   const [resStatus, setResStatus] = useState(service.resStatus);
   const [refNr, setRefNr] = useState(service.refNr || "");
   const [ticketNr, setTicketNr] = useState(service.ticketNr || "");
+  const [hotelName, setHotelName] = useState(service.hotelName || "");
+  const [hotelAddress, setHotelAddress] = useState(service.hotelAddress || "");
+  const [hotelPhone, setHotelPhone] = useState(service.hotelPhone || "");
+  const [hotelEmail, setHotelEmail] = useState(service.hotelEmail || "");
+  const [hotelModalVariant, setHotelModalVariant] = useState<HotelModalVariant>("v1");
+
+  const isHotel = category === "Hotel";
+  const isFlight = category === "Flight";
 
   const handleSave = async () => {
     setIsSubmitting(true);
@@ -486,34 +512,51 @@ function EditServiceModal({
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          service_name: name,
-          category,
-          service_price: parseFloat(servicePrice) || 0,
-          client_price: parseFloat(clientPrice) || 0,
-          res_status: resStatus,
-          ref_nr: refNr,
-          ticket_nr: ticketNr,
-        }),
-      });
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            service_name: name.trim(),
+            category,
+            service_date_from: dateFrom || null,
+            service_date_to: dateTo || dateFrom || null,
+            service_price: parseFloat(servicePrice) || 0,
+            client_price: parseFloat(clientPrice) || 0,
+            res_status: resStatus,
+            ref_nr: refNr || null,
+            ticket_nr: isFlight ? ticketNr || null : null,
+            hotel_name: isHotel ? hotelName || null : null,
+            hotel_address: isHotel ? hotelAddress || null : null,
+            hotel_phone: isHotel ? hotelPhone || null : null,
+            hotel_email: isHotel ? hotelEmail || null : null,
+          }),
+        }
+      );
 
       if (response.ok) {
         onServiceUpdated({
           id: service.id,
-          name,
+          name: name.trim(),
           category,
+          dateFrom: dateFrom || "",
+          dateTo: dateTo || dateFrom || "",
           servicePrice: parseFloat(servicePrice) || 0,
           clientPrice: parseFloat(clientPrice) || 0,
           resStatus,
           refNr,
-          ticketNr,
+          ticketNr: isFlight ? ticketNr : "",
+          hotelName: isHotel ? hotelName : "",
+          hotelAddress: isHotel ? hotelAddress : "",
+          hotelPhone: isHotel ? hotelPhone : "",
+          hotelEmail: isHotel ? hotelEmail : "",
         });
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -529,9 +572,17 @@ function EditServiceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Edit Service</h2>
+      <div
+        className="mx-4 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Edit Service</h2>
+            <p className="text-xs text-gray-600">
+              Full details editor with 6 HOTEL layout variants
+            </p>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -539,28 +590,40 @@ function EditServiceModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 overflow-y-auto px-6 py-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              Service Snapshot
+            </p>
+            <div className="grid grid-cols-1 gap-2 text-xs text-gray-700 md:grid-cols-4">
+              <p><span className="font-semibold">Supplier:</span> {service.supplier || "-"}</p>
+              <p><span className="font-semibold">Client:</span> {service.client || "-"}</p>
+              <p><span className="font-semibold">Payer:</span> {service.payer || "-"}</p>
+              <p><span className="font-semibold">Date:</span> {service.dateFrom || "-"} → {service.dateTo || "-"}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Category</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
               >
-                {["Flight", "Hotel", "Transfer", "Tour", "Insurance", "Visa", "Rent a Car", "Cruise", "Other"].map(cat => (
+                {["Flight", "Hotel", "Transfer", "Tour", "Insurance", "Visa", "Rent a Car", "Cruise", "Other"].map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
               <select
                 value={resStatus}
                 onChange={(e) => setResStatus(e.target.value as Service["resStatus"])}
@@ -576,7 +639,7 @@ function EditServiceModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Service Name</label>
             <input
               type="text"
               value={name}
@@ -585,9 +648,30 @@ function EditServiceModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Service Price (€)</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Date From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Date To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Service Price (€)</label>
               <input
                 type="number"
                 value={servicePrice}
@@ -596,7 +680,7 @@ function EditServiceModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client Price (€)</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Client Price (€)</label>
               <input
                 type="number"
                 value={clientPrice}
@@ -606,9 +690,9 @@ function EditServiceModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${isFlight ? "md:grid-cols-2" : ""}`}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ref Nr</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Ref Nr</label>
               <input
                 type="text"
                 value={refNr}
@@ -616,19 +700,42 @@ function EditServiceModal({
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ticket Nr</label>
-              <input
-                type="text"
-                value={ticketNr}
-                onChange={(e) => setTicketNr(e.target.value)}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            {isFlight && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Ticket Nr</label>
+                <input
+                  type="text"
+                  value={ticketNr}
+                  onChange={(e) => setTicketNr(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          {isHotel && (
+            <div className="space-y-3 border-t border-gray-200 pt-4">
+              <h3 className="text-sm font-semibold text-gray-900">Hotel Details (6 variants)</h3>
+              <HotelVariantSelector
+                value={hotelModalVariant}
+                onChange={setHotelModalVariant}
+              />
+              <HotelDesignLayout
+                variant={hotelModalVariant}
+                mode="edit"
+                fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
+                onChange={(field, value) => {
+                  if (field === "hotelName") setHotelName(value);
+                  if (field === "hotelAddress") setHotelAddress(value);
+                  if (field === "hotelPhone") setHotelPhone(value);
+                  if (field === "hotelEmail") setHotelEmail(value);
+                }}
               />
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
+        <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
           <button
             onClick={onClose}
             disabled={isSubmitting}
@@ -639,7 +746,7 @@ function EditServiceModal({
           <button
             onClick={handleSave}
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 disabled:opacity-50"
+            className="rounded bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
             {isSubmitting ? "Saving..." : "Save"}
           </button>

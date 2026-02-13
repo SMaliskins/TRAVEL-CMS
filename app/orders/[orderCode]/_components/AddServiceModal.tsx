@@ -5,6 +5,11 @@ import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import FlightItineraryInput, { FlightSegment } from "@/components/FlightItineraryInput";
+import {
+  HotelDesignLayout,
+  HotelVariantSelector,
+  type HotelModalVariant,
+} from "./HotelModalDesigns";
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -111,6 +116,7 @@ export function AddServiceModal({
   const [hotelAddress, setHotelAddress] = useState("");
   const [hotelPhone, setHotelPhone] = useState("");
   const [hotelEmail, setHotelEmail] = useState("");
+  const [hotelModalVariant, setHotelModalVariant] = useState<HotelModalVariant>("v1");
   
   // Transfer-specific fields
   const [pickupLocation, setPickupLocation] = useState("");
@@ -479,50 +485,26 @@ export function AddServiceModal({
           {/* Hotel-specific fields */}
           {showHotelFields && (
             <div className="border-t border-gray-200 pt-4 mt-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">Hotel Details</h3>
+              <h3 className="mb-2 text-sm font-semibold text-gray-900">Hotel Details</h3>
+              <p className="mb-3 text-xs text-gray-600">
+                Select one of six design models and compare usability directly in this modal.
+              </p>
               <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hotel Name</label>
-                  <input
-                    type="text"
-                    value={hotelName}
-                    onChange={(e) => setHotelName(e.target.value)}
-                    placeholder="e.g., Grand Hotel Rome"
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                  <input
-                    type="text"
-                    value={hotelAddress}
-                    onChange={(e) => setHotelAddress(e.target.value)}
-                    placeholder="Hotel address"
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input
-                      type="tel"
-                      value={hotelPhone}
-                      onChange={(e) => setHotelPhone(e.target.value)}
-                      placeholder="+39 06 1234567"
-                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={hotelEmail}
-                      onChange={(e) => setHotelEmail(e.target.value)}
-                      placeholder="hotel@example.com"
-                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
-                    />
-                  </div>
-                </div>
+                <HotelVariantSelector
+                  value={hotelModalVariant}
+                  onChange={setHotelModalVariant}
+                />
+                <HotelDesignLayout
+                  variant={hotelModalVariant}
+                  mode="add"
+                  fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
+                  onChange={(field, value) => {
+                    if (field === "hotelName") setHotelName(value);
+                    if (field === "hotelAddress") setHotelAddress(value);
+                    if (field === "hotelPhone") setHotelPhone(value);
+                    if (field === "hotelEmail") setHotelEmail(value);
+                  }}
+                />
               </div>
             </div>
           )}
