@@ -770,3 +770,62 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+### 📅 [2026-01-08] | [18:30]
+**Агент:** `Code Writer`
+**Задача:** `Merge feature/x into main`
+**Статус:** `SUCCESS`
+**Действия:**
+- Выполнен merge ветки `feature/x` в `main`
+- Разрешены конфликты (10 файлов):
+  - `.ai/PROJECT_LOG.md` - использована версия из feature/x
+  - `.ai/PROJECT_PROGRESS.md` - использована версия из feature/x
+  - `.ai/PROJECT_RULES.md` - использована версия из feature/x
+  - `.ai/PROJECT_TODO.md` - использована версия из feature/x
+  - `app/api/orders/create/route.ts` - использована версия из feature/x
+  - `app/directory/new/page.tsx` - использована версия из feature/x
+  - `components/DirectoryForm.tsx` - использована версия из feature/x
+  - `components/DirectorySearchPopover.tsx` - использована версия из feature/x
+  - `lib/supabaseClient.ts` - использована версия из feature/x
+  - `lib/types/directory.ts` - использована версия из feature/x
+- Создан merge commit: `6acf9e2`
+- Локальная ветка `main` обновлена
+**Результат:**
+- ✅ Merge успешно выполнен
+- ✅ Все конфликты разрешены (использована актуальная версия из feature/x)
+- ✅ Merge commit создан с описанием всех изменений
+- ⚠️ Push в `origin/main` требует авторизации GitHub (выполнить вручную)
+**Merged Features:**
+- Dashboard Redesign (Turion Style) - DASH1
+- Dashboard fixes: Currency $ → € (DASH2-3)
+- Orders UI improvements: 15 fixes (ORD-UI1-15)
+- Passport Details with AI parsing (D1)
+- Directory fixes and enhancements
+- UI/UX improvements (ripple effect, validation icons, transitions)
+- 30 commits from feature/x merged into main
+**Next Step:**
+- User must manually execute: `git push origin main` (requires GitHub authentication)
+- Or use: `gh auth login && git push origin main`
+Files touched:
+- 100+ files merged from feature/x to main
+- `.ai/PROJECT_LOG.md` (this entry)
+Commit:
+- Merge commit: `6acf9e2` - "merge: feature/x into main - Dashboard redesign and Orders UI improvements"
+Smoke test:
+- [x] Merge completed successfully
+- [x] All conflicts resolved
+- [x] Merge commit created
+- [x] Local main branch updated
+- [ ] Push to origin/main (requires user authentication)
+---
+
+### 📅 [2026-02-13] | [20:30]
+**Агент:** `Code Writer`
+**Задача:** `Fix OrderServicesBlock "Element type is invalid: got: object"`
+**Статус:** `SUCCESS`
+**Действия:**
+- Root cause: ESM/CJS interop — default imports (AssignedTravellersModal, AddServiceModal) could resolve to namespace object instead of component function
+- Added defensive extraction: use function when typeof is "function", else use `.default`
+- Added null guard for EditServiceModal when `services.find()` returns undefined
+**Результат:**
+- OrderServicesBlock.tsx updated with interop-safe imports and service existence check
+**Next Step:** `QA — verify order page and Services block render without "Element type invalid" error`

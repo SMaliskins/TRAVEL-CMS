@@ -3,8 +3,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import AssignedTravellersModal from "./AssignedTravellersModal";
-import AddServiceModal, { ServiceData } from "./AddServiceModal";
+// Ensure components are actual functions (fix ESM/CJS interop "got: object" error)
+import AssignedTravellersModalModule from "./AssignedTravellersModal";
+import AddServiceModalModule, { ServiceData } from "./AddServiceModal";
+
+const AssignedTravellersModal = (typeof AssignedTravellersModalModule === "function"
+  ? AssignedTravellersModalModule
+  : (AssignedTravellersModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
+const AddServiceModal = (typeof AddServiceModalModule === "function"
+  ? AddServiceModalModule
+  : (AddServiceModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
+
 import DateRangePicker from "@/components/DateRangePicker";
 import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
@@ -1828,24 +1837,23 @@ export default function OrderServicesBlock({
         />
       )}
 
-      {/* Edit Service Modal - simple inline editor */}
-      {editServiceId && (
-        <>
-          {console.log('🔍 Rendering EditServiceModalNew for service:', editServiceId)}
+      {/* Edit Service Modal - simple inline editor (null guard for service existence) */}
+      {editServiceId && (() => {
+        const service = services.find((s) => s.id === editServiceId);
+        return service ? (
           <EditServiceModalNew
-            service={services.find(s => s.id === editServiceId)!}
+            service={service}
             orderCode={orderCode}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
               setEditServiceId(null);
-              // Refresh travellers and services after update (clients may have been added)
               fetchTravellers();
               fetchServices();
             }}
           />
-        </>
-      )}
+        ) : null;
+      })()}
 
 
       {/* Split Service Modal (Single) */}
