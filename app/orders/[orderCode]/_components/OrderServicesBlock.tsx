@@ -39,6 +39,7 @@ import {
   getPriceTypeLabel
 } from "@/lib/services/deadlineCalculator";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Traveller {
   id: string;
