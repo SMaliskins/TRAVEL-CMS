@@ -145,7 +145,6 @@ interface Company {
   emergency_contact?: string;
   invoice_prefix?: string;
   default_payment_terms?: number;
-  default_vat_rate?: number;
   invoice_languages?: string[];
 }
 

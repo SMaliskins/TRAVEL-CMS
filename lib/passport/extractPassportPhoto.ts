@@ -38,12 +38,8 @@ async function extractEmbeddedImage(pdfBuffer: Buffer): Promise<string | null> {
   const rawBuffer = Buffer.isBuffer(largest.buffer)
     ? largest.buffer
     : Buffer.from(largest.buffer);
-<<<<<<< HEAD
-  const channels = (largest.channels ?? 3) as 1 | 2 | 3 | 4;
-=======
   const ch = largest.channels ?? 3;
   const channels = (ch >= 1 && ch <= 4 ? ch : 3) as 1 | 2 | 3 | 4;
->>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
 
   const jpegBuffer = await sharp(rawBuffer, {
     raw: {
