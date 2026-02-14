@@ -49,10 +49,8 @@ export default function TopBar() {
     fetchCompanyLogo();
   }, []);
 
-  // Fallback for localhost/dev when public env is not inlined
+  // Always reconcile commit SHA with server to avoid stale inlined env values.
   useEffect(() => {
-    if (gitCommitSha) return;
-
     const fetchCommitSha = async () => {
       try {
         const response = await fetch("/api/meta/commit", { cache: "no-store" });
@@ -60,9 +58,9 @@ export default function TopBar() {
 
         const data = (await response.json()) as { sha?: string; shortSha?: string };
         if (data.sha) {
-          setGitCommitSha(data.sha);
+          setGitCommitSha((prev) => (prev === data.sha ? prev : data.sha));
         } else if (data.shortSha) {
-          setGitCommitSha(data.shortSha);
+          setGitCommitSha((prev) => (prev === data.shortSha ? prev : data.shortSha));
         }
       } catch {
         // Silent fallback: commit badge just stays hidden
@@ -70,7 +68,7 @@ export default function TopBar() {
     };
 
     fetchCommitSha();
-  }, [gitCommitSha]);
+  }, []);
 
   // Get initials from name
   const getInitials = () => {
