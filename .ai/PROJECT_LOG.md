@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-02-14] CODE WRITER — Orders page: fix "Something went wrong" / lexical 'tc' initialization ✅
+
+**Task:** Fix /orders/0010-26-sm crash | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **AssignedTravellersModal** — удалён дублирующий `export default` (причина "default exported multiple times")
+2. **HotelSuggestInput, ClientMultiSelectDropdown** — созданы отсутствующие компоненты (AddServiceModal)
+3. **TypeScript** — исправлены касты FlightSegment→Record, airline в normalizeSegment, ServiceData/EditServiceModalNew типы, Company.default_vat_rate, airlineParsers cabinClass, extractPassportPhoto, parseMrz
+4. **OrderServicesBlock** — добавлен Fragment import, исправлен resStatus type narrowing для invoice checkbox
+
+**Файлы:** AssignedTravellersModal, AddServiceModal, OrderServicesBlock, EditServiceModalNew, ItineraryTimeline, HotelSuggestInput, ClientMultiSelectDropdown, company/page, airlineParsers, extractPassportPhoto, parseMrz
+
+**Результат:** Build проходит TypeScript. Ошибка "can't access lexical declaration 'tc' before initialization" устранялась через исправление цепочки сборки (duplicate export, missing modules).
+
+**Branch:** cursor/orders-tc-initialization-4913 | Commit: 82696db
+
+---
+
 ## [2026-01-30] CODE WRITER — Invoices: PDF fix, номер счёта, логотип, processed ✅
 
 **Task:** Invoices System Improvement (план) | **Status:** SUCCESS
