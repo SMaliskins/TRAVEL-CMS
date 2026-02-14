@@ -104,7 +104,7 @@ export function parseMrzToPassportData(text: string): PassportDataFromMrz | null
 function tryParseMrz(lines: string[]): PassportDataFromMrz | null {
   if (!lines || lines.length < 2) return null;
   try {
-    const result = parse(lines, { autocorrect: true }) as Record<string, unknown>;
+    const result = parse(lines, { autocorrect: true }) as unknown as Record<string, unknown>;
     const fields = (result.fields ?? result) as Record<string, string | null | undefined>;
     const documentNumber = (fields.documentNumber ?? result.documentNumber) as string | undefined;
     const lastName = ((fields.lastName ?? fields.surname ?? result.lastName) as string | undefined)

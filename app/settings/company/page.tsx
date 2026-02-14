@@ -138,6 +138,7 @@ interface Company {
   timezone?: string;
   city_label?: string;
   show_order_source?: boolean;
+  default_vat_rate?: number;
   // Additional
   working_hours?: string;
   emergency_contact?: string;

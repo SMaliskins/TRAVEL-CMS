@@ -244,23 +244,25 @@ interface TimelineEvent {
 }
 
 // Normalize segment keys (API/DB may return snake_case)
-function normalizeSegment(seg: Record<string, unknown>): { id: string; flightNumber: string; departure: string; arrival: string; departureDate: string; departureTimeScheduled: string; arrivalDate: string; arrivalTimeScheduled: string; departureCity?: string; arrivalCity?: string; departureTerminal?: string; arrivalTerminal?: string; duration?: string; cabinClass?: string; baggage?: string } {
+function normalizeSegment(seg: FlightSegment | Record<string, unknown>): { id: string; flightNumber: string; airline?: string; departure: string; arrival: string; departureDate: string; departureTimeScheduled: string; arrivalDate: string; arrivalTimeScheduled: string; departureCity?: string; arrivalCity?: string; departureTerminal?: string; arrivalTerminal?: string; duration?: string; cabinClass?: string; baggage?: string } {
+  const raw = seg as Record<string, unknown>;
   return {
-    id: String(seg.id ?? seg.flightNumber ?? Math.random().toString(36).slice(2)),
-    flightNumber: String(seg.flightNumber ?? seg.flight_number ?? ""),
-    departure: String(seg.departure ?? ""),
-    arrival: String(seg.arrival ?? ""),
-    departureDate: String(seg.departureDate ?? seg.departure_date ?? ""),
-    departureTimeScheduled: String(seg.departureTimeScheduled ?? seg.departure_time_scheduled ?? seg.departureTime ?? seg.departure_time ?? ""),
-    arrivalDate: String(seg.arrivalDate ?? seg.arrival_date ?? seg.departureDate ?? seg.departure_date ?? ""),
-    arrivalTimeScheduled: String(seg.arrivalTimeScheduled ?? seg.arrival_time_scheduled ?? seg.arrivalTime ?? seg.arrival_time ?? ""),
-    departureCity: seg.departureCity ?? seg.departure_city ? String(seg.departureCity ?? seg.departure_city) : undefined,
-    arrivalCity: seg.arrivalCity ?? seg.arrival_city ? String(seg.arrivalCity ?? seg.arrival_city) : undefined,
-    departureTerminal: seg.departureTerminal ?? seg.departure_terminal ? String(seg.departureTerminal ?? seg.departure_terminal) : undefined,
-    arrivalTerminal: seg.arrivalTerminal ?? seg.arrival_terminal ? String(seg.arrivalTerminal ?? seg.arrival_terminal) : undefined,
-    duration: seg.duration ? String(seg.duration) : undefined,
-    cabinClass: seg.cabinClass ?? seg.cabin_class ? String(seg.cabinClass ?? seg.cabin_class) : undefined,
-    baggage: seg.baggage ? String(seg.baggage) : undefined,
+    id: String(raw.id ?? raw.flightNumber ?? Math.random().toString(36).slice(2)),
+    flightNumber: String(raw.flightNumber ?? raw.flight_number ?? ""),
+    airline: raw.airline ? String(raw.airline) : undefined,
+    departure: String(raw.departure ?? ""),
+    arrival: String(raw.arrival ?? ""),
+    departureDate: String(raw.departureDate ?? raw.departure_date ?? ""),
+    departureTimeScheduled: String(raw.departureTimeScheduled ?? raw.departure_time_scheduled ?? raw.departureTime ?? raw.departure_time ?? ""),
+    arrivalDate: String(raw.arrivalDate ?? raw.arrival_date ?? raw.departureDate ?? raw.departure_date ?? ""),
+    arrivalTimeScheduled: String(raw.arrivalTimeScheduled ?? raw.arrival_time_scheduled ?? raw.arrivalTime ?? raw.arrival_time ?? ""),
+    departureCity: raw.departureCity ?? raw.departure_city ? String(raw.departureCity ?? raw.departure_city) : undefined,
+    arrivalCity: raw.arrivalCity ?? raw.arrival_city ? String(raw.arrivalCity ?? raw.arrival_city) : undefined,
+    departureTerminal: raw.departureTerminal ?? raw.departure_terminal ? String(raw.departureTerminal ?? raw.departure_terminal) : undefined,
+    arrivalTerminal: raw.arrivalTerminal ?? raw.arrival_terminal ? String(raw.arrivalTerminal ?? raw.arrival_terminal) : undefined,
+    duration: raw.duration ? String(raw.duration) : undefined,
+    cabinClass: raw.cabinClass ?? raw.cabin_class ? String(raw.cabinClass ?? raw.cabin_class) : undefined,
+    baggage: raw.baggage ? String(raw.baggage) : undefined,
   };
 }
 
@@ -337,7 +339,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
       // If we have flight segments, create an event for each segment
       if (service.flightSegments && service.flightSegments.length > 0) {
         for (const rawSeg of service.flightSegments) {
-          const segment = normalizeSegment(rawSeg as Record<string, unknown>);
+          const segment = normalizeSegment(rawSeg);
           // Дедупликация: parent (res_status changed) и Change service могут иметь одни сегменты
           const segmentKey = `${segment.departureDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
           if (seenSegmentKeys.has(segmentKey)) continue;

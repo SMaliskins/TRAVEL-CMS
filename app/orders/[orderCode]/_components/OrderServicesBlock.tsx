@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 // Ensure components are actual functions (fix ESM/CJS interop "got: object" error)
@@ -60,7 +60,7 @@ interface Service {
   dateTo: string;
   category: string;
   categoryId?: string | null;
-  categoryType?: string | null;
+  categoryType?: CategoryType;
   vatRate?: number | null;
   name: string;
   supplier: string;
@@ -508,7 +508,7 @@ export default function OrderServicesBlock({
     }> = [];
     for (const service of flightServices) {
       for (const seg of service.flightSegments || []) {
-        const s = seg as Record<string, unknown>;
+        const s = seg as unknown as Record<string, unknown>;
         allSegments.push({
           arrival: String(s.arrival ?? ""),
           arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
@@ -644,7 +644,7 @@ export default function OrderServicesBlock({
     }> = [];
     for (const service of flightServices) {
       for (const seg of service.flightSegments || []) {
-        const s = seg as Record<string, unknown>;
+        const s = seg as unknown as Record<string, unknown>;
         allSegments.push({
           arrival: String(s.arrival ?? ""),
           arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
@@ -916,7 +916,7 @@ export default function OrderServicesBlock({
           dateTo: s.dateTo || s.dateFrom || "",
           category: s.category || "Other",
           categoryId: s.categoryId || null,
-          categoryType: s.categoryType || null,
+          categoryType: (s.categoryType as CategoryType | undefined) ?? undefined,
           vatRate: s.vatRate ?? null,
           name: s.serviceName,
           supplier: s.supplierName || "-",
@@ -1510,18 +1510,13 @@ export default function OrderServicesBlock({
                                     checked={selectedServiceIds.includes(service.id)}
                                     onChange={(e) => {
                                       e.stopPropagation();
-                                      // Prevent selecting cancelled services
-                                      if (service.resStatus === 'cancelled') {
-                                        return;
-                                      }
                                       if (e.target.checked) {
                                         setSelectedServiceIds(prev => [...prev, service.id]);
                                       } else {
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
-                                    disabled={service.resStatus === 'cancelled'}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                     aria-label={`Select ${service.name} for invoice`}
                                     title="Select for invoice"
                                   />
@@ -1846,7 +1841,7 @@ export default function OrderServicesBlock({
         const service = services.find((s) => s.id === editServiceId);
         return service ? (
           <EditServiceModalNew
-            service={service}
+            service={service as any}
             orderCode={orderCode}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated) => {
