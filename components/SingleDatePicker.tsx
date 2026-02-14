@@ -3,12 +3,19 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
+export type ShortcutPreset = "today" | "tomorrow" | "dayAfter";
+
 interface SingleDatePickerProps {
   label?: string;
   value: string | undefined; // YYYY-MM-DD
   onChange: (date: string | undefined) => void;
   placeholder?: string;
   error?: string;
+  parsed?: boolean; // highlight as AI-parsed (green border)
+  /** Show Today, Tomorrow, Day after tomorrow in calendar footer (dashboard-style) */
+  shortcutPresets?: ShortcutPreset[];
+  /** Reference date for "1 month + 2 days before" / "2 weeks + 2 days before" (e.g. earliest service date); results are adjusted to previous working day if weekend */
+  relativeToDate?: string; // YYYY-MM-DD
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -23,6 +30,9 @@ export default function SingleDatePicker({
   onChange,
   placeholder = "Select date",
   error,
+  parsed = false,
+  shortcutPresets,
+  relativeToDate,
 }: SingleDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -142,7 +152,63 @@ export default function SingleDatePicker({
     setIsOpen(false);
   };
 
-  const displayValue = value ? formatDateDDMMYYYY(value) : placeholder;
+  const setPresetAndClose = (dateStr: string) => {
+    onChange(dateStr);
+    const d = new Date(dateStr + "T00:00:00");
+    setCurrentMonth({ year: d.getFullYear(), month: d.getMonth() });
+    setIsOpen(false);
+  };
+
+  // Shortcut presets: Today, Tomorrow, Day after tomorrow
+  const shortcutOptions = useMemo(() => {
+    if (!shortcutPresets?.length) return null;
+    const base = new Date(today);
+    const opts: { label: string; value: string }[] = [];
+    if (shortcutPresets.includes("today")) {
+      opts.push({ label: "Today", value: formatDateToISO(base) });
+    }
+    if (shortcutPresets.includes("tomorrow")) {
+      const t = new Date(base);
+      t.setDate(t.getDate() + 1);
+      opts.push({ label: "Tomorrow", value: formatDateToISO(t) });
+    }
+    if (shortcutPresets.includes("dayAfter")) {
+      const t = new Date(base);
+      t.setDate(t.getDate() + 2);
+      opts.push({ label: "Day after tomorrow", value: formatDateToISO(t) });
+    }
+    return opts;
+  }, [shortcutPresets, today]);
+
+  // Move date to previous working day if it falls on Saturday or Sunday
+  const toPreviousWorkingDay = (d: Date): Date => {
+    const out = new Date(d);
+    out.setHours(0, 0, 0, 0);
+    let day = out.getDay();
+    while (day === 0 || day === 6) {
+      out.setDate(out.getDate() - 1);
+      day = out.getDay();
+    }
+    return out;
+  };
+
+  // Relative presets: 1 month + 2 days before, 2 weeks + 2 days before (relative to relativeToDate), adjusted to working days
+  const relativeOptions = useMemo(() => {
+    if (!relativeToDate) return null;
+    const ref = new Date(relativeToDate + "T00:00:00");
+    ref.setHours(0, 0, 0, 0);
+    const oneMonthPlusTwo = new Date(ref);
+    oneMonthPlusTwo.setMonth(oneMonthPlusTwo.getMonth() - 1);
+    oneMonthPlusTwo.setDate(oneMonthPlusTwo.getDate() - 2);
+    const twoWeeksPlusTwo = new Date(ref);
+    twoWeeksPlusTwo.setDate(twoWeeksPlusTwo.getDate() - 14 - 2);
+    return [
+      { label: "1 month + 2 days before", value: formatDateToISO(toPreviousWorkingDay(oneMonthPlusTwo)) },
+      { label: "2 weeks + 2 days before", value: formatDateToISO(toPreviousWorkingDay(twoWeeksPlusTwo)) },
+    ];
+  }, [relativeToDate]);
+
+  const displayValue = (value ? formatDateDDMMYYYY(value) : placeholder).replace(/\//g, ".");
 
   return (
     <div ref={containerRef} className="relative">
@@ -154,9 +220,11 @@ export default function SingleDatePicker({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full rounded border px-3 py-2 text-left text-sm flex items-center justify-between focus:outline-none focus:ring-1 ${
-          error
-            ? "border-red-300 focus:border-red-500 focus:ring-red-500"
-            : "border-gray-300 focus:border-black focus:ring-black"
+          parsed
+            ? "border-green-500 ring-1 ring-green-500 focus:border-green-500 focus:ring-green-500"
+            : error
+              ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+              : "border-gray-300 focus:border-black focus:ring-black"
         } ${!value ? "text-gray-400" : "text-gray-900"}`}
       >
         <span>{displayValue}</span>
@@ -235,25 +303,47 @@ export default function SingleDatePicker({
             })}
           </div>
 
-          {/* Clear/Today buttons */}
-          <div className="mt-3 flex justify-between border-t border-gray-200 pt-3">
-            <button
-              type="button"
-              onClick={() => {
-                const todayStr = formatDateToISO(today);
-                onChange(todayStr);
-                setCurrentMonth({ year: today.getFullYear(), month: today.getMonth() });
-                setIsOpen(false);
-              }}
-              className="text-xs text-blue-600 hover:text-blue-800"
-            >
-              Today
-            </button>
+          {/* Presets row (dashboard-style): Today, Tomorrow, Day after, 1 month before, 2 weeks before */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-gray-200 pt-3">
+            {shortcutOptions?.length ? (
+              shortcutOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPresetAndClose(opt.value)}
+                  className={`text-xs transition-colors ${
+                    value === opt.value ? "font-semibold text-blue-700" : "text-blue-600 hover:text-blue-800"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPresetAndClose(formatDateToISO(today))}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Today
+              </button>
+            )}
+            {relativeOptions?.map((opt) => (
+              <button
+                key={opt.label}
+                type="button"
+                onClick={() => setPresetAndClose(opt.value)}
+                className={`text-xs transition-colors ${
+                  value === opt.value ? "font-semibold text-blue-700" : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
             {value && (
               <button
                 type="button"
                 onClick={handleClear}
-                className="text-xs text-gray-600 hover:text-gray-900"
+                className="ml-auto text-xs text-gray-600 hover:text-gray-900"
               >
                 Clear
               </button>

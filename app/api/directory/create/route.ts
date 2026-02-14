@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
+import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
+import { normalizePhoneForSave } from "@/utils/phone";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -102,7 +104,7 @@ export async function POST(request: NextRequest) {
       notes: null,
       company_id: companyId,
       email: (data.email && data.email.trim()) ? data.email.trim() : null,
-      phone: (data.phone && data.phone.trim()) ? data.phone.trim() : null,
+      phone: (data.phone && data.phone.trim()) ? normalizePhoneForSave(data.phone.trim()) || null : null,
       email_marketing_consent: false,
       phone_marketing_consent: false,
       created_by: user.id,
@@ -329,6 +331,9 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    // Upsert party embedding for semantic search (non-blocking)
+    upsertPartyEmbedding(partyId).catch((e) => console.warn("[create] upsertPartyEmbedding:", e));
 
     return NextResponse.json({
       ok: true,

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 
 // Company types for classification
 const COMPANY_TYPES = [
@@ -133,6 +134,7 @@ interface Company {
   beneficiary_name?: string;
   // Regional Settings
   default_currency?: string;
+  default_vat_rate?: number;
   date_format?: string;
   document_language?: string;
   timezone?: string;
@@ -143,6 +145,7 @@ interface Company {
   emergency_contact?: string;
   invoice_prefix?: string;
   default_payment_terms?: number;
+  invoice_languages?: string[];
 }
 
 export default function CompanySettingsPage() {
@@ -169,10 +172,32 @@ export default function CompanySettingsPage() {
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
   const countryInputRef = useRef<HTMLInputElement>(null);
 
+  // Invoice languages: type-ahead add
+  const [invoiceLanguageSearch, setInvoiceLanguageSearch] = useState("");
+  const [invoiceLanguageSuggestOpen, setInvoiceLanguageSuggestOpen] = useState(false);
+  const invoiceLanguageSuggestRef = useRef<HTMLUListElement>(null);
+
   useEffect(() => {
     loadCompany();
     checkRole();
   }, []);
+
+  // Close invoice language suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const refEl = invoiceLanguageSuggestRef.current;
+      if (!refEl) return;
+      const target = e.target as HTMLElement;
+      if (refEl.contains(target)) return;
+      if (target.closest?.("input[placeholder='Type language name...']")) return;
+      setInvoiceLanguageSuggestOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const invoiceLangList = Array.isArray(formData.invoice_languages) ? formData.invoice_languages : ["en"];
+  const suggestions = filterInvoiceLanguageSuggestions(invoiceLanguageSearch, invoiceLangList);
 
   const checkRole = async () => {
     try {
@@ -843,6 +868,73 @@ export default function CompanySettingsPage() {
           {/* Financial */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Financial</h2>
+
+            {/* Invoice languages — type to suggest, click to add, remove via tag */}
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Invoice languages</h3>
+              <p className="text-xs text-gray-500 mb-2">Languages available when creating an invoice. Type a language name for suggestions; click to add. At least one must be selected.</p>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {(Array.isArray(formData.invoice_languages) ? formData.invoice_languages : ["en"]).map((code) => (
+                  <span
+                    key={code}
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-1 text-sm text-blue-800"
+                  >
+                    {getInvoiceLanguageLabel(code)}
+                    {!readonly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const list = Array.isArray(formData.invoice_languages) ? formData.invoice_languages : ["en"];
+                          const next = list.filter((c) => c !== code);
+                          if (next.length === 0) return;
+                          setFormData({ ...formData, invoice_languages: next });
+                        }}
+                        className="ml-0.5 rounded p-0.5 hover:bg-blue-100 text-blue-600"
+                        aria-label={`Remove ${getInvoiceLanguageLabel(code)}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+              {!readonly && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={invoiceLanguageSearch}
+                    onChange={(e) => setInvoiceLanguageSearch(e.target.value)}
+                    onFocus={() => setInvoiceLanguageSuggestOpen(true)}
+                    placeholder="Type language name..."
+                    className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  {invoiceLanguageSuggestOpen && suggestions.length > 0 && (
+                    <ul
+                      ref={invoiceLanguageSuggestRef}
+                      className="absolute z-10 mt-1 w-full max-w-xs rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+                    >
+                      {suggestions.map((opt) => (
+                        <li key={opt.value}>
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-900"
+                            onClick={() => {
+                              const list = Array.isArray(formData.invoice_languages) ? formData.invoice_languages : ["en"];
+                              if (list.includes(opt.value)) return;
+                              setFormData({ ...formData, invoice_languages: [...list, opt.value] });
+                              setInvoiceLanguageSearch("");
+                              setInvoiceLanguageSuggestOpen(false);
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
             
             {/* Tax Settings */}
             <div className="mb-6 pb-6 border-b border-gray-200">

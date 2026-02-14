@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
+import { generateEmbeddings } from "@/lib/embeddings";
+import { getSearchPatterns, getSemanticQueryVariants, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -30,6 +32,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
 
   const record: DirectoryRecord = {
     id: row.id,
+    displayId: row.display_id || undefined,
     type: row.party_type === "company" ? "company" : "person",
     roles,
     isActive: row.status === "active",
@@ -52,6 +55,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.passportIssuingCountry = row.passport_issuing_country || undefined;
     record.passportFullName = row.passport_full_name || undefined;
     record.nationality = row.nationality || undefined;
+    record.avatarUrl = row.avatar_url || undefined;
   }
 
   // Company fields
@@ -65,10 +69,14 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   // Common fields
   record.phone = row.phone || undefined;
   record.email = row.email || undefined;
+  record.country = row.country || undefined;
 
-  // Supplier details - no additional fields needed
+  // Supplier details
   if (row.is_supplier) {
-    record.supplierExtras = {};
+    record.supplierExtras = {
+      serviceAreas: row.service_areas || undefined,
+      commissions: row.supplier_commissions || undefined,
+    };
   }
 
   // Subagent details
@@ -113,10 +121,11 @@ export async function GET(request: NextRequest) {
       userCompanyId = profile?.company_id || null;
     }
 
-    // Build base query
+    // Build base query – select only columns needed for list (avoids heavy payload)
+    const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country";
     let query = supabaseAdmin
       .from("party")
-      .select("*", { count: "exact" });
+      .select(partyColumns, { count: "exact" });
     
     // Apply tenant isolation if user is authenticated
     if (userCompanyId) {
@@ -128,18 +137,30 @@ export async function GET(request: NextRequest) {
       query = query.eq("party_type", type);
     }
 
-    if (status && (status === "active" || status === "inactive" || status === "blocked")) {
-      query = query.eq("status", status);
+    // By default return only active contacts (archived visible only when status=archived explicitly)
+    const effectiveStatus = status && status.trim() ? status : "active";
+    if (effectiveStatus === "active") {
+      query = query.eq("status", "active");
+    } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+      query = query.eq("status", effectiveStatus);
+    } else if (effectiveStatus === "archived") {
+      query = query.in("status", ["inactive", "archived"]);
     }
 
     // NOTE: Role filter is applied AFTER fetching related data
     // because is_client/is_supplier/is_subagent are determined by join tables
     // (client_party, partner_party, subagents), not columns in party table
 
-    // Apply search filter in SQL (ilike on display_name)
-    // This ensures search works BEFORE pagination
+    // Apply search filter: diacritics, layout transliteration, name variants (DIR3)
     if (search) {
-      query = query.ilike("display_name", `%${search}%`);
+      const patterns = getSearchPatterns(search);
+      const safePatterns = patterns.slice(0, 20).map((p) => p.replace(/[%,]/g, "")); // Include keyboard-typo variants
+      if (safePatterns.length === 1) {
+        query = query.ilike("display_name", `%${safePatterns[0]}%`);
+      } else if (safePatterns.length > 1) {
+        const orClause = safePatterns.map((p) => `display_name.ilike.%${p}%`).join(",");
+        query = query.or(orClause);
+      }
     }
 
     // Pagination
@@ -158,31 +179,96 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If search provided and no results from display_name, try searching in party_person
+    // Semantic search: 2–3 query variants (normalized + typo corrections), merge results
+    let semanticPartyIds: string[] = [];
+    if (search && search.trim().length >= 2 && process.env.OPENAI_API_KEY && userCompanyId) {
+      try {
+        const variants = getSemanticQueryVariants(search, 3).filter(Boolean);
+        if (variants.length === 0) variants.push(search.trim());
+        const embeddings = await generateEmbeddings(variants);
+        const threshold = (search.trim().length < 25 ? 0.25 : 0.3);
+        const allIds = new Set<string>();
+        for (const embedding of embeddings) {
+          const { data: semanticRows } = await supabaseAdmin.rpc("search_party_semantic", {
+            query_embedding: embedding,
+            p_company_id: userCompanyId,
+            match_limit: limit,
+            match_threshold: threshold,
+          });
+          (semanticRows || []).forEach((r: { party_id: string }) => allIds.add(r.party_id));
+        }
+        semanticPartyIds = Array.from(allIds);
+      } catch (e) {
+        console.warn("Semantic search failed:", e);
+      }
+    }
+
+    // If search provided and no results from display_name, try person/company + semantic fallback
     if (search && (!parties || parties.length === 0)) {
-      // Search in party_person by first_name or last_name
+      const patterns = getSearchPatterns(search).slice(0, 10).map((p) => p.replace(/[%,]/g, ""));
+      const searchTerms = patterns.length > 0 ? patterns : [search.replace(/[%,]/g, "")];
+      const personOr = searchTerms.flatMap((p) => [`first_name.ilike.%${p}%`, `last_name.ilike.%${p}%`]).join(",");
+      const companyOr = searchTerms.map((p) => `company_name.ilike.%${p}%`).join(",");
       const { data: personMatches } = await supabaseAdmin
         .from("party_person")
         .select("party_id")
-        .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`)
+        .or(personOr)
         .limit(limit);
-
-      if (personMatches && personMatches.length > 0) {
-        const matchedIds = personMatches.map((p: { party_id: string }) => p.party_id);
-        
-        // Fetch parties by these IDs
-        let personQuery = supabaseAdmin
+      const { data: companyMatches } = await supabaseAdmin
+        .from("party_company")
+        .select("party_id")
+        .or(companyOr)
+        .limit(limit);
+      const matchedIds = [
+        ...(personMatches || []).map((p: { party_id: string }) => p.party_id),
+        ...(companyMatches || []).map((c: { party_id: string }) => c.party_id),
+        ...semanticPartyIds,
+      ];
+      const allIds = [...new Set(matchedIds)];
+      if (allIds.length > 0) {
+        let fallbackQuery = supabaseAdmin
           .from("party")
-          .select("*", { count: "exact" })
-          .in("id", matchedIds);
-        
+          .select(partyColumns, { count: "exact" })
+          .in("id", allIds);
         if (userCompanyId) {
-          personQuery = personQuery.eq("company_id", userCompanyId);
+          fallbackQuery = fallbackQuery.eq("company_id", userCompanyId);
         }
-        
-        const { data: personParties, count: personCount } = await personQuery;
-        parties = personParties || [];
-        count = personCount || 0;
+        // Same status filter as main list: working directory = only active; archive view = inactive/archived
+        if (effectiveStatus === "active") {
+          fallbackQuery = fallbackQuery.eq("status", "active");
+        } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+          fallbackQuery = fallbackQuery.eq("status", effectiveStatus);
+        } else if (effectiveStatus === "archived") {
+          fallbackQuery = fallbackQuery.in("status", ["inactive", "archived"]);
+        }
+        const { data: fallbackParties, count: fallbackCount } = await fallbackQuery;
+        parties = fallbackParties || [];
+        count = fallbackCount || 0;
+      }
+    } else if (semanticPartyIds.length > 0 && parties && parties.length < limit) {
+      const existingIds = new Set((parties || []).map((p: any) => p.id));
+      const extraIds = semanticPartyIds.filter((id) => !existingIds.has(id));
+      if (extraIds.length > 0) {
+        let extraQuery = supabaseAdmin
+          .from("party")
+          .select(partyColumns)
+          .in("id", extraIds.slice(0, limit - (parties?.length || 0)));
+        if (userCompanyId) {
+          extraQuery = extraQuery.eq("company_id", userCompanyId);
+        }
+        // Same status filter: do not add archived/merged to working directory
+        if (effectiveStatus === "active") {
+          extraQuery = extraQuery.eq("status", "active");
+        } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+          extraQuery = extraQuery.eq("status", effectiveStatus);
+        } else if (effectiveStatus === "archived") {
+          extraQuery = extraQuery.in("status", ["inactive", "archived"]);
+        }
+        const { data: extraParties } = await extraQuery;
+        if (extraParties?.length) {
+          parties = [...(parties || []), ...extraParties];
+          count = (count || 0) + extraParties.length;
+        }
       }
     }
 
@@ -197,32 +283,27 @@ export async function GET(request: NextRequest) {
 
     const partyIds = parties.map((p: any) => p.id);
 
-    // Fetch related data in parallel
+    // Fetch related data in parallel - only columns needed for buildDirectoryRecord
     const [personData, companyData, clientData, supplierData, subagentData] = await Promise.all([
-      // Person data
       supabaseAdmin
         .from("party_person")
-        .select("*")
+        .select("party_id,title,first_name,last_name,dob,personal_code,citizenship,passport_number,passport_issue_date,passport_expiry_date,passport_issuing_country,passport_full_name,nationality,avatar_url")
         .in("party_id", partyIds),
-      // Company data
       supabaseAdmin
         .from("party_company")
-        .select("*")
+        .select("party_id,company_name,reg_number,legal_address,actual_address")
         .in("party_id", partyIds),
-      // Client roles
       supabaseAdmin
         .from("client_party")
         .select("party_id")
         .in("party_id", partyIds),
-      // Supplier data
       supabaseAdmin
         .from("partner_party")
-        .select("*")
+        .select("party_id")
         .in("party_id", partyIds),
-      // Subagent data
       supabaseAdmin
         .from("subagents")
-        .select("*")
+        .select("party_id,commission_scheme")
         .in("party_id", partyIds),
     ]);
 
@@ -243,22 +324,20 @@ export async function GET(request: NextRequest) {
       filteredParties = parties.filter((p: any) => subagentMap.has(p.id));
     }
 
-    // Apply search filter (including first_name, last_name, company_name) after loading all data
+    // Apply search filter with diacritics, layout, variants (DIR3)
     if (search) {
-      const searchLower = search.toLowerCase();
+      const patterns = getSearchPatterns(search);
       filteredParties = filteredParties.filter((p: any) => {
-        const matchesDisplayName = p.display_name?.toLowerCase().includes(searchLower);
-        const matchesEmail = p.email?.toLowerCase().includes(searchLower);
-        const matchesPhone = p.phone?.toLowerCase().includes(searchLower);
+        const matchesDisplayName = matchesSearch(p.display_name, patterns);
+        const matchesEmail = matchesSearch(p.email, patterns);
+        const matchesPhone = matchesSearch(p.phone, patterns);
         
-        // Check person data (first_name, last_name)
         const person = personMap.get(p.id);
-        const matchesFirstName = person?.first_name?.toLowerCase().includes(searchLower);
-        const matchesLastName = person?.last_name?.toLowerCase().includes(searchLower);
+        const matchesFirstName = matchesSearch(person?.first_name, patterns);
+        const matchesLastName = matchesSearch(person?.last_name, patterns);
         
-        // Check company_name from party_company
         const company = companyMap.get(p.id);
-        const matchesCompanyName = company?.company_name?.toLowerCase().includes(searchLower);
+        const matchesCompanyName = matchesSearch(company?.company_name, patterns);
         
         return matchesDisplayName || matchesEmail || matchesPhone || 
                matchesFirstName || matchesLastName || matchesCompanyName;

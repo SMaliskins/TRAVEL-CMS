@@ -32,6 +32,7 @@ export interface DirectoryRecord {
   firstName?: string;
   lastName?: string;
   title?: string;
+  gender?: string; // male | female
   dob?: string;
   personalCode?: string;
   citizenship?: string;
@@ -44,6 +45,8 @@ export interface DirectoryRecord {
   passportFullName?: string;
   nationality?: string;
   avatarUrl?: string; // Photo extracted from passport
+  /** Estonia/Latvia Alien's passport – document says "Alien's passport". Show red icon next to passport. */
+  isAlienPassport?: boolean;
   
   // Company fields
   companyName?: string;
@@ -61,4 +64,10 @@ export interface DirectoryRecord {
   
   // Subagent-specific
   subagentExtras?: SubagentDetails;
+
+  // Audit (who created / last updated)
+  createdById?: string;
+  updatedById?: string;
+  createdByDisplayName?: string;
+  updatedByDisplayName?: string;
 }

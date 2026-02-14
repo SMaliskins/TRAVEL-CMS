@@ -13,7 +13,26 @@ import {
 import { useRipple } from "@/hooks/useRipple";
 import { ValidationIcon } from "@/components/ValidationIcon";
 import PassportDetailsInput, { PassportData } from "@/components/PassportDetailsInput";
+import SingleDatePicker from "@/components/SingleDatePicker";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
+import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+
+function getZodiacSign(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  const day = d.getDate();
+  const month = d.getMonth() + 1;
+  // [month, lastDayOfFirstSign, signIfDay<=cutoff, signIfDay>cutoff]
+  const periods: [number, number, string, string][] = [
+    [1, 19, "♑ Capricorn", "♒ Aquarius"], [2, 18, "♒ Aquarius", "♓ Pisces"], [3, 20, "♓ Pisces", "♈ Aries"],
+    [4, 19, "♈ Aries", "♉ Taurus"], [5, 20, "♉ Taurus", "♊ Gemini"], [6, 20, "♊ Gemini", "♋ Cancer"],
+    [7, 22, "♋ Cancer", "♌ Leo"], [8, 22, "♌ Leo", "♍ Virgo"], [9, 22, "♍ Virgo", "♎ Libra"],
+    [10, 22, "♎ Libra", "♏ Scorpio"], [11, 21, "♏ Scorpio", "♐ Sagittarius"], [12, 21, "♐ Sagittarius", "♑ Capricorn"],
+  ];
+  const p = periods.find(([m]) => m === month);
+  return p ? (day <= p[1] ? p[2] : p[3]) : null;
+}
 
 const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia", "Australia",
@@ -92,6 +111,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     
     // Track touched fields (fields that user has interacted with)
     const [touchedFields, setTouchedFields] = useState<Set<string>>(new Set());
+    
+    // Track passport fields parsed from PDF/AI (for green border)
+    const [passportParsedFields, setPassportParsedFields] = useState<Set<string>>(new Set());
     
     // Track field changes
     const markFieldDirty = (fieldName: string) => {
@@ -188,6 +210,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Person fields
     const [firstName, setFirstName] = useState(record?.firstName || "");
     const [lastName, setLastName] = useState(record?.lastName || "");
+    const [gender, setGender] = useState(record?.gender || "");
     const [personalCode, setPersonalCode] = useState(record?.personalCode || "");
     const [dob, setDob] = useState(record?.dob || "");
 
@@ -201,6 +224,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       dob: record?.dob || undefined,
       nationality: record?.nationality || undefined,
       avatarUrl: record?.avatarUrl || undefined,
+      personalCode: record?.personalCode || undefined,
+      isAlienPassport: record?.isAlienPassport,
     });
 
     // Company fields
@@ -279,9 +304,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       loadCategories();
     }, []);
 
-    // Sync passport fields from record when record changes (after save)
+    // Sync person fields from record when record changes (after save)
     useEffect(() => {
       if (record) {
+        setFirstName(record.firstName || "");
+        setLastName(record.lastName || "");
+        setGender(record.gender || "");
+        setPhone(record.phone ? formatPhoneForDisplay(record.phone) || record.phone : "");
+        setEmail(record.email || "");
         setPassportData({
           passportNumber: record.passportNumber || undefined,
           passportIssueDate: record.passportIssueDate || undefined,
@@ -291,6 +321,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           dob: record.dob || undefined,
           nationality: record.nationality || undefined,
           avatarUrl: record.avatarUrl || undefined,
+          personalCode: record.personalCode || undefined,
+          isAlienPassport: record.isAlienPassport,
         });
       } else if (mode === "create") {
         // Reset passport fields in create mode
@@ -302,6 +334,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           passportFullName: undefined,
           dob: undefined,
           nationality: undefined,
+          personalCode: undefined,
         });
       }
     }, [record, mode]);
@@ -314,6 +347,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         roles: record.roles,
         firstName: record.firstName,
         lastName: record.lastName,
+        gender: record.gender,
         companyName: record.companyName,
         personalCode: record.personalCode,
         dob: record.dob,
@@ -330,6 +364,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         passportIssuingCountry: record.passportIssuingCountry,
         passportFullName: record.passportFullName,
         nationality: record.nationality,
+        avatarUrl: record.avatarUrl,
+        isAlienPassport: record.isAlienPassport,
       };
     };
 
@@ -361,6 +397,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         currentRolesStr !== initialRolesStr ||
         firstName.trim() !== (initialValues.firstName || "").trim() ||
         lastName.trim() !== (initialValues.lastName || "").trim() ||
+        gender !== (initialValues.gender || "") ||
         companyName.trim() !== (initialValues.companyName || "").trim() ||
         personalCode.trim() !== (initialValues.personalCode || "").trim() ||
         dob !== (initialValues.dob || "") ||
@@ -368,7 +405,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         email.trim() !== (initialValues.email || "").trim() ||
         regNo.trim() !== (initialValues.regNumber || "").trim() ||
         address.trim() !== (initialValues.legalAddress || "").trim() ||
-        actualAddress.trim() !== (initialValues.actualAddress || "").trim()
+        actualAddress.trim() !== (initialValues.actualAddress || "").trim() ||
+        (passportData.avatarUrl || "") !== (initialValues.avatarUrl || "") ||
+        (passportData.isAlienPassport ?? false) !== (initialValues.isAlienPassport ?? false)
       ) {
         return true;
       }
@@ -499,14 +538,15 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       const formData: Partial<DirectoryRecord> = {
         type: actualType,
         roles,
-        phone: phone || undefined,
-        email: email || undefined,
+        phone: phone.trim() ? (normalizePhoneForSave(phone) || undefined) : undefined,
+        email: email.trim() ? email.trim() : undefined,
       };
 
       // Set person or company fields based on actual type
       if (actualType === "person") {
         formData.firstName = firstName;
         formData.lastName = lastName;
+        formData.gender = gender || undefined;
         formData.personalCode = personalCode || undefined;
         formData.dob = dob || undefined;
         
@@ -518,6 +558,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.passportFullName = passportData.passportFullName || undefined;
         formData.nationality = passportData.nationality || undefined;
         formData.avatarUrl = passportData.avatarUrl || undefined;
+        formData.isAlienPassport = passportData.isAlienPassport;
         // dob is already set above, but update from passport if provided
         if (passportData.dob) {
           formData.dob = passportData.dob;
@@ -673,7 +714,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         {/* Main details and Statistics sections in 2 columns */}
         <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-12">
           {/* Left: Main Details (2/3 width) */}
-          <div className={`lg:col-span-8 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
+          <div className={`lg:col-span-6 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Main details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               {/* Type and Roles in one row - labels on top, options below */}
@@ -767,104 +808,101 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               {/* Person fields */}
               {displayType === "person" && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => {
-                        setFirstName(e.target.value);
-                        markFieldDirty("firstName");
-                      }}
-                      onBlur={() => markFieldTouched("firstName")}
-                      onFocus={() => markFieldTouched("firstName")}
-                      className={getInputClasses("firstName", true, firstName)}
-                      required
-                      aria-label="First name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => {
-                        setLastName(e.target.value);
-                        markFieldDirty("lastName");
-                      }}
-                      onBlur={() => markFieldTouched("lastName")}
-                      onFocus={() => markFieldTouched("lastName")}
-                      className={getInputClasses("lastName", true, lastName)}
-                      required
-                      aria-label="Last name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Personal code
-                    </label>
-                    <input
-                      type="text"
-                      value={personalCode}
-                      onChange={(e) => {
-                        setPersonalCode(e.target.value);
-                        markFieldDirty("personalCode");
-                      }}
-                      onBlur={() => markFieldTouched("personalCode")}
-                      onFocus={() => markFieldTouched("personalCode")}
-                      className={getInputClasses("personalCode", false, personalCode)}
-                      aria-label="Personal code"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Date of birth
-                    </label>
-                    <input
-                      type="date"
-                      value={dob}
-                      onChange={(e) => {
-                        setDob(e.target.value);
-                        markFieldDirty("dob");
-                      }}
-                      onBlur={() => markFieldTouched("dob")}
-                      onFocus={() => markFieldTouched("dob")}
-                      className={getInputClasses("dob", false, dob)}
-                      aria-label="Date of birth"
-                    />
-                  </div>
-
-                  {/* Passport Details */}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <PassportDetailsInput
-                      data={passportData}
-                      onChange={(data) => {
-                        setPassportData(data);
-                        // Notify parent so header avatar updates immediately
-                        if (data.avatarUrl !== undefined) onAvatarChange?.(data.avatarUrl);
-                        // Always update form fields from parsed passport
-                        if (data.firstName && data.lastName) {
-                          setFirstName(data.firstName);
-                          setLastName(data.lastName);
+                  <div className="flex flex-wrap gap-4 md:col-span-2">
+                    <div className="flex-1 min-w-[120px]">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        First name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => {
+                          setFirstName(e.target.value);
                           markFieldDirty("firstName");
+                        }}
+                        onBlur={() => markFieldTouched("firstName")}
+                        onFocus={() => markFieldTouched("firstName")}
+                        className={getInputClasses("firstName", true, firstName)}
+                        required
+                        aria-label="First name"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[120px]">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Last name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => {
+                          setLastName(e.target.value);
                           markFieldDirty("lastName");
-                        }
-                        if (data.dob) {
-                          setDob(data.dob);
-                          markFieldDirty("dob");
-                        }
-                        if (data.personalCode) {
-                          setPersonalCode(data.personalCode);
+                        }}
+                        onBlur={() => markFieldTouched("lastName")}
+                        onFocus={() => markFieldTouched("lastName")}
+                        className={getInputClasses("lastName", true, lastName)}
+                        required
+                        aria-label="Last name"
+                      />
+                    </div>
+                    <div className="min-w-[100px]">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Gender
+                      </label>
+                      <select
+                        value={gender}
+                        onChange={(e) => {
+                          setGender(e.target.value);
+                          markFieldDirty("gender");
+                        }}
+                        onBlur={() => markFieldTouched("gender")}
+                        onFocus={() => markFieldTouched("gender")}
+                        className={getInputClasses("gender", false, gender)}
+                        aria-label="Gender"
+                      >
+                        <option value="">—</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-4 md:col-span-2">
+                    <div className="flex-1 min-w-[120px]">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Personal code
+                      </label>
+                      <input
+                        type="text"
+                        value={personalCode}
+                        onChange={(e) => {
+                          setPersonalCode(e.target.value);
                           markFieldDirty("personalCode");
-                        }
-                        markFieldDirty("passport");
-                      }}
-                      readonly={false}
-                    />
+                        }}
+                        onBlur={() => markFieldTouched("personalCode")}
+                        onFocus={() => markFieldTouched("personalCode")}
+                        className={getInputClasses("personalCode", false, personalCode)}
+                        aria-label="Personal code"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[120px]">
+                      <SingleDatePicker
+                        label="Date of birth"
+                        value={dob || undefined}
+                        onChange={(date) => {
+                          setDob(date || "");
+                          markFieldDirty("dob");
+                        }}
+                        placeholder="dd.mm.yyyy"
+                      />
+                    </div>
+                    <div className="min-w-[100px]">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Zodiac
+                      </label>
+                      <div className="min-h-[2.25rem] flex items-center text-sm text-gray-600">
+                        {dob && getZodiacSign(dob) ? getZodiacSign(dob) : "—"}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -1030,41 +1068,82 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                 </>
               )}
 
-              {/* Common fields */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    markFieldDirty("phone");
-                  }}
-                  onBlur={() => markFieldTouched("phone")}
-                  onFocus={() => markFieldTouched("phone")}
-                  className={getInputClasses("phone", false, phone)}
-                  aria-label="Phone"
-                />
+              {/* Common fields - Phone and Email in one row */}
+              <div className="flex flex-wrap gap-4 md:col-span-2">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      markFieldDirty("phone");
+                    }}
+                    onBlur={() => {
+                      markFieldTouched("phone");
+                      if (phone.trim()) {
+                        const formatted = formatPhoneForDisplay(phone);
+                        if (formatted) setPhone(formatted);
+                      }
+                    }}
+                    onFocus={() => markFieldTouched("phone")}
+                    placeholder="(+371) 722727218"
+                    className={getInputClasses("phone", false, phone)}
+                    aria-label="Phone"
+                  />
+                </div>
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      markFieldDirty("email");
+                    }}
+                    onBlur={() => markFieldTouched("email")}
+                    onFocus={() => markFieldTouched("email")}
+                    placeholder="client@email.com"
+                    className={getInputClasses("email", false, email)}
+                    aria-label="Email"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    markFieldDirty("email");
-                  }}
-                  onBlur={() => markFieldTouched("email")}
-                  onFocus={() => markFieldTouched("email")}
-                  className={getInputClasses("email", false, email)}
-                  aria-label="Email"
-                />
-              </div>
+
+              {/* Passport Details - under Phone/Email, left-aligned (person only) */}
+              {displayType === "person" && (
+                <div className="md:col-span-2 mt-4 pt-4 border-t border-gray-200">
+                  <PassportDetailsInput
+                    data={passportData}
+                    parsedFields={passportParsedFields}
+                    onChange={(data, options) => {
+                      setPassportData(data);
+                      if (options?.parsedFields) setPassportParsedFields(options.parsedFields);
+                      if (data.avatarUrl !== undefined) onAvatarChange?.(data.avatarUrl);
+                      if (data.firstName && data.lastName) {
+                        setFirstName(data.firstName);
+                        setLastName(data.lastName);
+                        markFieldDirty("firstName");
+                        markFieldDirty("lastName");
+                      }
+                      if (data.dob) {
+                        setDob(data.dob);
+                        markFieldDirty("dob");
+                      }
+                      if (data.personalCode) {
+                        setPersonalCode(data.personalCode);
+                        markFieldDirty("personalCode");
+                      }
+                      markFieldDirty("passport");
+                    }}
+                    readonly={false}
+                  />
+                </div>
+              )}
 
               {/* Supplier Details - inside Main details so visible when Supplier checked */}
               {isSupplier && (
@@ -1332,7 +1411,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           </div>
 
           {/* Right: Statistics with Tabs (1/3 width) - Always visible */}
-          <div className="lg:col-span-4 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md">
+          <div className="lg:col-span-6 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md">
               <h2 className="mb-4 md:mb-5 text-base md:text-lg font-semibold tracking-tight text-gray-900">Statistics</h2>
               <div className="space-y-3 md:space-y-4">
                 {/* Tabs - modern style with switching */}
@@ -1437,13 +1516,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           <div className="flex justify-between items-center min-h-[1.5rem]">
                             <span className="text-sm text-gray-600 truncate">Last Trip</span>
                             <span className="text-sm font-medium text-gray-900 truncate ml-2">
-                              {stats.lastTrip ? new Date(stats.lastTrip).toLocaleDateString("lv-LV") : "-"}
+                              {stats.lastTrip ? formatDateDDMMYYYY(stats.lastTrip) : "-"}
                             </span>
                           </div>
                           <div className="flex justify-between items-center min-h-[1.5rem]">
                             <span className="text-sm text-gray-600 truncate">Next Trip</span>
                             <span className="text-sm font-medium text-gray-900 truncate ml-2">
-                              {stats.nextTrip ? new Date(stats.nextTrip).toLocaleDateString("lv-LV") : "-"}
+                              {stats.nextTrip ? formatDateDDMMYYYY(stats.nextTrip) : "-"}
                             </span>
                           </div>
                         </div>
@@ -1486,7 +1565,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-500">Created at</label>
                 <div className="text-sm text-gray-700">
-                  {new Date(record.createdAt).toLocaleString()}
+                  {formatDateDDMMYYYY(record.createdAt)}
+                  <span className="block mt-0.5 text-gray-500">
+                    by {record.createdByDisplayName ?? "—"}
+                  </span>
                 </div>
               </div>
               {record.updatedAt && (
@@ -1495,7 +1577,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     Last updated
                   </label>
                   <div className="text-sm text-gray-700">
-                    {new Date(record.updatedAt).toLocaleString()}
+                    {formatDateDDMMYYYY(record.updatedAt)}
+                    <span className="block mt-0.5 text-gray-500">
+                      by {record.updatedByDisplayName ?? "—"}
+                    </span>
                   </div>
                 </div>
               )}

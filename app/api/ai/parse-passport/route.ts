@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 
 /**
  * AI-powered passport parsing
@@ -28,6 +29,9 @@ interface PassportData {
   lastName?: string;   // Surname - from MRZ line 1 (before <<) or visual zone
   dob?: string; // YYYY-MM-DD
   nationality?: string;
+  personalCode?: string; // Personal ID / national ID (e.g. "123456-12345", "Запис N")
+  /** Estonia/Latvia Alien's passport – document explicitly says "Alien's passport" / "Välismaalase pass" / "Ārzemnieka pase" */
+  isAlienPassport?: boolean;
 }
 
 const SYSTEM_PROMPT = `You are a passport document parser. Extract passport information from images of passport pages, passport scans, or PDFs.
@@ -46,7 +50,9 @@ Return a JSON object with this structure:
     "firstName": "JOHN MICHAEL",
     "lastName": "SMITH",
     "dob": "1985-05-20",
-    "nationality": "US"
+    "nationality": "US",
+    "personalCode": "123456-12345",
+    "isAlienPassport": false
   }
 }
 
@@ -54,13 +60,52 @@ Rules:
 - Dates in YYYY-MM-DD format
 - passportIssuingCountry should be 2-letter ISO country code (e.g., "US", "GB", "DE", "UA" for Ukraine)
 - passportFullName: full name exactly as shown in passport
-- Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), etc. Parse Cyrillic names correctly.
+- Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), Estonian, etc. Parse Cyrillic names correctly.
 - firstName: given name(s) - from MRZ line 2 or visual "First name" / "Given names"
 - lastName: surname/family name - from MRZ line 1 (before <<) or visual "Surname" / "Last name"
 - dob is the date of birth from the passport
 - nationality should be 2-letter ISO country code
+- personalCode: ALWAYS extract if present. National personal ID / personal code. Look for: "Personal No.", "Personal code", "Isikukood" (Estonia), "Personas kods" (Latvia), "Asmens kodas" (Lithuania), "Идентификационный код", "Record No.", "Запис N", or any numeric ID field (e.g. 11 digits, or XXXXXX-XXXXX). Copy exactly as shown (with or without hyphen). Omit only if truly not on the document.
+- isAlienPassport: You MUST always include this field. Set to true when the document is an Alien's passport (Estonia: "Välismaalase pass" / "Alien's passport"; Latvia: "Ārzemnieka pase" / "Alien's passport"). For Estonian or Latvian documents, look at the document type or title on the cover/page – if it says "Alien's passport", "Välismaalase pass", "Ārzemnieka pase", or "non-citizen passport", set isAlienPassport: true. For regular (citizen) passports set false.
 - If you cannot determine a value, omit it or use empty string
 - Only return valid JSON, no other text`;
+
+function formatDate(dateStr: string | undefined): string | undefined {
+  if (!dateStr) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const date = new Date(dateStr);
+  if (!isNaN(date.getTime())) return date.toISOString().split("T")[0];
+  return undefined;
+}
+
+function normalizePassport(passport: PassportData): PassportData {
+  return {
+    passportNumber: passport.passportNumber || undefined,
+    passportIssueDate: formatDate(passport.passportIssueDate),
+    passportExpiryDate: formatDate(passport.passportExpiryDate),
+    passportIssuingCountry: passport.passportIssuingCountry || undefined,
+    passportFullName: passport.passportFullName || undefined,
+    firstName: passport.firstName || undefined,
+    lastName: passport.lastName || undefined,
+    dob: formatDate(passport.dob),
+    nationality: passport.nationality || undefined,
+    personalCode: passport.personalCode ? String(passport.personalCode).trim() || undefined : undefined,
+    isAlienPassport: passport.isAlienPassport === true,
+  };
+}
+
+function mergePassports(primary: PassportData, secondary: PassportData): PassportData {
+  const merged = { ...primary };
+  for (const k of Object.keys(secondary) as (keyof PassportData)[]) {
+    const v = secondary[k];
+    if (k === "isAlienPassport") {
+      merged.isAlienPassport = primary.isAlienPassport === true || secondary.isAlienPassport === true;
+    } else if (typeof v === "string" && v && !merged[k]) {
+      (merged as Record<string, string | undefined>)[k] = v;
+    }
+  }
+  return merged;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -161,7 +206,7 @@ export async function POST(request: NextRequest) {
               },
               {
                 type: "text",
-                text: "Extract all passport information from this PDF document. Return JSON only.",
+                text: "Extract all passport information from this PDF document. Include isAlienPassport: true if the document type is Alien's passport (Estonia: Välismaalase pass; Latvia: Ārzemnieka pase). Return JSON only.",
               },
             ],
           },
@@ -184,7 +229,7 @@ export async function POST(request: NextRequest) {
               },
               {
                 type: "text",
-                text: "Extract all passport information from this image. Return JSON only.",
+                text: "Extract all passport information from this image. Include isAlienPassport: true if the document type is Alien's passport (Estonia: Välismaalase pass; Latvia: Ārzemnieka pase). Return JSON only.",
               },
             ],
           },
@@ -217,45 +262,58 @@ export async function POST(request: NextRequest) {
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || "";
 
-      // Parse JSON from response
+      let openaiPassport: PassportData | null = null;
       try {
-        // Try to extract JSON from the response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
-          const passport: PassportData = parsed.passport || {};
-
-          // Validate and format dates
-          const formatDate = (dateStr: string | undefined): string | undefined => {
-            if (!dateStr) return undefined;
-            // If already in YYYY-MM-DD format, return as is
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-              return dateStr;
-            }
-            // Try to parse other formats
-            const date = new Date(dateStr);
-            if (!isNaN(date.getTime())) {
-              return date.toISOString().split("T")[0];
-            }
-            return undefined;
-          };
-
-          return NextResponse.json({
-            passport: {
-              passportNumber: passport.passportNumber || undefined,
-              passportIssueDate: formatDate(passport.passportIssueDate),
-              passportExpiryDate: formatDate(passport.passportExpiryDate),
-              passportIssuingCountry: passport.passportIssuingCountry || undefined,
-              passportFullName: passport.passportFullName || undefined,
-              firstName: passport.firstName || undefined,
-              lastName: passport.lastName || undefined,
-              dob: formatDate(passport.dob),
-              nationality: passport.nationality || undefined,
-            },
-          });
+          const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
+          openaiPassport = normalizePassport(raw || {});
         }
       } catch (parseErr) {
-        console.error("Failed to parse AI response:", parseErr, "Content:", content);
+        console.error("Failed to parse OpenAI response:", parseErr, "Content:", content);
+      }
+
+      // Second pass: Anthropic (if configured and we have image/text)
+      const anthropicKey = process.env.ANTHROPIC_API_KEY;
+      let anthropicPassport: PassportData | null = null;
+      if (anthropicKey && (imageBase64 || textContent) && !isPDF) {
+        try {
+          const anthropic = new Anthropic({ apiKey: anthropicKey });
+          const userContent = textContent
+            ? [{ type: "text" as const, text: `Parse this passport text and extract all passport information. Return JSON only.\n\n${textContent}` }]
+            : [
+                { type: "image" as const, source: { type: "base64" as const, media_type: (mimeType || "image/png") as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageBase64! } },
+                { type: "text" as const, text: "Extract all passport information from this image. Return JSON only." },
+              ];
+          const msg = await anthropic.messages.create({
+            model: "claude-3-5-haiku-20241022",
+            max_tokens: 1000,
+            system: SYSTEM_PROMPT,
+            messages: [{ role: "user", content: userContent }],
+          });
+          const text = msg.content.find((c) => c.type === "text");
+          const textContent2 = text && "text" in text ? text.text : "";
+          const jsonMatch2 = textContent2.match(/\{[\s\S]*\}/);
+          if (jsonMatch2?.[0]) {
+            const parsed = JSON.parse(jsonMatch2[0]);
+            const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
+            anthropicPassport = normalizePassport(raw || {});
+          }
+        } catch (anthErr) {
+          console.warn("Anthropic second pass failed:", anthErr);
+        }
+      }
+
+      // Merge: prefer OpenAI as primary, fill gaps from Anthropic
+      const finalPassport = openaiPassport
+        ? anthropicPassport
+          ? mergePassports(openaiPassport, anthropicPassport)
+          : openaiPassport
+        : anthropicPassport;
+
+      if (finalPassport) {
+        return NextResponse.json({ passport: finalPassport });
       }
 
       return NextResponse.json({ 

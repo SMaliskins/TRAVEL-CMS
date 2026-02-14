@@ -1,11 +1,11 @@
 /**
  * AI Task: Parse Document
- * 
- * Извлекает структурированные данные из документов:
- * - Паспорта
- * - Визы
- * - Брони отелей
- * - Страховки
+ *
+ * Extracts structured data from documents:
+ * - Passports
+ * - Visas
+ * - Hotel bookings
+ * - Insurance
  */
 
 import { aiVision } from "../client";
@@ -111,7 +111,7 @@ For hotel_booking:
 Dates in YYYY-MM-DD format. Leave empty string for unknown values.`;
 
 /**
- * Парсинг документа из изображения
+ * Parse document from image
  */
 export async function parseDocument(
   imageBase64: string,

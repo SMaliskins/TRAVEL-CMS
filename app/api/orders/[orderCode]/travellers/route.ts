@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
@@ -102,7 +102,7 @@ export async function GET(
       }
     }
 
-    // Fetch order travellers with party details
+    // Fetch order travellers with party details (include party.status to exclude archived)
     const { data: travellers, error } = await supabaseAdmin
       .from("order_travellers")
       .select(`
@@ -115,6 +115,7 @@ export async function GET(
           display_name,
           phone,
           email,
+          status,
           party_person (
             first_name,
             last_name,
@@ -134,24 +135,29 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch travellers" }, { status: 500 });
     }
 
-    // Transform to frontend format
-    const formattedTravellers = (travellers || []).map((t) => {
-      // Handle both single object and array return from Supabase join
-      const partyRaw = t.party as unknown;
-      const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string }[] } | null;
-      const person = party?.party_person?.[0];
-      
-      return {
-        id: t.party_id,
-        firstName: person?.first_name || party?.display_name?.split(" ")[0] || "",
-        lastName: person?.last_name || party?.display_name?.split(" ").slice(1).join(" ") || "",
-        title: person?.title || "Mr",
-        dob: person?.dob || null,
-        personalCode: person?.personal_code || null,
-        contactNumber: party?.phone || null,
-        isMainClient: t.is_main_client || t.party_id === order.client_party_id,
-      };
-    });
+    // Transform to frontend format; exclude archived/inactive parties (do not show in Splits / Travellers)
+    const formattedTravellers = (travellers || [])
+      .filter((t) => {
+        const partyRaw = t.party as unknown;
+        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { status?: string } | null;
+        const status = party?.status ?? "active";
+        return status === "active";
+      })
+      .map((t) => {
+        const partyRaw = t.party as unknown;
+        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string }[] } | null;
+        const person = party?.party_person?.[0];
+        return {
+          id: t.party_id,
+          firstName: person?.first_name || party?.display_name?.split(" ")[0] || "",
+          lastName: person?.last_name || party?.display_name?.split(" ").slice(1).join(" ") || "",
+          title: person?.title || "Mr",
+          dob: person?.dob || null,
+          personalCode: person?.personal_code || null,
+          contactNumber: party?.phone || null,
+          isMainClient: t.is_main_client || t.party_id === order.client_party_id,
+        };
+      });
 
     return NextResponse.json({ travellers: formattedTravellers });
   } catch (error) {

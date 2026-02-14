@@ -2,18 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/contexts/ToastContext";
 import { supabase } from "@/lib/supabaseClient";
-// Ensure components are actual functions (fix ESM/CJS interop "got: object" error)
-import AssignedTravellersModalModule from "./AssignedTravellersModal";
-import AddServiceModalModule, { ServiceData } from "./AddServiceModal";
-
-const AssignedTravellersModal = (typeof AssignedTravellersModalModule === "function"
-  ? AssignedTravellersModalModule
-  : (AssignedTravellersModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
-const AddServiceModal = (typeof AddServiceModalModule === "function"
-  ? AddServiceModalModule
-  : (AddServiceModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
-
+import AssignedTravellersModal from "./AssignedTravellersModal";
+import AddServiceModal, { ServiceData } from "./AddServiceModal";
 import DateRangePicker from "@/components/DateRangePicker";
 import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
@@ -21,6 +13,7 @@ import SplitServiceModal from "./SplitServiceModal";
 import SplitModalMulti from "./SplitModalMulti";
 import MergeServicesModal from "./MergeServicesModal";
 import ConfirmModal from "@/components/ConfirmModal";
+import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
@@ -30,6 +23,7 @@ import { getCityByName, getCityByIATA } from "@/lib/data/cities";
 import ItineraryTabs from "./ItineraryTabs";
 import SmartHintRow from "./SmartHintRow";
 import ItineraryTimeline, { SelectedBoardingPass } from "./ItineraryTimeline";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { 
   getRefundPolicyBadge, 
   getDeadlineUrgency, 
@@ -40,6 +34,8 @@ import {
   getPriceTypeLabel
 } from "@/lib/services/deadlineCalculator";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
+import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
 interface Traveller {
   id: string;
@@ -126,35 +122,70 @@ interface Service {
   agentDiscountType?: "%" | "€" | null;
 }
 
-function toTitleCase(str: string): string {
-  return str
-    .trim()
-    .split(/\s+/)
-    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
-    .join(" ");
-}
+// Fallback when API is unavailable (same names/types as AddServiceModal)
+const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_rate?: number }[] = [
+  { id: "fallback-flight", name: "Flight", type: "flight", vat_rate: 0 },
+  { id: "fallback-hotel", name: "Hotel", type: "hotel", vat_rate: 21 },
+  { id: "fallback-transfer", name: "Transfer", type: "transfer", vat_rate: 21 },
+  { id: "fallback-tour", name: "Package Tour", type: "tour", vat_rate: 21 },
+  { id: "fallback-insurance", name: "Insurance", type: "insurance", vat_rate: 21 },
+  { id: "fallback-visa", name: "Visa", type: "visa", vat_rate: 21 },
+  { id: "fallback-rent_a_car", name: "Rent a Car", type: "rent_a_car", vat_rate: 21 },
+  { id: "fallback-cruise", name: "Cruise", type: "cruise", vat_rate: 21 },
+  { id: "fallback-other", name: "Other", type: "other", vat_rate: 21 },
+];
 
-// Format hotel/tour name: Title Case hotel + " 5*" + Title Case room + meal (parsed text for Package Tour, else board labels)
-function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, fallback: string): string {
-  const name = (s.hotelName || "").trim();
-  const parts: string[] = [];
-  if (name) parts.push(toTitleCase(name));
-  if (s.hotelStarRating?.trim()) parts.push(`${s.hotelStarRating.trim().replace(/\*/g, "")}*`);
-  if (s.hotelRoom?.trim()) parts.push(toTitleCase(s.hotelRoom.trim()));
-  const boardLabels: Record<string, string> = {
-    room_only: "Room Only",
-    breakfast: "Breakfast",
-    half_board: "Half Board",
-    full_board: "Full Board",
-    all_inclusive: "All Inclusive",
-  };
-  const board = s.mealPlanText?.trim()
-    ? toTitleCase(s.mealPlanText.trim())
-    : s.hotelBoard
-      ? boardLabels[String(s.hotelBoard)] || toTitleCase(String(s.hotelBoard))
-      : null;
-  if (board) parts.push(board);
-  return parts.length > 0 ? parts.join(" · ").replace(/\* · /g, "*· ") : toTitleCase(fallback);
+function ChooseServiceTypeModal({
+  categories,
+  onSelect,
+  onClose,
+}: {
+  categories: { id: string; name: string; type?: string; vat_rate?: number }[];
+  onSelect: (categoryId: string, category?: { id: string; name: string; type?: string; vat_rate?: number }) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-xl bg-white shadow-xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">What service are you adding?</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            aria-label="Close"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => onSelect(cat.id, cat)}
+              className="flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800"
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface OrderServicesBlockProps {
@@ -189,6 +220,14 @@ export default function OrderServicesBlock({
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showChooseCategoryModal, setShowChooseCategoryModal] = useState(false);
+  const [addServiceCategoryId, setAddServiceCategoryId] = useState<string | null>(null);
+  const [addServiceCategoryType, setAddServiceCategoryType] = useState<string | null>(null);
+  const [addServiceCategoryName, setAddServiceCategoryName] = useState<string | null>(null);
+  const [addServiceCategoryVatRate, setAddServiceCategoryVatRate] = useState<number | null>(null);
+  // Preloaded categories so "What service?" opens with final names (no substitution)
+  const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
+  const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   
@@ -202,6 +241,8 @@ export default function OrderServicesBlock({
   
   // Traveller filter for itinerary tabs
   const [selectedTravellerId, setSelectedTravellerId] = useState<string | null>(null);
+  // In-app content modal (URL in iframe) instead of window.open
+  const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
   
   // Filter services based on cancelled filter and selected traveller
   const visibleServices = useMemo(() => {
@@ -217,11 +258,11 @@ export default function OrderServicesBlock({
     return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
   }, [visibleServices]);
   
-  // Also filter out cancelled services from selectedServiceIds when they become cancelled
+  // Filter out cancelled and invoiced services from selectedServiceIds (can't invoice again while invoice is active)
   useEffect(() => {
     setSelectedServiceIds(prev => prev.filter(id => {
       const service = services.find(s => s.id === id);
-      return service && service.resStatus !== 'cancelled';
+      return service && service.resStatus !== 'cancelled' && !service.invoice_id;
     }));
   }, [services]);
   
@@ -449,7 +490,7 @@ export default function OrderServicesBlock({
       
       if (method === "whatsapp") {
         alert(`Files downloaded: ${fileNames}\n\nOpen WhatsApp and attach the downloaded files.`);
-        window.open("https://web.whatsapp.com/", "_blank");
+        setContentModal({ url: "https://web.whatsapp.com/", title: "WhatsApp" });
       } else {
         const flights = selectedBoardingPasses.map(p => p.flightNumber).filter((v, i, a) => a.indexOf(v) === i).join(", ");
         window.location.href = `mailto:?subject=${encodeURIComponent(`Boarding Passes - ${flights}`)}`;
@@ -474,6 +515,26 @@ export default function OrderServicesBlock({
     return counts;
   }, [services, hideCancelled]);
   
+  // --- Helper functions for map route computation (must be declared before useMemo that references them) ---
+
+  // Parse "Origin - Destination" from flight service name (e.g. "03.02 Nice-Côte d'Azur - London Heathrow")
+  const parseRouteFromName = (name: string): CityWithCountry[] | null => {
+    const parts = name.split(/\s*-\s*/).map(p => p.trim());
+    if (parts.length < 2) return null;
+    let originStr = parts[0];
+    const destStr = parts[parts.length - 1];
+    if (originStr.match(/^\d{1,2}\.\d{1,2}\.(?:\d{2})?\d{0,2}\s+/)) {
+      originStr = originStr.replace(/^\d{1,2}\.\d{1,2}\.(?:\d{2})?\d{0,2}\s+/, "").trim();
+    }
+    const originCity = getCityByName(originStr) || (originStr.length <= 4 ? getCityByIATA(originStr) : undefined);
+    const destCity = getCityByName(destStr) || getCityByName(destStr.replace(/\s+(Airport|Heathrow|Airport)$/i, "").trim()) || (destStr.length <= 4 ? getCityByIATA(destStr) : undefined);
+    if (!originCity || !destCity) return null;
+    return [
+      { city: originCity.name, country: originCity.country || "", countryCode: originCity.countryCode, lat: originCity.lat, lng: originCity.lng },
+      { city: destCity.name, country: destCity.country || "", countryCode: destCity.countryCode, lat: destCity.lat, lng: destCity.lng },
+    ];
+  };
+
   // Map route points — FIXED. See .ai/specs/itinerary-map-spec.md
   // Origin = where they fly FROM. Destinations = where they go. Full path = origin + each arrival.
   const mapRoutePoints = useMemo(() => {
@@ -489,7 +550,8 @@ export default function OrderServicesBlock({
     const flightServices = activeServices
       .filter(s => {
         const cat = (s.category || "").toLowerCase();
-        return (cat.includes("flight") || cat.includes("tour")) && s.flightSegments && s.flightSegments.length > 0;
+        const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
+        return isFlight && s.flightSegments && s.flightSegments.length > 0;
       })
       .sort((a, b) => {
         const dateA = a.flightSegments?.[0]?.departureDate || a.dateFrom;
@@ -508,7 +570,7 @@ export default function OrderServicesBlock({
     }> = [];
     for (const service of flightServices) {
       for (const seg of service.flightSegments || []) {
-        const s = seg as Record<string, unknown>;
+        const s = seg as unknown as Record<string, unknown>;
         allSegments.push({
           arrival: String(s.arrival ?? ""),
           arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
@@ -554,6 +616,21 @@ export default function OrderServicesBlock({
               lng: cityData.lng,
             });
           }
+        }
+      }
+    }
+    
+    if (routePoints.length === 0) {
+      const flightNoSegments = activeServices.filter(s => {
+        const cat = (s.category || "").toLowerCase();
+        const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
+        return isFlight && (!s.flightSegments || s.flightSegments.length === 0) && s.name;
+      });
+      for (const service of flightNoSegments) {
+        const parsed = parseRouteFromName(service.name);
+        if (parsed && parsed.length >= 2) {
+          routePoints.push(parsed[0], parsed[1]);
+          break;
         }
       }
     }
@@ -625,7 +702,8 @@ export default function OrderServicesBlock({
     const flightServices = travellerServices
       .filter(s => {
         const cat = (s.category || "").toLowerCase();
-        return (cat.includes("flight") || cat.includes("tour")) && s.flightSegments && s.flightSegments.length > 0;
+        const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
+        return isFlight && s.flightSegments && s.flightSegments.length > 0;
       })
       .sort((a, b) => {
         const dateA = a.flightSegments?.[0]?.departureDate || a.dateFrom;
@@ -644,7 +722,7 @@ export default function OrderServicesBlock({
     }> = [];
     for (const service of flightServices) {
       for (const seg of service.flightSegments || []) {
-        const s = seg as Record<string, unknown>;
+        const s = seg as unknown as Record<string, unknown>;
         allSegments.push({
           arrival: String(s.arrival ?? ""),
           arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
@@ -789,6 +867,18 @@ export default function OrderServicesBlock({
       destinations: group.destinations,
     }));
   }, [services, orderTravellers, selectedTravellerId]);
+
+  const { travellerIdToColor, routeColorsUsed } = useMemo(() => {
+    const idToColor: Record<string, string> = {};
+    const used: string[] = [];
+    for (const r of travellerRoutes) {
+      used.push(r.color);
+      for (const id of r.travellerId.split(",").map((s) => s.trim()).filter(Boolean)) {
+        idToColor[id] = r.color;
+      }
+    }
+    return { travellerIdToColor: idToColor, routeColorsUsed: used };
+  }, [travellerRoutes]);
   
   // Smart hints state - load from localStorage
   const dismissedHintsKey = React.useMemo(() => `dismissedHints_${orderCode}`, [orderCode]);
@@ -910,68 +1000,71 @@ export default function OrderServicesBlock({
       if (response.ok) {
         const data = await response.json();
         // Map API response to Service interface
-        const mappedServices: Service[] = (data.services || []).map((s: ServiceData) => ({
-          id: s.id,
-          dateFrom: s.dateFrom || "",
-          dateTo: s.dateTo || s.dateFrom || "",
-          category: s.category || "Other",
-          categoryId: s.categoryId || null,
-          categoryType: s.categoryType || null,
-          vatRate: s.vatRate ?? null,
-          name: s.serviceName,
-          supplier: s.supplierName || "-",
-          client: s.clientName || "-",
-          payer: s.payerName || "-",
-          supplierPartyId: s.supplierPartyId,
-          payerPartyId: s.payerPartyId,
-          clientPartyId: s.clientPartyId,
-          servicePrice: s.servicePrice || 0,
-          clientPrice: s.clientPrice || 0,
-          resStatus: s.resStatus || "booked",
-          refNr: s.refNr || "",
-          ticketNr: s.ticketNr || "",
-          assignedTravellerIds: s.travellerIds || [],
-          invoice_id: s.invoice_id || null,
-          splitGroupId: s.splitGroupId || null,
+        const mappedServices: Service[] = (data.services || []).map((raw: unknown) => {
+          const s = raw as Record<string, unknown>;
+          return {
+          id: String(s.id),
+          dateFrom: String(s.dateFrom ?? s.service_date_from ?? ""),
+          dateTo: String(s.dateTo ?? s.service_date_to ?? s.dateFrom ?? s.service_date_from ?? ""),
+          category: String(s.category ?? "Other"),
+          categoryId: (s.categoryId ?? s.category_id) as string | null,
+          categoryType: ((s.categoryType ?? s.category_type) || undefined) as Service["categoryType"],
+          vatRate: (s.vatRate ?? s.vat_rate) as number | null,
+          name: String(s.serviceName ?? s.service_name ?? ""),
+          supplier: String(s.supplierName ?? s.supplier_name ?? "-"),
+          client: String(s.clientName ?? s.client_name ?? "-"),
+          payer: String(s.payerName ?? s.payer_name ?? "-"),
+          supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
+          payerPartyId: (s.payerPartyId ?? s.payer_party_id) as string | undefined,
+          clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
+          servicePrice: Number(s.servicePrice ?? s.service_price ?? 0),
+          clientPrice: Number(s.clientPrice ?? s.client_price ?? 0),
+          resStatus: String(s.resStatus ?? s.res_status ?? "booked") as Service["resStatus"],
+          refNr: String(s.refNr ?? s.ref_nr ?? ""),
+          ticketNr: String(s.ticketNr ?? s.ticket_nr ?? ""),
+          assignedTravellerIds: (s.travellerIds ?? s.traveller_ids ?? []) as string[],
+          invoice_id: (s.invoice_id ?? null) as string | null,
+          splitGroupId: (s.splitGroupId ?? s.split_group_id ?? null) as string | null,
           // Flight-specific
-          flightSegments: s.flightSegments || [],
-          ticketNumbers: s.ticketNumbers || [],
-          boardingPasses: s.boardingPasses || [],
-          baggage: s.baggage || "",
-          cabinClass: s.cabinClass || "economy",
+          flightSegments: (s.flightSegments ?? s.flight_segments ?? []) as FlightSegment[],
+          ticketNumbers: (s.ticketNumbers ?? s.ticket_numbers ?? []) as Service["ticketNumbers"],
+          boardingPasses: (s.boardingPasses ?? s.boarding_passes ?? []) as Service["boardingPasses"],
+          baggage: String(s.baggage ?? ""),
+          cabinClass: String(s.cabinClass ?? s.cabin_class ?? "economy") as Service["cabinClass"],
           // Terms & Conditions
-          priceType: s.priceType || null,
-          refundPolicy: s.refundPolicy || null,
-          freeCancellationUntil: s.freeCancellationUntil || null,
-          cancellationPenaltyAmount: s.cancellationPenaltyAmount || null,
-          cancellationPenaltyPercent: s.cancellationPenaltyPercent || null,
+          priceType: (s.priceType ?? s.price_type ?? null) as Service["priceType"],
+          refundPolicy: (s.refundPolicy ?? s.refund_policy ?? null) as Service["refundPolicy"],
+          freeCancellationUntil: (s.freeCancellationUntil ?? s.free_cancellation_until ?? null) as string | null,
+          cancellationPenaltyAmount: (s.cancellationPenaltyAmount ?? s.cancellation_penalty_amount ?? null) as number | null,
+          cancellationPenaltyPercent: (s.cancellationPenaltyPercent ?? s.cancellation_penalty_percent ?? null) as number | null,
           // Amendment fields
-          parentServiceId: s.parentServiceId || null,
-          serviceType: s.serviceType || "original",
-          cancellationFee: s.cancellationFee || null,
-          refundAmount: s.refundAmount || null,
-          changeFee: s.changeFee || null,
+          parentServiceId: (s.parentServiceId ?? s.parent_service_id ?? null) as string | null,
+          serviceType: String(s.serviceType ?? s.service_type ?? "original") as Service["serviceType"],
+          cancellationFee: (s.cancellationFee ?? s.cancellation_fee ?? null) as number | null,
+          refundAmount: (s.refundAmount ?? s.refund_amount ?? null) as number | null,
+          changeFee: (s.changeFee ?? s.change_fee ?? null) as number | null,
           // Tour (persisted commission - must pass all for Edit modal to display)
-          commissionName: s.commissionName ?? null,
-          commissionRate: s.commissionRate ?? null,
-          commissionAmount: s.commissionAmount ?? null,
-          agentDiscountValue: s.agentDiscountValue ?? null,
-          agentDiscountType: s.agentDiscountType ?? null,
+          commissionName: (s.commissionName ?? s.commission_name ?? null) as string | null,
+          commissionRate: (s.commissionRate ?? s.commission_rate ?? null) as number | null,
+          commissionAmount: (s.commissionAmount ?? s.commission_amount ?? null) as number | null,
+          agentDiscountValue: (s.agentDiscountValue ?? s.agent_discount_value ?? null) as number | null,
+          agentDiscountType: (s.agentDiscountType ?? s.agent_discount_type ?? null) as string | null,
           // Tour/Hotel fields (must pass for Edit modal to display after save)
-          hotelName: s.hotelName ?? null,
-          hotelStarRating: s.hotelStarRating ?? null,
-          hotelRoom: s.hotelRoom ?? null,
-          hotelBoard: s.hotelBoard ?? null,
-          mealPlanText: s.mealPlanText ?? null,
-          transferType: s.transferType ?? null,
-          additionalServices: s.additionalServices ?? null,
-          hotelAddress: s.hotelAddress ?? null,
-          hotelPhone: s.hotelPhone ?? null,
-          hotelEmail: s.hotelEmail ?? null,
-          paymentDeadlineDeposit: s.paymentDeadlineDeposit ?? null,
-          paymentDeadlineFinal: s.paymentDeadlineFinal ?? null,
-          paymentTerms: s.paymentTerms ?? null,
-        }));
+          hotelName: (s.hotelName ?? s.hotel_name ?? null) as string | null,
+          hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
+          hotelRoom: (s.hotelRoom ?? s.hotel_room ?? null) as string | null,
+          hotelBoard: (s.hotelBoard ?? s.hotel_board ?? null) as string | null,
+          mealPlanText: (s.mealPlanText ?? s.meal_plan_text ?? null) as string | null,
+          transferType: (s.transferType ?? s.transfer_type ?? null) as string | null,
+          additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
+          hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
+          hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
+          hotelEmail: (s.hotelEmail ?? s.hotel_email ?? null) as string | null,
+          paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
+          paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,
+          paymentTerms: (s.paymentTerms ?? s.payment_terms ?? null) as string | null,
+        };
+        });
         setServices(mappedServices);
       }
     } catch (err) {
@@ -1009,16 +1102,54 @@ export default function OrderServicesBlock({
     fetchTravellers();
   }, [fetchServices, fetchTravellers]);
 
+  // Preload categories so "What service?" opens with final names (no substitution)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+          return;
+        }
+        const res = await fetch("/api/travel-service-categories", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          credentials: "include",
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const list = (data.categories || []).filter((c: { is_active?: boolean }) => c.is_active !== false);
+          if (list.length > 0) {
+            setServiceCategories(list.map((c: { id: string; name: string; type?: string; vat_rate?: number }) => ({
+              id: c.id,
+              name: c.name,
+              type: typeof c.type === "string" ? c.type.toLowerCase() : "other",
+              vat_rate: typeof c.vat_rate === "number" ? c.vat_rate : 21,
+            })));
+          } else {
+            setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+          }
+        } else {
+          setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+        }
+      } catch {
+        if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // When categories load and user had clicked Add Service, open chooser
+  useEffect(() => {
+    if (serviceCategories.length > 0 && pendingOpenChooseModal) {
+      setPendingOpenChooseModal(false);
+      setShowChooseCategoryModal(true);
+    }
+  }, [serviceCategories.length, pendingOpenChooseModal]);
+
   // Handle new service added
   const handleServiceAdded = (service: ServiceData) => {
-    console.log('🔍 handleServiceAdded received:', {
-      id: service.id,
-      clientPartyId: service.clientPartyId,
-      clientName: service.clientName,
-      payerPartyId: service.payerPartyId,
-      payerName: service.payerName,
-    });
-    
     const newService: Service = {
       id: service.id,
       dateFrom: service.dateFrom || "",
@@ -1038,19 +1169,10 @@ export default function OrderServicesBlock({
       refNr: service.refNr || "",
       ticketNr: service.ticketNr || "",
       assignedTravellerIds: service.travellerIds || [],
-      hotelName: service.hotelName || "",
-      hotelAddress: service.hotelAddress || "",
-      hotelPhone: service.hotelPhone || "",
-      hotelEmail: service.hotelEmail || "",
     };
-    
-    console.log('✅ newService created:', {
-      id: newService.id,
-      client: newService.client,
-      clientPartyId: newService.clientPartyId,
-    });
-    
     setServices(prev => [...prev, newService]);
+    // Refresh travellers so new clients appear in TRAVELLERS column (they're added to order_travellers by API)
+    fetchTravellers();
   };
 
   const selectedService = services.find((s) => s.id === modalServiceId);
@@ -1106,19 +1228,6 @@ export default function OrderServicesBlock({
     const index = Math.abs(hash) % colors.length;
     return colors[index];
   };
-  const formatDateDDMMYYYY = (dateString: string) => {
-    try {
-      const date = new Date(dateString + "T00:00:00");
-      if (isNaN(date.getTime())) return "-";
-      const day = String(date.getDate()).padStart(2, "0");
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
-    } catch {
-      return "-";
-    }
-  };
-
   const getDateRangeKey = (service: Service) => {
     const startDate = formatDateDDMMYYYY(service.dateFrom);
     const endDate = service.dateTo
@@ -1297,19 +1406,73 @@ export default function OrderServicesBlock({
     setModalServiceId(null);
   };
 
-  if (isLoading) {
-    return (
-      <div className="rounded-lg bg-white shadow-sm p-6">
-        <div className="text-center text-gray-500">Loading services...</div>
+  const servicesTableContent = isLoading ? (
+    <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+      <style>{`
+        @keyframes services-skeleton-shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .services-skeleton-cell {
+          background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+          background-size: 200% 100%;
+          animation: services-skeleton-shimmer 1.2s ease-in-out infinite;
+        }
+      `}</style>
+      <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📋</span>
+          <h2 className="text-base font-semibold text-gray-900">Services</h2>
+        </div>
       </div>
-    );
-  }
+      <div className="px-3 py-2 border-b border-gray-100">
+        <div className="h-8 rounded-md services-skeleton-cell w-48" />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="w-20 px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="min-w-[180px] px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <tr key={i} className="border-b border-gray-100">
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell mx-auto w-4" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-32" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-24" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
+                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-12" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <>
-      {/* Vertical layout: Services on top, Map below */}
+      <style>{`
+        @keyframes services-row-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .services-row-in {
+          opacity: 0;
+          animation: services-row-in 0.35s ease-out forwards;
+        }
+      `}</style>
+      {/* Vertical layout: Services on top, Itinerary + Map below */}
       <div className="space-y-4">
-        {/* Services table */}
+        {/* Services table — skeleton when loading; Itinerary block always rendered below */}
+        {isLoading ? servicesTableContent : (
         <div className="rounded-lg bg-white shadow-sm">
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1338,7 +1501,13 @@ export default function OrderServicesBlock({
               {hideCancelled ? "Show" : "Hide"} Cancelled
             </button>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+              if (serviceCategories.length > 0) {
+                setShowChooseCategoryModal(true);
+              } else {
+                setPendingOpenChooseModal(true);
+              }
+            }}
               className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1412,7 +1581,9 @@ export default function OrderServicesBlock({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {sortedGroupKeys.map((groupKey) => {
+              {(() => {
+                let serviceRowIndex = 0;
+                return sortedGroupKeys.map((groupKey) => {
                 const groupServices = groupedServices[groupKey].sort((a, b) => {
                   // Sort within group: category, then name
                   const categoryCompare = a.category.localeCompare(b.category);
@@ -1422,7 +1593,7 @@ export default function OrderServicesBlock({
                 const isExpanded = expandedGroups[groupKey] ?? true;
 
                 return (
-                  <Fragment key={`group-${groupKey}`}>
+                  <React.Fragment key={`group-${groupKey}`}>
                     {/* Group header row */}
                     <tr
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
@@ -1463,12 +1634,14 @@ export default function OrderServicesBlock({
                         const splitGroupColor = service.splitGroupId ? getSplitGroupColor(service.splitGroupId) : null;
 
 
+                        const rowDelay = serviceRowIndex++ * 40;
                         return (
                           <React.Fragment key={service.id}>
                           <tr
-                            className={`group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
+                            className={`services-row-in group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
                               service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
                             }`}
+                            style={{ animationDelay: `${rowDelay}ms` }}
                             onDoubleClick={(e) => {
                               e.stopPropagation();
                               console.log('🔍 DoubleClick triggered on row! Service ID:', service.id);
@@ -1488,14 +1661,14 @@ export default function OrderServicesBlock({
                               <div className="flex items-center justify-center gap-1">
                                 {service.invoice_id ? (
                                   <div className="flex items-center justify-center">
-                                    {/* Clickable Invoice Icon */}
+                                    {/* Invoiced: show icon, link to invoice; cannot select for new invoice while active */}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        window.location.href = `/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`;
+                                        router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
                                       }}
                                       className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
-                                      title="View invoice"
+                                      title="Invoiced — view invoice (cannot issue another invoice for this service)"
                                     >
                                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1510,17 +1683,13 @@ export default function OrderServicesBlock({
                                     checked={selectedServiceIds.includes(service.id)}
                                     onChange={(e) => {
                                       e.stopPropagation();
-                                      // Prevent selecting cancelled services
-                                      if (service.resStatus === 'cancelled') {
-                                        return;
-                                      }
                                       if (e.target.checked) {
                                         setSelectedServiceIds(prev => [...prev, service.id]);
                                       } else {
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
-                                    disabled={service.resStatus === 'cancelled'}
+                                    disabled={(service as Service).resStatus === 'cancelled'}
                                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label={`Select ${service.name} for invoice`}
                                     title="Select for invoice"
@@ -1540,9 +1709,7 @@ export default function OrderServicesBlock({
                                   </span>
                                 )}
                                 <span>
-                                  {(service.category === "Hotel" || service.category === "Tour" || service.category === "Package Tour")
-                                    ? formatHotelDisplayName(service as { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, service.name)
-                                    : service.name}
+                                  {getServiceDisplayName(service, service.name)}
                                 </span>
                               </div>
                             </td>
@@ -1708,17 +1875,18 @@ export default function OrderServicesBlock({
                           </React.Fragment>
                         );
                       })}
-                  </Fragment>
+                  </React.Fragment>
                 );
-              })}
+              });
+              })()}
             </tbody>
           </table>
         </div>
       </div>
+        )}
 
         {/* Itinerary Timeline + Map - side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Left: Itinerary Timeline (2/3) */}
+        <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <ItineraryTimeline
               services={visibleServices.map(s => ({
@@ -1732,6 +1900,8 @@ export default function OrderServicesBlock({
                 supplier: s.supplier,
                 resStatus: s.resStatus,
                 hotelName: s.hotelName,
+                hotelAddress: (s as { hotelAddress?: string }).hotelAddress,
+                hotelPhone: (s as { hotelPhone?: string }).hotelPhone,
                 flightSegments: s.flightSegments,
                 refNr: s.refNr,
                 ticketNumbers: s.ticketNumbers,
@@ -1746,52 +1916,28 @@ export default function OrderServicesBlock({
               onUploadBoardingPass={async (serviceId, file, clientId, flightNumber) => {
                 const client = orderTravellers.find(t => t.id === clientId);
                 const clientName = client ? `${client.firstName} ${client.lastName}` : "Unknown";
-                
                 const formData = new FormData();
                 formData.append("file", file);
                 formData.append("clientId", clientId);
                 formData.append("clientName", clientName);
                 formData.append("flightNumber", flightNumber);
-                
-                const response = await fetch(`/api/services/${serviceId}/boarding-passes`, {
-                  method: "POST",
-                  body: formData,
-                });
-                
-                if (response.ok) {
-                  // Refresh services to get updated boarding passes
-                  fetchServices();
-                } else {
-                  const error = await response.json();
-                  alert(error.error || "Failed to upload boarding pass");
-                }
+                const response = await fetch(`/api/services/${serviceId}/boarding-passes`, { method: "POST", body: formData });
+                if (response.ok) fetchServices();
+                else { const err = await response.json(); alert(err.error || "Failed to upload boarding pass"); }
               }}
-              onViewBoardingPass={(pass) => {
-                window.open(pass.fileUrl, "_blank");
-              }}
+              onViewBoardingPass={(pass) => setContentModal({ url: pass.fileUrl, title: pass.fileName || "Boarding pass" })}
               onDeleteBoardingPass={async (serviceId, passId) => {
                 if (!confirm("Delete this boarding pass?")) return;
-                
-                const response = await fetch(
-                  `/api/services/${serviceId}/boarding-passes?passId=${passId}`,
-                  { method: "DELETE" }
-                );
-                
-                if (response.ok) {
-                  fetchServices();
-                } else {
-                  alert("Failed to delete boarding pass");
-                }
+                const response = await fetch(`/api/services/${serviceId}/boarding-passes?passId=${passId}`, { method: "DELETE" });
+                if (response.ok) fetchServices(); else alert("Failed to delete boarding pass");
               }}
-              onEditService={(serviceId) => {
-                setEditServiceId(serviceId);
-              }}
+              onEditService={(serviceId) => setEditServiceId(serviceId)}
               selectedBoardingPasses={selectedBoardingPasses}
               onToggleBoardingPassSelection={handleToggleBoardingPassSelection}
+              travellerIdToColor={travellerIdToColor}
+              routeColorsUsed={routeColorsUsed}
             />
           </div>
-          
-          {/* Right: Itinerary Map (1/3) */}
           <div className="rounded-lg bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-200 px-3 py-2">
               <div className="flex items-center gap-2">
@@ -1808,9 +1954,7 @@ export default function OrderServicesBlock({
                 className="h-[500px]"
               />
             ) : (
-              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-                No destinations set
-              </div>
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No destinations set</div>
             )}
           </div>
         </div>
@@ -1829,6 +1973,22 @@ export default function OrderServicesBlock({
         />
       )}
 
+      {showChooseCategoryModal && (
+        <ChooseServiceTypeModal
+          categories={serviceCategories.length > 0 ? serviceCategories : CHOOSE_CATEGORY_FALLBACK}
+          onSelect={(categoryId, category) => {
+            setAddServiceCategoryId(categoryId);
+            setAddServiceCategoryType(category?.type ?? null);
+            setAddServiceCategoryName(category?.name ?? null);
+            setAddServiceCategoryVatRate(category?.vat_rate ?? null);
+            setShowChooseCategoryModal(false);
+            // Open add modal next tick so category type/name/vat state is committed before first paint
+            setTimeout(() => setShowAddModal(true), 0);
+          }}
+          onClose={() => setShowChooseCategoryModal(false)}
+        />
+      )}
+
       {showAddModal && (
         <AddServiceModal
           orderDateFrom={orderDateFrom}
@@ -1836,42 +1996,62 @@ export default function OrderServicesBlock({
           orderCode={orderCode}
           defaultClientId={defaultClientId}
           defaultClientName={defaultClientName}
-          onClose={() => setShowAddModal(false)}
+          initialCategoryId={addServiceCategoryId ?? undefined}
+          initialCategoryType={addServiceCategoryType ?? undefined}
+          initialCategoryName={addServiceCategoryName ?? undefined}
+          initialVatRate={addServiceCategoryVatRate ?? undefined}
+          onClose={() => {
+            setShowAddModal(false);
+            setAddServiceCategoryId(null);
+            setAddServiceCategoryType(null);
+            setAddServiceCategoryName(null);
+            setAddServiceCategoryVatRate(null);
+          }}
           onServiceAdded={handleServiceAdded}
         />
       )}
 
-      {/* Edit Service Modal - simple inline editor (null guard for service existence) */}
-      {editServiceId && (() => {
-        const service = services.find((s) => s.id === editServiceId);
-        return service ? (
+      {/* Edit Service Modal - simple inline editor */}
+      {editServiceId && (
+        <>
+          {console.log('🔍 Rendering EditServiceModalNew for service:', editServiceId)}
           <EditServiceModalNew
-            service={service}
+            service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
             orderCode={orderCode}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
               setEditServiceId(null);
+              // Refresh travellers and services after update (clients may have been added)
               fetchTravellers();
               fetchServices();
             }}
           />
-        ) : null;
-      })()}
+        </>
+      )}
 
 
       {/* Split Service Modal (Single) */}
-      {splitServiceId && (
-        <SplitServiceModal
-          service={services.find(s => s.id === splitServiceId)!}
-          orderCode={orderCode}
-          onClose={() => setSplitServiceId(null)}
-          onSuccess={() => {
-            fetchServices();
-            setSplitServiceId(null);
-          }}
-        />
-      )}
+      {splitServiceId && (() => {
+        const splitService = services.find(s => s.id === splitServiceId);
+        const serviceTravellerIds = splitService?.assignedTravellerIds ?? [];
+        const travellers = orderTravellers.filter(t => serviceTravellerIds.includes(t.id));
+        return (
+          <SplitServiceModal
+            service={splitService!}
+            orderCode={orderCode}
+            travellers={travellers}
+            orderTravellers={orderTravellers}
+            mainClientId={defaultClientId ?? undefined}
+            onTravellersRefetch={fetchTravellers}
+            onClose={() => setSplitServiceId(null)}
+            onSuccess={() => {
+              fetchServices();
+              setSplitServiceId(null);
+            }}
+          />
+        );
+      })()}
       {/* Split Multi Modal */}
       {splitMultiModalOpen && (
         <SplitModalMulti
@@ -1952,25 +2132,40 @@ export default function OrderServicesBlock({
                   // Filter out cancelled services before passing to onIssueInvoice
                   const selectedServicesData = services
                     .filter(s => selectedServiceIds.includes(s.id) && s.resStatus !== 'cancelled')
-                    .map(s => ({
-                      id: s.id,
-                      name: s.name,
-                      clientPrice: s.clientPrice,
-                      category: s.category,
-                      dateFrom: s.dateFrom,
-                      dateTo: s.dateTo,
-                      client: s.client,
-                      clientPartyId: s.clientPartyId,
-                      payer: s.payer,
-                      payerPartyId: s.payerPartyId,
-                      paymentDeadlineDeposit: s.paymentDeadlineDeposit,
-                      paymentDeadlineFinal: s.paymentDeadlineFinal,
-                      paymentTerms: s.paymentTerms,
-                      resStatus: s.resStatus, // Add resStatus for filtering cancelled services
-                    }));
+                    .map(s => {
+                      const clientNames = (s.assignedTravellerIds?.length && orderTravellers.length)
+                        ? orderTravellers
+                            .filter((t) => s.assignedTravellerIds!.includes(t.id))
+                            .map((t) => `${(t.firstName || "").trim()} ${(t.lastName || "").trim()}`.trim())
+                            .filter(Boolean)
+                            .join(", ") || s.client
+                        : s.client;
+                      return {
+                        ...s,
+                        id: s.id,
+                        name: s.name,
+                        clientPrice: s.clientPrice,
+                        category: s.category,
+                        dateFrom: s.dateFrom,
+                        dateTo: s.dateTo,
+                        client: clientNames,
+                        clientPartyId: s.clientPartyId,
+                        payer: s.payer,
+                        payerPartyId: s.payerPartyId,
+                        paymentDeadlineDeposit: s.paymentDeadlineDeposit,
+                        paymentDeadlineFinal: s.paymentDeadlineFinal,
+                        paymentTerms: s.paymentTerms,
+                        resStatus: s.resStatus,
+                        hotelName: (s as { hotelName?: string | null }).hotelName ?? null,
+                        hotelStarRating: (s as { hotelStarRating?: string | null }).hotelStarRating ?? null,
+                        hotelRoom: (s as { hotelRoom?: string | null }).hotelRoom ?? null,
+                        hotelBoard: (s as { hotelBoard?: string | null }).hotelBoard ?? null,
+                        mealPlanText: (s as { mealPlanText?: string | null }).mealPlanText ?? null,
+                      };
+                    });
                   
                   if (selectedServicesData.length === 0) {
-                    alert('No active services selected. Cancelled services are excluded.');
+                    alert('No active, non-invoiced services selected. Cancelled and already-invoiced services are excluded.');
                     return;
                   }
                   onIssueInvoice(selectedServicesData);
@@ -2157,6 +2352,15 @@ export default function OrderServicesBlock({
             fetchServices();
             fetchTravellers();
           }}
+        />
+      )}
+
+      {contentModal && (
+        <ContentModal
+          isOpen={true}
+          onClose={() => setContentModal(null)}
+          title={contentModal.title}
+          url={contentModal.url}
         />
       )}
       

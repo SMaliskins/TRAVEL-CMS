@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { parseFlightBooking, getAirportTimezoneOffset } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 
 interface Service {
   id: string;
@@ -150,10 +151,8 @@ export default function ChangeServiceModal({
       let currentDate = '';
       
       segments.forEach((seg) => {
-        const dateStr = seg.departureDate ? 
-          new Date(seg.departureDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }).replace(/\//g, '.') : '';
-        
-        if (dateStr !== currentDate) {
+        const dateStr = seg.departureDate ? formatDateDDMMYYYY(seg.departureDate) : '';
+        if (dateStr && dateStr !== '-' && dateStr !== currentDate) {
           if (routeParts.length > 0) routeParts.push('/');
           routeParts.push(dateStr);
           currentDate = dateStr;
@@ -223,10 +222,8 @@ export default function ChangeServiceModal({
     let currentDate = '';
     
     segments.forEach((seg) => {
-      const dateStr = seg.departureDate ? 
-        new Date(seg.departureDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }).replace(/\//g, '.') : '';
-      
-      if (dateStr !== currentDate) {
+      const dateStr = seg.departureDate ? formatDateDDMMYYYY(seg.departureDate) : '';
+      if (dateStr && dateStr !== '-' && dateStr !== currentDate) {
         if (routeParts.length > 0) routeParts.push('/');
         routeParts.push(dateStr);
         currentDate = dateStr;
@@ -446,11 +443,7 @@ export default function ChangeServiceModal({
     }
   };
   
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.');
-  };
+  const formatDate = (dateStr: string) => formatDateDDMMYYYY(dateStr || null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

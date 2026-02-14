@@ -1,17 +1,19 @@
 "use client";
 
 /**
- * Itinerary Timeline — утверждённый layout для перелётов (Flight и Tour Package):
+ * Itinerary Timeline — approved layout for flights (Flight and Tour Package):
  * Flight number, airline, class, baggage, route (dep→arr + times + terminals),
  * duration, PNR, traveller, +BP button, status (Flight departed / Check-in countdown).
- * Tour Package с flight segments отображается тем же layout.
- * См. .ai/specs/itinerary-flight-layout-approved.md
+ * Tour Package with flight segments uses the same layout.
+ * See .ai/specs/itinerary-flight-layout-approved.md
  */
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getCheckinUrl, isCheckinAvailable } from "@/lib/flights/airlineCheckin";
 import CheckinCountdown from "@/components/CheckinCountdown";
 import BoardingPassUpload from "@/components/BoardingPassUpload";
 import { requestNotificationPermission } from "@/lib/notifications/checkinNotifications";
+import { getCityByName, getCityByIATA } from "@/lib/data/cities";
 
 // Format baggage for short display (compact, for inline use)
 // personal = under seat, cabin = carry-on, bag = checked
@@ -150,6 +152,8 @@ interface TimelineService {
   resStatus: string;
   refNr?: string; // Booking reference
   hotelName?: string; // Tour Package hotel
+  hotelAddress?: string;
+  hotelPhone?: string;
   flightSegments?: FlightSegment[];
   ticketNumbers?: TicketNumber[]; // Clients with ticket numbers
   boardingPasses?: BoardingPass[]; // Uploaded boarding passes
@@ -186,6 +190,10 @@ interface ItineraryTimelineProps {
   // Multi-select BP across services
   selectedBoardingPasses?: SelectedBoardingPass[];
   onToggleBoardingPassSelection?: (pass: SelectedBoardingPass) => void;
+  /** Map travellerId -> hex color (same as map route colors); used to highlight flight cards */
+  travellerIdToColor?: Record<string, string>;
+  /** Hex colors already used for flight routes; hotel uses colors not in this set */
+  routeColorsUsed?: string[];
 }
 
 // Category icons
@@ -199,10 +207,20 @@ const categoryIcons: Record<string, string> = {
   Other: "📌",
 };
 
-// Format date as DD.MM
+// Format date as dd.mm.yyyy (project standard)
 function formatDateShort(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
+  return formatDateDDMMYYYY(dateStr);
+}
+
+// Colours for hotel blocks (use ones not used by flight routes on the map)
+const HOTEL_COLOR_CANDIDATES = ["#f59e0b", "#f97316", "#8b5cf6", "#ec4899", "#14b8a6"];
+function getHotelColors(routeColorsUsed: string[] = []): { checkin: string; checkout: string } {
+  const used = new Set(routeColorsUsed);
+  const available = HOTEL_COLOR_CANDIDATES.filter((c) => !used.has(c));
+  return {
+    checkin: available[0] ?? "#22c55e",
+    checkout: available[1] ?? "#f97316",
+  };
 }
 
 // Timeline event structure
@@ -228,7 +246,8 @@ interface TimelineEvent {
   duration?: string;
   cabinClass?: string;
   baggage?: string;
-  arrivalNextDay?: boolean; // Прилёт на след. день
+  arrivalNextDay?: boolean; // Arrival on next day
+  arrivalDate?: string; // YYYY-MM-DD for schedule card
   // Client info for flights
   bookingRef?: string;
   ticketNumbers?: TicketNumber[];
@@ -238,30 +257,130 @@ interface TimelineEvent {
   departureDateTime?: string; // ISO format: YYYY-MM-DDTHH:mm
   // For boarding passes
   serviceId?: string;
+  // Hotel
+  hotelAddress?: string;
+  hotelPhone?: string;
+  /** When multiple rooms merged: one surname(s) per room, shown in right column */
+  hotelRoomSurnames?: string[];
   boardingPasses?: BoardingPass[];
   // Who uses this service (for deduplicated events)
   travellerSurnames?: string;
+  /** Assigned traveller ids (for route color when no ticketNumbers yet) */
+  assignedTravellerIds?: string[];
 }
 
-// Normalize segment keys (API/DB may return snake_case)
-function normalizeSegment(seg: Record<string, unknown>): { id: string; flightNumber: string; departure: string; arrival: string; departureDate: string; departureTimeScheduled: string; arrivalDate: string; arrivalTimeScheduled: string; departureCity?: string; arrivalCity?: string; departureTerminal?: string; arrivalTerminal?: string; duration?: string; cabinClass?: string; baggage?: string } {
+// Ensure airport is shown as IATA code (3 letters). If value is a city name, resolve via cities DB.
+function toAirportCode(value: string): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  if (/^[A-Za-z]{3}$/.test(s)) return s.toUpperCase();
+  const city = getCityByName(s);
+  return city?.iataCode ?? s;
+}
+
+// Normalize segment keys (API/DB may return snake_case). For Itinerary always show airport CODES (readable).
+function normalizeSegment(seg: Record<string, unknown>): { id: string; flightNumber: string; airline?: string; departure: string; arrival: string; departureDate: string; departureTimeScheduled: string; arrivalDate: string; arrivalTimeScheduled: string; departureCity?: string; arrivalCity?: string; departureTerminal?: string; arrivalTerminal?: string; duration?: string; cabinClass?: string; baggage?: string } {
+  const depRaw = seg.departure_code ?? seg.departure ?? "";
+  const arrRaw = seg.arrival_code ?? seg.arrival ?? "";
+  const departure = toAirportCode(String(depRaw));
+  const arrival = toAirportCode(String(arrRaw));
+  const departureCityRaw = seg.departureCity ?? seg.departure_city;
+  const arrivalCityRaw = seg.arrivalCity ?? seg.arrival_city;
+  const departureCity = departureCityRaw ? String(departureCityRaw) : (departure ? getCityByIATA(departure)?.name : undefined);
+  const arrivalCity = arrivalCityRaw ? String(arrivalCityRaw) : (arrival ? getCityByIATA(arrival)?.name : undefined);
   return {
     id: String(seg.id ?? seg.flightNumber ?? Math.random().toString(36).slice(2)),
     flightNumber: String(seg.flightNumber ?? seg.flight_number ?? ""),
-    departure: String(seg.departure ?? ""),
-    arrival: String(seg.arrival ?? ""),
+    airline: (seg.airline ?? seg.airline_name) != null ? String(seg.airline ?? seg.airline_name) : undefined,
+    departure,
+    arrival,
     departureDate: String(seg.departureDate ?? seg.departure_date ?? ""),
     departureTimeScheduled: String(seg.departureTimeScheduled ?? seg.departure_time_scheduled ?? seg.departureTime ?? seg.departure_time ?? ""),
     arrivalDate: String(seg.arrivalDate ?? seg.arrival_date ?? seg.departureDate ?? seg.departure_date ?? ""),
     arrivalTimeScheduled: String(seg.arrivalTimeScheduled ?? seg.arrival_time_scheduled ?? seg.arrivalTime ?? seg.arrival_time ?? ""),
-    departureCity: seg.departureCity ?? seg.departure_city ? String(seg.departureCity ?? seg.departure_city) : undefined,
-    arrivalCity: seg.arrivalCity ?? seg.arrival_city ? String(seg.arrivalCity ?? seg.arrival_city) : undefined,
+    departureCity,
+    arrivalCity,
     departureTerminal: seg.departureTerminal ?? seg.departure_terminal ? String(seg.departureTerminal ?? seg.departure_terminal) : undefined,
     arrivalTerminal: seg.arrivalTerminal ?? seg.arrival_terminal ? String(seg.arrivalTerminal ?? seg.arrival_terminal) : undefined,
     duration: seg.duration ? String(seg.duration) : undefined,
     cabinClass: seg.cabinClass ?? seg.cabin_class ? String(seg.cabinClass ?? seg.cabin_class) : undefined,
     baggage: seg.baggage ? String(seg.baggage) : undefined,
   };
+}
+
+// Flight = category "Flight", "Air Ticket", or Tour with flight segments
+function isFlightService(service: TimelineService): boolean {
+  const cat = (service.category || "").toLowerCase();
+  if (cat.includes("flight") || cat === "air ticket" || cat.includes("air ticket")) return true;
+  if ((service as { serviceType?: string }).serviceType === "change") return true;
+  if (((service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour") && service.flightSegments && service.flightSegments.length > 0) return true;
+  return false;
+}
+
+// Flight card — single layout; optional left border color (from map itinerary colour)
+function renderFlightCard(event: TimelineEvent, leftBorderColor?: string): React.ReactNode {
+  const depT = event.departureTerminal?.toLowerCase().startsWith("terminal") ? event.departureTerminal : event.departureTerminal ? `T${event.departureTerminal}` : "";
+  const arrT = event.arrivalTerminal?.toLowerCase().startsWith("terminal") ? event.arrivalTerminal : event.arrivalTerminal ? `T${event.arrivalTerminal}` : "";
+  const hasRoute = !!(event.departureCode || event.arrivalCode);
+
+  return (
+      <div
+        className={`bg-white rounded-lg pl-3 pr-3 pt-2 pb-2 border border-sky-100 border-l-4 ${!leftBorderColor ? "border-l-sky-400" : ""}`}
+        style={leftBorderColor ? { borderLeftColor: leftBorderColor } : undefined}
+      >
+        <div className="flex items-center gap-3 text-sm">
+          <div className="w-24 flex-shrink-0 flex flex-col items-center gap-1 text-center">
+            <span className="font-semibold text-sky-700">{event.flightNumber}</span>
+            {event.airline && <span className="text-[10px] text-gray-400">{event.airline}</span>}
+            {event.cabinClass && (
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium capitalize ${
+                event.cabinClass === "first"
+                  ? "bg-amber-100 text-amber-800 border border-amber-300"
+                  : event.cabinClass === "business"
+                  ? "bg-purple-100 text-purple-800 border border-purple-300"
+                  : event.cabinClass === "premium_economy"
+                  ? "bg-teal-100 text-teal-800"
+                  : "bg-gray-100 text-gray-600"
+              }`}>
+                {event.cabinClass.replace("_", " ")}
+              </span>
+            )}
+            {event.baggage && (
+              <span className="text-[10px] text-gray-500" title={formatBaggageTooltip(event.baggage)}>
+                🧳 {formatBaggageShort(event.baggage)}
+              </span>
+            )}
+          </div>
+          <div className="flex-1">
+            {hasRoute ? (
+              <div className="flex items-center gap-2">
+                <div className="text-center min-w-[80px]">
+                  <div className="text-xs text-gray-400">{formatDateShort(event.date)}</div>
+                  <div className="font-medium">{event.departureCode || "—"}</div>
+                  {event.departureCity && <div className="text-[10px] text-gray-500">{event.departureCity}</div>}
+                  <div className="text-sm font-semibold">{event.departureTime || ""}</div>
+                  {depT && <div className="text-[10px] text-gray-400">{depT}</div>}
+                </div>
+                <div className="flex-1 flex flex-col items-center justify-center px-2 gap-1">
+                  {event.duration ? <div className="text-xs font-medium text-gray-700">{event.duration}</div> : <div className="text-[10px] text-gray-400">—</div>}
+                  <div className="w-full h-px bg-gray-300 relative"><span className="absolute left-1/2 -translate-x-1/2 -top-1 text-gray-400">✈</span></div>
+                </div>
+                <div className="text-center min-w-[80px]">
+                  <div className="text-xs text-gray-400">{event.arrivalDate ? formatDateShort(event.arrivalDate) : formatDateShort(event.date)}</div>
+                  <div className="font-medium">{event.arrivalCode || "—"}</div>
+                  {event.arrivalCity && <div className="text-[10px] text-gray-500">{event.arrivalCity}</div>}
+                  <div className="text-sm font-semibold">{event.arrivalTime || ""}</div>
+                  {event.arrivalNextDay && <span className="text-amber-600 text-[10px] font-medium" title="Arrival next day">+1</span>}
+                  {arrT && <div className="text-[10px] text-gray-400">{arrT}</div>}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-1"><span className="text-xs text-gray-500">Укажите маршрут в Edit</span></div>
+            )}
+          </div>
+        </div>
+      </div>
+  );
 }
 
 // Helper: get traveller surnames for contributing services (splitted deduplication)
@@ -285,7 +404,7 @@ function getTravellerSurnames(
 // Convert services to timeline events
 function servicesToEvents(services: TimelineService[], travellers: Traveller[]): TimelineEvent[] {
   const events: TimelineEvent[] = [];
-  const seenSegmentKeys = new Set<string>(); // Дедупликация: parent + change могут иметь одни сегменты
+  const seenSegmentKeys = new Set<string>(); // Deduplication: parent and change may share same segments
   const seenSplitGroupHotelIds = new Set<string>();
   const seenSplitGroupTransferIds = new Set<string>();
   const seenSplitGroupOtherIds = new Set<string>();
@@ -311,11 +430,12 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
         type: 'hotel_checkin',
         icon: "🏨",
         title: `Check-in 13:00-14:00: ${service.name}`,
-        sortOrder: 50, // After flights/transfers
+        sortOrder: 50,
         serviceId: service.id,
         travellerSurnames: travellerSurnames || undefined,
+        hotelAddress: service.hotelAddress,
+        hotelPhone: service.hotelPhone,
       });
-      
       if (service.dateTo && service.dateTo !== service.dateFrom) {
         events.push({
           id: `${service.id}-checkout`,
@@ -323,22 +443,24 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
           type: 'hotel_checkout',
           icon: "🏨",
           title: `Check-out 11:00-12:00: ${service.name}`,
-          sortOrder: 10, // Before flights on departure day
+          sortOrder: 10,
           serviceId: service.id,
           travellerSurnames: travellerSurnames || undefined,
+          hotelAddress: service.hotelAddress,
+          hotelPhone: service.hotelPhone,
         });
       }
-    } else if (service.category === "Flight" || (service as { serviceType?: string }).serviceType === "change" || (((service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour") && service.flightSegments && service.flightSegments.length > 0)) {
-      // Flight или Tour Package с flight segments — один и тот же утверждённый layout
+    } else if (isFlightService(service)) {
+      // Flight or Tour Package with flight segments — same approved layout
       const firstFlightNumber = service.flightSegments?.[0]?.flightNumber || "";
       const checkinUrl = getCheckinUrl(firstFlightNumber);
-      const flightIcon = categoryIcons.Flight; // ✈️ для всех перелётов (Flight и Tour Package)
+      const flightIcon = categoryIcons.Flight; // ✈️ for all flights (Flight and Tour Package)
       
       // If we have flight segments, create an event for each segment
       if (service.flightSegments && service.flightSegments.length > 0) {
         for (const rawSeg of service.flightSegments) {
-          const segment = normalizeSegment(rawSeg as Record<string, unknown>);
-          // Дедупликация: parent (res_status changed) и Change service могут иметь одни сегменты
+          const segment = normalizeSegment(rawSeg as unknown as Record<string, unknown>);
+          // Deduplication: parent (res_status changed) and Change service may share same segments
           const segmentKey = `${segment.departureDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
           if (seenSegmentKeys.has(segmentKey)) continue;
           seenSegmentKeys.add(segmentKey);
@@ -377,6 +499,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
             cabinClass: segment.cabinClass,
             baggage: segment.baggage || service.baggage,
             arrivalNextDay: segment.arrivalDate !== segment.departureDate,
+            arrivalDate: segment.arrivalDate,
             // Client info
             bookingRef: service.refNr,
             ticketNumbers: service.ticketNumbers,
@@ -387,26 +510,33 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
             // For boarding passes
             serviceId: service.id,
             boardingPasses: service.boardingPasses,
+            assignedTravellerIds: service.assignedTravellerIds,
           });
         }
       } else {
-        // Fallback: just show the route name
+        // Fallback: flight without segments — show ticket block, do NOT repeat service name
         events.push({
           id: service.id,
           date: service.dateFrom,
           type: 'flight',
           icon: flightIcon,
-          title: service.name,
+          title: "Flight",
           subtitle: service.supplier,
           sortOrder: 30,
+          flightNumber: firstFlightNumber || "—",
+          departureCode: "",
+          arrivalCode: "",
+          departureTime: "",
+          arrivalTime: "",
           bookingRef: service.refNr,
           ticketNumbers: service.ticketNumbers,
           checkinUrl: checkinUrl || undefined,
           serviceId: service.id,
           boardingPasses: service.boardingPasses,
+          assignedTravellerIds: service.assignedTravellerIds,
         });
       }
-      // Tour Package: отель check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate for splitted)
+      // Tour Package: hotel check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate for splitted)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
       if (isTour && service.dateFrom && service.dateTo) {
         if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) {
@@ -423,6 +553,8 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
             sortOrder: 50,
             serviceId: service.id,
             travellerSurnames: travellerSurnames || undefined,
+            hotelAddress: service.hotelAddress,
+            hotelPhone: service.hotelPhone,
           });
           if (service.dateTo !== service.dateFrom) {
             events.push({
@@ -434,6 +566,8 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
               sortOrder: 10,
               serviceId: service.id,
               travellerSurnames: travellerSurnames || undefined,
+              hotelAddress: service.hotelAddress,
+              hotelPhone: service.hotelPhone,
             });
           }
         }
@@ -452,7 +586,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
         travellerSurnames: travellerSurnames || undefined,
       });
     } else {
-      // Tour Package без flight segments: только отель check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate)
+      // Tour Package without flight segments: hotel check-in 13:00-14:00, check-out 11:00-12:00 only (deduplicate)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
       if (isTour && service.dateFrom && service.dateTo) {
         if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) {
@@ -469,6 +603,8 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
             sortOrder: 50,
             serviceId: service.id,
             travellerSurnames: travellerSurnames || undefined,
+            hotelAddress: service.hotelAddress,
+            hotelPhone: service.hotelPhone,
           });
           if (service.dateTo !== service.dateFrom) {
             events.push({
@@ -480,6 +616,8 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
               sortOrder: 10,
               serviceId: service.id,
               travellerSurnames: travellerSurnames || undefined,
+              hotelAddress: service.hotelAddress,
+              hotelPhone: service.hotelPhone,
             });
           }
         }
@@ -534,14 +672,27 @@ export default function ItineraryTimeline({
   onEditService,
   selectedBoardingPasses = [],
   onToggleBoardingPassSelection,
+  travellerIdToColor = {},
+  routeColorsUsed = [],
 }: ItineraryTimelineProps) {
-  const events = servicesToEvents(services, travellers);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const hotelColors = useMemo(() => getHotelColors(routeColorsUsed), [routeColorsUsed]);
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
+    return cats.sort((a, b) => a.localeCompare(b));
+  }, [services]);
+
+  const servicesFilteredByCategory = selectedCategory
+    ? services.filter((s) => s.category === selectedCategory)
+    : services;
+  const events = servicesToEvents(servicesFilteredByCategory, travellers);
   const groupedByDate = groupByDate(events);
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
     new Date(a).getTime() - new Date(b).getTime()
   );
   
-  // Filter travellers based on selection
   const displayTravellers = selectedTravellerId 
     ? travellers.filter(t => t.id === selectedTravellerId)
     : travellers;
@@ -575,8 +726,8 @@ export default function ItineraryTimeline({
             <span className="text-lg">📅</span>
             <h2 className="text-base font-semibold text-gray-900">Itinerary</h2>
           </div>
-          {travellers.length > 0 && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {travellers.length > 0 && (
               <select
                 value={selectedTravellerId || "all"}
                 onChange={(e) => onSelectTraveller?.(e.target.value === "all" ? null : e.target.value)}
@@ -590,12 +741,28 @@ export default function ItineraryTimeline({
                   </option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+            {categories.length > 0 && (
+              <select
+                value={selectedCategory ?? "all"}
+                onChange={(e) => setSelectedCategory(e.target.value === "all" ? null : e.target.value)}
+                className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                title="Filter by category"
+                aria-label="Filter itinerary by category"
+              >
+                <option value="all">All categories ({categories.length})</option>
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {categoryIcons[cat] ? `${categoryIcons[cat]} ${cat}` : cat}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Compact Timeline */}
+      {/* Timeline — each day is one band: left border + light bg so date clearly owns its events */}
       <div className="p-3 space-y-3">
         {sortedDates.map((dateKey) => {
           const dayEvents = groupedByDate[dateKey];
@@ -603,26 +770,24 @@ export default function ItineraryTimeline({
           const weekday = new Date(dateKey).toLocaleDateString("en-GB", { weekday: "short" });
           
           return (
-            <div key={dateKey} className="flex gap-3">
-              {/* Date badge */}
-              <div className="flex-shrink-0 w-16 text-center">
-                <div className="text-xs font-bold text-blue-600">{weekday}</div>
-                <div className="text-sm font-semibold text-gray-900">{formattedDate}</div>
-              </div>
-              
-              {/* Events for this date */}
-              <div className="flex-1 space-y-1.5">
+            <div key={dateKey} className="rounded-r-lg border-l-2 border-blue-200 bg-gray-50/50 pl-3 pr-3 pt-2 pb-2">
+              <div className="flex gap-5 min-w-0 items-start">
+                {/* Date — anchor for this day */}
+                <div className="flex-shrink-0 w-16 text-center pr-2 pt-0.5">
+                  <div className="text-xs font-bold text-blue-600">{weekday}</div>
+                  <div className="text-sm font-semibold text-gray-900">{formattedDate}</div>
+                </div>
+                
+                <div className="flex-1 min-w-0 space-y-1.5">
                 {dayEvents.map((event) => (
                   <div
                     key={event.id}
-                    className={`px-2 py-1.5 rounded text-sm ${
-                      event.type === 'hotel_checkout' 
-                        ? 'bg-orange-50 text-orange-800' 
-                        : event.type === 'hotel_checkin'
-                        ? 'bg-green-50 text-green-800'
+                    className={`text-sm ${
+                      event.type === 'hotel_checkout' || event.type === 'hotel_checkin'
+                        ? 'min-h-0'
                         : event.type === 'flight'
-                        ? 'bg-blue-50 text-blue-800'
-                        : 'bg-gray-50 text-gray-700'
+                        ? 'min-h-0'
+                        : 'bg-gray-50 text-gray-700 px-2 py-1.5 rounded'
                     } ${onEditService ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
                     onDoubleClick={() => {
                       if (onEditService && event.serviceId) {
@@ -631,108 +796,89 @@ export default function ItineraryTimeline({
                     }}
                     title={onEditService ? "Double-click to edit" : undefined}
                   >
-                    {event.type === 'flight' && event.flightNumber ? (
-                      // Detailed flight display with clients
-                      <div className="flex items-start gap-2">
-                        <span className="mt-0.5">{event.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          {/* Flight number and airline */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold">{event.flightNumber}</span>
-                            {event.airline && (
-                              <span className="text-xs text-gray-500">{event.airline}</span>
-                            )}
-                            {event.cabinClass && (
-                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium capitalize ${
-                                event.cabinClass === "first" 
-                                  ? "bg-amber-100 text-amber-800 border border-amber-300" 
-                                  : event.cabinClass === "business" 
-                                  ? "bg-purple-100 text-purple-800 border border-purple-300"
-                                  : event.cabinClass === "premium_economy"
-                                  ? "bg-teal-100 text-teal-800"
-                                  : "bg-gray-100 text-gray-600"
-                              }`}>
-                                {event.cabinClass.replace("_", " ")}
-                              </span>
-                            )}
-                            {event.baggage && (
-                              <span className="text-xs text-gray-500" title={formatBaggageTooltip(event.baggage)}>
-                                {formatBaggageShort(event.baggage)}
-                              </span>
-                            )}
-                          </div>
-                          {/* Route with times */}
-                          <div className="flex items-center gap-1 mt-0.5 text-xs">
-                            <div className="flex items-center gap-0.5">
-                              <span className="font-medium">{event.departureCode}</span>
-                              {event.departureCity && (
-                                <span className="text-gray-500 hidden sm:inline">({event.departureCity})</span>
+                    {event.type === 'hotel_checkin' || event.type === 'hotel_checkout' ? (
+                      // Hotel card — left border (colors not used by flights on map), content 2/3; right 1/3 + surname(s)
+                      <div className="flex items-stretch gap-2 min-w-0">
+                        <div
+                          className="w-2/3 flex-shrink-0 bg-white rounded-lg pl-3 pr-3 pt-2 pb-2 border border-gray-200 border-l-4 text-gray-800"
+                          style={{ borderLeftColor: event.type === 'hotel_checkin' ? hotelColors.checkin : hotelColors.checkout }}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="text-lg flex-shrink-0">{event.icon}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium">{event.title}</div>
+                              {event.hotelAddress && (
+                                <div className="text-xs text-gray-600 mt-1">📍 {event.hotelAddress}</div>
                               )}
-                              <span className="font-bold ml-1">{event.departureTime}</span>
-                              {event.departureTerminal && (
-                                <span className="text-gray-400 text-[10px]">{event.departureTerminal.toLowerCase().startsWith("terminal") ? event.departureTerminal : `T${event.departureTerminal}`}</span>
+                              {event.hotelPhone && (
+                                <div className="text-xs text-gray-600 mt-0.5">
+                                  <a href={`tel:${event.hotelPhone.replace(/\s/g, '')}`} className="hover:underline">📞 {event.hotelPhone}</a>
+                                </div>
                               )}
                             </div>
-                            <span className="text-gray-400 mx-1">→</span>
-                            <div className="flex items-center gap-0.5">
-                              <span className="font-medium">{event.arrivalCode}</span>
-                              {event.arrivalCity && (
-                                <span className="text-gray-500 hidden sm:inline">({event.arrivalCity})</span>
-                              )}
-                              <span className="font-bold ml-1">{event.arrivalTime}</span>
-                              {event.arrivalNextDay && (
-                                <span className="text-amber-600 text-[10px] font-medium ml-1" title="Прилёт на следующий день">+1</span>
-                              )}
-                              {event.arrivalTerminal && (
-                                <span className="text-gray-400 text-[10px]">{event.arrivalTerminal.toLowerCase().startsWith("terminal") ? event.arrivalTerminal : `T${event.arrivalTerminal}`}</span>
-                              )}
-                            </div>
-                            {event.duration && (
-                              <span className="text-gray-400 ml-2">{event.duration}</span>
-                            )}
                           </div>
                         </div>
+                        {/* Right: same padding as flight block (pl-4 pr-3), surname(s) */}
+                        <div className="flex-1 min-w-0 flex flex-col items-end justify-center pl-4 pr-3 py-2 rounded-lg border border-gray-200 bg-white">
+                          {event.hotelRoomSurnames && event.hotelRoomSurnames.length > 0 ? (
+                            event.hotelRoomSurnames.map((surnames, i) => (
+                              <div key={i} className="text-xs font-medium text-gray-700 text-right">{surnames}</div>
+                            ))
+                          ) : event.travellerSurnames ? (
+                            <div className="text-xs font-medium text-gray-700 text-right">{event.travellerSurnames}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : event.type === 'flight' && event.flightNumber ? (
+                      // Detailed flight display — flight block 2/3 (left border = map route colour), right panel 1/3
+                      <div className="flex items-stretch gap-2 min-w-0">
+                        <div className="w-2/3 flex-shrink-0 min-w-0 overflow-x-auto">
+                          {renderFlightCard(
+                            event,
+                            (() => {
+                              const tid = event.ticketNumbers?.[0]?.clientId ?? event.assignedTravellerIds?.[0];
+                              return tid ? travellerIdToColor[tid] : undefined;
+                            })()
+                          )}
+                        </div>
                         
-                        {/* Clients with tickets and check-in */}
+                        {/* Right panel: same outline as flight card (rounded + border), no thick left stripe */}
                         {(event.ticketNumbers && event.ticketNumbers.length > 0) || event.bookingRef ? (
-                          <div className="flex-shrink-0 text-right text-xs space-y-0.5 border-l border-blue-200 pl-2 ml-2">
-                            {event.bookingRef && (
-                              <div className="flex items-center gap-1.5 justify-end">
-                                <span className="text-gray-500">PNR:</span>
-                                <span className="font-mono font-semibold text-gray-700">{event.bookingRef}</span>
-                                <CopyButton text={event.bookingRef} title="Copy PNR" />
-                                {event.ticketNumbers && event.ticketNumbers.length > 0 && (
-                                  <>
-                                    <span className="text-gray-400 mx-1">|</span>
-                                    <span className="text-gray-600">
+                          <div className="flex-1 min-w-0 flex flex-col items-end justify-center gap-2 pl-4 rounded-lg border border-sky-100 bg-white">
+                            {/* Row 1: PNR + passenger surname(s) */}
+                            <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                              {event.bookingRef && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">PNR</span>
+                                  <span className="font-mono text-xs font-semibold text-gray-800">{event.bookingRef}</span>
+                                  <CopyButton text={event.bookingRef} title="Copy PNR" />
+                                </div>
+                              )}
+                              {event.ticketNumbers && event.ticketNumbers.length > 0 && (
+                                <>
+                                  {event.bookingRef && <span className="text-gray-300">|</span>}
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-600">
                                       {event.ticketNumbers.map(t => t.clientName.split(" ").pop()).join(", ")}
                                     </span>
-                                    <CopyButton 
-                                      text={event.ticketNumbers.map(t => t.clientName.split(" ").pop()).join(", ")} 
-                                      title="Copy surname" 
+                                    <CopyButton
+                                      text={event.ticketNumbers.map(t => t.clientName.split(" ").pop()).join(", ")}
+                                      title="Copy surname"
                                     />
-                                  </>
-                                )}
-                              </div>
-                            )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            {/* Row 2: BP checkboxes + upload per passenger */}
                             {event.ticketNumbers && event.ticketNumbers.map((ticket) => (
-                              <div key={ticket.clientId} className="flex items-center gap-1.5 justify-end">
-                                {ticket.ticketNr && (
-                                  <>
-                                    <span className="font-mono text-[10px] text-gray-400">{ticket.ticketNr}</span>
-                                    <CopyButton text={ticket.ticketNr} title="Copy ticket" />
-                                  </>
-                                )}
+                              <div key={ticket.clientId} className="flex items-center gap-2 justify-end">
                                 {event.serviceId && (() => {
-                                  // Find passes for this client and flight
                                   const clientPasses = (event.boardingPasses || []).filter(
                                     bp => bp.clientName === ticket.clientName && bp.flightNumber === event.flightNumber
                                   );
                                   const hasPass = clientPasses.length > 0;
-                                  
                                   return (
-                                    <div className="flex items-center gap-1">
-                                      {/* Multi-select checkbox (only show if BP exists) */}
+                                    <div className="flex items-center gap-1.5">
                                       {hasPass && onToggleBoardingPassSelection && (
                                         <div className="flex flex-col gap-0.5">
                                           {clientPasses.map(pass => {
@@ -751,6 +897,7 @@ export default function ItineraryTimeline({
                                                     fileUrl: pass.fileUrl,
                                                   })}
                                                   className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                  aria-label={`Select boarding pass ${pass.fileName}`}
                                                 />
                                               </label>
                                             );
@@ -763,7 +910,7 @@ export default function ItineraryTimeline({
                                         clientId={ticket.clientId}
                                         clientName={ticket.clientName}
                                         existingPasses={event.boardingPasses}
-                                        onUpload={onUploadBoardingPass 
+                                        onUpload={onUploadBoardingPass
                                           ? (file, clientId, flightNumber) => onUploadBoardingPass(event.serviceId!, file, clientId, flightNumber)
                                           : undefined
                                         }
@@ -778,22 +925,18 @@ export default function ItineraryTimeline({
                                 })()}
                               </div>
                             ))}
-                            {/* Show flight status */}
+                            {/* Row 3: status */}
                             {event.flightNumber && event.departureDateTime && (() => {
                               const depTime = new Date(event.departureDateTime).getTime();
                               const now = Date.now();
                               const isPast = now > depTime;
-                              
-                              // If flight departed, always show this
                               if (isPast) {
-                                return <span className="text-[10px] text-gray-400">Flight departed</span>;
+                                return <span className="text-[10px] text-gray-500">Flight departed</span>;
                               }
-                              
-                              // Check if all clients have BP for this specific flight
                               const allHaveBP = event.ticketNumbers && event.ticketNumbers.length > 0 &&
-                                event.ticketNumbers.every(ticket => 
-                                  event.boardingPasses?.some(bp => 
-                                    bp.clientName === ticket.clientName && bp.flightNumber === event.flightNumber
+                                event.ticketNumbers.every(t =>
+                                  event.boardingPasses?.some(bp =>
+                                    bp.clientName === t.clientName && bp.flightNumber === event.flightNumber
                                   )
                                 );
                               if (allHaveBP) return null;
@@ -807,7 +950,6 @@ export default function ItineraryTimeline({
                                 />
                               );
                             })()}
-                            
                           </div>
                         ) : null}
                       </div>
@@ -824,12 +966,13 @@ export default function ItineraryTimeline({
                   </div>
                 ))}
               </div>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Ремарка: время check-in/check-out может различаться — только при наличии отеля в Itinerary */}
+      {/* Note: check-in/check-out times may vary — shown only when hotel is present in Itinerary */}
       {events.some(e => e.type === 'hotel_checkin' || e.type === 'hotel_checkout') && (
         <div className="border-t border-gray-200 px-4 py-2 bg-gray-50">
           <p className="text-xs text-gray-500 italic">

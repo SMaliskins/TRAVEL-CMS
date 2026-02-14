@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
@@ -9,12 +9,8 @@ import ClientMultiSelectDropdown from "@/components/ClientMultiSelectDropdown";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import type { SupplierCommission } from "@/lib/types/directory";
-import {
-  HotelDesignLayout,
-  HotelVariantSelector,
-  type HotelModalVariant,
-} from "./HotelModalDesigns";
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -23,6 +19,12 @@ interface AddServiceModalProps {
   defaultClientName?: string;
   orderDateFrom?: string | null;
   orderDateTo?: string | null;
+  /** When set, category is fixed and selector is hidden (opened from "What service?" step) */
+  initialCategoryId?: string | null;
+  /** Type/name/vat from parent so modal opens with correct category when id is API UUID (not in fallback) */
+  initialCategoryType?: string | null;
+  initialCategoryName?: string | null;
+  initialVatRate?: number | null;
   onClose: () => void;
   onServiceAdded: (service: ServiceData) => void;
 }
@@ -101,8 +103,14 @@ export interface ServiceData {
   cancellationPenaltyAmount?: number | null;
   cancellationPenaltyPercent?: number | null;
   changeFee?: number | null; // Airline change fee (for Flights)
+  // Amendment / change-of-booking
+  parentServiceId?: string | null;
+  serviceType?: string;
+  cancellationFee?: number | null;
+  refundAmount?: number | null;
   // Tour (Package Tour) pricing
   commissionName?: string | null;
+  commissionRate?: number | null;
   commissionAmount?: number | null;
   agentDiscountValue?: number | null;
   agentDiscountType?: "%" | "€" | null;
@@ -130,33 +138,65 @@ const RES_STATUS_OPTIONS: { value: ServiceData["resStatus"]; label: string }[] =
   { value: "cancelled", label: "Cancelled" },
 ];
 
-export function AddServiceModal({ 
+const VALID_CATEGORY_TYPES: CategoryType[] = ["flight", "hotel", "transfer", "tour", "insurance", "visa", "rent_a_car", "cruise", "other"];
+
+export default function AddServiceModal({ 
   orderCode,
   defaultClientId,
   defaultClientName,
   orderDateFrom,
   orderDateTo,
+  initialCategoryId,
+  initialCategoryType,
+  initialCategoryName,
+  initialVatRate,
   onClose, 
   onServiceAdded 
 }: AddServiceModalProps) {
+  const categoryLocked = !!initialCategoryId;
   console.log('🚀 AddServiceModal mounted with:', {
     defaultClientId,
     defaultClientName,
     orderDateFrom,
     orderDateTo,
+    initialCategoryId,
+    initialCategoryType,
+    initialCategoryName,
+    categoryLocked,
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Categories from API - start with empty, load on mount
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [categoryType, setCategoryType] = useState<CategoryType>('flight');
+  // Categories: show fallback immediately when category is locked so form opens without Loading
+  const [categories, setCategories] = useState<ServiceCategory[]>(() =>
+    categoryLocked ? FALLBACK_CATEGORIES : []
+  );
+  const [categoriesLoading, setCategoriesLoading] = useState(() => !categoryLocked);
+  const [categoryId, setCategoryId] = useState<string | null>(() => {
+    if (!initialCategoryId) return null;
+    // Always use initialCategoryId so we never show wrong category (e.g. Flight when user chose Package Tour)
+    return initialCategoryId;
+  });
+  const [categoryType, setCategoryType] = useState<CategoryType>(() => {
+    if (!initialCategoryId) return 'flight';
+    const matched = FALLBACK_CATEGORIES.find(c => c.id === initialCategoryId);
+    if (matched) {
+      return (matched.type || "other") as CategoryType;
+    }
+    const raw = initialCategoryType && VALID_CATEGORY_TYPES.includes(initialCategoryType as CategoryType)
+      ? initialCategoryType
+      : "other";
+    return (typeof raw === "string" ? raw.toLowerCase() : "other") as CategoryType;
+  });
 
   // Form state
-  const [category, setCategory] = useState(""); // Display name - set after categories load
+  const [category, setCategory] = useState(() => {
+    if (!initialCategoryId) return "";
+    const matched = FALLBACK_CATEGORIES.find(c => c.id === initialCategoryId);
+    if (matched) return matched.name;
+    return (initialCategoryName ?? "") as string;
+  });
   const [serviceName, setServiceName] = useState("");
   const [dateFrom, setDateFrom] = useState<string | undefined>(orderDateFrom || undefined);
   const [dateTo, setDateTo] = useState<string | undefined>(orderDateTo || undefined);
@@ -193,7 +233,15 @@ export function AddServiceModal({
   
   // Track which field was last edited to determine calculation direction
   const pricingLastEditedRef = useRef<'cost' | 'marge' | 'sale' | 'agent' | 'commission' | null>(null);
-  const [vatRate, setVatRate] = useState<number>(0); // Default 0%, can be 21%
+  const [vatRate, setVatRate] = useState<number>(() => {
+    if (categoryLocked && initialVatRate != null && !Number.isNaN(Number(initialVatRate))) {
+      const v = Number(initialVatRate);
+      // Package Tour: VAT always >0 (country settings); fallback 21
+      if (initialCategoryType === "tour" && v === 0) return 21;
+      return v;
+    }
+    return 0;
+  }); // Default 0%, can be 21%
   // Draft for Flight/Hotel, Booked for others
   const [resStatus, setResStatus] = useState<ServiceData["resStatus"]>("draft");
   const [refNr, setRefNr] = useState("");
@@ -206,7 +254,6 @@ export function AddServiceModal({
   const [hotelAddress, setHotelAddress] = useState("");
   const [hotelPhone, setHotelPhone] = useState("");
   const [hotelEmail, setHotelEmail] = useState("");
-  const [hotelModalVariant, setHotelModalVariant] = useState<HotelModalVariant>("v1");
   const [hotelBedType, setHotelBedType] = useState<"king_queen" | "twin" | "not_guaranteed">("not_guaranteed");
   const [hotelPreferences, setHotelPreferences] = useState({
     earlyCheckIn: false,
@@ -243,10 +290,12 @@ export function AddServiceModal({
   const [isDraggingTour, setIsDraggingTour] = useState(false);
   const tourParseInputRef = useRef<HTMLInputElement>(null);
   const [parsedFields, setParsedFields] = useState<Set<string>>(new Set());
+  /** Fields parser returned but value empty or not applied — show red outline */
+  const [parseAttemptedButEmpty, setParseAttemptedButEmpty] = useState<Set<string>>(new Set());
   // Tour-specific: hotel star, room, meal, transfer, additional
   const [hotelStarRating, setHotelStarRating] = useState("");
   const [hotelRoom, setHotelRoom] = useState("");
-  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive">("room_only");
+  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">("room_only");
   const [mealPlanText, setMealPlanText] = useState("");
   const [transferType, setTransferType] = useState("");
   const [additionalServices, setAdditionalServices] = useState("");
@@ -288,12 +337,16 @@ export function AddServiceModal({
   // Load categories on mount so default is from Travel Services (e.g. Air Ticket), not FALLBACK Flight
   const loadCategories = useCallback(async () => {
     try {
-      setCategoriesLoading(true);
+      if (!categoryLocked) setCategoriesLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setCategories(FALLBACK_CATEGORIES);
-        const first = FALLBACK_CATEGORIES.find(c => c.is_active);
-        if (first) setCategoryId(first.id);
+        if (initialCategoryId) {
+          setCategoryId(initialCategoryId);
+        } else {
+          const first = FALLBACK_CATEGORIES.find(c => c.is_active);
+          if (first) setCategoryId(first.id);
+        }
         return;
       }
       const response = await fetch("/api/travel-service-categories", {
@@ -305,32 +358,49 @@ export function AddServiceModal({
         const apiCategories = (data.categories || []) as ServiceCategory[];
         if (apiCategories.length > 0) {
           setCategories(apiCategories);
-          // Set first active category as default
-          const first = apiCategories.find((c: ServiceCategory) => c.is_active);
-          if (first) setCategoryId(first.id);
+          if (initialCategoryId) {
+            setCategoryId(initialCategoryId);
+          } else {
+            const first = apiCategories.find((c: ServiceCategory) => c.is_active);
+            if (first) setCategoryId(first.id);
+          }
         } else {
           setCategories(FALLBACK_CATEGORIES);
-          const first = FALLBACK_CATEGORIES.find(c => c.is_active);
-          if (first) setCategoryId(first.id);
+          if (initialCategoryId) {
+            setCategoryId(initialCategoryId);
+          } else {
+            const first = FALLBACK_CATEGORIES.find(c => c.is_active);
+            if (first) setCategoryId(first.id);
+          }
         }
       } else {
         setCategories(FALLBACK_CATEGORIES);
-        const first = FALLBACK_CATEGORIES.find(c => c.is_active);
-        if (first) setCategoryId(first.id);
+        if (initialCategoryId) {
+          setCategoryId(initialCategoryId);
+        } else {
+          const first = FALLBACK_CATEGORIES.find(c => c.is_active);
+          if (first) setCategoryId(first.id);
+        }
       }
     } catch (err) {
       console.error("Error loading categories:", err);
       setCategories(FALLBACK_CATEGORIES);
-      const first = FALLBACK_CATEGORIES.find(c => c.is_active);
-      if (first) setCategoryId(first.id);
+      if (initialCategoryId) {
+        setCategoryId(initialCategoryId);
+      } else {
+        const first = FALLBACK_CATEGORIES.find(c => c.is_active);
+        if (first) setCategoryId(first.id);
+      }
     } finally {
       setCategoriesLoading(false);
     }
-  }, []);
+  }, [initialCategoryId, categoryLocked]);
 
   useEffect(() => {
+    // When category is pre-selected (Package Tour etc.) skip fetch so form doesn't re-render with "second" layout
+    if (categoryLocked) return;
     loadCategories();
-  }, [loadCategories]);
+  }, [loadCategories, categoryLocked]);
 
   // Load supplier commissions only on dropdown open (lazy), not on supplier change
   const loadSupplierCommissions = useCallback(async () => {
@@ -358,20 +428,31 @@ export function AddServiceModal({
     if (categoryType !== "tour" || !supplierPartyId) {
       setSupplierCommissions([]);
       setSelectedCommissionIndex(-1);
+    } else {
+      loadSupplierCommissions();
     }
-  }, [categoryType, supplierPartyId]);
+  }, [categoryType, supplierPartyId, loadSupplierCommissions]);
 
   // Derive category name, type and VAT from selected category BY ID (single source of truth: categoryId)
-  // Normalize type to lowercase so "Tour" from DB matches our categoryType === "tour" checks
+  // Package Tour: VAT always >0 (country/settings); fallback 21 if category has 0
   useEffect(() => {
     const matched = categories.find(c => c.id === categoryId);
     if (matched) {
       setCategory(matched.name);
       const rawType = (matched as { type?: string }).type ?? "other";
       setCategoryType((typeof rawType === "string" ? rawType.toLowerCase() : "other") as CategoryType);
-      setVatRate(matched.vat_rate);
+      const v = matched.vat_rate;
+      const isTour = (typeof rawType === "string" ? rawType.toLowerCase() : "") === "tour";
+      setVatRate(isTour && (v == null || v === 0) ? 21 : v);
     }
   }, [categoryId, categories]);
+
+  // Package Tour: VAT always >0 (e.g. Latvia 21%); enforce when category gave 0 or initial state was 0
+  useEffect(() => {
+    if (categoryType === "tour" && vatRate === 0) {
+      setVatRate(21);
+    }
+  }, [categoryType, vatRate]);
 
   // Store ticket numbers by index to preserve when client changes
   const ticketNumbersRef = useRef<string[]>([]);
@@ -525,7 +606,6 @@ export function AddServiceModal({
   };
 
   // Determine which fields to show based on category
-  const normalizedCategory = category.trim().toLowerCase();
   const showTicketNr = categoryType === "flight";
   const showHotelFields = categoryType === "hotel";
   const showTransferFields = categoryType === "transfer";
@@ -756,6 +836,16 @@ export function AddServiceModal({
     const regexResult = parseWithRegex(text);
     if (regexResult && regexResult.segments.length > 0) {
       applyParsedData(regexResult.segments, regexResult.booking);
+      const segs = regexResult.segments;
+      setParsedFields((prev) => {
+        const next = new Set(prev);
+        if (segs.length > 0) {
+          if (segs[0].departureDate) next.add("dateFrom");
+          const last = segs[segs.length - 1];
+          if (last.arrivalDate || last.departureDate) next.add("dateTo");
+        }
+        return next;
+      });
       return;
     }
     
@@ -765,16 +855,18 @@ export function AddServiceModal({
 
   // Tour (Package Tour) AI parsing - apply parsed data to form
   const applyParsedTourData = useCallback(async (p: Record<string, unknown>) => {
-    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" => {
+    const mapMeal = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
       const p2 = (plan || "").toUpperCase();
       if (p2 === "RO" || p2 === "ROOM ONLY") return "room_only";
       if (p2 === "BB" || p2 === "BED AND BREAKFAST") return "breakfast";
       if (p2 === "HB" || p2 === "HALF BOARD") return "half_board";
       if (p2 === "FB" || p2 === "FULL BOARD") return "full_board";
-      if (p2 === "AI" || p2 === "UAI" || p2 === "ALL INCLUSIVE" || p2 === "ULTRA ALL INCLUSIVE") return "all_inclusive";
-      return "all_inclusive";
+      if (p2 === "UAI" || p2 === "ULTRA ALL INCLUSIVE") return "uai";
+      if (p2 === "AI" || p2 === "ALL INCLUSIVE") return "all_inclusive";
+      return "room_only";
     };
     const fields = new Set<string>();
+    const attemptedEmpty = new Set<string>();
     if (p.direction && typeof p.direction === "string") {
       setServiceName(String(p.direction).trim());
       fields.add("serviceName");
@@ -841,6 +933,19 @@ export function AddServiceModal({
         arrivalStatus: "scheduled",
       })));
       fields.add("flightSegments");
+      // Dates from flight segments when not already set from accommodation
+      if (segs.length > 0) {
+        const first = segs[0];
+        const last = segs[segs.length - 1];
+        if (first?.departureDate && !fields.has("dateFrom")) {
+          setDateFrom(String(first.departureDate).slice(0, 10));
+          fields.add("dateFrom");
+        }
+        if (last?.arrivalDate && !fields.has("dateTo")) {
+          setDateTo(String(last.arrivalDate).slice(0, 10));
+          fields.add("dateTo");
+        }
+      }
     }
     if (p.pricing && typeof p.pricing === "object") {
       const pr = p.pricing as Record<string, unknown>;
@@ -848,7 +953,7 @@ export function AddServiceModal({
       if (total != null) {
         setClientPrice(String(total));
         setServicePrice(String(total));
-        fields.add("clientPrice");
+        // Only Cost (€) is parsed; Sale (€) is not — system doesn't know final client price
         fields.add("servicePrice");
       }
     }
@@ -860,11 +965,57 @@ export function AddServiceModal({
       if (pt.finalPercent != null) { setFinalPercent(String(pt.finalPercent)); fields.add("finalPercent"); }
       setPaymentTerms(`${pt.depositPercent ?? 0}% deposit, ${pt.finalPercent ?? 100}% final`);
     }
-    if (p.operator && typeof p.operator === "object" && (p.operator as Record<string, unknown>).name) {
-      setSupplierName(String((p.operator as Record<string, unknown>).name));
+    const operatorName =
+      (p.operator && typeof p.operator === "object" && (p.operator as Record<string, unknown>).name != null)
+        ? String((p.operator as Record<string, unknown>).name).trim()
+        : (p.detectedOperator != null && typeof p.detectedOperator === "string")
+          ? String(p.detectedOperator).trim()
+          : "";
+    if (operatorName.length > 0) {
+      setSupplierName(operatorName);
       fields.add("supplierName");
+      // Resolve supplier party by name so commission can load
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const res = await fetch(
+            `/api/directory?role=supplier&search=${encodeURIComponent(operatorName)}&limit=1`,
+            { headers: { Authorization: `Bearer ${session.access_token}` }, credentials: "include" }
+          );
+          if (res.ok) {
+            const json = await res.json();
+            const first = json?.data?.[0];
+            if (first?.id) setSupplierPartyId(first.id);
+          }
+        }
+      } catch {}
+    } else if (p.operator != null || p.detectedOperator != null) {
+      attemptedEmpty.add("supplierName");
     }
-    if (p.bookingRef) { setRefNr(String(p.bookingRef)); fields.add("refNr"); }
+    if (p.bookingRef) { const v = String(p.bookingRef).trim(); if (v) { setRefNr(v); fields.add("refNr"); } else { attemptedEmpty.add("refNr"); } }
+    // Mark attempted-but-empty for any field the parser could have filled but didn't
+    if ((p.direction != null || p.accommodation || p.flights) && !fields.has("serviceName")) attemptedEmpty.add("serviceName");
+    if (p.accommodation && typeof p.accommodation === "object") {
+      if (!fields.has("hotelName")) attemptedEmpty.add("hotelName");
+      if (!fields.has("hotelStarRating")) attemptedEmpty.add("hotelStarRating");
+      if (!fields.has("hotelRoom")) attemptedEmpty.add("hotelRoom");
+      if (!fields.has("hotelBoard")) attemptedEmpty.add("hotelBoard");
+    }
+    if ((p.accommodation || p.flights) && !fields.has("dateFrom")) attemptedEmpty.add("dateFrom");
+    if ((p.accommodation || p.flights) && !fields.has("dateTo")) attemptedEmpty.add("dateTo");
+    if (p.flights != null && typeof p.flights === "object" && !fields.has("flightSegments")) attemptedEmpty.add("flightSegments");
+    if (p.transfers != null && !fields.has("transferType")) attemptedEmpty.add("transferType");
+    if (p.additionalServices != null && !fields.has("additionalServices")) attemptedEmpty.add("additionalServices");
+    if (p.pricing != null && typeof p.pricing === "object") {
+      if (!fields.has("servicePrice")) attemptedEmpty.add("servicePrice");
+    }
+    if (p.paymentTerms != null && typeof p.paymentTerms === "object") {
+      const pt = p.paymentTerms as Record<string, unknown>;
+      if (!fields.has("paymentDeadlineDeposit")) attemptedEmpty.add("paymentDeadlineDeposit");
+      if (!fields.has("paymentDeadlineFinal")) attemptedEmpty.add("paymentDeadlineFinal");
+      if (!fields.has("depositPercent")) attemptedEmpty.add("depositPercent");
+      if (!fields.has("finalPercent")) attemptedEmpty.add("finalPercent");
+    }
     // Travellers: find-or-create and add to clients (same as EditServiceModalNew)
     if (Array.isArray(p.travellers) && p.travellers.length > 0) {
       const travellers = p.travellers
@@ -907,13 +1058,39 @@ export function AddServiceModal({
                 setPayerName(clientEntries[0].name);
               }
               fields.add("clients");
+            } else {
+              attemptedEmpty.add("clients");
             }
+          } else {
+            attemptedEmpty.add("clients");
           }
         } catch (err) {
           console.error("Find-or-create travellers error:", err);
+          attemptedEmpty.add("clients");
         }
       }
+    } else if (Array.isArray(p.travellers) && p.travellers.length > 0 && !fields.has("clients")) {
+      attemptedEmpty.add("clients");
     }
+    // Parsed document => at least Booked
+    setResStatus((prev) => (prev === "draft" ? "booked" : prev));
+    // Deposit + departure >4 months => Early booking
+    let parsedDateFrom: string | null = null;
+    if (p.accommodation && typeof p.accommodation === "object") {
+      const a = p.accommodation as Record<string, unknown>;
+      if (a.arrivalDate) parsedDateFrom = String(a.arrivalDate).slice(0, 10);
+    }
+    if (!parsedDateFrom && p.flights && typeof p.flights === "object" && Array.isArray((p.flights as Record<string, unknown>).segments)) {
+      const segs = (p.flights as Record<string, unknown>).segments as Record<string, string>[];
+      if (segs.length > 0 && segs[0].departureDate) parsedDateFrom = String(segs[0].departureDate).slice(0, 10);
+    }
+    if (parsedDateFrom && (fields.has("paymentDeadlineDeposit") || fields.has("depositPercent"))) {
+      const dep = new Date(parsedDateFrom);
+      const now = new Date();
+      const monthsDiff = (dep.getTime() - now.getTime()) / (30.44 * 24 * 60 * 60 * 1000);
+      if (monthsDiff >= 4) setPriceType("ebd");
+    }
+    setParseAttemptedButEmpty(attemptedEmpty);
     setParsedFields(fields);
   }, []);
 
@@ -944,7 +1121,7 @@ export function AddServiceModal({
         setParseError(data.error || "Could not parse document.");
         return;
       }
-      await applyParsedTourData(data.parsed);
+      await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
     } catch (err) {
       console.error("Parse package tour error:", err);
       setParseError("Failed to parse document.");
@@ -973,7 +1150,7 @@ export function AddServiceModal({
         setParseError(data.error || "Could not parse text.");
         return;
       }
-      await applyParsedTourData(data.parsed);
+      await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
       setShowTourPasteInput(false);
       setTourPasteText("");
     } catch (err) {
@@ -1023,7 +1200,12 @@ export function AddServiceModal({
         refNr,
         ticketNr: showTicketNr ? (categoryType === "flight" ? ticketNumbers.map(t => t.ticketNr).join(", ") : ticketNr) : "",
         ticketNumbers: categoryType === "flight" ? ticketNumbers : undefined,
-        travellerIds: [],
+        // Travellers = selected clients (party IDs). If none selected, use primary client so CLIENT always appears in TRAVELLERS
+        travellerIds: (() => {
+          const ids = [...new Set(clients.filter(c => c.id).map(c => c.id as string))];
+          if (ids.length === 0 && primaryClient?.id) ids.push(primaryClient.id);
+          return ids;
+        })(),
       };
       
       // Add hotel-specific fields (same as Edit Service)
@@ -1056,13 +1238,17 @@ export function AddServiceModal({
         payload.linkedFlightId = linkedFlightId;
       }
       
-      // Add flight-specific fields
+      // Add flight-specific fields (Flight category and Package Tour can have flight schedule)
       if (categoryType === "flight") {
         payload.cabinClass = cabinClass;
         payload.baggage = baggage;
         if (flightSegments.length > 0) {
           payload.flightSegments = flightSegments;
         }
+      }
+      if (categoryType === "tour" && flightSegments.length > 0) {
+        payload.flightSegments = flightSegments;
+        if (linkedFlightId) payload.linkedFlightId = linkedFlightId;
       }
       
       // Add payment deadline fields
@@ -1150,6 +1336,9 @@ export function AddServiceModal({
     }
   };
 
+  const RightWrapper = categoryType === "hotel" ? "div" : React.Fragment;
+  const rightWrapperProps = categoryType === "hotel" ? { className: "md:col-span-1 space-y-3" as const } : {};
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
@@ -1161,7 +1350,9 @@ export function AddServiceModal({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-gray-900">Add Service</h2>
+            <h2 className="text-base font-semibold text-gray-900">
+              Add Service{category ? ` — ${category}` : ""}
+            </h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1421,36 +1612,124 @@ export function AddServiceModal({
             </div>
           )}
 
-          {/* 6 Hotel layout variants - always visible at top */}
-          <div className="mb-4 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
-            <HotelVariantSelector value={hotelModalVariant} onChange={setHotelModalVariant} />
-            {showHotelFields ? (
-              <HotelDesignLayout
-                variant={hotelModalVariant}
-                mode="add"
-                fields={{ hotelName, hotelAddress, hotelPhone, hotelEmail }}
-                onChange={(field, value) => {
-                  if (field === "hotelName") setHotelName(value);
-                  if (field === "hotelAddress") setHotelAddress(value);
-                  if (field === "hotelPhone") setHotelPhone(value);
-                  if (field === "hotelEmail") setHotelEmail(value);
-                }}
-              />
-            ) : (
-              <div className="mt-3 rounded-lg border border-amber-300 bg-white px-4 py-3 text-sm text-amber-800">
-                Set <strong>Category</strong> to <strong>Hotel</strong> below to use these 6 layout designs.
-              </div>
-            )}
-          </div>
-
-          {/* Main Grid - 3 columns on desktop */}
+          {/* Main Grid - 3 columns; for Hotel: left 2/3 = Hotel Details (with Dates), right 1/3 = Parties + Pricing */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             
-            {/* Column 1: Basic Info */}
-            <div className="space-y-3">
+            {/* Column 1: For Hotel = Hotel Details (2/3) with Hotel Name, then Dates; else Basic Info */}
+            <div className={`space-y-3 ${categoryType === "hotel" ? "md:col-span-2" : ""}`}>
+              {categoryType === "hotel" ? (
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
+                  <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
+                    <HotelSuggestInput
+                      value={hotelName}
+                      onChange={setHotelName}
+                      onHotelSelected={(d) => {
+                        setHotelName(d.name);
+                        if (d.address) setHotelAddress(d.address);
+                        if (d.phone) setHotelPhone(d.phone);
+                        if (d.email) setHotelEmail(d.email);
+                        setServiceName(d.name);
+                      }}
+                      placeholder="Search hotel by name..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
+                    <DateRangePicker
+                      label=""
+                      from={dateFrom}
+                      to={dateTo}
+                      onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                      triggerClassName="border-amber-300"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
+                      <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                      <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                        <option value="room_only">Room only</option>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="half_board">Half board</option>
+                        <option value="full_board">Full board</option>
+                        <option value="all_inclusive">AI (All inclusive)</option>
+                        <option value="uai">UAI (Ultra All Inclusive)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>
+                      <select value={hotelBedType} onChange={(e) => setHotelBedType(e.target.value as typeof hotelBedType)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
+                        <option value="king_queen">King/Queen</option>
+                        <option value="twin">Twin</option>
+                        <option value="not_guaranteed">Not guaranteed</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
+                      <input type="text" value={hotelAddress} onChange={(e) => setHotelAddress(e.target.value)} placeholder="Address" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                      <input type="tel" value={hotelPhone} onChange={(e) => setHotelPhone(e.target.value)} placeholder="Phone" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Email</label>
+                      <input type="email" value={hotelEmail} onChange={(e) => setHotelEmail(e.target.value)} placeholder="Email" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Preferences</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Early check-in
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Late check-in
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Higher floor
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.kingSizeBed} onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        King size bed
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.honeymooners} onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Honeymooners
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.silentRoom} onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Silent room
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input type="checkbox" checked={hotelPreferences.parking} onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))} className="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                        Parking
+                      </label>
+                    </div>
+                    <div className="mb-2">
+                      <input type="text" value={hotelPreferences.roomsNextTo} onChange={(e) => setHotelPreferences(prev => ({ ...prev, roomsNextTo: e.target.value }))} placeholder="Rooms next to..." className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <div>
+                      <textarea value={hotelPreferences.freeText} onChange={(e) => setHotelPreferences(prev => ({ ...prev, freeText: e.target.value }))} placeholder="Additional preferences (free text)" rows={2} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                    </div>
+                    <button type="button" onClick={() => { const preferencesList = Object.entries(hotelPreferences).filter(([key, value]) => key !== "roomsNextTo" && key !== "freeText" && value === true).map(([key]) => key.replace(/([A-Z])/g, " $1").toLowerCase()).join(", "); const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:\n\nRoom: ${hotelRoom || "Not specified"}\nBoard: ${hotelBoard}\nBed Type: ${hotelBedType}\nPreferences: ${preferencesList || "None"}${hotelPreferences.roomsNextTo ? `\nRooms next to: ${hotelPreferences.roomsNextTo}` : ""}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ""}`; alert(`Message to hotel:\n\n${message}\n\n(Will be saved to Communication tab)`); }} className="w-full px-3 py-2 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">📧 Send to Hotel</button>
+                  </div>
+                </div>
+              ) : (
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Basic Info</h4>
                 
+                {!categoryLocked && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Category *</label>
                   <select
@@ -1469,6 +1748,7 @@ export function AddServiceModal({
                     )}
                   </select>
                 </div>
+                )}
                 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
@@ -1478,8 +1758,8 @@ export function AddServiceModal({
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : categoryType === "hotel" ? "Hotel name" : "Description"}
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : "Description"}
+                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
 
@@ -1490,6 +1770,7 @@ export function AddServiceModal({
                     from={dateFrom}
                     to={dateTo}
                     onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                    triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                   />
                 </div>
                 
@@ -1503,7 +1784,7 @@ export function AddServiceModal({
                         value={hotelName}
                         onChange={(e) => setHotelName(e.target.value)}
                         placeholder="Hotel name"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -1513,7 +1794,7 @@ export function AddServiceModal({
                         value={hotelStarRating}
                         onChange={(e) => setHotelStarRating(e.target.value)}
                         placeholder="5*"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                   </div>
@@ -1529,7 +1810,7 @@ export function AddServiceModal({
                         value={hotelRoom}
                         onChange={(e) => setHotelRoom(e.target.value)}
                         placeholder="Club Superior"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelRoom") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -1537,13 +1818,14 @@ export function AddServiceModal({
                       <select
                         value={hotelBoard}
                         onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelBoard") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       >
                         <option value="room_only">RO</option>
                         <option value="breakfast">BB</option>
                         <option value="half_board">HB</option>
                         <option value="full_board">FB</option>
-                        <option value="all_inclusive">AI/UAI</option>
+                        <option value="all_inclusive">AI</option>
+                        <option value="uai">UAI</option>
                       </select>
                     </div>
                   </div>
@@ -1559,7 +1841,7 @@ export function AddServiceModal({
                         value={transferType}
                         onChange={(e) => setTransferType(e.target.value)}
                         placeholder="Group / Individual / —"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("transferType") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -1569,7 +1851,7 @@ export function AddServiceModal({
                         onChange={(e) => setAdditionalServices(e.target.value)}
                         placeholder="Extra services"
                         rows={2}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${parseAttemptedButEmpty.has("additionalServices") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                   </>
@@ -1620,14 +1902,16 @@ export function AddServiceModal({
                   </div>
                 )}
               </div>
+              )}
             </div>
 
-            {/* Column 2: Parties */}
+            {/* Right side: Parties + Pricing (when Hotel: one column 1/3) */}
+            <RightWrapper {...rightWrapperProps}>
             <div className="space-y-3">
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parties</h4>
                 
-                <div className={categoryType === "tour" && parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
+                <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   {categoryType === "hotel" ? (
                     <div className="space-y-2">
@@ -1679,15 +1963,18 @@ export function AddServiceModal({
                       )}
                     </div>
                   ) : (
-                    <PartySelect
-                      value={supplierPartyId}
-                      onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
-                      roleFilter="supplier"
-                    />
+                    <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
+                      <PartySelect
+                        value={supplierPartyId}
+                        onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                        roleFilter="supplier"
+                        initialDisplayName={supplierName}
+                      />
+                    </div>
                   )}
                 </div>
                 
-                <div>
+                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <div className="flex items-center justify-between mb-0.5">
                     <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
                     <ClientMultiSelectDropdown
@@ -1782,7 +2069,7 @@ export function AddServiceModal({
                             setServicePrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div>
@@ -1845,7 +2132,7 @@ export function AddServiceModal({
                             setClientPrice(e.target.value);
                           }}
                           placeholder="0.00"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("clientPrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
                     </div>
@@ -1994,7 +2281,7 @@ export function AddServiceModal({
               <div className="p-3 bg-gray-50 rounded-lg space-y-2">
                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">References</h4>
                 
-                <div className={categoryType === "flight" ? "grid grid-cols-2 gap-2" : ""}>
+                <div className={categoryType === "flight" || categoryType === "hotel" ? "grid grid-cols-2 gap-2" : ""}>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}</label>
                     <input
@@ -2002,12 +2289,12 @@ export function AddServiceModal({
                       value={refNr}
                       onChange={(e) => setRefNr(e.target.value)}
                       placeholder="Booking ref"
-                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 ${parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
                     />
                   </div>
                   
-                  {/* Status - for Flight in References section */}
-                  {categoryType === "flight" && (
+                  {/* Status - for Flight and Hotel in References section */}
+                  {(categoryType === "flight" || categoryType === "hotel") && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                       <select
@@ -2125,7 +2412,7 @@ export function AddServiceModal({
                           type="date"
                           value={paymentDeadlineDeposit}
                           onChange={(e) => setPaymentDeadlineDeposit(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2137,7 +2424,7 @@ export function AddServiceModal({
                           value={depositPercent}
                           onChange={(e) => setDepositPercent(e.target.value)}
                           placeholder="10"
-                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("depositPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2146,7 +2433,7 @@ export function AddServiceModal({
                           type="date"
                           value={paymentDeadlineFinal}
                           onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2158,7 +2445,7 @@ export function AddServiceModal({
                           value={finalPercent}
                           onChange={(e) => setFinalPercent(e.target.value)}
                           placeholder="90"
-                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("finalPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                     </div>
@@ -2177,12 +2464,13 @@ export function AddServiceModal({
               </div>
               )}
             </div>
+          </RightWrapper>
           </div>
 
           {/* Flight Schedule - show parsed segments (Flight or Tour) */}
           {(categoryType === "flight" || categoryType === "tour") && flightSegments.length > 0 && (
-            <div className={`mt-3 p-3 rounded-lg border ${parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
-              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
+            <div className={`mt-3 p-3 rounded-lg border ${parseAttemptedButEmpty.has("flightSegments") ? "bg-red-50 border-red-200 ring-2 ring-red-300" : parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
+              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parseAttemptedButEmpty.has("flightSegments") ? "text-red-700" : parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
               <div className="space-y-2">
                 {flightSegments.map((seg, idx) => {
                   // Calculate time between segments
@@ -2237,12 +2525,7 @@ export function AddServiceModal({
                     }
                   }
                   
-                  // Format date for display
-                  const formatDate = (dateStr: string) => {
-                    if (!dateStr) return "";
-                    const date = new Date(dateStr);
-                    return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-                  };
+                  const formatDate = (dateStr: string) => (dateStr ? formatDateDDMMYYYY(dateStr) : "");
                   
                   return (
                     <div key={seg.id || idx}>
@@ -2356,13 +2639,13 @@ export function AddServiceModal({
             </div>
           )}
 
-          {/* Category-specific fields - Collapsible sections */}
-          {showHotelFields && (
+          {/* Category-specific fields - Hotel Details at top for hotel; show here only for non-hotel (e.g. Tour) */}
+          {showHotelFields && categoryType !== "hotel" && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name (search)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
                 <HotelSuggestInput
                   value={hotelName}
                   onChange={setHotelName}
@@ -2389,7 +2672,8 @@ export function AddServiceModal({
                     <option value="breakfast">Breakfast</option>
                     <option value="half_board">Half board</option>
                     <option value="full_board">Full board</option>
-                    <option value="all_inclusive">All inclusive</option>
+                    <option value="all_inclusive">AI (All inclusive)</option>
+                    <option value="uai">UAI (Ultra All Inclusive)</option>
                   </select>
                 </div>
                 <div>
@@ -2513,5 +2797,3 @@ export function AddServiceModal({
     </div>
   );
 }
-
-export default AddServiceModal;

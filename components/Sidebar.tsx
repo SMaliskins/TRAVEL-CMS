@@ -18,6 +18,7 @@ type NavElement = NavItem;
 const navConfig: NavElement[] = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
   { name: "Orders", href: "/orders", icon: "📋" },
+  { name: "Finances", href: "/finances/invoices", icon: "💰" },
   { name: "Analytics", href: "/analytics/orders", icon: "📈" },
   { name: "Directory", href: "/directory", icon: "📁" },
 ];

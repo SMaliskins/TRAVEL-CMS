@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 1. Orders count (за период)
+    // 1. Orders count (for the period)
     const { count: ordersCount, error: ordersError } = await supabaseAdmin
       .from("orders")
       .select("*", { count: "exact", head: true })
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       console.error("Orders count error:", ordersError);
     }
 
-    // 2. Active Bookings (заказы, которые еще не начались)
+    // 2. Active Bookings (orders that have not started yet)
     const { count: activeBookings, error: activeBookingsError } = await supabaseAdmin
       .from("orders")
       .select("*", { count: "exact", head: true })
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
       console.error("Active bookings error:", activeBookingsError);
     }
 
-    // 3. Revenue (за период) - сумма client_price из order_services
+    // 3. Revenue (for the period) — sum of client_price from order_services
     const { data: revenueData, error: revenueError } = await supabaseAdmin
       .from("order_services")
       .select("client_price, orders!inner(company_id, created_at)")
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       }, 0);
     }
 
-    // 4. Profit (за период) - сумма (client_price - service_price)
+    // 4. Profit (for the period) — sum of (client_price - service_price)
     const { data: profitData, error: profitError } = await supabaseAdmin
       .from("order_services")
       .select("client_price, service_price, orders!inner(company_id, created_at)")
@@ -142,8 +142,8 @@ export async function GET(request: NextRequest) {
       }, 0);
     }
 
-    // 5. Overdue Payments (просроченные оплаты)
-    // Проверяем наличие колонок amount, paid, due_date
+    // 5. Overdue Payments (past due)
+    // Check that columns amount, paid, due_date exist
     const { data: overdueData, error: overdueError } = await supabaseAdmin
       .from("orders")
       .select("amount, paid, due_date")

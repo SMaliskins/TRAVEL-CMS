@@ -337,6 +337,9 @@ function getGroupKey(type: "year" | "month" | "day", key: string): string {
   }
 }
 
+// Debounce delay for semantic search (ms)
+const SEMANTIC_DEBOUNCE_MS = 400;
+
 export default function OrdersPage() {
   const router = useRouter();
   const { openTab } = useTabs();
@@ -344,6 +347,7 @@ export default function OrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
+  const [semanticOrderCodes, setSemanticOrderCodes] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => 
     loadExpandedFromStorage()
   );
@@ -396,10 +400,43 @@ export default function OrdersPage() {
     return unsubscribe;
   }, []);
 
+  // Debounced semantic search when queryText changes
+  useEffect(() => {
+    const q = searchState.queryText?.trim();
+    if (!q || q.length < 2) {
+      setSemanticOrderCodes([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token || null;
+        const res = await fetch("/api/search/semantic/order-service", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify({ query: q, limit: 20 }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSemanticOrderCodes(data.orderCodes || []);
+        } else {
+          setSemanticOrderCodes([]);
+        }
+      } catch {
+        setSemanticOrderCodes([]);
+      }
+    }, SEMANTIC_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchState.queryText]);
+
   // Filter orders based on search state
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, searchState);
-  }, [orders, searchState]);
+    return filterOrders(orders, searchState, { semanticOrderCodes });
+  }, [orders, searchState, semanticOrderCodes]);
 
   // Build tree from filtered orders
   const tree = useMemo(() => buildOrdersTree(filteredOrders), [filteredOrders]);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
@@ -13,8 +13,13 @@ import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useToast } from "@/contexts/ToastContext";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
+const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
+function isValidTab(value: string | null): value is TabType {
+  return value !== null && TAB_VALUES.includes(value as TabType);
+}
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 
 interface OrderData {
@@ -46,10 +51,34 @@ export default function OrderPage({
   params: Promise<{ orderCode: string }>;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("client");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { showToast } = useToast();
+  const [activeTab, setActiveTabState] = useState<TabType>("client");
+
+  // Sync tab from URL (on load and when user uses back/forward)
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (isValidTab(tabFromUrl)) {
+      setActiveTabState(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  // Update URL when tab changes so reload keeps the same tab
+  const setActiveTab = useCallback(
+    (tab: TabType) => {
+      setActiveTabState(tab);
+      const next = new URLSearchParams(searchParams?.toString() ?? "");
+      next.set("tab", tab);
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
+    },
+    [pathname, searchParams, router]
+  );
+
   const [orderCode, setOrderCode] = useState<string>("");
   const [order, setOrder] = useState<OrderData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [orderLoading, setOrderLoading] = useState(false); // order fetch in progress (header shows "Loading...")
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
@@ -351,44 +380,46 @@ export default function OrderPage({
     fetchCompanySettings();
   }, []);
 
-  // Fetch order data
+  // Resolve orderCode from params, then fetch order (services load in parallel in OrderServicesBlock)
   useEffect(() => {
-    const fetchOrder = async (code: string) => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        const response = await fetch(`/api/orders/${encodeURIComponent(code)}`, {
-          headers: {
-            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-          },
-          credentials: "include",
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setOrder(data.order || data);
-        } else if (response.status === 404) {
-          setError("Order not found");
-        } else {
-          const errData = await response.json().catch(() => ({}));
-          setError(errData.error || "Failed to load order");
-        }
-      } catch (err) {
-        console.error("Fetch order error:", err);
-        setError("Network error");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
+    let cancelled = false;
     params.then((resolvedParams) => {
-      const orderCodeFromSlug = slugToOrderCode(resolvedParams.orderCode);
-      setOrderCode(orderCodeFromSlug);
-      fetchOrder(orderCodeFromSlug);
+      if (cancelled) return;
+      const code = slugToOrderCode(resolvedParams.orderCode);
+      setOrderCode(code);
+      setError(null);
+      setOrderLoading(true);
+
+      (async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const response = await fetch(`/api/orders/${encodeURIComponent(code)}`, {
+            headers: {
+              ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+            },
+            credentials: "include",
+          });
+          if (cancelled) return;
+          if (response.ok) {
+            const data = await response.json();
+            setOrder(data.order || data);
+          } else if (response.status === 404) {
+            setError("Order not found");
+          } else {
+            const errData = await response.json().catch(() => ({}));
+            setError(errData.error || "Failed to load order");
+          }
+        } catch (err) {
+          if (!cancelled) {
+            console.error("Fetch order error:", err);
+            setError("Network error");
+          }
+        } finally {
+          if (!cancelled) setOrderLoading(false);
+        }
+      })();
     });
+    return () => { cancelled = true; };
   }, [params]);
 
   // Update order status
@@ -425,7 +456,8 @@ export default function OrderPage({
   // Calculate effective status (auto-finish if past date_to)
   const effectiveStatus = order ? getEffectiveStatus(order.status, order.date_to) : "Active";
 
-  if (isLoading) {
+  // Full-page loading only until we have orderCode (params resolved)
+  if (!orderCode) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg text-gray-500">Loading...</div>
@@ -454,22 +486,28 @@ export default function OrderPage({
                 <h1 className="text-2xl font-bold text-gray-900">
                   {orderCode}
                 </h1>
-                <OrderStatusBadge 
-                  status={effectiveStatus}
-                  onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
-                  readonly={effectiveStatus === "Completed" || isSaving}
-                />
+                {order && (
+                  <OrderStatusBadge 
+                    status={effectiveStatus}
+                    onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
+                    readonly={effectiveStatus === "Completed" || isSaving}
+                  />
+                )}
               </div>
               {/* Created date + Agent - directly under order code */}
               {order?.created_at && (
                 <div className="mt-0.5 text-xs text-gray-400">
-                  Created on {new Date(order.created_at).toLocaleDateString("en-GB")} by {order.owner_name || "Unknown"}
+                  Created on {formatDateDDMMYYYY(order.created_at)} by {order.owner_name || "Unknown"}
                 </div>
               )}
             </div>
             
-            {/* Center: Client Name + Itinerary + Dates (each with inline editor) */}
-            {order && (
+            {/* Center: Client Name + Itinerary + Dates (or Loading when order not yet loaded) */}
+            {!order ? (
+              <div className="flex-1 min-w-0 ml-4 flex items-center text-gray-500">
+                {orderLoading ? "Loading order..." : null}
+              </div>
+            ) : (
               <div className="flex-1 min-w-0 ml-4">
                 {/* Row 1: Client Name */}
                 {editingHeaderField === "client" ? (
@@ -946,17 +984,17 @@ export default function OrderPage({
 
         {/* Tab Content */}
         <div className="mb-6">
-          {activeTab === "client" && order && (
+          {activeTab === "client" && (
             <div className="space-y-6">
-              {/* Services Block - Priority */}
+              {/* Services Block - loads in parallel with order (table appears as soon as services load) */}
               <OrderServicesBlock 
                 orderCode={orderCode}
-                defaultClientId={order.client_party_id}
-                defaultClientName={order.client_display_name || undefined}
-                orderDateFrom={order.date_from}
-                orderDateTo={order.date_to}
+                defaultClientId={order?.client_party_id}
+                defaultClientName={order?.client_display_name || undefined}
+                orderDateFrom={order?.date_from}
+                orderDateTo={order?.date_to}
                 itineraryDestinations={itineraryDestinations}
-                orderSource={(order.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
+                orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 onIssueInvoice={(services) => {
                   // Filter out cancelled services
                   const activeServices = services.filter(s => s.resStatus !== 'cancelled');
@@ -1025,7 +1063,7 @@ export default function OrderPage({
                   onCreateNew={() => {
                     // Switch to Client tab to select services
                     setActiveTab("client");
-                    alert("Please select services from the table and click 'Issue Invoice'");
+                    showToast("error", "Please select services from the table and click 'Issue Invoice'");
                   }}
                 />
               )}

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     console.log("[API /party] Fetching parties for company:", companyId);
 
-    // Fetch all parties for the company
+    // Fetch all active parties for the company (exclude archived/inactive for splits and selects)
     const { data: parties, error } = await supabaseAdmin
       .from("party")
       .select(`
@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
         phone
       `)
       .eq("company_id", companyId)
+      .eq("status", "active")
       .order("display_name", { ascending: true });
 
     if (error) {

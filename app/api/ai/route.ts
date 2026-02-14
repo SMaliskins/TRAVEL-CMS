@@ -8,9 +8,9 @@ import { isAIAvailable } from "@/lib/ai/config";
 
 /**
  * POST /api/ai
- * 
- * Универсальный AI endpoint
- * 
+ *
+ * Universal AI endpoint
+ *
  * Body:
  * {
  *   task: string,

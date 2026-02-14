@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createClient } from "@supabase/supabase-js";
+import { normalizePhoneForSave } from "@/utils/phone";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -181,7 +182,7 @@ export async function POST(request: NextRequest) {
           status: 'active',
           company_id: companyId,
           email: recordData.email || null,
-          phone: recordData.phone || null,
+          phone: recordData.phone ? normalizePhoneForSave(recordData.phone) || null : null,
           country: recordData.country || null,
           service_areas: recordData.supplierExtras?.serviceAreas || null,
           supplier_commissions: null,

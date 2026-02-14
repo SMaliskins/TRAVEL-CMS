@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useUser } from "@/contexts/UserContext";
 import RoleBadge from "./RoleBadge";
 import EditUserModal from "./EditUserModal";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Role {
   id: string;
@@ -74,7 +75,7 @@ export default function UserList({
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     
-    return d.toLocaleDateString();
+    return formatDateDDMMYYYY(date);
   };
 
   if (filteredUsers.length === 0) {

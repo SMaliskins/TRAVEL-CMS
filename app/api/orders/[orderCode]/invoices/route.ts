@@ -20,6 +20,8 @@ export async function GET(
     
     const { searchParams } = new URL(request.url);
     const getNextNumber = searchParams.get('nextNumber') === 'true';
+    const countParam = searchParams.get('count');
+    const count = countParam ? Math.min(Math.max(1, parseInt(countParam, 10)), 100) : 1;
 
     // Get order ID from order_code
     const { data: order, error: orderError } = await supabaseAdmin
@@ -45,72 +47,96 @@ export async function GET(
       );
     }
 
-    // If requesting next invoice number
+    // Next invoice number: NNNYY-INITIALS-NNNN (e.g. 00126-SMA-0001)
+    // NNN = order number 3 digits, YY = year 2 digits, INITIALS = agent, NNNN = company invoice sequence 4 digits
     if (getNextNumber) {
-      // Get current user for initials
       const authHeader = request.headers.get("authorization");
       let userInitials = "XX";
-      
+
       if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.replace("Bearer ", "");
         const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-        
+
         if (!userError && user) {
-          // Get user profile for first_name and last_name
           const { data: profile } = await supabaseAdmin
             .from("user_profiles")
             .select("first_name, last_name")
             .eq("id", user.id)
             .single();
-          
+
           if (profile) {
             const firstName = (profile.first_name || "").trim();
             const lastName = (profile.last_name || "").trim();
             if (firstName && lastName) {
-              // First letter of first name + first 2 letters of last name
               userInitials = (firstName[0] + lastName.substring(0, 2)).toUpperCase();
             } else if (firstName) {
-              userInitials = firstName.substring(0, 3).toUpperCase().padEnd(3, 'X');
+              userInitials = firstName.substring(0, 3).toUpperCase().padEnd(3, "X");
             }
           }
         }
       }
-      
-      // New format: 001626-SM-0132 (6 digits = seq+year, initials, 4 digits = seq for >1000/year)
+
       const currentYear = new Date().getFullYear().toString().slice(-2);
-      
+      // Order number 3 digits from order_code (e.g. "001-26-sma" → "001", "0014-26-sm" → "014")
+      const parts = orderCode.split("-");
+      const orderNumRaw = parts[0] ? parseInt(parts[0], 10) : 0;
+      const orderNum3 = isNaN(orderNumRaw) ? "001" : String(Math.max(0, orderNumRaw)).padStart(3, "0").slice(-3);
+      const prefix = `${orderNum3}${currentYear}`;
+
+      // Current max sequence from existing invoices (for sync with table + fallback)
       const { data: invoices } = await supabaseAdmin
         .from("invoices")
         .select("invoice_number")
         .eq("company_id", order.company_id);
-      
+
       let maxSeq = 0;
       if (invoices) {
-        invoices.forEach((inv: any) => {
-          // Match new format: NNNNYY-SS-NNNN (e.g. 001626-SM-0132)
-          const matchNew = inv.invoice_number?.match(/^(\d{6})-[A-Z]+-(\d{4})$/);
-          if (matchNew) {
-            const yearPart = matchNew[1].slice(-2);
-            const seq = parseInt(matchNew[2], 10);
-            if (yearPart === currentYear && seq > maxSeq) maxSeq = seq;
+        invoices.forEach((inv: { invoice_number?: string }) => {
+          const m = inv.invoice_number?.match(/^\d{5}-[A-Z]+-(\d{4})$/);
+          if (m) {
+            const yearInNum = inv.invoice_number!.slice(3, 5);
+            if (yearInNum === currentYear) {
+              const n = parseInt(m[1], 10);
+              if (n > maxSeq) maxSeq = n;
+            }
           }
-          // Legacy format: INV-XXXX-YY-INITIALS-NNNN
-          const matchLegacy = inv.invoice_number?.match(/INV-\d{4}-(\d{2})-[A-Z]+-(\d+)/);
-          if (matchLegacy) {
-            const invoiceYear = matchLegacy[1];
-            const num = parseInt(matchLegacy[2], 10);
-            if (invoiceYear === currentYear && num > maxSeq) maxSeq = num;
+          const leg = inv.invoice_number?.match(/^INV-\d{4}-(\d{2})-[A-Z]+-(\d+)$/);
+          if (leg && leg[1] === currentYear) {
+            const n = parseInt(leg[2], 10);
+            if (n > maxSeq) maxSeq = n;
           }
         });
       }
-      
-      const nextSeq = maxSeq + 1;
-      const seqPadded4 = nextSeq.toString().padStart(4, '0');
-      const seqYear6 = seqPadded4 + currentYear; // NNNN + YY = 6 digits
-      
-      return NextResponse.json({ 
-        nextInvoiceNumber: `${seqYear6}-${userInitials}-${seqPadded4}` 
+
+      // Atomic reservation so parallel requests never get the same numbers (RPC locks row)
+      const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc("reserve_invoice_sequences", {
+        p_company_id: order.company_id,
+        p_year: currentYear,
+        p_count: count,
+        p_min_sequence: maxSeq,
       });
+
+      let start: number;
+      if (rpcError || rpcData == null) {
+        start = maxSeq + 1;
+      } else {
+        // RPC can return scalar, or [n], or [{ reserve_invoice_sequences: n }]
+        const raw = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        const n = typeof raw === "object" && raw !== null && "reserve_invoice_sequences" in raw
+          ? (raw as { reserve_invoice_sequences: number }).reserve_invoice_sequences
+          : Number(raw);
+        start = typeof n === "number" && Number.isInteger(n) && n >= 1 ? n : maxSeq + 1;
+      }
+
+      if (count <= 1) {
+        const nextInvoiceNumber = `${prefix}-${userInitials}-${String(start).padStart(4, "0")}`;
+        return NextResponse.json({ nextInvoiceNumber });
+      }
+      const nextInvoiceNumbers: string[] = [];
+      for (let i = 0; i < count; i++) {
+        nextInvoiceNumbers.push(`${prefix}-${userInitials}-${String(start + i).padStart(4, "0")}`);
+      }
+      return NextResponse.json({ nextInvoiceNumbers });
     }
 
     // Get all invoices for this order
@@ -200,6 +226,7 @@ export async function POST(
       total,
       notes,
     } = body;
+    const { language } = body;
 
     // Validation
     if (!invoice_number || !items || items.length === 0) {
@@ -252,6 +279,21 @@ export async function POST(
     if (invoicedServices.length > 0) {
       return NextResponse.json(
         { error: "Some services are already invoiced" },
+        { status: 400 }
+      );
+    }
+
+    // Allow reusing invoice number from a cancelled invoice; reject if number is already on an active invoice
+    const { data: existingWithNumber } = await supabaseAdmin
+      .from("invoices")
+      .select("id, status")
+      .eq("company_id", order.company_id)
+      .eq("invoice_number", String(invoice_number).trim())
+      .maybeSingle();
+
+    if (existingWithNumber && existingWithNumber.status !== "cancelled" && existingWithNumber.status !== "replaced") {
+      return NextResponse.json(
+        { error: "Invoice number already in use" },
         { status: 400 }
       );
     }
@@ -336,6 +378,10 @@ export async function POST(
     } catch (e) {
       // If columns don't exist, we'll catch the error below
       console.warn('Payment terms fields may not exist in database schema', e);
+    }
+
+    if (language !== undefined && language !== null && String(language).trim() !== "") {
+      invoiceData.language = String(language).trim();
     }
 
     const { data: invoice, error: invoiceError } = await supabaseAdmin

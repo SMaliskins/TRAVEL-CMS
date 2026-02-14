@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import Anthropic from "@anthropic-ai/sdk";
 import { logAiUsage } from "@/lib/aiUsageLogger";
 import { requireModule } from "@/lib/modules/checkModule";
 
@@ -132,10 +133,10 @@ Rules:
 - hotelName: Extract hotel name UP TO the star rating (*). E.g. "STARLIGHT RESORT HOTEL 5* Ultra All Inclusive" -> hotelName: "STARLIGHT RESORT HOTEL", starRating: "5*"
 - starRating: Category/star rating (5*, 4*, etc.)
 - roomType: Standard, Club Superior, Club Deluxe, etc.
-- mealPlan: Use EXACT text from document - do not abbreviate or convert. If document says "Ultra All Inclusive" write that; if "UAI" write "UAI"; if "BB" write "BB"
+- mealPlan: Be SPECIFIC. AI (All Inclusive) and UAI (Ultra All Inclusive) are DIFFERENT meal types - do not mix them. Return exactly as in document: "UAI" or "Ultra All Inclusive" for Ultra All Inclusive; "AI" or "All Inclusive" for All Inclusive; "BB" for Bed & Breakfast; "HB" for Half Board; "FB" for Full Board; "RO" for Room Only. Use the abbreviation from the document when present (e.g. "UAI", "AI"), otherwise the full name.
 - transfers.type: "Group", "Individual", or "—" if absent
 - operator.name: Tour operator name
-- bookingRef: Application/booking number (номер заявки) if present in document
+- bookingRef: Application/booking number if present in document
 - totalPrice, cost: Extract Cost (€), Kopējā ceļojuma cena, total trip price, package price - any field showing total cost in EUR. Put in pricing.totalPrice and pricing.cost
 - paymentTerms: Extract deposit/final dates and percentages if present
 - flights.segments: Same structure as flight itinerary parser - IATA codes, dates YYYY-MM-DD, times HH:mm
@@ -196,73 +197,132 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
-    if (!openaiKey) {
+    if (!anthropicKey) {
       return NextResponse.json(
-        { error: "AI parsing not configured. Add OPENAI_API_KEY.", parsed: null },
+        { error: "AI parsing not configured. Add ANTHROPIC_API_KEY.", parsed: null },
         { status: 503 }
       );
     }
 
-    // Build user message content: text, PDF file, or image
-    let userContent: string | object[];
-    if (textContent) {
-      userContent = `Parse this Package Tour document:\n\n${textContent}`;
-    } else if (pdfBase64) {
-      // GPT-4o native PDF input - no pdf-parse needed
-      userContent = [
-        { type: "file", file: { filename: "document.pdf", file_data: `data:application/pdf;base64,${pdfBase64}` } },
-        { type: "text", text: "Extract all Package Tour information from this PDF. Return JSON only." },
-      ] as object[];
-    } else {
-      userContent = [
-        { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-        { type: "text", text: "Extract all Package Tour information. Return JSON only." },
-      ] as object[];
+    // PDF: try pdf-parse for Anthropic (text). If that fails, fallback to OpenAI (GPT-4o supports PDF natively)
+    if (pdfBase64) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require("pdf-parse");
+        const buffer = Buffer.from(pdfBase64, "base64");
+        const pdfData = await pdfParse(buffer);
+        const raw = (pdfData.text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+        if (raw && raw.length >= 10) {
+          textContent = raw;
+          pdfBase64 = null; // use Anthropic with text
+        }
+        // else keep pdfBase64 for OpenAI fallback below
+      } catch (pdfErr) {
+        console.error("pdf-parse failed:", pdfErr);
+        // keep pdfBase64 for OpenAI fallback below
+      }
     }
 
-    const messages: { role: string; content: string | object[] }[] = [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userContent },
-    ];
+    // Fallback: PDF but no text (scanned/image PDF) — use OpenAI with raw PDF if key is set
+    if (pdfBase64 && openaiKey) {
+      const messages: { role: string; content: string | object[] }[] = [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "file", file: { filename: "document.pdf", file_data: `data:application/pdf;base64,${pdfBase64}` } },
+            { type: "text", text: "Extract all Package Tour information from this PDF. Return JSON only." },
+          ] as object[],
+        },
+      ];
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+        body: JSON.stringify({ model: "gpt-4o", messages, max_tokens: 3000, temperature: 0.1 }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || "";
+        const usage = data.usage || {};
+        if (authInfo) {
+          await logAiUsage({
+            companyId: authInfo.companyId,
+            userId: authInfo.userId,
+            operation: "parse_package_tour",
+            model: "gpt-4o",
+            inputTokens: usage.prompt_tokens || 0,
+            outputTokens: usage.completion_tokens || 0,
+            totalTokens: usage.total_tokens || 0,
+            success: true,
+            metadata: { inputType, fallback: "openai_pdf" },
+          });
+        }
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return NextResponse.json({ parsed, detectedOperator: parsed.detectedOperator || parsed.operator?.name || null });
+        }
+      }
+    }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages,
-        max_tokens: 3000,
-        temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("OpenAI API error:", errorData);
+    // If we still have PDF and no OpenAI fallback succeeded, return helpful error
+    if (pdfBase64) {
       return NextResponse.json(
-        { error: "AI parsing failed", details: errorData, parsed: null },
-        { status: 500 }
+        {
+          error: openaiKey
+            ? "Could not extract tour data from this PDF. Try pasting the text manually or use a different PDF."
+            : "Could not extract text from PDF. Add OPENAI_API_KEY for image/scanned PDF support, or paste the text manually.",
+          parsed: null,
+        },
+        { status: 400 }
       );
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    const usage = data.usage || {};
+    // Build user message for Anthropic: text or image (inline type — SDK MessageCreateParams shape varies by version)
+    type ContentBlock =
+      | { type: "text"; text: string }
+      | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+    let userContent: ContentBlock[];
+    if (textContent) {
+      userContent = [{ type: "text" as const, text: `Parse this Package Tour document:\n\n${textContent}` }];
+    } else if (imageBase64) {
+      const mediaType = (mimeType === "image/jpeg" ? "image/jpeg" : mimeType === "image/gif" ? "image/gif" : mimeType === "image/webp" ? "image/webp" : "image/png") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      userContent = [
+        { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: imageBase64 } },
+        { type: "text" as const, text: "Extract all Package Tour information from this image. Return JSON only." },
+      ];
+    } else {
+      return NextResponse.json(
+        { error: "No text or image to parse.", parsed: null },
+        { status: 400 }
+      );
+    }
 
-    // Log AI usage for billing
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+    const TOUR_MODEL = "claude-3-5-haiku-20241022";
+
+    const msg = await anthropic.messages.create({
+      model: TOUR_MODEL,
+      max_tokens: 3000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userContent }],
+    });
+
+    const textBlock = msg.content.find((c) => c.type === "text");
+    const content = textBlock && "text" in textBlock ? textBlock.text : "";
+    const usage = msg.usage ?? { input_tokens: 0, output_tokens: 0 };
+
     if (authInfo) {
       await logAiUsage({
         companyId: authInfo.companyId,
         userId: authInfo.userId,
         operation: "parse_package_tour",
-        model: "gpt-4o",
-        inputTokens: usage.prompt_tokens || 0,
-        outputTokens: usage.completion_tokens || 0,
-        totalTokens: usage.total_tokens || 0,
+        model: TOUR_MODEL,
+        inputTokens: usage.input_tokens || 0,
+        outputTokens: usage.output_tokens || 0,
+        totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
         success: true,
         metadata: { inputType },
       });
@@ -278,19 +338,18 @@ export async function POST(request: NextRequest) {
         });
       }
     } catch (parseErr) {
-      console.error("Failed to parse AI response:", parseErr, "Content:", content);
+      console.error("Failed to parse Anthropic response:", parseErr, "Content:", content);
     }
 
     return NextResponse.json({ error: "Could not extract tour information", parsed: null });
   } catch (err) {
     console.error("Parse package tour error:", err);
-    // Log failed usage
     if (authInfo) {
       await logAiUsage({
         companyId: authInfo.companyId,
         userId: authInfo.userId,
         operation: "parse_package_tour",
-        model: "gpt-4o",
+        model: "claude-3-5-haiku-20241022",
         success: false,
         errorMessage: err instanceof Error ? err.message : "Unknown error",
       });
