@@ -1,0 +1,34 @@
+import { NextResponse } from "next/server";
+import { execSync } from "node:child_process";
+
+function resolveCommitSha(): string {
+  const fromEnv =
+    process.env.NEXT_PUBLIC_GIT_COMMIT_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GITHUB_SHA;
+
+  if (fromEnv && fromEnv.trim()) {
+    return fromEnv.trim();
+  }
+
+  try {
+    return execSync("git rev-parse HEAD").toString().trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function GET() {
+  const sha = resolveCommitSha();
+  return NextResponse.json(
+    {
+      sha,
+      shortSha: sha ? sha.slice(0, 7) : "",
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
+  );
+}

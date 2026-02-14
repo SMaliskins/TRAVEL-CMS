@@ -20,7 +20,9 @@ export default function TopBar() {
   const now = useClock();
   const { profile } = useUser();
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
-  const gitCommitSha = process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || "";
+  const [gitCommitSha, setGitCommitSha] = useState<string>(
+    process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || ""
+  );
   const shortCommitSha = gitCommitSha ? gitCommitSha.slice(0, 7) : "";
 
   // Fetch company logo
@@ -46,6 +48,29 @@ export default function TopBar() {
     };
     fetchCompanyLogo();
   }, []);
+
+  // Fallback for localhost/dev when public env is not inlined
+  useEffect(() => {
+    if (gitCommitSha) return;
+
+    const fetchCommitSha = async () => {
+      try {
+        const response = await fetch("/api/meta/commit", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { sha?: string; shortSha?: string };
+        if (data.sha) {
+          setGitCommitSha(data.sha);
+        } else if (data.shortSha) {
+          setGitCommitSha(data.shortSha);
+        }
+      } catch {
+        // Silent fallback: commit badge just stays hidden
+      }
+    };
+
+    fetchCommitSha();
+  }, [gitCommitSha]);
 
   // Get initials from name
   const getInitials = () => {
