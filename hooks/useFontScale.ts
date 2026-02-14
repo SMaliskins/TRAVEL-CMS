@@ -37,6 +37,24 @@ export function useFontScale() {
   const [fontFamily, setFontFamilyState] = useState<string>(DEFAULT_FONT);
   const [isClient, setIsClient] = useState(false);
 
+  const applyScale = (newScale: number) => {
+    if (typeof document !== "undefined") {
+      document.documentElement.style.setProperty("--font-scale", String(newScale));
+      // Also apply to base font size
+      document.documentElement.style.fontSize = `${newScale * 100}%`;
+    }
+  };
+
+  const applyFontFamily = (fontValue: string) => {
+    if (typeof document !== "undefined") {
+      const preset = FONT_PRESETS.find((f) => f.value === fontValue);
+      if (preset) {
+        document.documentElement.style.setProperty("--font-family", preset.css);
+        document.body.style.fontFamily = preset.css;
+      }
+    }
+  };
+
   // Load settings from localStorage on mount
   useEffect(() => {
     setIsClient(true);
@@ -64,24 +82,6 @@ export function useFontScale() {
       applyFontFamily(DEFAULT_FONT);
     }
   }, []);
-
-  const applyScale = (newScale: number) => {
-    if (typeof document !== "undefined") {
-      document.documentElement.style.setProperty("--font-scale", String(newScale));
-      // Also apply to base font size
-      document.documentElement.style.fontSize = `${newScale * 100}%`;
-    }
-  };
-
-  const applyFontFamily = (fontValue: string) => {
-    if (typeof document !== "undefined") {
-      const preset = FONT_PRESETS.find(f => f.value === fontValue);
-      if (preset) {
-        document.documentElement.style.setProperty("--font-family", preset.css);
-        document.body.style.fontFamily = preset.css;
-      }
-    }
-  };
 
   const setScale = (newScale: number) => {
     const clampedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));

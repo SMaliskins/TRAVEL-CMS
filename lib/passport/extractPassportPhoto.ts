@@ -9,6 +9,15 @@ import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { randomUUID } from "crypto";
 
+function toNodeBuffer(value: unknown): Buffer | null {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof ArrayBuffer) return Buffer.from(value);
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
+}
+
 export async function extractAndUploadPassportPhoto(
   pdfBuffer: Buffer
 ): Promise<string | null> {
@@ -33,18 +42,29 @@ async function extractEmbeddedImage(pdfBuffer: Buffer): Promise<string | null> {
 
   const largest = imagesData.reduce((a, b) =>
     a.width * a.height > b.width * b.height ? a : b
-  ) as unknown as { buffer: ArrayBuffer | Buffer; width: number; height: number; channels?: number };
+  );
+  const largestRaw = largest as unknown as {
+    width: number;
+    height: number;
+    channels?: number;
+    buffer?: ArrayBuffer | Buffer | ArrayBufferView;
+    data?: ArrayBuffer | Buffer | ArrayBufferView;
+  };
 
-  const rawBuffer = Buffer.isBuffer(largest.buffer)
-    ? largest.buffer
-    : Buffer.from(largest.buffer);
-  const ch = largest.channels ?? 3;
-  const channels = (ch >= 1 && ch <= 4 ? ch : 3) as 1 | 2 | 3 | 4;
+  const rawBuffer = toNodeBuffer(largestRaw.buffer ?? largestRaw.data);
+  if (!rawBuffer) return null;
+  const channels: 1 | 2 | 3 | 4 =
+    largestRaw.channels === 1 ||
+    largestRaw.channels === 2 ||
+    largestRaw.channels === 3 ||
+    largestRaw.channels === 4
+      ? largestRaw.channels
+      : 3;
 
   const jpegBuffer = await sharp(rawBuffer, {
     raw: {
-      width: largest.width,
-      height: largest.height,
+      width: largestRaw.width,
+      height: largestRaw.height,
       channels,
     },
   })
