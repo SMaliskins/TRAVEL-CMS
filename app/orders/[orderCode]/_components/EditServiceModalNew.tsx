@@ -32,10 +32,10 @@ interface Service {
   name: string;
   category: string; // Display name
   categoryId?: string | null; // UUID reference to travel_service_categories
-  categoryType?: CategoryType; // Functional type for conditional logic
+  categoryType?: CategoryType | string | null; // Functional type for conditional logic
   servicePrice: number;
   clientPrice: number;
-  vatRate?: number;
+  vatRate?: number | null;
   resStatus: string | null;
   refNr?: string | null;
   ticketNr?: string | null;
@@ -141,7 +141,7 @@ export default function EditServiceModalNew({
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoryId, setCategoryId] = useState<string | null>(service.categoryId || null);
-  const [categoryType, setCategoryType] = useState<CategoryType>(service.categoryType || 'other');
+  const [categoryType, setCategoryType] = useState<CategoryType>((service.categoryType as CategoryType) || 'other');
   
   // Change/Cancel modals
   const [showChangeModal, setShowChangeModal] = useState(false);

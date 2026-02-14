@@ -33,12 +33,13 @@ async function extractEmbeddedImage(pdfBuffer: Buffer): Promise<string | null> {
 
   const largest = imagesData.reduce((a, b) =>
     a.width * a.height > b.width * b.height ? a : b
-  ) as { buffer: ArrayBuffer | Buffer; width: number; height: number; channels?: number };
+  ) as unknown as { buffer?: ArrayBuffer | Buffer; data?: Uint8ClampedArray; width: number; height: number; channels?: number };
 
-  const rawBuffer = Buffer.isBuffer(largest.buffer)
-    ? largest.buffer
-    : Buffer.from(largest.buffer);
-  const channels = largest.channels ?? 3;
+  const rawBuffer = largest.buffer
+    ? (Buffer.isBuffer(largest.buffer) ? largest.buffer : Buffer.from(largest.buffer))
+    : (largest.data ? Buffer.from(largest.data.buffer) : null);
+  if (!rawBuffer) return null;
+  const channels = (largest.channels ?? 3) as 1 | 2 | 3 | 4;
 
   const jpegBuffer = await sharp(rawBuffer, {
     raw: {

@@ -244,10 +244,11 @@ interface TimelineEvent {
 }
 
 // Normalize segment keys (API/DB may return snake_case)
-function normalizeSegment(seg: Record<string, unknown>): { id: string; flightNumber: string; departure: string; arrival: string; departureDate: string; departureTimeScheduled: string; arrivalDate: string; arrivalTimeScheduled: string; departureCity?: string; arrivalCity?: string; departureTerminal?: string; arrivalTerminal?: string; duration?: string; cabinClass?: string; baggage?: string } {
+function normalizeSegment(seg: Record<string, unknown>): { id: string; flightNumber: string; airline?: string; departure: string; arrival: string; departureDate: string; departureTimeScheduled: string; arrivalDate: string; arrivalTimeScheduled: string; departureCity?: string; arrivalCity?: string; departureTerminal?: string; arrivalTerminal?: string; duration?: string; cabinClass?: string; baggage?: string } {
   return {
     id: String(seg.id ?? seg.flightNumber ?? Math.random().toString(36).slice(2)),
     flightNumber: String(seg.flightNumber ?? seg.flight_number ?? ""),
+    airline: seg.airline ?? seg.airline_name ? String(seg.airline ?? seg.airline_name) : undefined,
     departure: String(seg.departure ?? ""),
     arrival: String(seg.arrival ?? ""),
     departureDate: String(seg.departureDate ?? seg.departure_date ?? ""),
@@ -337,7 +338,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
       // If we have flight segments, create an event for each segment
       if (service.flightSegments && service.flightSegments.length > 0) {
         for (const rawSeg of service.flightSegments) {
-          const segment = normalizeSegment(rawSeg as Record<string, unknown>);
+          const segment = normalizeSegment(rawSeg as unknown as Record<string, unknown>);
           // Дедупликация: parent (res_status changed) и Change service могут иметь одни сегменты
           const segmentKey = `${segment.departureDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
           if (seenSegmentKeys.has(segmentKey)) continue;

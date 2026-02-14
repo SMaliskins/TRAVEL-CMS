@@ -101,6 +101,12 @@ export interface ServiceData {
   cancellationPenaltyAmount?: number | null;
   cancellationPenaltyPercent?: number | null;
   changeFee?: number | null; // Airline change fee (for Flights)
+  // Amendment fields (change/cancellation)
+  parentServiceId?: string | null;
+  serviceType?: "original" | "change" | "cancellation";
+  cancellationFee?: number | null;
+  refundAmount?: number | null;
+  commissionRate?: number | null;
   // Tour (Package Tour) pricing
   commissionName?: string | null;
   commissionAmount?: number | null;
