@@ -39,7 +39,6 @@ import {
   getPriceTypeLabel
 } from "@/lib/services/deadlineCalculator";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Traveller {
   id: string;
@@ -1141,11 +1140,25 @@ export default function OrderServicesBlock({
     const index = Math.abs(hash) % colors.length;
     return colors[index];
   };
+
+  const formatDateForGrouping = (dateString?: string | null): string => {
+    if (!dateString) return "-";
+    try {
+      const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
+      if (isNaN(date.getTime())) return "-";
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}.${month}.${year}`;
+    } catch {
+      return "-";
+    }
+  };
   const getDateRangeKey = (service: Service) => {
-    const startDate = formatDateDDMMYYYY(service.dateFrom);
+    const startDate = formatDateForGrouping(service.dateFrom);
     const endDate = service.dateTo
-      ? formatDateDDMMYYYY(service.dateTo)
-      : formatDateDDMMYYYY(service.dateFrom);
+      ? formatDateForGrouping(service.dateTo)
+      : formatDateForGrouping(service.dateFrom);
     return `${startDate} - ${endDate}`;
   };
 
