@@ -20,6 +20,8 @@ export default function TopBar() {
   const now = useClock();
   const { profile } = useUser();
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const gitCommitSha = process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || "";
+  const shortCommitSha = gitCommitSha ? gitCommitSha.slice(0, 7) : "";
 
   // Fetch company logo
   useEffect(() => {
@@ -96,13 +98,21 @@ export default function TopBar() {
     <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 bg-white">
       <div className="flex h-full items-center gap-4 px-4">
         {/* Left side - Company Logo */}
-        <div className="flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2">
           {companyLogo && (
             <img 
               src={companyLogo} 
               alt="Company Logo" 
               className="h-10 max-w-[140px] object-contain"
             />
+          )}
+          {shortCommitSha && (
+            <span
+              className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-mono text-gray-600"
+              title={`Commit: ${gitCommitSha}`}
+            >
+              {shortCommitSha}
+            </span>
           )}
         </div>
         

@@ -1,11 +1,23 @@
 import type { NextConfig } from "next";
 import packageJson from "./package.json";
+import { execSync } from "node:child_process";
 
 const appVersion = packageJson.version;
+const gitCommitSha =
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  (() => {
+    try {
+      return execSync("git rev-parse --short HEAD").toString().trim();
+    } catch {
+      return "";
+    }
+  })();
 
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
+    NEXT_PUBLIC_GIT_COMMIT_SHA: gitCommitSha,
   },
   images: {
     remotePatterns: [
