@@ -630,7 +630,7 @@ export default function OrderServicesBlock({
   };
 
   // Parse "Origin - Destination" from flight service name (e.g. "03.02 Nice-Côte d'Azur - London Heathrow")
-  const parseRouteFromName = (name: string): CityWithCountry[] | null => {
+  function parseRouteFromName(name: string): CityWithCountry[] | null {
     const parts = name.split(/\s*-\s*/).map(p => p.trim());
     if (parts.length < 2) return null;
     let originStr = parts[0];
@@ -645,7 +645,7 @@ export default function OrderServicesBlock({
       { city: originCity.name, country: originCity.country || "", countryCode: originCity.countryCode, lat: originCity.lat, lng: originCity.lng },
       { city: destCity.name, country: destCity.country || "", countryCode: destCity.countryCode, lat: destCity.lat, lng: destCity.lng },
     ];
-  };
+  }
 
   // Helper: build full flight route for a traveller
   // Origin (first departure) = where they fly FROM. Destinations = where they go (incl. transits like Frankfurt)
