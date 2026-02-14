@@ -114,12 +114,24 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   };
 
   const getStatusBadge = (status: Invoice['status']) => {
+<<<<<<< HEAD
     const styles: Record<string, string> = {
+=======
+<<<<<<< HEAD
+    const styles: Record<string, string> = {
+=======
+    const styles: Record<Invoice['status'], string> = {
+>>>>>>> fe92b53 (fix: TypeScript/build errors for Vercel (InvoiceList, OrderServicesBlock, EditServiceModalNew, company, DirectoryForm, ClientsByCitizenshipPie, airlineParsers, extractPassportPhoto, parseMrz))
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
       draft: 'bg-gray-100 text-gray-700 border-gray-300',
       sent: 'bg-blue-100 text-blue-700 border-blue-300',
       paid: 'bg-green-100 text-green-700 border-green-300',
       cancelled: 'bg-red-100 text-red-700 border-red-300',
       overdue: 'bg-orange-100 text-orange-700 border-orange-300',
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
       processed: 'bg-indigo-100 text-indigo-700 border-indigo-300',
       replaced: 'bg-amber-100 text-amber-700 border-amber-300',
       issued: 'bg-emerald-100 text-emerald-700 border-emerald-300',
@@ -127,15 +139,40 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
     };
 
     const labels: Record<string, string> = {
+<<<<<<< HEAD
+=======
+=======
+      issued: 'bg-slate-100 text-slate-700 border-slate-300',
+      issued_sent: 'bg-blue-100 text-blue-700 border-blue-300',
+      processed: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+      replaced: 'bg-amber-100 text-amber-700 border-amber-300',
+    };
+
+    const labels: Record<Invoice['status'], string> = {
+>>>>>>> fe92b53 (fix: TypeScript/build errors for Vercel (InvoiceList, OrderServicesBlock, EditServiceModalNew, company, DirectoryForm, ClientsByCitizenshipPie, airlineParsers, extractPassportPhoto, parseMrz))
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
       draft: 'Draft',
       sent: 'Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
       processed: 'Processed',
       replaced: 'Replaced',
       issued: 'Issued',
       issued_sent: 'Issued & Sent',
+<<<<<<< HEAD
+=======
+=======
+      issued: 'Issued',
+      issued_sent: 'Issued & Sent',
+      processed: 'Processed',
+      replaced: 'Replaced',
+>>>>>>> fe92b53 (fix: TypeScript/build errors for Vercel (InvoiceList, OrderServicesBlock, EditServiceModalNew, company, DirectoryForm, ClientsByCitizenshipPie, airlineParsers, extractPassportPhoto, parseMrz))
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
     };
 
     return (

@@ -28,10 +28,10 @@ interface Service {
   name: string;
   category: string; // Display name
   categoryId?: string | null; // UUID reference to travel_service_categories
-  categoryType?: CategoryType; // Functional type for conditional logic
+  categoryType?: CategoryType | string | null; // Functional type (API may return string)
   servicePrice: number;
   clientPrice: number;
-  vatRate?: number;
+  vatRate?: number | null;
   resStatus: string | null;
   refNr?: string | null;
   ticketNr?: string | null;

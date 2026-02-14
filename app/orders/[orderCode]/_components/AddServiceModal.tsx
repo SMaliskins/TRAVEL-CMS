@@ -103,8 +103,14 @@ export interface ServiceData {
   cancellationPenaltyAmount?: number | null;
   cancellationPenaltyPercent?: number | null;
   changeFee?: number | null; // Airline change fee (for Flights)
+  // Amendment / change-of-booking
+  parentServiceId?: string | null;
+  serviceType?: string;
+  cancellationFee?: number | null;
+  refundAmount?: number | null;
   // Tour (Package Tour) pricing
   commissionName?: string | null;
+  commissionRate?: number | null;
   commissionAmount?: number | null;
   agentDiscountValue?: number | null;
   agentDiscountType?: "%" | "€" | null;

@@ -1687,7 +1687,15 @@ export default function OrderServicesBlock({
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
+<<<<<<< HEAD
                                     disabled={false}
+=======
+<<<<<<< HEAD
+                                    disabled={false}
+=======
+                                    disabled={(service as Service).resStatus === 'cancelled'}
+>>>>>>> fe92b53 (fix: TypeScript/build errors for Vercel (InvoiceList, OrderServicesBlock, EditServiceModalNew, company, DirectoryForm, ClientsByCitizenshipPie, airlineParsers, extractPassportPhoto, parseMrz))
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
                                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label={`Select ${service.name} for invoice`}
                                     title="Select for invoice"
@@ -2014,7 +2022,15 @@ export default function OrderServicesBlock({
         <>
           {console.log('🔍 Rendering EditServiceModalNew for service:', editServiceId)}
           <EditServiceModalNew
+<<<<<<< HEAD
             service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>["service"]}
+=======
+<<<<<<< HEAD
+            service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>["service"]}
+=======
+            service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
+>>>>>>> fe92b53 (fix: TypeScript/build errors for Vercel (InvoiceList, OrderServicesBlock, EditServiceModalNew, company, DirectoryForm, ClientsByCitizenshipPie, airlineParsers, extractPassportPhoto, parseMrz))
+>>>>>>> fcd3f9f (fix(build): resolve Vercel and local build errors)
             orderCode={orderCode}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated) => {
