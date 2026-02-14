@@ -5,6 +5,24 @@
 
 ---
 
+### 📅 [2026-02-14] | [16:30]
+**Агент:** `Code Writer`
+**Задача:** `Fix TDZ error: can't access lexical declaration 'tc' before initialization`
+
+**Task:** Runtime crash fix | **Status:** SUCCESS
+**Agent:** Code Writer | **Complexity:** 🟡 Medium
+
+**Действия:**
+1. **Root cause:** `parseRouteFromName` was a `const` arrow function declared AFTER the `useMemo` callback that used it. Since `useMemo` runs synchronously during rendering, the `const` was in the Temporal Dead Zone (TDZ) when accessed.
+2. **Fix:** Moved `parseRouteFromName` declaration to BEFORE the `mapRoutePoints` useMemo in `OrderServicesBlock.tsx`.
+3. **Verified:** Build succeeds; in minified output, the parse function is now declared before its usage.
+
+**Файлы:** `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`
+
+**Результат:** Build OK. TDZ error resolved. Pages at `/orders/[orderCode]` should load without "can't access lexical declaration 'tc' before initialization" error.
+
+---
+
 ### 📅 [2026-02-14] | [12:57]
 **Агент:** `Code Writer`
 **Задача:** `Fix Vercel + local build errors`
