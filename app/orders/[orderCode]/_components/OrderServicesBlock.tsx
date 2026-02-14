@@ -38,6 +38,7 @@ import {
   getRefundPolicyLabel,
   getPriceTypeLabel
 } from "@/lib/services/deadlineCalculator";
+import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
 
 interface Traveller {
