@@ -20,9 +20,7 @@ export default function TopBar() {
   const now = useClock();
   const { profile } = useUser();
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
-  const [gitCommitSha, setGitCommitSha] = useState<string>(
-    process.env.NEXT_PUBLIC_GIT_COMMIT_SHA || ""
-  );
+  const [gitCommitSha, setGitCommitSha] = useState<string>("");
   const shortCommitSha = gitCommitSha ? gitCommitSha.slice(0, 7) : "";
 
   // Fetch company logo
@@ -49,11 +47,11 @@ export default function TopBar() {
     fetchCompanyLogo();
   }, []);
 
-  // Always reconcile commit SHA with server to avoid stale inlined env values.
+  // Always read commit SHA from server to avoid stale inlined env values.
   useEffect(() => {
     const fetchCommitSha = async () => {
       try {
-        const response = await fetch("/api/meta/commit", { cache: "no-store" });
+        const response = await fetch(`/api/meta/commit?t=${Date.now()}`, { cache: "no-store" });
         if (!response.ok) return;
 
         const data = (await response.json()) as { sha?: string; shortSha?: string };
