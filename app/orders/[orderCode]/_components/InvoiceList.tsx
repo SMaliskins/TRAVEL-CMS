@@ -16,6 +16,7 @@ interface Invoice {
   tax_amount: number;
   client_name: string;
   payer_name?: string | null;
+  payer_email?: string | null;
   notes: string | null;
   created_at?: string;
   replaced_by_invoice_id?: string | null;
@@ -113,20 +114,28 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
   };
 
   const getStatusBadge = (status: Invoice['status']) => {
-    const styles = {
+    const styles: Record<string, string> = {
       draft: 'bg-gray-100 text-gray-700 border-gray-300',
       sent: 'bg-blue-100 text-blue-700 border-blue-300',
       paid: 'bg-green-100 text-green-700 border-green-300',
       cancelled: 'bg-red-100 text-red-700 border-red-300',
       overdue: 'bg-orange-100 text-orange-700 border-orange-300',
+      processed: 'bg-indigo-100 text-indigo-700 border-indigo-300',
+      replaced: 'bg-amber-100 text-amber-700 border-amber-300',
+      issued: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+      issued_sent: 'bg-teal-100 text-teal-700 border-teal-300',
     };
 
-    const labels = {
+    const labels: Record<string, string> = {
       draft: 'Draft',
       sent: 'Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
+      processed: 'Processed',
+      replaced: 'Replaced',
+      issued: 'Issued',
+      issued_sent: 'Issued & Sent',
     };
 
     return (

@@ -5,6 +5,29 @@
 
 ---
 
+### 📅 [2026-02-14] | [12:57]
+**Агент:** `Code Writer`
+**Задача:** `Fix Vercel + local build errors`
+**Статус:** `SUCCESS`
+**Действия:**
+- InvoiceList: styles/labels для статусов processed, replaced, issued, issued_sent; payer_email в Invoice
+- ItineraryTimeline + OrderServicesBlock: FlightSegment as unknown as Record
+- OrderServicesBlock: API mapping с поддержкой snake_case; parentServiceId, amendment fields; EditServiceModalNew type cast; resStatus narrowed type fix
+- InvoiceList.tsx: Invoice status badges extended
+- Settings company: default_vat_rate в Company interface
+- DirectoryForm: phone/email null → undefined
+- ClientsByCitizenshipPie: formatter value?: number
+- airlineParsers: cabinClass fallback "economy"
+- extractPassportPhoto: type cast + channels
+- parseMrz: ParseResult as unknown as Record
+- npm install @sparticuz/chromium puppeteer-core
+
+**Результат:** Build проходит успешно (feature/x). Vercel и локальная сборка должны работать.
+
+**Next Step:** —
+
+---
+
 ## [2026-01-30] Itinerary: цвета перелётов и отелей по карте маршрутов ✅
 
 **Task:** Подсветка перелётов цветом маршрута клиента с карты; отели — цветами из не занятых маршрутами | **Status:** SUCCESS

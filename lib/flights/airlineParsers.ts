@@ -635,7 +635,7 @@ function parseLufthansa(text: string): ParseResult | null {
       totalPrice: priceMatch ? parseFloat(priceMatch[1].replace(",", ".")) : null,
       currency: "EUR",
       ticketNumbers: ticketMatch ? [ticketMatch[1]] : [],
-      cabinClass: detectedCabinClass,
+      cabinClass: detectedCabinClass ?? "economy",
       refundPolicy: detectRefundPolicy(text),
       baggage,
       passengerName,

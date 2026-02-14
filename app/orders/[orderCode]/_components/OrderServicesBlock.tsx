@@ -550,7 +550,7 @@ export default function OrderServicesBlock({
     }> = [];
     for (const service of flightServices) {
       for (const seg of service.flightSegments || []) {
-        const s = seg as Record<string, unknown>;
+        const s = seg as unknown as Record<string, unknown>;
         allSegments.push({
           arrival: String(s.arrival ?? ""),
           arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
@@ -720,7 +720,7 @@ export default function OrderServicesBlock({
     }> = [];
     for (const service of flightServices) {
       for (const seg of service.flightSegments || []) {
-        const s = seg as Record<string, unknown>;
+        const s = seg as unknown as Record<string, unknown>;
         allSegments.push({
           arrival: String(s.arrival ?? ""),
           arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
@@ -998,68 +998,71 @@ export default function OrderServicesBlock({
       if (response.ok) {
         const data = await response.json();
         // Map API response to Service interface
-        const mappedServices: Service[] = (data.services || []).map((s: ServiceData) => ({
-          id: s.id,
-          dateFrom: s.dateFrom || "",
-          dateTo: s.dateTo || s.dateFrom || "",
-          category: s.category || "Other",
-          categoryId: s.categoryId || null,
-          categoryType: s.categoryType || null,
-          vatRate: s.vatRate ?? null,
-          name: s.serviceName,
-          supplier: s.supplierName || "-",
-          client: s.clientName || "-",
-          payer: s.payerName || "-",
-          supplierPartyId: s.supplierPartyId,
-          payerPartyId: s.payerPartyId,
-          clientPartyId: s.clientPartyId,
-          servicePrice: s.servicePrice || 0,
-          clientPrice: s.clientPrice || 0,
-          resStatus: s.resStatus || "booked",
-          refNr: s.refNr || "",
-          ticketNr: s.ticketNr || "",
-          assignedTravellerIds: s.travellerIds || [],
-          invoice_id: s.invoice_id || null,
-          splitGroupId: s.splitGroupId || null,
+        const mappedServices: Service[] = (data.services || []).map((raw: unknown) => {
+          const s = raw as Record<string, unknown>;
+          return {
+          id: String(s.id),
+          dateFrom: String(s.dateFrom ?? s.service_date_from ?? ""),
+          dateTo: String(s.dateTo ?? s.service_date_to ?? s.dateFrom ?? s.service_date_from ?? ""),
+          category: String(s.category ?? "Other"),
+          categoryId: (s.categoryId ?? s.category_id) as string | null,
+          categoryType: ((s.categoryType ?? s.category_type) || undefined) as Service["categoryType"],
+          vatRate: (s.vatRate ?? s.vat_rate) as number | null,
+          name: String(s.serviceName ?? s.service_name ?? ""),
+          supplier: String(s.supplierName ?? s.supplier_name ?? "-"),
+          client: String(s.clientName ?? s.client_name ?? "-"),
+          payer: String(s.payerName ?? s.payer_name ?? "-"),
+          supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
+          payerPartyId: (s.payerPartyId ?? s.payer_party_id) as string | undefined,
+          clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
+          servicePrice: Number(s.servicePrice ?? s.service_price ?? 0),
+          clientPrice: Number(s.clientPrice ?? s.client_price ?? 0),
+          resStatus: String(s.resStatus ?? s.res_status ?? "booked") as Service["resStatus"],
+          refNr: String(s.refNr ?? s.ref_nr ?? ""),
+          ticketNr: String(s.ticketNr ?? s.ticket_nr ?? ""),
+          assignedTravellerIds: (s.travellerIds ?? s.traveller_ids ?? []) as string[],
+          invoice_id: (s.invoice_id ?? null) as string | null,
+          splitGroupId: (s.splitGroupId ?? s.split_group_id ?? null) as string | null,
           // Flight-specific
-          flightSegments: s.flightSegments || [],
-          ticketNumbers: s.ticketNumbers || [],
-          boardingPasses: s.boardingPasses || [],
-          baggage: s.baggage || "",
-          cabinClass: s.cabinClass || "economy",
+          flightSegments: (s.flightSegments ?? s.flight_segments ?? []) as FlightSegment[],
+          ticketNumbers: (s.ticketNumbers ?? s.ticket_numbers ?? []) as Service["ticketNumbers"],
+          boardingPasses: (s.boardingPasses ?? s.boarding_passes ?? []) as Service["boardingPasses"],
+          baggage: String(s.baggage ?? ""),
+          cabinClass: String(s.cabinClass ?? s.cabin_class ?? "economy") as Service["cabinClass"],
           // Terms & Conditions
-          priceType: s.priceType || null,
-          refundPolicy: s.refundPolicy || null,
-          freeCancellationUntil: s.freeCancellationUntil || null,
-          cancellationPenaltyAmount: s.cancellationPenaltyAmount || null,
-          cancellationPenaltyPercent: s.cancellationPenaltyPercent || null,
+          priceType: (s.priceType ?? s.price_type ?? null) as Service["priceType"],
+          refundPolicy: (s.refundPolicy ?? s.refund_policy ?? null) as Service["refundPolicy"],
+          freeCancellationUntil: (s.freeCancellationUntil ?? s.free_cancellation_until ?? null) as string | null,
+          cancellationPenaltyAmount: (s.cancellationPenaltyAmount ?? s.cancellation_penalty_amount ?? null) as number | null,
+          cancellationPenaltyPercent: (s.cancellationPenaltyPercent ?? s.cancellation_penalty_percent ?? null) as number | null,
           // Amendment fields
-          parentServiceId: s.parentServiceId || null,
-          serviceType: s.serviceType || "original",
-          cancellationFee: s.cancellationFee || null,
-          refundAmount: s.refundAmount || null,
-          changeFee: s.changeFee || null,
+          parentServiceId: (s.parentServiceId ?? s.parent_service_id ?? null) as string | null,
+          serviceType: String(s.serviceType ?? s.service_type ?? "original") as Service["serviceType"],
+          cancellationFee: (s.cancellationFee ?? s.cancellation_fee ?? null) as number | null,
+          refundAmount: (s.refundAmount ?? s.refund_amount ?? null) as number | null,
+          changeFee: (s.changeFee ?? s.change_fee ?? null) as number | null,
           // Tour (persisted commission - must pass all for Edit modal to display)
-          commissionName: s.commissionName ?? null,
-          commissionRate: s.commissionRate ?? null,
-          commissionAmount: s.commissionAmount ?? null,
-          agentDiscountValue: s.agentDiscountValue ?? null,
-          agentDiscountType: s.agentDiscountType ?? null,
+          commissionName: (s.commissionName ?? s.commission_name ?? null) as string | null,
+          commissionRate: (s.commissionRate ?? s.commission_rate ?? null) as number | null,
+          commissionAmount: (s.commissionAmount ?? s.commission_amount ?? null) as number | null,
+          agentDiscountValue: (s.agentDiscountValue ?? s.agent_discount_value ?? null) as number | null,
+          agentDiscountType: (s.agentDiscountType ?? s.agent_discount_type ?? null) as string | null,
           // Tour/Hotel fields (must pass for Edit modal to display after save)
-          hotelName: s.hotelName ?? null,
-          hotelStarRating: s.hotelStarRating ?? null,
-          hotelRoom: s.hotelRoom ?? null,
-          hotelBoard: s.hotelBoard ?? null,
-          mealPlanText: s.mealPlanText ?? null,
-          transferType: s.transferType ?? null,
-          additionalServices: s.additionalServices ?? null,
-          hotelAddress: s.hotelAddress ?? null,
-          hotelPhone: s.hotelPhone ?? null,
-          hotelEmail: s.hotelEmail ?? null,
-          paymentDeadlineDeposit: s.paymentDeadlineDeposit ?? null,
-          paymentDeadlineFinal: s.paymentDeadlineFinal ?? null,
-          paymentTerms: s.paymentTerms ?? null,
-        }));
+          hotelName: (s.hotelName ?? s.hotel_name ?? null) as string | null,
+          hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
+          hotelRoom: (s.hotelRoom ?? s.hotel_room ?? null) as string | null,
+          hotelBoard: (s.hotelBoard ?? s.hotel_board ?? null) as string | null,
+          mealPlanText: (s.mealPlanText ?? s.meal_plan_text ?? null) as string | null,
+          transferType: (s.transferType ?? s.transfer_type ?? null) as string | null,
+          additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
+          hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
+          hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
+          hotelEmail: (s.hotelEmail ?? s.hotel_email ?? null) as string | null,
+          paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
+          paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,
+          paymentTerms: (s.paymentTerms ?? s.payment_terms ?? null) as string | null,
+        };
+        });
         setServices(mappedServices);
       }
     } catch (err) {
@@ -1678,17 +1681,13 @@ export default function OrderServicesBlock({
                                     checked={selectedServiceIds.includes(service.id)}
                                     onChange={(e) => {
                                       e.stopPropagation();
-                                      // Prevent selecting cancelled services
-                                      if (service.resStatus === 'cancelled') {
-                                        return;
-                                      }
                                       if (e.target.checked) {
                                         setSelectedServiceIds(prev => [...prev, service.id]);
                                       } else {
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
-                                    disabled={service.resStatus === 'cancelled'}
+                                    disabled={false}
                                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                     aria-label={`Select ${service.name} for invoice`}
                                     title="Select for invoice"
@@ -2015,7 +2014,7 @@ export default function OrderServicesBlock({
         <>
           {console.log('🔍 Rendering EditServiceModalNew for service:', editServiceId)}
           <EditServiceModalNew
-            service={services.find(s => s.id === editServiceId)!}
+            service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>["service"]}
             orderCode={orderCode}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated) => {

@@ -538,8 +538,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       const formData: Partial<DirectoryRecord> = {
         type: actualType,
         roles,
-        phone: phone.trim() ? (normalizePhoneForSave(phone) || null) : null,
-        email: email.trim() ? email.trim() : null,
+        phone: phone.trim() ? (normalizePhoneForSave(phone) || undefined) : undefined,
+        email: email.trim() ? email.trim() : undefined,
       };
 
       // Set person or company fields based on actual type

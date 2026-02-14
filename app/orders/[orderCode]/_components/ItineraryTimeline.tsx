@@ -459,7 +459,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
       // If we have flight segments, create an event for each segment
       if (service.flightSegments && service.flightSegments.length > 0) {
         for (const rawSeg of service.flightSegments) {
-          const segment = normalizeSegment(rawSeg as Record<string, unknown>);
+          const segment = normalizeSegment(rawSeg as unknown as Record<string, unknown>);
           // Deduplication: parent (res_status changed) and Change service may share same segments
           const segmentKey = `${segment.departureDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
           if (seenSegmentKeys.has(segmentKey)) continue;

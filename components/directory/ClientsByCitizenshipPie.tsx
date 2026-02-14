@@ -51,9 +51,10 @@ export function ClientsByCitizenshipPie({ data, totalClients }: ClientsByCitizen
             ))}
           </Pie>
           <Tooltip
-            formatter={(value: number) => {
-              const pct = total > 0 ? ((Number(value) / total) * 100).toFixed(0) : "0";
-              return [`${value} (${pct}%)`, "Clients"];
+            formatter={(value?: number) => {
+              const v = Number(value ?? 0);
+              const pct = total > 0 ? ((v / total) * 100).toFixed(0) : "0";
+              return [`${v} (${pct}%)`, "Clients"];
             }}
             contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
           />

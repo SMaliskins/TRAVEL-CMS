@@ -134,6 +134,7 @@ interface Company {
   beneficiary_name?: string;
   // Regional Settings
   default_currency?: string;
+  default_vat_rate?: number;
   date_format?: string;
   document_language?: string;
   timezone?: string;
