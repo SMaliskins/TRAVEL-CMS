@@ -2,10 +2,17 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/contexts/ToastContext";
 import { supabase } from "@/lib/supabaseClient";
-import AssignedTravellersModal from "./AssignedTravellersModal";
-import AddServiceModal, { ServiceData } from "./AddServiceModal";
+// Ensure components are actual functions (fix ESM/CJS interop "got: object" error)
+import AssignedTravellersModalModule from "./AssignedTravellersModal";
+import AddServiceModalModule, { ServiceData } from "./AddServiceModal";
+
+const AssignedTravellersModal = (typeof AssignedTravellersModalModule === "function"
+  ? AssignedTravellersModalModule
+  : (AssignedTravellersModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
+const AddServiceModal = (typeof AddServiceModalModule === "function"
+  ? AddServiceModalModule
+  : (AddServiceModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
 import DateRangePicker from "@/components/DateRangePicker";
 import PartyCombobox from "./PartyCombobox";
 import EditServiceModalNew from "./EditServiceModalNew";
@@ -13,7 +20,6 @@ import SplitServiceModal from "./SplitServiceModal";
 import SplitModalMulti from "./SplitModalMulti";
 import MergeServicesModal from "./MergeServicesModal";
 import ConfirmModal from "@/components/ConfirmModal";
-import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
@@ -23,7 +29,6 @@ import { getCityByName, getCityByIATA } from "@/lib/data/cities";
 import ItineraryTabs from "./ItineraryTabs";
 import SmartHintRow from "./SmartHintRow";
 import ItineraryTimeline, { SelectedBoardingPass } from "./ItineraryTimeline";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { 
   getRefundPolicyBadge, 
   getDeadlineUrgency, 
@@ -34,8 +39,6 @@ import {
   getPriceTypeLabel
 } from "@/lib/services/deadlineCalculator";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
-import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
-import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
 interface Traveller {
   id: string;
@@ -122,70 +125,35 @@ interface Service {
   agentDiscountType?: "%" | "€" | null;
 }
 
-// Fallback when API is unavailable (same names/types as AddServiceModal)
-const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_rate?: number }[] = [
-  { id: "fallback-flight", name: "Flight", type: "flight", vat_rate: 0 },
-  { id: "fallback-hotel", name: "Hotel", type: "hotel", vat_rate: 21 },
-  { id: "fallback-transfer", name: "Transfer", type: "transfer", vat_rate: 21 },
-  { id: "fallback-tour", name: "Package Tour", type: "tour", vat_rate: 21 },
-  { id: "fallback-insurance", name: "Insurance", type: "insurance", vat_rate: 21 },
-  { id: "fallback-visa", name: "Visa", type: "visa", vat_rate: 21 },
-  { id: "fallback-rent_a_car", name: "Rent a Car", type: "rent_a_car", vat_rate: 21 },
-  { id: "fallback-cruise", name: "Cruise", type: "cruise", vat_rate: 21 },
-  { id: "fallback-other", name: "Other", type: "other", vat_rate: 21 },
-];
+function toTitleCase(str: string): string {
+  return str
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(" ");
+}
 
-function ChooseServiceTypeModal({
-  categories,
-  onSelect,
-  onClose,
-}: {
-  categories: { id: string; name: string; type?: string; vat_rate?: number }[];
-  onSelect: (categoryId: string, category?: { id: string; name: string; type?: string; vat_rate?: number }) => void;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-xl bg-white shadow-xl p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">What service are you adding?</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            aria-label="Close"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => onSelect(cat.id, cat)}
-              className="flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800"
-            >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+// Format hotel/tour name: Title Case hotel + " 5*" + Title Case room + meal (parsed text for Package Tour, else board labels)
+function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: string | null; hotelRoom?: string | null; hotelBoard?: string | null; mealPlanText?: string | null }, fallback: string): string {
+  const name = (s.hotelName || "").trim();
+  const parts: string[] = [];
+  if (name) parts.push(toTitleCase(name));
+  if (s.hotelStarRating?.trim()) parts.push(`${s.hotelStarRating.trim().replace(/\*/g, "")}*`);
+  if (s.hotelRoom?.trim()) parts.push(toTitleCase(s.hotelRoom.trim()));
+  const boardLabels: Record<string, string> = {
+    room_only: "Room Only",
+    breakfast: "Breakfast",
+    half_board: "Half Board",
+    full_board: "Full Board",
+    all_inclusive: "All Inclusive",
+  };
+  const board = s.mealPlanText?.trim()
+    ? toTitleCase(s.mealPlanText.trim())
+    : s.hotelBoard
+      ? boardLabels[String(s.hotelBoard)] || toTitleCase(String(s.hotelBoard))
+      : null;
+  if (board) parts.push(board);
+  return parts.length > 0 ? parts.join(" · ").replace(/\* · /g, "*· ") : toTitleCase(fallback);
 }
 
 interface OrderServicesBlockProps {
@@ -220,14 +188,6 @@ export default function OrderServicesBlock({
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showChooseCategoryModal, setShowChooseCategoryModal] = useState(false);
-  const [addServiceCategoryId, setAddServiceCategoryId] = useState<string | null>(null);
-  const [addServiceCategoryType, setAddServiceCategoryType] = useState<string | null>(null);
-  const [addServiceCategoryName, setAddServiceCategoryName] = useState<string | null>(null);
-  const [addServiceCategoryVatRate, setAddServiceCategoryVatRate] = useState<number | null>(null);
-  // Preloaded categories so "What service?" opens with final names (no substitution)
-  const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
-  const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   
@@ -1100,52 +1060,6 @@ export default function OrderServicesBlock({
     fetchTravellers();
   }, [fetchServices, fetchTravellers]);
 
-  // Preload categories so "What service?" opens with final names (no substitution)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-          return;
-        }
-        const res = await fetch("/api/travel-service-categories", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          credentials: "include",
-        });
-        if (cancelled) return;
-        if (res.ok) {
-          const data = await res.json();
-          const list = (data.categories || []).filter((c: { is_active?: boolean }) => c.is_active !== false);
-          if (list.length > 0) {
-            setServiceCategories(list.map((c: { id: string; name: string; type?: string; vat_rate?: number }) => ({
-              id: c.id,
-              name: c.name,
-              type: typeof c.type === "string" ? c.type.toLowerCase() : "other",
-              vat_rate: typeof c.vat_rate === "number" ? c.vat_rate : 21,
-            })));
-          } else {
-            setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-          }
-        } else {
-          setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-        }
-      } catch {
-        if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // When categories load and user had clicked Add Service, open chooser
-  useEffect(() => {
-    if (serviceCategories.length > 0 && pendingOpenChooseModal) {
-      setPendingOpenChooseModal(false);
-      setShowChooseCategoryModal(true);
-    }
-  }, [serviceCategories.length, pendingOpenChooseModal]);
-
   // Handle new service added
   const handleServiceAdded = (service: ServiceData) => {
     const newService: Service = {
@@ -1499,13 +1413,7 @@ export default function OrderServicesBlock({
               {hideCancelled ? "Show" : "Hide"} Cancelled
             </button>
             <button
-              onClick={() => {
-              if (serviceCategories.length > 0) {
-                setShowChooseCategoryModal(true);
-              } else {
-                setPendingOpenChooseModal(true);
-              }
-            }}
+              onClick={() => setShowAddModal(true)}
               className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1971,22 +1879,6 @@ export default function OrderServicesBlock({
         />
       )}
 
-      {showChooseCategoryModal && (
-        <ChooseServiceTypeModal
-          categories={serviceCategories.length > 0 ? serviceCategories : CHOOSE_CATEGORY_FALLBACK}
-          onSelect={(categoryId, category) => {
-            setAddServiceCategoryId(categoryId);
-            setAddServiceCategoryType(category?.type ?? null);
-            setAddServiceCategoryName(category?.name ?? null);
-            setAddServiceCategoryVatRate(category?.vat_rate ?? null);
-            setShowChooseCategoryModal(false);
-            // Open add modal next tick so category type/name/vat state is committed before first paint
-            setTimeout(() => setShowAddModal(true), 0);
-          }}
-          onClose={() => setShowChooseCategoryModal(false)}
-        />
-      )}
-
       {showAddModal && (
         <AddServiceModal
           orderDateFrom={orderDateFrom}
@@ -1994,17 +1886,7 @@ export default function OrderServicesBlock({
           orderCode={orderCode}
           defaultClientId={defaultClientId}
           defaultClientName={defaultClientName}
-          initialCategoryId={addServiceCategoryId ?? undefined}
-          initialCategoryType={addServiceCategoryType ?? undefined}
-          initialCategoryName={addServiceCategoryName ?? undefined}
-          initialVatRate={addServiceCategoryVatRate ?? undefined}
-          onClose={() => {
-            setShowAddModal(false);
-            setAddServiceCategoryId(null);
-            setAddServiceCategoryType(null);
-            setAddServiceCategoryName(null);
-            setAddServiceCategoryVatRate(null);
-          }}
+          onClose={() => setShowAddModal(false)}
           onServiceAdded={handleServiceAdded}
         />
       )}
