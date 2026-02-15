@@ -2143,7 +2143,7 @@ export default function OrderServicesBlock({
             orderCode={orderCode}
             companyCurrencyCode={companyCurrencyCode}
             onClose={() => setEditServiceId(null)}
-            onServiceUpdated={(updated) => {
+            onServiceUpdated={(updated: Partial<Service> & { id: string }) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
               setEditServiceId(null);
               // Refresh travellers and services after update (clients may have been added)

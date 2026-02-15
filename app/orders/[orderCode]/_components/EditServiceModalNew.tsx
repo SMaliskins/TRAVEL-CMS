@@ -69,6 +69,7 @@ interface Service {
   transferType?: string;
   additionalServices?: string;
   hotelBoard?: "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai";
+  mealPlanText?: string;
   hotelBedType?: "king_queen" | "twin" | "not_guaranteed";
   hotelEarlyCheckIn?: boolean;
   hotelLateCheckIn?: boolean;
@@ -1519,6 +1520,7 @@ export default function EditServiceModalNew({
           });
         }
 
+        const opt = (v: string | null | undefined) => (v?.trim() ? v.trim() : undefined);
         onServiceUpdated({
           id: service.id,
           name: serviceName,
@@ -1537,34 +1539,32 @@ export default function EditServiceModalNew({
           ticketNumbers: categoryType === "flight" ? ticketNumbers : undefined,
           dateFrom,
           dateTo,
-          // Flight-specific fields
+          // Flight-specific
           cabinClass: categoryType === "flight" ? cabinClass : undefined,
           baggage: categoryType === "flight" ? baggage : undefined,
           flightSegments: categoryType === "flight" ? flightSegments : undefined,
-          // Hotel / Tour: so list and re-open Edit show saved values
-          ...(showHotelFields || categoryType === "tour" ? {
-            hotelName: hotelName || null,
-            hotelAddress: hotelAddress || null,
-            hotelPhone: hotelPhone || null,
-            hotelEmail: hotelEmail || null,
-            hotelRoom: hotelRoom || null,
-            hotelBoard: hotelBoard || null,
-            hotelBedType: hotelBedType || null,
-            hotelStarRating: categoryType === "tour" ? (hotelStarRating || null) : undefined,
-            mealPlanText: categoryType === "tour" ? (mealPlanText?.trim() || null) : undefined,
-            transferType: categoryType === "tour" ? (transferType || null) : undefined,
-            additionalServices: categoryType === "tour" ? (additionalServices || null) : undefined,
-            hotelEarlyCheckIn: hotelPreferences.earlyCheckIn ?? undefined,
-            hotelLateCheckIn: hotelPreferences.lateCheckIn ?? undefined,
-            hotelHigherFloor: hotelPreferences.higherFloor ?? undefined,
-            hotelKingSizeBed: hotelPreferences.kingSizeBed ?? undefined,
-            hotelHoneymooners: hotelPreferences.honeymooners ?? undefined,
-            hotelSilentRoom: hotelPreferences.silentRoom ?? undefined,
-            hotelRoomsNextTo: hotelPreferences.roomsNextTo || undefined,
-            hotelParking: hotelPreferences.parking ?? undefined,
-            hotelPreferencesFreeText: hotelPreferences.freeText || undefined,
-          } : {}),
-          // Tour: so list keeps discount and Edit reopens with correct values
+          // Hotel / Tour: Service expects string | undefined, not null (use opt())
+          hotelName: (showHotelFields || categoryType === "tour") ? opt(hotelName) : undefined,
+          hotelAddress: (showHotelFields || categoryType === "tour") ? opt(hotelAddress) : undefined,
+          hotelPhone: showHotelFields ? opt(hotelPhone) : undefined,
+          hotelEmail: showHotelFields ? opt(hotelEmail) : undefined,
+          hotelRoom: (showHotelFields || categoryType === "tour") ? opt(hotelRoom) : undefined,
+          hotelBoard: (showHotelFields || categoryType === "tour") ? (hotelBoard || undefined) : undefined,
+          hotelBedType: showHotelFields ? (hotelBedType || undefined) : undefined,
+          hotelStarRating: categoryType === "tour" ? opt(hotelStarRating) : undefined,
+          mealPlanText: categoryType === "tour" ? opt(mealPlanText) : undefined,
+          transferType: categoryType === "tour" ? opt(transferType) : undefined,
+          additionalServices: categoryType === "tour" ? opt(additionalServices) : undefined,
+          hotelEarlyCheckIn: showHotelFields ? hotelPreferences.earlyCheckIn ?? undefined : undefined,
+          hotelLateCheckIn: showHotelFields ? hotelPreferences.lateCheckIn ?? undefined : undefined,
+          hotelHigherFloor: showHotelFields ? hotelPreferences.higherFloor ?? undefined : undefined,
+          hotelKingSizeBed: showHotelFields ? hotelPreferences.kingSizeBed ?? undefined : undefined,
+          hotelHoneymooners: showHotelFields ? hotelPreferences.honeymooners ?? undefined : undefined,
+          hotelSilentRoom: showHotelFields ? hotelPreferences.silentRoom ?? undefined : undefined,
+          hotelRoomsNextTo: showHotelFields ? (hotelPreferences.roomsNextTo || undefined) : undefined,
+          hotelParking: showHotelFields ? hotelPreferences.parking ?? undefined : undefined,
+          hotelPreferencesFreeText: showHotelFields ? (hotelPreferences.freeText || undefined) : undefined,
+          // Tour: commission accepts null
           commissionName: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.name ?? null : null) : undefined,
           commissionRate: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.rate ?? null : Number(service.commissionRate) ?? null) : undefined,
           commissionAmount: categoryType === "tour" ? (() => { const c = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null; const cost = parseFloat(servicePrice) || 0; return c?.rate != null && c.rate > 0 ? Math.round((cost * c.rate / 100) * 100) / 100 : (Number(service.commissionAmount) || 0); })() : undefined,
