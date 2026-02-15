@@ -347,6 +347,7 @@ export default function OrderServicesBlock({
   const [bulkSearchResults, setBulkSearchResults] = useState<Array<{ id: string; displayName: string; type: string }>>([]);
   const [bulkSearchLoading, setBulkSearchLoading] = useState(false);
   const [bulkSelectedClients, setBulkSelectedClients] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [geocodedCoords, setGeocodedCoords] = useState<Record<string, { lat: number; lng: number }>>({});
   
   // Draggable floating bar state
   const [floatingBarPosition, setFloatingBarPosition] = useState<{ x: number; y: number } | null>(null);
@@ -653,33 +654,29 @@ export default function OrderServicesBlock({
     }
     
     if (routePoints.length === 0) {
-      const hotelServices = activeServices.filter(s => 
-        (s.category === "Hotel" || s.category === "Tour") && s.dateFrom && s.dateTo
+      const cat = (s: { category?: string }) => (s.category || "").trim().toLowerCase();
+      const hotelServices = activeServices.filter(s =>
+        cat(s) === "hotel" || (cat(s) === "tour" && (s as { hotelName?: string }).hotelName)
       );
       for (const hotel of hotelServices) {
-        if (hotel.dateFrom && hotel.dateTo) {
-          const checkIn = new Date(hotel.dateFrom);
-          const checkOut = new Date(hotel.dateTo);
-          const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-          if (nights >= 1) {
-            const hotelCity = (hotel as { hotelName?: string }).hotelName?.split(",")[0]?.trim()
-              || hotel.name?.split(",")[0]?.trim()
-              || hotel.supplier?.split(",")[0]?.trim();
-            if (hotelCity && !seenCities.has(hotelCity.toLowerCase())) {
-              seenCities.add(hotelCity.toLowerCase());
-              const cityData = getCityByName(hotelCity);
-              if (cityData) {
-                routePoints.push({
-                  city: cityData.name,
-                  country: cityData.country || "",
-                  countryCode: cityData.countryCode,
-                  lat: cityData.lat,
-                  lng: cityData.lng,
-                });
-              }
-            }
-          }
-        }
+        const rawName = (hotel as { hotelName?: unknown; hotel_name?: unknown }).hotelName
+          ?? (hotel as { hotel_name?: unknown }).hotel_name ?? hotel.name ?? hotel.supplier ?? "";
+        const rawAddr = (hotel as { hotelAddress?: unknown; hotel_address?: unknown }).hotelAddress
+          ?? (hotel as { hotel_address?: unknown }).hotel_address ?? "";
+        const hotelName = (typeof rawName === "string" ? rawName : String(rawName || "")).trim();
+        const hotelAddress = (typeof rawAddr === "string" ? rawAddr : String(rawAddr || "")).trim();
+        const query = hotelAddress || hotelName;
+        if (!query) continue;
+        const key = `${hotel.id}|${query}`;
+        const coords = geocodedCoords[key];
+        if (!coords) continue;
+        routePoints.push({
+          city: [hotelName, hotelAddress].filter(Boolean).join(" — ") || query,
+          country: "",
+          countryCode: undefined,
+          lat: coords.lat,
+          lng: coords.lng,
+        });
       }
     }
     
@@ -687,7 +684,51 @@ export default function OrderServicesBlock({
     if (routePoints.length > 0) return routePoints;
     const hasActiveServices = services.some(s => s.resStatus !== "cancelled");
     return hasActiveServices ? itineraryDestinations : [];
-  }, [services, itineraryDestinations, selectedTravellerId]);
+  }, [services, itineraryDestinations, selectedTravellerId, geocodedCoords]);
+
+  // Geocode hotel addresses via Nominatim when no flight route (so map shows hotel points)
+  useEffect(() => {
+    const activeServices = services.filter(s => {
+      if (s.resStatus === "cancelled") return false;
+      if (selectedTravellerId && !s.assignedTravellerIds.includes(selectedTravellerId)) return false;
+      return true;
+    });
+    const cat = (s: { category?: string }) => (s.category || "").trim().toLowerCase();
+    const hotelServices = activeServices.filter(s =>
+      cat(s) === "hotel" || (cat(s) === "tour" && (s as { hotelName?: string }).hotelName)
+    );
+    let cancelled = false;
+    (async () => {
+      for (const hotel of hotelServices) {
+        if (cancelled) break;
+        const rawName = (hotel as { hotelName?: unknown; hotel_name?: unknown }).hotelName
+          ?? (hotel as { hotel_name?: unknown }).hotel_name ?? hotel.name ?? hotel.supplier ?? "";
+        const rawAddr = (hotel as { hotelAddress?: unknown; hotel_address?: unknown }).hotelAddress
+          ?? (hotel as { hotel_address?: unknown }).hotel_address ?? "";
+        const hotelName = (typeof rawName === "string" ? rawName : String(rawName || "")).trim();
+        const hotelAddress = (typeof rawAddr === "string" ? rawAddr : String(rawAddr || "")).trim();
+        const query = (hotelAddress || hotelName).trim();
+        if (!query) continue;
+        const key = `${hotel.id}|${query}`;
+        if (geocodedCoords[key]) continue;
+        try {
+          const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { credentials: "include" });
+          if (cancelled) break;
+          if (!res.ok) continue;
+          const json = await res.json();
+          const lat = json?.data?.lat;
+          const lng = json?.data?.lng;
+          if (typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)) {
+            setGeocodedCoords(prev => (prev[key] ? prev : { ...prev, [key]: { lat, lng } }));
+          }
+        } catch {
+          // ignore
+        }
+        await new Promise(r => setTimeout(r, 1100));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [services, selectedTravellerId, geocodedCoords]);
 
   // Colors for different travellers
   const ROUTE_COLORS = [

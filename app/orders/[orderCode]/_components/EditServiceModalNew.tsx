@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PartySelect from '@/components/PartySelect';
 import DateRangePicker from '@/components/DateRangePicker';
@@ -12,6 +12,17 @@ import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
 import HotelSuggestInput from '@/components/HotelSuggestInput';
 import type { SupplierCommission } from '@/lib/types/directory';
+
+const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
+const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
+const BOARD_LABELS: Record<string, string> = {
+  room_only: "Room only",
+  breakfast: "Breakfast",
+  half_board: "Half board",
+  full_board: "Full board",
+  all_inclusive: "AI (All inclusive)",
+  uai: "UAI (Ultra All Inclusive)",
+};
 
 // Functional types that determine which features are available
 type CategoryType = 'flight' | 'hotel' | 'transfer' | 'tour' | 'insurance' | 'visa' | 'rent_a_car' | 'cruise' | 'other';
@@ -290,7 +301,22 @@ export default function EditServiceModalNew({
   const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct">(
     (service.supplierBookingType as any) || "gds"
   );
-  
+  const hotelOptionsFetchedForRef = useRef<string | null>(null);
+  const [roomListOpen, setRoomListOpen] = useState(false);
+  const [boardListOpen, setBoardListOpen] = useState(false);
+  const roomListRef = useRef<HTMLDivElement>(null);
+  const roomListRef2 = useRef<HTMLDivElement>(null);
+  const boardListRef = useRef<HTMLDivElement>(null);
+  const boardListRef2 = useRef<HTMLDivElement>(null);
+  const [customRooms, setCustomRooms] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(CUSTOM_ROOMS_KEY) || "[]"); } catch { return []; }
+  });
+  const [customBoards, setCustomBoards] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(CUSTOM_BOARDS_KEY) || "[]"); } catch { return []; }
+  });
+
   // Transfer-specific fields
   const [pickupLocation, setPickupLocation] = useState(service.pickupLocation || "");
   const [dropoffLocation, setDropoffLocation] = useState(service.dropoffLocation || "");
@@ -577,6 +603,60 @@ export default function EditServiceModalNew({
   useEffect(() => {
     loadCategories();
   }, [loadCategories]);
+
+  // When Edit opens with a hotel name, fetch room/meal options from Ratehawk so "From hotel" hints appear without re-selecting
+  useEffect(() => {
+    if (categoryType !== "hotel" || !hotelName.trim() || hotelName.trim().length < 2) return;
+    const key = hotelName.trim().toLowerCase();
+    if (hotelOptionsFetchedForRef.current === key) return;
+    hotelOptionsFetchedForRef.current = key;
+    let cancelled = false;
+    (async () => {
+      try {
+        const suggestRes = await fetch("/api/ratehawk/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: hotelName.trim(), language: "en" }),
+        });
+        const suggestJson = await suggestRes.json();
+        if (cancelled || !suggestRes.ok || !suggestJson.data?.hotels?.length) return;
+        const hotels = suggestJson.data.hotels as { hid: number; name: string }[];
+        const first = hotels[0];
+        const contentRes = await fetch("/api/ratehawk/hotel-content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hids: [first.hid], language: "en" }),
+        });
+        const contentJson = await contentRes.json();
+        if (cancelled || !contentRes.ok || !contentJson.data?.[0]) return;
+        const h = contentJson.data[0];
+        const roomOpts = h.room_groups?.map((rg: { name?: string }) => rg.name?.trim()).filter(Boolean) ?? [];
+        const roomOptions = roomOpts.length ? [...new Set(roomOpts)] as string[] : [];
+        const mealOptions = (h.meal_types as string[] | undefined)?.length ? (h.meal_types as string[]) : [];
+        if (cancelled) return;
+        setHotelRoomOptions(roomOptions);
+        setHotelMealOptions(mealOptions);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [categoryType, hotelName]);
+
+  // Close room/board list on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (roomListRef.current?.contains(target) || roomListRef2.current?.contains(target) || boardListRef.current?.contains(target) || boardListRef2.current?.contains(target)) return;
+      setRoomListOpen(false);
+      setBoardListOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const roomOptionsForDropdown = useMemo(() => [...new Set([...hotelRoomOptions, ...customRooms])], [hotelRoomOptions, customRooms]);
+  const boardOptionsForDropdown = useMemo(() => [...new Set([...Object.values(BOARD_LABELS), ...hotelMealOptions, ...customBoards])], [hotelMealOptions, customBoards]);
 
   // Map meal plan abbreviation to hotel_board (AI and UAI are different: AI = All Inclusive, UAI = Ultra All Inclusive)
   const mapMealPlanToBoard = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
@@ -1401,6 +1481,29 @@ export default function EditServiceModalNew({
           cabinClass: categoryType === "flight" ? cabinClass : undefined,
           baggage: categoryType === "flight" ? baggage : undefined,
           flightSegments: categoryType === "flight" ? flightSegments : undefined,
+          // Hotel / Tour: so list and re-open Edit show saved values
+          ...(showHotelFields || categoryType === "tour" ? {
+            hotelName: hotelName || null,
+            hotelAddress: hotelAddress || null,
+            hotelPhone: hotelPhone || null,
+            hotelEmail: hotelEmail || null,
+            hotelRoom: hotelRoom || null,
+            hotelBoard: hotelBoard || null,
+            hotelBedType: hotelBedType || null,
+            hotelStarRating: categoryType === "tour" ? (hotelStarRating || null) : undefined,
+            mealPlanText: categoryType === "tour" ? (mealPlanText?.trim() || null) : undefined,
+            transferType: categoryType === "tour" ? (transferType || null) : undefined,
+            additionalServices: categoryType === "tour" ? (additionalServices || null) : undefined,
+            hotelEarlyCheckIn: hotelPreferences.earlyCheckIn ?? undefined,
+            hotelLateCheckIn: hotelPreferences.lateCheckIn ?? undefined,
+            hotelHigherFloor: hotelPreferences.higherFloor ?? undefined,
+            hotelKingSizeBed: hotelPreferences.kingSizeBed ?? undefined,
+            hotelHoneymooners: hotelPreferences.honeymooners ?? undefined,
+            hotelSilentRoom: hotelPreferences.silentRoom ?? undefined,
+            hotelRoomsNextTo: hotelPreferences.roomsNextTo || undefined,
+            hotelParking: hotelPreferences.parking ?? undefined,
+            hotelPreferencesFreeText: hotelPreferences.freeText || undefined,
+          } : {}),
           // Tour: so list keeps discount and Edit reopens with correct values
           commissionName: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.name ?? null : null) : undefined,
           commissionRate: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.rate ?? null : Number(service.commissionRate) ?? null) : undefined,
@@ -1730,39 +1833,64 @@ export default function EditServiceModalNew({
                     />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <div>
+                    <div ref={roomListRef} className="relative">
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
                       <input
                         type="text"
-                        list="edit-hotel-room-datalist"
                         value={hotelRoom}
                         onChange={(e) => setHotelRoom(e.target.value)}
-                        placeholder="Room type (or choose from hotel)"
+                        onFocus={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
+                        onClick={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
+                        onBlur={() => {
+                          const v = hotelRoom.trim();
+                          if (v && !roomOptionsForDropdown.includes(v)) {
+                            const next = [...customRooms, v];
+                            setCustomRooms(next);
+                            try { localStorage.setItem(CUSTOM_ROOMS_KEY, JSON.stringify(next)); } catch {}
+                          }
+                        }}
+                        placeholder="Room type (click to choose or type your own)"
                         className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                       />
-                      {hotelRoomOptions.length > 0 && (
-                        <datalist id="edit-hotel-room-datalist">
-                          {hotelRoomOptions.map((opt) => (
-                            <option key={opt} value={opt} />
+                      {roomListOpen && roomOptionsForDropdown.length > 0 && (
+                        <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
+                          {roomOptionsForDropdown.map((opt) => (
+                            <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { setHotelRoom(opt); setRoomListOpen(false); }}>{opt}</button>
                           ))}
-                        </datalist>
+                        </div>
                       )}
                     </div>
-                    <div>
+                    <div ref={boardListRef} className="relative">
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
-                      {hotelMealOptions.length > 0 && (
-                        <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
-                          <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
-                        ))}</p>
+                      <input
+                        type="text"
+                        value={mealPlanText || BOARD_LABELS[hotelBoard] || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMealPlanText(v);
+                          const mapped = (Object.entries(BOARD_LABELS).find(([, l]) => l === v)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(v);
+                          setHotelBoard(mapped);
+                        }}
+                        onFocus={() => boardOptionsForDropdown.length > 0 && setBoardListOpen(true)}
+                        onClick={() => boardOptionsForDropdown.length > 0 && setBoardListOpen(true)}
+                        onBlur={() => {
+                          const v = (mealPlanText || BOARD_LABELS[hotelBoard] || "").trim();
+                          if (v && !boardOptionsForDropdown.includes(v)) {
+                            const next = [...customBoards, v];
+                            setCustomBoards(next);
+                            try { localStorage.setItem(CUSTOM_BOARDS_KEY, JSON.stringify(next)); } catch {}
+                          }
+                        }}
+                        placeholder="Board (click to choose or type your own)"
+                        className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                      />
+                      {boardListOpen && boardOptionsForDropdown.length > 0 && (
+                        <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
+                          {boardOptionsForDropdown.map((opt) => (
+                            <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { setMealPlanText(opt); setHotelBoard((Object.entries(BOARD_LABELS).find(([, l]) => l === opt)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(opt)); setBoardListOpen(false); }}>{opt}</button>
+                          ))}
+                        </div>
                       )}
-                      <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
-                        <option value="room_only">Room only</option>
-                        <option value="breakfast">Breakfast</option>
-                        <option value="half_board">Half board</option>
-                        <option value="full_board">Full board</option>
-                        <option value="all_inclusive">AI (All inclusive)</option>
-                        <option value="uai">UAI (Ultra All Inclusive)</option>
-                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>
@@ -2694,39 +2822,64 @@ export default function EditServiceModalNew({
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div>
+                <div ref={roomListRef2} className="relative">
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
                   <input
                     type="text"
-                    list="edit-hotel-room-datalist-2"
                     value={hotelRoom}
                     onChange={(e) => setHotelRoom(e.target.value)}
-                    placeholder="Room type (or choose from hotel)"
+                    onFocus={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
+                    onClick={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
+                    onBlur={() => {
+                      const v = hotelRoom.trim();
+                      if (v && !roomOptionsForDropdown.includes(v)) {
+                        const next = [...customRooms, v];
+                        setCustomRooms(next);
+                        try { localStorage.setItem(CUSTOM_ROOMS_KEY, JSON.stringify(next)); } catch {}
+                      }
+                    }}
+                    placeholder="Room type (click to choose or type your own)"
                     className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                   />
-                  {hotelRoomOptions.length > 0 && (
-                    <datalist id="edit-hotel-room-datalist-2">
-                      {hotelRoomOptions.map((opt) => (
-                        <option key={opt} value={opt} />
+                  {roomListOpen && roomOptionsForDropdown.length > 0 && (
+                    <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
+                      {roomOptionsForDropdown.map((opt) => (
+                        <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { setHotelRoom(opt); setRoomListOpen(false); }}>{opt}</button>
                       ))}
-                    </datalist>
+                    </div>
                   )}
                 </div>
-                <div>
+                <div ref={boardListRef2} className="relative">
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
-                  {hotelMealOptions.length > 0 && (
-                    <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
-                      <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
-                    ))}</p>
+                  <input
+                    type="text"
+                    value={mealPlanText || BOARD_LABELS[hotelBoard] || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setMealPlanText(v);
+                      const mapped = (Object.entries(BOARD_LABELS).find(([, l]) => l === v)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(v);
+                      setHotelBoard(mapped);
+                    }}
+                    onFocus={() => boardOptionsForDropdown.length > 0 && setBoardListOpen(true)}
+                    onClick={() => boardOptionsForDropdown.length > 0 && setBoardListOpen(true)}
+                    onBlur={() => {
+                      const v = (mealPlanText || BOARD_LABELS[hotelBoard] || "").trim();
+                      if (v && !boardOptionsForDropdown.includes(v)) {
+                        const next = [...customBoards, v];
+                        setCustomBoards(next);
+                        try { localStorage.setItem(CUSTOM_BOARDS_KEY, JSON.stringify(next)); } catch {}
+                      }
+                    }}
+                    placeholder="Board (click to choose or type your own)"
+                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                  />
+                  {boardListOpen && boardOptionsForDropdown.length > 0 && (
+                    <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
+                      {boardOptionsForDropdown.map((opt) => (
+                        <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { setMealPlanText(opt); setHotelBoard((Object.entries(BOARD_LABELS).find(([, l]) => l === opt)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(opt)); setBoardListOpen(false); }}>{opt}</button>
+                      ))}
+                    </div>
                   )}
-                  <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
-                    <option value="room_only">Room only</option>
-                    <option value="breakfast">Breakfast</option>
-                    <option value="half_board">Half board</option>
-                    <option value="full_board">Full board</option>
-                    <option value="all_inclusive">AI (All inclusive)</option>
-                    <option value="uai">UAI (Ultra All Inclusive)</option>
-                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>

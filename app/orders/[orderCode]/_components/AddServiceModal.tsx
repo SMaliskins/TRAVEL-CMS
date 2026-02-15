@@ -1672,21 +1672,27 @@ export default function AddServiceModal({
                         value={hotelRoom}
                         onChange={(e) => setHotelRoom(e.target.value)}
                         placeholder="Room type (or choose from hotel)"
+                        title={hotelRoom || undefined}
                         className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                       />
                       {hotelRoomOptions.length > 0 && (
-                        <datalist id="add-hotel-room-datalist">
-                          {hotelRoomOptions.map((opt) => (
-                            <option key={opt} value={opt} />
-                          ))}
-                        </datalist>
+                        <>
+                          <p className="text-xs text-amber-600 mb-1 mt-0.5">From hotel: {hotelRoomOptions.map((opt) => (
+                            <button key={opt} type="button" onClick={() => setHotelRoom(opt)} title={opt} className="mr-1.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{opt}</button>
+                          ))}</p>
+                          <datalist id="add-hotel-room-datalist">
+                            {hotelRoomOptions.map((opt) => (
+                              <option key={opt} value={opt} />
+                            ))}
+                          </datalist>
+                        </>
                       )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
                       {hotelMealOptions.length > 0 && (
                         <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
-                          <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
+                          <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} title={meal} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{meal}</button>
                         ))}</p>
                       )}
                       <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
@@ -2708,21 +2714,27 @@ export default function AddServiceModal({
                     value={hotelRoom}
                     onChange={(e) => setHotelRoom(e.target.value)}
                     placeholder="Room type (or choose from hotel)"
+                    title={hotelRoom || undefined}
                     className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                   />
                   {hotelRoomOptions.length > 0 && (
-                    <datalist id="add-hotel-room-datalist-2">
-                      {hotelRoomOptions.map((opt) => (
-                        <option key={opt} value={opt} />
-                      ))}
-                    </datalist>
+                    <>
+                      <p className="text-xs text-amber-600 mb-1 mt-0.5">From hotel: {hotelRoomOptions.map((opt) => (
+                        <button key={opt} type="button" onClick={() => setHotelRoom(opt)} title={opt} className="mr-1.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{opt}</button>
+                      ))}</p>
+                      <datalist id="add-hotel-room-datalist-2">
+                        {hotelRoomOptions.map((opt) => (
+                          <option key={opt} value={opt} />
+                        ))}
+                      </datalist>
+                    </>
                   )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
                   {hotelMealOptions.length > 0 && (
                     <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
-                      <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
+                      <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} title={meal} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{meal}</button>
                     ))}</p>
                   )}
                   <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">

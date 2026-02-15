@@ -104,6 +104,7 @@ export const CITIES: City[] = [
   // Turkey
   { name: "Istanbul", country: "Turkey", countryCode: "TR", lat: 41.0082, lng: 28.9784, iataCode: "IST" },
   { name: "Antalya", country: "Turkey", countryCode: "TR", lat: 36.8969, lng: 30.7133, iataCode: "AYT" },
+  { name: "Kadriye", country: "Turkey", countryCode: "TR", lat: 36.7689, lng: 31.3917 },
   { name: "Bodrum", country: "Turkey", countryCode: "TR", lat: 37.0343, lng: 27.4305, iataCode: "BJV" },
   { name: "Cappadocia", country: "Turkey", countryCode: "TR", lat: 38.6431, lng: 34.8289, iataCode: "NAV" },
   
