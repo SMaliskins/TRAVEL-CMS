@@ -10,6 +10,7 @@ import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
+import HotelSuggestInput from '@/components/HotelSuggestInput';
 import type { SupplierCommission } from '@/lib/types/directory';
 
 // Functional types that determine which features are available
@@ -262,6 +263,10 @@ export default function EditServiceModalNew({
   const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">(
     (service.hotelBoard as any) || "room_only"
   );
+  /** Room types from Ratehawk for selected hotel — click to choose */
+  const [hotelRoomOptions, setHotelRoomOptions] = useState<string[]>([]);
+  /** Meal types from Ratehawk for selected hotel — click to choose */
+  const [hotelMealOptions, setHotelMealOptions] = useState<string[]>([]);
   const [mealPlanText, setMealPlanText] = useState<string>(() => {
     if ((service as { mealPlanText?: string }).mealPlanText?.trim()) return (service as { mealPlanText?: string }).mealPlanText!.trim();
     const b = (service.hotelBoard as any) || "room_only";
@@ -582,6 +587,17 @@ export default function EditServiceModalNew({
     if (p === "FB" || p === "FULL BOARD") return "full_board";
     if (p === "UAI" || p === "ULTRA ALL INCLUSIVE") return "uai";
     if (p === "AI" || p === "ALL INCLUSIVE") return "all_inclusive";
+    return "room_only";
+  };
+  // Ratehawk meal label → hotel_board (for Board dropdown from API; uses .includes for long labels)
+  const mapRatehawkMealToBoard = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
+    const p = (plan || "").toUpperCase();
+    if (p.includes("RO") || p.includes("ROOM ONLY")) return "room_only";
+    if (p.includes("BB") || p.includes("BED AND BREAKFAST") || p.includes("BREAKFAST")) return "breakfast";
+    if (p.includes("HB") || p.includes("HALF BOARD")) return "half_board";
+    if (p.includes("FB") || p.includes("FULL BOARD")) return "full_board";
+    if (p.includes("UAI") || p.includes("ULTRA ALL INCLUSIVE")) return "uai";
+    if (p.includes("AI") || p.includes("ALL INCLUSIVE")) return "all_inclusive";
     return "room_only";
   };
 
@@ -1689,12 +1705,18 @@ export default function EditServiceModalNew({
                   <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
-                    <input
-                      type="text"
+                    <HotelSuggestInput
                       value={hotelName}
-                      onChange={(e) => setHotelName(e.target.value)}
-                      placeholder="Hotel name"
-                      className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                      onChange={setHotelName}
+                      onHotelSelected={(d) => {
+                        setHotelName(d.name);
+                        if (d.address) setHotelAddress(d.address);
+                        if (d.phone) setHotelPhone(d.phone);
+                        if (d.email) setHotelEmail(d.email);
+                        setHotelRoomOptions(d.roomOptions ?? []);
+                        setHotelMealOptions(d.mealOptions ?? []);
+                      }}
+                      placeholder="Search hotel by name..."
                     />
                   </div>
                   <div>
@@ -1710,10 +1732,29 @@ export default function EditServiceModalNew({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
-                      <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                      <input
+                        type="text"
+                        list="edit-hotel-room-datalist"
+                        value={hotelRoom}
+                        onChange={(e) => setHotelRoom(e.target.value)}
+                        placeholder="Room type (or choose from hotel)"
+                        className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                      />
+                      {hotelRoomOptions.length > 0 && (
+                        <datalist id="edit-hotel-room-datalist">
+                          {hotelRoomOptions.map((opt) => (
+                            <option key={opt} value={opt} />
+                          ))}
+                        </datalist>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                      {hotelMealOptions.length > 0 && (
+                        <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
+                          <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
+                        ))}</p>
+                      )}
                       <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
                         <option value="room_only">Room only</option>
                         <option value="breakfast">Breakfast</option>
@@ -2635,37 +2676,50 @@ export default function EditServiceModalNew({
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               
-              {/* Hotel Name - auto-filled from Name field */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
-                <input 
-                  type="text" 
-                  value={hotelName} 
-                  onChange={(e) => setHotelName(e.target.value)} 
-                  placeholder="Hotel name" 
-                  className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" 
+                <HotelSuggestInput
+                  value={hotelName}
+                  onChange={setHotelName}
+                  onHotelSelected={(d) => {
+                    setHotelName(d.name);
+                    if (d.address) setHotelAddress(d.address);
+                    if (d.phone) setHotelPhone(d.phone);
+                    if (d.email) setHotelEmail(d.email);
+                    setHotelRoomOptions(d.roomOptions ?? []);
+                    setHotelMealOptions(d.mealOptions ?? []);
+                  }}
+                  placeholder="Search hotel by name..."
                 />
               </div>
               
-              {/* Room, Board, Bed Type */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
-                  <input 
-                    type="text" 
-                    value={hotelRoom} 
-                    onChange={(e) => setHotelRoom(e.target.value)} 
-                    placeholder="Room type" 
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" 
+                  <input
+                    type="text"
+                    list="edit-hotel-room-datalist-2"
+                    value={hotelRoom}
+                    onChange={(e) => setHotelRoom(e.target.value)}
+                    placeholder="Room type (or choose from hotel)"
+                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                   />
+                  {hotelRoomOptions.length > 0 && (
+                    <datalist id="edit-hotel-room-datalist-2">
+                      {hotelRoomOptions.map((opt) => (
+                        <option key={opt} value={opt} />
+                      ))}
+                    </datalist>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
-                  <select
-                    value={hotelBoard}
-                    onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)}
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  >
+                  {hotelMealOptions.length > 0 && (
+                    <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
+                      <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
+                    ))}</p>
+                  )}
+                  <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
                     <option value="room_only">Room only</option>
                     <option value="breakfast">Breakfast</option>
                     <option value="half_board">Half board</option>

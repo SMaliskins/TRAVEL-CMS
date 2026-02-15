@@ -28,7 +28,7 @@ async function getCompanyId(userId: string) {
 // PATCH - Update category
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser(request);
@@ -41,7 +41,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await context.params;
     const categoryId = resolvedParams.id;
     const body = await request.json();
     const { name, vat_rate, is_active, type } = body;
@@ -96,7 +96,7 @@ export async function PATCH(
 // DELETE - Delete category
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser(request);
@@ -109,7 +109,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
-    const resolvedParams = params instanceof Promise ? await params : params;
+    const resolvedParams = await context.params;
     const categoryId = resolvedParams.id;
 
     // Verify category belongs to user's company

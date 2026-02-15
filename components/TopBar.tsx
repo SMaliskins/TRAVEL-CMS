@@ -129,14 +129,14 @@ export default function TopBar() {
               className="h-10 max-w-[140px] object-contain"
             />
           )}
-          {shortCommitSha && (
+          {shortCommitSha ? (
             <span
               className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-mono text-gray-600"
-              title={`Commit: ${gitCommitSha}`}
+              title={`Deploy: ${gitCommitSha}`}
             >
-              {shortCommitSha}
+              Deploy {shortCommitSha}
             </span>
-          )}
+          ) : null}
         </div>
         
         {/* Center - Progress widget */}

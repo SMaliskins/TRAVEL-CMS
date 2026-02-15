@@ -296,6 +296,10 @@ export default function AddServiceModal({
   const [hotelStarRating, setHotelStarRating] = useState("");
   const [hotelRoom, setHotelRoom] = useState("");
   const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">("room_only");
+  /** Room types from Ratehawk for selected hotel — click to choose */
+  const [hotelRoomOptions, setHotelRoomOptions] = useState<string[]>([]);
+  /** Meal types from Ratehawk for selected hotel — click to choose */
+  const [hotelMealOptions, setHotelMealOptions] = useState<string[]>([]);
   const [mealPlanText, setMealPlanText] = useState("");
   const [transferType, setTransferType] = useState("");
   const [additionalServices, setAdditionalServices] = useState("");
@@ -316,6 +320,18 @@ export default function AddServiceModal({
   const [changeFee, setChangeFee] = useState<string>(""); // Airline change fee
   const [cabinClass, setCabinClass] = useState<"economy" | "premium_economy" | "business" | "first">("economy");
   const [baggage, setBaggage] = useState<string>(""); // Baggage allowance
+
+  // Map Ratehawk meal label to hotel_board enum (for Board dropdown from API)
+  const mapRatehawkMealToBoard = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
+    const p = (plan || "").toUpperCase();
+    if (p.includes("RO") || p === "ROOM ONLY") return "room_only";
+    if (p.includes("BB") || p.includes("BED AND BREAKFAST") || p.includes("BREAKFAST")) return "breakfast";
+    if (p.includes("HB") || p.includes("HALF BOARD")) return "half_board";
+    if (p.includes("FB") || p.includes("FULL BOARD")) return "full_board";
+    if (p.includes("UAI") || p.includes("ULTRA ALL INCLUSIVE")) return "uai";
+    if (p.includes("AI") || p.includes("ALL INCLUSIVE")) return "all_inclusive";
+    return "room_only";
+  };
 
   // Auto-fill clients/payer when defaultClient changes
   useEffect(() => {
@@ -1631,6 +1647,8 @@ export default function AddServiceModal({
                         if (d.phone) setHotelPhone(d.phone);
                         if (d.email) setHotelEmail(d.email);
                         setServiceName(d.name);
+                        setHotelRoomOptions(d.roomOptions ?? []);
+                        setHotelMealOptions(d.mealOptions ?? []);
                       }}
                       placeholder="Search hotel by name..."
                     />
@@ -1648,10 +1666,29 @@ export default function AddServiceModal({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
-                      <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                      <input
+                        type="text"
+                        list="add-hotel-room-datalist"
+                        value={hotelRoom}
+                        onChange={(e) => setHotelRoom(e.target.value)}
+                        placeholder="Room type (or choose from hotel)"
+                        className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                      />
+                      {hotelRoomOptions.length > 0 && (
+                        <datalist id="add-hotel-room-datalist">
+                          {hotelRoomOptions.map((opt) => (
+                            <option key={opt} value={opt} />
+                          ))}
+                        </datalist>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                      {hotelMealOptions.length > 0 && (
+                        <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
+                          <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
+                        ))}</p>
+                      )}
                       <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
                         <option value="room_only">Room only</option>
                         <option value="breakfast">Breakfast</option>
@@ -2655,6 +2692,8 @@ export default function AddServiceModal({
                     if (d.phone) setHotelPhone(d.phone);
                     if (d.email) setHotelEmail(d.email);
                     setServiceName(d.name);
+                    setHotelRoomOptions(d.roomOptions ?? []);
+                    setHotelMealOptions(d.mealOptions ?? []);
                   }}
                   placeholder="Search hotel by name..."
                 />
@@ -2663,10 +2702,29 @@ export default function AddServiceModal({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
-                  <input type="text" value={hotelRoom} onChange={(e) => setHotelRoom(e.target.value)} placeholder="Room type" className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" />
+                  <input
+                    type="text"
+                    list="add-hotel-room-datalist-2"
+                    value={hotelRoom}
+                    onChange={(e) => setHotelRoom(e.target.value)}
+                    placeholder="Room type (or choose from hotel)"
+                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                  />
+                  {hotelRoomOptions.length > 0 && (
+                    <datalist id="add-hotel-room-datalist-2">
+                      {hotelRoomOptions.map((opt) => (
+                        <option key={opt} value={opt} />
+                      ))}
+                    </datalist>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
+                  {hotelMealOptions.length > 0 && (
+                    <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
+                      <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800">{meal}</button>
+                    ))}</p>
+                  )}
                   <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
                     <option value="room_only">Room only</option>
                     <option value="breakfast">Breakfast</option>
