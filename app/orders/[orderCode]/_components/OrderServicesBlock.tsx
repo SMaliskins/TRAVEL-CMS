@@ -42,6 +42,7 @@ import {
 } from "@/lib/services/deadlineCalculator";
 import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Traveller {
   id: string;
