@@ -55,10 +55,12 @@ export default function TopBar() {
         if (!response.ok) return;
 
         const data = (await response.json()) as { sha?: string; shortSha?: string };
-        if (data.sha) {
-          setGitCommitSha((prev) => (prev === data.sha ? prev : data.sha));
-        } else if (data.shortSha) {
-          setGitCommitSha((prev) => (prev === data.shortSha ? prev : data.shortSha));
+        const sha = data.sha;
+        const shortSha = data.shortSha;
+        if (sha) {
+          setGitCommitSha((prev) => (prev === sha ? prev : sha));
+        } else if (shortSha) {
+          setGitCommitSha((prev) => (prev === shortSha ? prev : shortSha));
         }
       } catch {
         // Silent fallback: commit badge just stays hidden
