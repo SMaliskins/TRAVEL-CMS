@@ -113,6 +113,8 @@ interface EditServiceModalProps {
   orderCode: string;
   onClose: () => void;
   onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
+  /** Company currency from Regional Settings (e.g. EUR, USD) for Pricing labels */
+  companyCurrencyCode?: string;
 }
 
 // Fallback categories used when API is not available
@@ -137,12 +139,24 @@ const RES_STATUS_OPTIONS = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
+function getCurrencySymbol(code: string): string {
+  const c = (code || "EUR").trim().toUpperCase() || "EUR";
+  try {
+    const parts = new Intl.NumberFormat(undefined, { style: "currency", currency: c, currencyDisplay: "symbol" }).formatToParts(0);
+    return parts.find((p: { type: string }) => p.type === "currency")?.value ?? c;
+  } catch {
+    return c;
+  }
+}
+
 export default function EditServiceModalNew({
   service,
   orderCode,
   onClose,
   onServiceUpdated,
+  companyCurrencyCode = "EUR",
 }: EditServiceModalProps) {
+  const currencySymbol = getCurrencySymbol(companyCurrencyCode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -233,11 +247,18 @@ export default function EditServiceModalNew({
   const [payerName, setPayerName] = useState(service.payer || "");
   const [servicePrice, setServicePrice] = useState(String(service.servicePrice || 0));
   const [marge, setMarge] = useState(() => {
-    if (service.commissionAmount != null) {
-      const disc = Number(service.agentDiscountValue) || 0;
-      return String(Math.round(((Number(service.commissionAmount) || 0) - disc) * 100) / 100);
+    // Only use Tour commission formula when service is actually Tour; otherwise Marge = Sale - Cost
+    const cat = (service as { categoryType?: string; category?: string }).categoryType;
+    const catStr = String((service as { category?: string }).category || "").toLowerCase();
+    const isTour = cat === "tour" || catStr.includes("tour") || catStr.includes("package");
+    if (isTour && (service as { commissionAmount?: number | null }).commissionAmount != null) {
+      const disc = Number((service as { agentDiscountValue?: number | null }).agentDiscountValue) || 0;
+      const comm = Number((service as { commissionAmount?: number | null }).commissionAmount) || 0;
+      return String(Math.round((comm - disc) * 100) / 100);
     }
-    return String(Math.round(((service.clientPrice || 0) - (service.servicePrice || 0)) * 100) / 100);
+    const sale = Number(service.clientPrice ?? 0);
+    const cost = Number(service.servicePrice ?? 0);
+    return String(Math.round((sale - cost) * 100) / 100);
   });
   const [clientPrice, setClientPrice] = useState(String(service.clientPrice || 0));
   // Tour (Package Tour) pricing
@@ -604,12 +625,11 @@ export default function EditServiceModalNew({
     loadCategories();
   }, [loadCategories]);
 
-  // When Edit opens with a hotel name, fetch room/meal options from Ratehawk so "From hotel" hints appear without re-selecting
+  // When Edit opens with a hotel name, fetch room/meal options from Ratehawk so dropdown hints appear on click without re-selecting hotel
   useEffect(() => {
     if (categoryType !== "hotel" || !hotelName.trim() || hotelName.trim().length < 2) return;
     const key = hotelName.trim().toLowerCase();
     if (hotelOptionsFetchedForRef.current === key) return;
-    hotelOptionsFetchedForRef.current = key;
     let cancelled = false;
     (async () => {
       try {
@@ -636,8 +656,9 @@ export default function EditServiceModalNew({
         if (cancelled) return;
         setHotelRoomOptions(roomOptions);
         setHotelMealOptions(mealOptions);
+        hotelOptionsFetchedForRef.current = key;
       } catch {
-        // ignore
+        // ignore — ref not set so next open will retry
       }
     })();
     return () => { cancelled = true; };
@@ -1334,7 +1355,34 @@ export default function EditServiceModalNew({
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const primaryClient = clients.find(c => c.id) || clients[0];
+      // Resolve clients: find-or-create for name-only entries so we have ids for payload and service travellers
+      let resolvedClients: ClientEntry[] = [...clients];
+      const nameOnly = clients.filter(c => (c.name?.trim() ?? "") !== "" && !c.id);
+      if (nameOnly.length > 0) {
+        const res = await fetch("/api/parties/find-or-create-travellers", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ travellers: nameOnly.map(c => ({ name: c.name })) }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const parties = (data.parties || []) as { name: string; id: string; displayName: string }[];
+          let nameOnlyIdx = 0;
+          resolvedClients = clients.map((c) => {
+            if ((c.name?.trim() ?? "") !== "" && !c.id && parties[nameOnlyIdx]) {
+              const p = parties[nameOnlyIdx++];
+              return { id: p.id, name: p.displayName || p.name };
+            }
+            return c;
+          });
+        }
+      }
+
+      const clientIds = resolvedClients.filter(c => c.id).map(c => c.id as string);
+      const primaryClient = resolvedClients.find(c => c.id) || resolvedClients[0];
 
       const payload: Record<string, unknown> = {
         category,
@@ -1346,8 +1394,7 @@ export default function EditServiceModalNew({
         supplier_name: supplierName,
         client_party_id: primaryClient?.id || null,
         client_name: primaryClient?.name || "",
-        // All clients for order_service_travellers
-        clients: clients.filter(c => c.id).map(c => ({ id: c.id, name: c.name })),
+        clients: resolvedClients.filter(c => c.id).map(c => ({ id: c.id, name: c.name })),
         payer_party_id: payerPartyId,
         payer_name: payerName,
         service_price: parseFloat(servicePrice) || 0,
@@ -1367,7 +1414,7 @@ export default function EditServiceModalNew({
         payload.hotel_email = hotelEmail;
         payload.hotel_room = hotelRoom;
         payload.hotel_board = hotelBoard;
-        payload.hotel_bed_type = hotelBedType;
+        payload.hotel_bed_type = hotelBedType ?? "not_guaranteed";
         payload.hotel_early_check_in = hotelPreferences.earlyCheckIn;
         payload.hotel_late_check_in = hotelPreferences.lateCheckIn;
         payload.hotel_higher_floor = hotelPreferences.higherFloor;
@@ -1456,18 +1503,31 @@ export default function EditServiceModalNew({
       );
 
       if (response.ok) {
-        // Sync clients to order_travellers
-        await addClientsToOrderTravellers(clients.map(c => c.id));
-        
+        // Sync clients to order_travellers (so they appear in order Travellers column)
+        await addClientsToOrderTravellers(clientIds);
+
+        // Persist service travellers (order_service_travellers) so Edit reopens with correct clients
+        if (clientIds.length > 0) {
+          await fetch(`/api/services/${encodeURIComponent(service.id)}/travellers`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            credentials: "include",
+            body: JSON.stringify({ travellerIds: clientIds }),
+          });
+        }
+
         onServiceUpdated({
           id: service.id,
           name: serviceName,
           category,
           supplier: supplierName || "-",
-          client: (clients.find(c => c.id) || clients[0])?.name || "-",
+          client: primaryClient?.name || "-",
           payer: payerName || "-",
           supplierPartyId,
-          clientPartyId: (clients.find(c => c.id) || clients[0])?.id || undefined,
+          clientPartyId: primaryClient?.id || undefined,
           payerPartyId,
           servicePrice: parseFloat(servicePrice) || 0,
           clientPrice: parseFloat(clientPrice) || 0,
@@ -2271,7 +2331,7 @@ export default function EditServiceModalNew({
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost (€)</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
                         <input
                           type="number"
                           step="0.01"
@@ -2337,7 +2397,7 @@ export default function EditServiceModalNew({
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale (€)</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale ({currencySymbol})</label>
                         <input
                           type="number"
                           step="0.01"
@@ -2357,7 +2417,7 @@ export default function EditServiceModalNew({
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge (€)</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge ({currencySymbol})</label>
                         <input
                           type="text"
                           readOnly
@@ -2383,7 +2443,7 @@ export default function EditServiceModalNew({
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost (€)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -2398,7 +2458,7 @@ export default function EditServiceModalNew({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge (€)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -2412,7 +2472,7 @@ export default function EditServiceModalNew({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale (€)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -2442,16 +2502,16 @@ export default function EditServiceModalNew({
                       {vatRate > 0 ? (
                         <>
                           <div className={margin >= 0 ? "text-green-600" : "text-red-600"}>
-                            Margin: €{margin.toFixed(2)}
-                            <span className="text-gray-500 ml-1">(VAT: €{vatAmount.toFixed(2)})</span>
+                            Margin: {currencySymbol}{margin.toFixed(2)}
+                            <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toFixed(2)})</span>
                           </div>
                           <div className={margin >= 0 ? "text-green-700 font-semibold" : "text-red-600 font-semibold"}>
-                            Profit: €{profit.toFixed(2)}
+                            Profit: {currencySymbol}{profit.toFixed(2)}
                           </div>
                         </>
                       ) : (
                         <div className={margin >= 0 ? "text-green-700 font-semibold" : "text-red-600 font-semibold"}>
-                          Profit: €{margin.toFixed(2)}
+                          Profit: {currencySymbol}{margin.toFixed(2)}
                         </div>
                       )}
                     </div>
@@ -2459,7 +2519,7 @@ export default function EditServiceModalNew({
                 })()}
 
                 {categoryType !== "tour" && (
-                <div className="flex items-end gap-4">
+                <div className="flex items-end gap-4 flex-wrap">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">VAT</label>
                     <select
@@ -2472,25 +2532,25 @@ export default function EditServiceModalNew({
                       <option value={21}>21%</option>
                     </select>
                   </div>
-                  {(parseFloat(marge) || 0) !== 0 && (() => {
+                  {(() => {
                     const margin = parseFloat(marge) || 0;
                     const vatAmount = vatRate > 0 ? margin * vatRate / (100 + vatRate) : 0;
                     const profit = margin - vatAmount;
                     return (
-                      <div className="text-xs font-medium flex-1">
+                      <div className="text-xs font-medium flex-1 pt-1 border-t border-gray-200 min-w-[140px]">
                         {vatRate > 0 ? (
                           <>
                             <div className={margin >= 0 ? 'text-green-600' : 'text-red-600'}>
-                              Margin: €{margin.toFixed(2)}
-                              <span className="text-gray-500 ml-1">(VAT: €{vatAmount.toFixed(2)})</span>
+                              Margin: {currencySymbol}{margin.toFixed(2)}
+                              <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toFixed(2)})</span>
                             </div>
-                            <div className="text-green-700 font-semibold">
-                              Profit: €{profit.toFixed(2)}
+                            <div className={margin >= 0 ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'}>
+                              Profit: {currencySymbol}{profit.toFixed(2)}
                             </div>
                           </>
                         ) : (
                           <div className={margin >= 0 ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'}>
-                            Profit: €{margin.toFixed(2)}
+                            Profit: {currencySymbol}{margin.toFixed(2)}
                           </div>
                         )}
                       </div>
@@ -2643,7 +2703,7 @@ export default function EditServiceModalNew({
                   {/* Change Fee - only for Flight */}
                   {categoryType === "flight" && (
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Change Fee €</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Change Fee</label>
                       <input
                         type="number"
                         min="0"

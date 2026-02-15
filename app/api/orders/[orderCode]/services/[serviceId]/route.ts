@@ -62,8 +62,11 @@ export async function PATCH(
     if (body.client_name !== undefined) updates.client_name = body.client_name;
     if (body.payer_party_id !== undefined) updates.payer_party_id = body.payer_party_id;
     if (body.payer_name !== undefined) updates.payer_name = body.payer_name;
-    if (body.date_from !== undefined) updates.date_from = body.date_from;
-    if (body.date_to !== undefined) updates.date_to = body.date_to;
+    // order_services columns are service_date_from / service_date_to (payload sends these)
+    if (body.service_date_from !== undefined) updates.service_date_from = body.service_date_from;
+    if (body.service_date_to !== undefined) updates.service_date_to = body.service_date_to;
+    if (body.date_from !== undefined) updates.service_date_from = body.date_from;
+    if (body.date_to !== undefined) updates.service_date_to = body.date_to;
 
     // Tour / Hotel / terms (Edit modal sends snake_case)
     if (body.hotel_name !== undefined) updates.hotel_name = body.hotel_name;
@@ -77,6 +80,7 @@ export async function PATCH(
     if (body.hotel_phone !== undefined) updates.hotel_phone = body.hotel_phone;
     if (body.hotel_email !== undefined) updates.hotel_email = body.hotel_email;
     if (body.hotel_bed_type !== undefined) updates.hotel_bed_type = body.hotel_bed_type;
+    if (body.hotelBedType !== undefined) updates.hotel_bed_type = body.hotelBedType;
     if (body.hotel_early_check_in !== undefined) updates.hotel_early_check_in = body.hotel_early_check_in;
     if (body.hotel_late_check_in !== undefined) updates.hotel_late_check_in = body.hotel_late_check_in;
     if (body.hotel_higher_floor !== undefined) updates.hotel_higher_floor = body.hotel_higher_floor;

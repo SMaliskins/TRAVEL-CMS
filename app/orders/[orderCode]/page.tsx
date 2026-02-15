@@ -86,6 +86,7 @@ export default function OrderPage({
   const [invoiceServicesByPayer, setInvoiceServicesByPayer] = useState<Map<string, any[]>>(new Map());
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
+  const [companyCurrencyCode, setCompanyCurrencyCode] = useState<string>("EUR");
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [editingHeaderField, setEditingHeaderField] = useState<"client" | "itinerary" | "dates" | null>(null);
   
@@ -372,6 +373,7 @@ export default function OrderPage({
         if (response.ok) {
           const data = await response.json();
           setShowOrderSource(data.company?.show_order_source || false);
+          setCompanyCurrencyCode(data.company?.default_currency || "EUR");
         }
       } catch (err) {
         console.error("Failed to fetch company settings:", err);
@@ -995,6 +997,7 @@ export default function OrderPage({
                 orderDateTo={order?.date_to}
                 itineraryDestinations={itineraryDestinations}
                 orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
+                companyCurrencyCode={companyCurrencyCode}
                 onIssueInvoice={(services) => {
                   // Filter out cancelled services
                   const activeServices = services.filter(s => s.resStatus !== 'cancelled');

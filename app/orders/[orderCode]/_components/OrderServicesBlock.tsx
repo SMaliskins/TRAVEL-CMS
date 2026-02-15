@@ -15,8 +15,12 @@ const AddServiceModal = (typeof AddServiceModalModule === "function"
   : (AddServiceModalModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
 import DateRangePicker from "@/components/DateRangePicker";
 import PartyCombobox from "./PartyCombobox";
-import EditServiceModalNew from "./EditServiceModalNew";
+import EditServiceModalNewModule from "./EditServiceModalNew";
 import SplitServiceModal from "./SplitServiceModal";
+
+const EditServiceModalNew = (typeof EditServiceModalNewModule === "function"
+  ? EditServiceModalNewModule
+  : (EditServiceModalNewModule as { default?: React.ComponentType })?.default) as React.ComponentType<any>;
 import SplitModalMulti from "./SplitModalMulti";
 import MergeServicesModal from "./MergeServicesModal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -89,12 +93,23 @@ interface Service {
   hotelStarRating?: string | null;
   hotelRoom?: string | null;
   hotelBoard?: string | null;
+  hotelBedType?: "king_queen" | "twin" | "not_guaranteed" | string | null;
   mealPlanText?: string | null;
   transferType?: string | null;
   additionalServices?: string | null;
   hotelAddress?: string;
   hotelPhone?: string;
   hotelEmail?: string;
+  hotelEarlyCheckIn?: boolean | null;
+  hotelLateCheckIn?: boolean | null;
+  hotelHigherFloor?: boolean | null;
+  hotelKingSizeBed?: boolean | null;
+  hotelHoneymooners?: boolean | null;
+  hotelSilentRoom?: boolean | null;
+  hotelRoomsNextTo?: string | null;
+  hotelParking?: boolean | null;
+  hotelPreferencesFreeText?: string | null;
+  supplierBookingType?: string | null;
   // Transfer-specific
   pickupLocation?: string;
   dropoffLocation?: string;
@@ -238,6 +253,8 @@ interface OrderServicesBlockProps {
   itineraryDestinations?: CityWithCountry[];
   // Order source for smart hints
   orderSource?: 'TA' | 'TO' | 'CORP' | 'NON';
+  // Company currency from Regional Settings (e.g. EUR, USD) for Pricing display
+  companyCurrencyCode?: string;
 }
 
 export default function OrderServicesBlock({ 
@@ -249,6 +266,7 @@ export default function OrderServicesBlock({
   onIssueInvoice,
   itineraryDestinations = [],
   orderSource = 'NON',
+  companyCurrencyCode = 'EUR',
 }: OrderServicesBlockProps) {
   const router = useRouter();
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
@@ -1134,12 +1152,23 @@ export default function OrderServicesBlock({
           hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
           hotelRoom: (s.hotelRoom ?? s.hotel_room ?? null) as string | null,
           hotelBoard: (s.hotelBoard ?? s.hotel_board ?? null) as string | null,
+          hotelBedType: (s.hotelBedType ?? s.hotel_bed_type ?? null) as Service["hotelBedType"],
           mealPlanText: (s.mealPlanText ?? s.meal_plan_text ?? null) as string | null,
           transferType: (s.transferType ?? s.transfer_type ?? null) as string | null,
           additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
           hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
           hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
           hotelEmail: (s.hotelEmail ?? s.hotel_email ?? null) as string | null,
+          hotelEarlyCheckIn: (s.hotelEarlyCheckIn ?? s.hotel_early_check_in ?? null) as boolean | null,
+          hotelLateCheckIn: (s.hotelLateCheckIn ?? s.hotel_late_check_in ?? null) as boolean | null,
+          hotelHigherFloor: (s.hotelHigherFloor ?? s.hotel_higher_floor ?? null) as boolean | null,
+          hotelKingSizeBed: (s.hotelKingSizeBed ?? s.hotel_king_size_bed ?? null) as boolean | null,
+          hotelHoneymooners: (s.hotelHoneymooners ?? s.hotel_honeymooners ?? null) as boolean | null,
+          hotelSilentRoom: (s.hotelSilentRoom ?? s.hotel_silent_room ?? null) as boolean | null,
+          hotelRoomsNextTo: (s.hotelRoomsNextTo ?? s.hotel_rooms_next_to ?? null) as string | null,
+          hotelParking: (s.hotelParking ?? s.hotel_parking ?? null) as boolean | null,
+          hotelPreferencesFreeText: (s.hotelPreferencesFreeText ?? s.hotel_preferences_free_text ?? null) as string | null,
+          supplierBookingType: (s.supplierBookingType ?? s.supplier_booking_type ?? null) as string | null,
           paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
           paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,
           paymentTerms: (s.paymentTerms ?? s.payment_terms ?? null) as string | null,
@@ -2089,6 +2118,7 @@ export default function OrderServicesBlock({
           orderCode={orderCode}
           defaultClientId={defaultClientId}
           defaultClientName={defaultClientName}
+          companyCurrencyCode={companyCurrencyCode}
           initialCategoryId={addServiceCategoryId ?? undefined}
           initialCategoryType={addServiceCategoryType ?? undefined}
           initialCategoryName={addServiceCategoryName ?? undefined}
@@ -2111,6 +2141,7 @@ export default function OrderServicesBlock({
           <EditServiceModalNew
             service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
             orderCode={orderCode}
+            companyCurrencyCode={companyCurrencyCode}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));

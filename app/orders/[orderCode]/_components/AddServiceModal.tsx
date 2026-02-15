@@ -25,6 +25,8 @@ interface AddServiceModalProps {
   initialCategoryType?: string | null;
   initialCategoryName?: string | null;
   initialVatRate?: number | null;
+  /** Company currency from Regional Settings (e.g. EUR, USD) for Pricing labels */
+  companyCurrencyCode?: string;
   onClose: () => void;
   onServiceAdded: (service: ServiceData) => void;
 }
@@ -140,6 +142,16 @@ const RES_STATUS_OPTIONS: { value: ServiceData["resStatus"]; label: string }[] =
 
 const VALID_CATEGORY_TYPES: CategoryType[] = ["flight", "hotel", "transfer", "tour", "insurance", "visa", "rent_a_car", "cruise", "other"];
 
+function getCurrencySymbol(code: string): string {
+  const c = (code || "EUR").trim().toUpperCase() || "EUR";
+  try {
+    const parts = new Intl.NumberFormat(undefined, { style: "currency", currency: c, currencyDisplay: "symbol" }).formatToParts(0);
+    return parts.find((p: { type: string }) => p.type === "currency")?.value ?? c;
+  } catch {
+    return c;
+  }
+}
+
 export default function AddServiceModal({ 
   orderCode,
   defaultClientId,
@@ -150,9 +162,11 @@ export default function AddServiceModal({
   initialCategoryType,
   initialCategoryName,
   initialVatRate,
+  companyCurrencyCode = "EUR",
   onClose, 
   onServiceAdded 
 }: AddServiceModalProps) {
+  const currencySymbol = getCurrencySymbol(companyCurrencyCode);
   const categoryLocked = !!initialCategoryId;
   console.log('🚀 AddServiceModal mounted with:', {
     defaultClientId,
@@ -1676,25 +1690,15 @@ export default function AddServiceModal({
                         className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                       />
                       {hotelRoomOptions.length > 0 && (
-                        <>
-                          <p className="text-xs text-amber-600 mb-1 mt-0.5">From hotel: {hotelRoomOptions.map((opt) => (
-                            <button key={opt} type="button" onClick={() => setHotelRoom(opt)} title={opt} className="mr-1.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{opt}</button>
-                          ))}</p>
-                          <datalist id="add-hotel-room-datalist">
-                            {hotelRoomOptions.map((opt) => (
-                              <option key={opt} value={opt} />
-                            ))}
-                          </datalist>
-                        </>
+                        <datalist id="add-hotel-room-datalist">
+                          {hotelRoomOptions.map((opt) => (
+                            <option key={opt} value={opt} />
+                          ))}
+                        </datalist>
                       )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
-                      {hotelMealOptions.length > 0 && (
-                        <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
-                          <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} title={meal} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{meal}</button>
-                        ))}</p>
-                      )}
                       <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
                         <option value="room_only">Room only</option>
                         <option value="breakfast">Breakfast</option>
@@ -2101,7 +2105,7 @@ export default function AddServiceModal({
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost (€)</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
                         <input
                           type="number"
                           step="0.01"
@@ -2164,7 +2168,7 @@ export default function AddServiceModal({
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale (€)</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale ({currencySymbol})</label>
                         <input
                           type="number"
                           step="0.01"
@@ -2181,7 +2185,7 @@ export default function AddServiceModal({
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge (€)</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge ({currencySymbol})</label>
                         <input
                           type="text"
                           readOnly
@@ -2207,7 +2211,7 @@ export default function AddServiceModal({
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost (€)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -2222,7 +2226,7 @@ export default function AddServiceModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge (€)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -2236,7 +2240,7 @@ export default function AddServiceModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale (€)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -2718,25 +2722,15 @@ export default function AddServiceModal({
                     className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                   />
                   {hotelRoomOptions.length > 0 && (
-                    <>
-                      <p className="text-xs text-amber-600 mb-1 mt-0.5">From hotel: {hotelRoomOptions.map((opt) => (
-                        <button key={opt} type="button" onClick={() => setHotelRoom(opt)} title={opt} className="mr-1.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{opt}</button>
-                      ))}</p>
-                      <datalist id="add-hotel-room-datalist-2">
-                        {hotelRoomOptions.map((opt) => (
-                          <option key={opt} value={opt} />
-                        ))}
-                      </datalist>
-                    </>
+                    <datalist id="add-hotel-room-datalist-2">
+                      {hotelRoomOptions.map((opt) => (
+                        <option key={opt} value={opt} />
+                      ))}
+                    </datalist>
                   )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
-                  {hotelMealOptions.length > 0 && (
-                    <p className="text-xs text-amber-600 mb-1">From hotel: {hotelMealOptions.map((meal) => (
-                      <button key={meal} type="button" onClick={() => setHotelBoard(mapRatehawkMealToBoard(meal))} title={meal} className="mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 truncate max-w-[120px] inline-block align-middle" style={{ maxWidth: "120px" }}>{meal}</button>
-                    ))}</p>
-                  )}
                   <select value={hotelBoard} onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)} className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white">
                     <option value="room_only">Room only</option>
                     <option value="breakfast">Breakfast</option>

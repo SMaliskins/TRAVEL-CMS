@@ -136,6 +136,17 @@ export async function GET(
         hotel_address?: string | null;
         hotel_phone?: string | null;
         hotel_email?: string | null;
+        hotel_bed_type?: string | null;
+        hotel_early_check_in?: boolean | null;
+        hotel_late_check_in?: boolean | null;
+        hotel_higher_floor?: boolean | null;
+        hotel_king_size_bed?: boolean | null;
+        hotel_honeymooners?: boolean | null;
+        hotel_silent_room?: boolean | null;
+        hotel_rooms_next_to?: string | null;
+        hotel_parking?: boolean | null;
+        hotel_preferences_free_text?: string | null;
+        supplier_booking_type?: string | null;
         payment_deadline_deposit?: string | null;
         payment_deadline_final?: string | null;
         payment_terms?: string | null;
@@ -186,6 +197,17 @@ export async function GET(
         hotelAddress: row.hotel_address ?? null,
         hotelPhone: row.hotel_phone ?? null,
         hotelEmail: row.hotel_email ?? null,
+        hotelBedType: row.hotel_bed_type ?? null,
+        hotelEarlyCheckIn: row.hotel_early_check_in ?? null,
+        hotelLateCheckIn: row.hotel_late_check_in ?? null,
+        hotelHigherFloor: row.hotel_higher_floor ?? null,
+        hotelKingSizeBed: row.hotel_king_size_bed ?? null,
+        hotelHoneymooners: row.hotel_honeymooners ?? null,
+        hotelSilentRoom: row.hotel_silent_room ?? null,
+        hotelRoomsNextTo: row.hotel_rooms_next_to ?? null,
+        hotelParking: row.hotel_parking ?? null,
+        hotelPreferencesFreeText: row.hotel_preferences_free_text ?? null,
+        supplierBookingType: row.supplier_booking_type ?? null,
         paymentDeadlineDeposit: row.payment_deadline_deposit ?? null,
         paymentDeadlineFinal: row.payment_deadline_final ?? null,
         paymentTerms: row.payment_terms ?? null,
