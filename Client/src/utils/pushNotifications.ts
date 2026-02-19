@@ -1,5 +1,6 @@
 import { Platform } from 'react-native'
 import * as Notifications from 'expo-notifications'
+import Constants from 'expo-constants'
 import { apiClient } from '../api/client'
 
 Notifications.setNotificationHandler({
@@ -29,9 +30,17 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       return null
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: undefined,
-    })
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId ??
+      undefined
+
+    if (!projectId) {
+      console.log('[Push] No projectId available (Expo Go dev mode) — skipping token registration')
+      return null
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId })
     const token = tokenData.data
 
     await apiClient.patch('/profile', { notificationToken: token })
@@ -46,7 +55,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     return token
   } catch (err) {
-    console.error('[Push] Registration error:', err)
+    console.log('[Push] Registration skipped:', (err as Error).message)
     return null
   }
 }
