@@ -45,6 +45,44 @@ async function executeToolCall(
       return JSON.stringify(orders ?? [])
     }
 
+    if (toolName === 'get_trip_itinerary') {
+      const orderCode = toolInput.order_code as string
+      const { data: order } = await supabaseAdmin
+        .from('orders')
+        .select('id, order_code, status, countries_cities, date_from, date_to')
+        .eq('client_party_id', crmClientId)
+        .eq('order_code', orderCode)
+        .single()
+
+      if (!order) {
+        return JSON.stringify({ error: `Order ${orderCode} not found` })
+      }
+
+      const { data: services } = await supabaseAdmin
+        .from('order_services')
+        .select(`
+          category, service_name,
+          service_date_from, service_date_to,
+          res_status, supplier_name, ref_nr,
+          flight_segments, cabin_class,
+          hotel_name, hotel_star_rating, hotel_room, hotel_board, hotel_bed_type,
+          transfer_type, pickup_location, dropoff_location, pickup_time
+        `)
+        .eq('order_id', order.id)
+        .neq('res_status', 'cancelled')
+        .order('service_date_from', { ascending: true })
+
+      return JSON.stringify({
+        order: {
+          code: order.order_code,
+          status: order.status,
+          destination: order.countries_cities,
+          dates: `${order.date_from} — ${order.date_to}`,
+        },
+        services: services ?? [],
+      })
+    }
+
     if (toolName === 'search_transfers') {
       return JSON.stringify({
         note: 'Transfer search is not yet available. Please contact your travel agent for transfer arrangements.',

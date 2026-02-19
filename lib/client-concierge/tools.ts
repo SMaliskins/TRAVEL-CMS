@@ -33,11 +33,22 @@ export const conciergeTools: Anthropic.Messages.Tool[] = [
   },
   {
     name: 'get_client_trips',
-    description: "Get the client's upcoming trips from the CRM",
+    description: "Get the client's upcoming trips from the CRM (basic info: dates, destination, status)",
     input_schema: {
       type: 'object' as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'get_trip_itinerary',
+    description: "Get full itinerary for a specific trip: flights (airline, flight number, times, airports, cabin class), hotels (name, stars, room, board, check-in/out), transfers, and other services",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        order_code: { type: 'string', description: 'Order code (e.g. ORD-000123)' },
+      },
+      required: ['order_code'],
     },
   },
 ]
