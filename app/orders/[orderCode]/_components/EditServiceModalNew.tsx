@@ -2094,7 +2094,7 @@ export default function EditServiceModalNew({
             </div>
           )}
 
-          <div className={`grid grid-cols-1 gap-4 ${categoryType === "flight" ? "md:grid-cols-[3fr_2fr]" : categoryType === "hotel" ? "md:grid-cols-[1.65fr_1fr]" : "md:grid-cols-3"}`}>
+          <div className={`grid grid-cols-1 gap-3 ${categoryType === "flight" ? "md:grid-cols-[3fr_2fr]" : categoryType === "hotel" ? "md:grid-cols-[1.65fr_1fr]" : "md:grid-cols-3"}`}>
             
             <div className={`space-y-3 ${categoryType === "hotel" ? "" : ""}`}>
               {categoryType === "hotel" ? (
@@ -2544,8 +2544,7 @@ export default function EditServiceModalNew({
             {/* PARTIES — Supplier + Ref Nr + Status (flight only) */}
             {categoryType === "flight" && (
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">PARTIES</h4>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">SUPPLIER</h4>
                 <PartySelect
                   value={supplierPartyId}
                   onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
@@ -2717,7 +2716,7 @@ export default function EditServiceModalNew({
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-normal text-[#343A40] mb-1">Payer</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
                   <PartySelect
                     key={`payer-${payerPartyId || 'empty'}`}
                     value={payerPartyId}
@@ -3054,7 +3053,7 @@ export default function EditServiceModalNew({
               )}
               
               {/* Booking Terms (hidden for Flight) */}
-              {category !== "Flight" && (
+              {categoryType !== "flight" && (
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
                 <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">Booking Terms</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3091,38 +3090,7 @@ export default function EditServiceModalNew({
                       </select>
                     </div>
                   )}
-                  {/* Refund Policy for Flight (Hotel has it under PAYMENT TERMS) */}
-                  {categoryType === "flight" && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
-                      <select
-                        value={refundPolicy}
-                        onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="non_ref">Non-refundable</option>
-                        <option value="refundable">Refundable (with conditions)</option>
-                        <option value="fully_ref">Fully Refundable</option>
-                      </select>
-                    </div>
-                  )}
                   
-                  {/* Change Fee - only for Flight */}
-                  {categoryType === "flight" && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Change Fee</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={changeFee}
-                        onChange={(e) => setChangeFee(e.target.value)}
-                        placeholder="0 = free"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      />
-                      <span className="text-[10px] text-gray-400">+ class diff</span>
-                    </div>
-                  )}
                 </div>
                 
                 {/* Cancellation/Refund details - hidden for Tour */}
@@ -3166,23 +3134,7 @@ export default function EditServiceModalNew({
                 
                 {/* Payment Deadlines - different for Flight vs Tour vs Other */}
                 <div className="border-t border-gray-200 pt-2 mt-2">
-                  {categoryType === "flight" ? (
-                    // Flight: single deadline (typically +1 day)
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                        <input
-                          type="date"
-                          value={paymentDeadlineFinal}
-                          onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <span className="text-xs text-gray-500 pb-2">Usually +1 day from booking</span>
-                      </div>
-                    </div>
-                  ) : categoryType === "tour" ? (
+                  {categoryType === "tour" ? (
                     // Tour: Deposit Due + %, Final Due + % — 2x2 grid so fields have enough width for date picker & numbers
                     <div className="grid grid-cols-2 gap-3">
                       <div className="min-w-0">
@@ -3266,8 +3218,8 @@ export default function EditServiceModalNew({
             })()}
           </div>
 
-          {/* Category-specific fields - Hotel Details moved to top left for hotel; only show bottom block for non-hotel */}
-          {!showHotelFields && (
+          {/* Category-specific fields - Hotel Details only for hotel category */}
+          {showHotelFields && (
             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
               
@@ -3553,8 +3505,8 @@ ${message}
             </div>
           )}
 
-          {/* Actions - Sticky Footer (hidden for Hotel — buttons are in left column) */}
-          {category !== "Flight" && categoryType !== "hotel" && (
+          {/* Actions - Sticky Footer (hidden for Hotel and Flight — buttons are in right column) */}
+          {categoryType !== "hotel" && categoryType !== "flight" && (
             <div className="mt-4 pt-3 border-t flex justify-end gap-2">
               <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
                 Cancel

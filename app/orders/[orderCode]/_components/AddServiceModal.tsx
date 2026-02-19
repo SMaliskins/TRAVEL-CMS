@@ -2097,7 +2097,7 @@ export default function AddServiceModal({
                     <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100">
                       Cancel
                     </button>
-                    <button type="button" onClick={handleSave} disabled={isSubmitting} className="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                    <button type="button" onClick={(e) => handleSubmit(e as unknown as React.FormEvent)} disabled={isSubmitting} className="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                       {isSubmitting ? (
                         <>
                           <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -2305,8 +2305,7 @@ export default function AddServiceModal({
             {/* PARTIES — Supplier + Ref Nr + Status (flight only) */}
             {categoryType === "flight" && (
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">PARTIES</h4>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">SUPPLIER</h4>
                 <PartySelect
                   value={supplierPartyId}
                   onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
@@ -2626,7 +2625,7 @@ export default function AddServiceModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-[#343A40] mb-0.5">{categoryType === "hotel" ? "Margin" : "Marge"} ({currencySymbol})</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "hotel" ? "Margin" : "Marge"} ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"

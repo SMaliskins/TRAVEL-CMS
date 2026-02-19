@@ -31,6 +31,7 @@ export default function BankAccountsManager({ readonly }: Props) {
   const [formCurrency, setFormCurrency] = useState("EUR");
   const [formDefault, setFormDefault] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const getToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -79,8 +80,9 @@ export default function BankAccountsManager({ readonly }: Props) {
   const handleSave = async () => {
     if (!formName.trim()) return;
     setSaving(true);
+    setError("");
     const token = await getToken();
-    if (!token) return;
+    if (!token) { setError("Not authenticated"); setSaving(false); return; }
 
     const body = {
       account_name: formName.trim(),
@@ -91,23 +93,32 @@ export default function BankAccountsManager({ readonly }: Props) {
       is_default: formDefault,
     };
 
-    if (editingId) {
-      await fetch(`/api/company/bank-accounts/${editingId}`, {
-        method: "PATCH",
+    try {
+      const url = editingId
+        ? `/api/company/bank-accounts/${editingId}`
+        : "/api/company/bank-accounts";
+      const res = await fetch(url, {
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
-    } else {
-      await fetch("/api/company/bank-accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-    }
 
-    setSaving(false);
-    resetForm();
-    loadAccounts();
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        console.error("[BankAccounts] Save error:", json);
+        setError(json.error || `Failed to save (${res.status})`);
+        setSaving(false);
+        return;
+      }
+
+      setSaving(false);
+      resetForm();
+      loadAccounts();
+    } catch (err) {
+      console.error("[BankAccounts] Network error:", err);
+      setError("Network error");
+      setSaving(false);
+    }
   };
 
   const handleDeactivate = async (id: string) => {
@@ -190,6 +201,9 @@ export default function BankAccountsManager({ readonly }: Props) {
 
       {showForm && (
         <div className="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50">
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{error}</div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Account Name <span className="text-red-500">*</span>

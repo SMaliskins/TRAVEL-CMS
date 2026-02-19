@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: order } = await supabaseAdmin
+    const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .select("id")
       .eq("id", order_id)
@@ -106,7 +106,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      console.error("[Payments POST] Order not found", { order_id, companyId, orderError });
+      return NextResponse.json({ error: "Order not found", debug: { order_id, companyId } }, { status: 404 });
     }
 
     const { data: payment, error } = await supabaseAdmin

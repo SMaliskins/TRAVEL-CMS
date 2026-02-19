@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useDraggableModal } from "@/hooks/useDraggableModal";
 
 interface BankAccount {
   id: string;
@@ -54,6 +55,10 @@ export default function AddPaymentModal({
   const [orderId, setOrderId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paidAtDisplay, setPaidAtDisplay] = useState(() => {
+    const d = new Date(); return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+  });
+  const datePickerRef = useRef<HTMLInputElement>(null);
   const [method, setMethod] = useState<"cash" | "bank" | "card">("bank");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("EUR");
@@ -80,13 +85,24 @@ export default function AddPaymentModal({
   const orderDropdownRef = useRef<HTMLDivElement>(null);
   const payerSearchRef = useRef<HTMLInputElement>(null);
   const payerDropdownRef = useRef<HTMLDivElement>(null);
+  const { modalStyle, onHeaderMouseDown, resetPosition } = useDraggableModal();
+
+  useEffect(() => {
+    if (!open) return;
+    resetPosition();
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [open, onClose, resetPosition]);
 
   useEffect(() => {
     if (!open) return;
     loadBankAccounts();
     setOrderId(preselectedOrderId || "");
     setInvoiceId("");
-    setPaidAt(new Date().toISOString().slice(0, 10));
+    const now = new Date();
+    setPaidAt(now.toISOString().slice(0, 10));
+    setPaidAtDisplay(`${String(now.getDate()).padStart(2,"0")}.${String(now.getMonth()+1).padStart(2,"0")}.${now.getFullYear()}`);
     setMethod("bank");
     setAmount("");
     setCurrency("EUR");
@@ -100,8 +116,8 @@ export default function AddPaymentModal({
     setSelectedOrder(null);
     setInvoiceOptions([]);
 
-    if (preselectedOrderId && preselectedOrderCode) {
-      loadOrderDetails(preselectedOrderId, preselectedOrderCode);
+    if (preselectedOrderCode) {
+      loadOrderDetails(preselectedOrderId || "", preselectedOrderCode);
     }
   }, [open, preselectedOrderId, preselectedOrderCode]);
 
@@ -134,29 +150,34 @@ export default function AddPaymentModal({
   const loadOrderDetails = async (oid: string, ocode: string) => {
     const token = await getToken();
     if (!token) return;
-    const res = await fetch(`/api/orders?search=${encodeURIComponent(ocode)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const orders: OrderOption[] = (json.orders ?? json.data ?? []).map(
-        (o: Record<string, unknown>) => ({
-          id: o.id ?? o.orderId,
-          order_code: o.order_code ?? o.orderId,
-          client_display_name: o.client_display_name ?? o.client ?? null,
-          amount_total: Number(o.amount_total ?? o.amount ?? 0),
-          amount_paid: Number(o.amount_paid ?? o.paid ?? 0),
-          amount_debt: Number(o.amount_debt ?? o.debt ?? 0),
-        })
-      );
-      const match = orders.find((o) => o.id === oid || o.order_code === ocode);
-      if (match) {
-        setSelectedOrder(match);
-        setOrderId(match.id);
-        setOrderSearch(match.order_code);
-        if (match.client_display_name) setPayerSearch(match.client_display_name);
-        if (match.amount_debt > 0) setAmount(String(match.amount_debt));
+    try {
+      const res = await fetch(`/api/orders?search=${encodeURIComponent(ocode)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const orders: OrderOption[] = (json.orders ?? json.data ?? []).map(
+          (o: Record<string, unknown>) => ({
+            id: String(o.id ?? o.orderId ?? ""),
+            order_code: String(o.order_code ?? o.orderId ?? ""),
+            client_display_name: o.client_display_name ?? o.client ?? null,
+            amount_total: Number(o.amount_total ?? o.amount ?? 0),
+            amount_paid: Number(o.amount_paid ?? o.paid ?? 0),
+            amount_debt: Number(o.amount_debt ?? o.debt ?? 0),
+          })
+        );
+        const match = orders.find((o) => o.order_code === ocode || o.id === oid);
+        if (match && match.id) {
+          setError("");
+          setSelectedOrder(match);
+          setOrderId(match.id);
+          setOrderSearch(match.order_code);
+          if (match.client_display_name) setPayerSearch(match.client_display_name as string);
+          if (match.amount_debt > 0) setAmount(String(match.amount_debt));
+        }
       }
+    } catch (err) {
+      console.error("[AddPayment] loadOrderDetails error:", err);
     }
   };
 
@@ -237,7 +258,8 @@ export default function AddPaymentModal({
       );
       if (res.ok) {
         const json = await res.json();
-        setInvoiceOptions(json.invoices ?? json.data ?? []);
+        const all: InvoiceOption[] = json.invoices ?? json.data ?? [];
+        setInvoiceOptions(all.filter((inv) => inv.status !== "cancelled"));
       }
     })();
   }, [orderId, selectedOrder, getToken]);
@@ -267,6 +289,7 @@ export default function AddPaymentModal({
   }, []);
 
   const handleSelectOrder = (o: OrderOption) => {
+    setError("");
     setOrderId(o.id);
     setSelectedOrder(o);
     setOrderSearch(o.order_code);
@@ -287,7 +310,8 @@ export default function AddPaymentModal({
 
   const handleSave = async () => {
     setError("");
-    if (!orderId) {
+    const effectiveOrderId = orderId || selectedOrder?.id || "";
+    if (!effectiveOrderId) {
       setError("Select an order");
       return;
     }
@@ -311,7 +335,7 @@ export default function AddPaymentModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          order_id: orderId,
+          order_id: effectiveOrderId,
           invoice_id: invoiceId || null,
           method,
           amount: parseFloat(amount),
@@ -326,6 +350,7 @@ export default function AddPaymentModal({
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
+        console.error("[AddPayment] Save failed", JSON.stringify({ orderId, status: res.status, json }));
         setError(json.error || "Failed to save payment");
         return;
       }
@@ -344,8 +369,8 @@ export default function AddPaymentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-lg shadow-xl">
-        <div className="flex items-center justify-between border-b px-5 py-4">
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-lg shadow-xl" style={modalStyle}>
+        <div className="flex items-center justify-between border-b px-5 py-4 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <h2 className="text-lg font-semibold text-gray-900">Add Payment</h2>
           <button
             onClick={onClose}
@@ -464,17 +489,49 @@ export default function AddPaymentModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Payment Date <span className="text-red-500">*</span>
             </label>
-            <input
-              type="date"
-              value={paidAt}
-              onChange={(e) => setPaidAt(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            />
-            {paidAt && (
-              <p className="text-xs text-gray-500 mt-1">
-                {formatDateDDMMYYYY(paidAt)}
-              </p>
-            )}
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={paidAtDisplay}
+                onChange={(e) => {
+                  let v = e.target.value.replace(/[^\d.]/g, "");
+                  const digits = v.replace(/\./g, "");
+                  if (digits.length <= 2) v = digits;
+                  else if (digits.length <= 4) v = digits.slice(0,2) + "." + digits.slice(2);
+                  else v = digits.slice(0,2) + "." + digits.slice(2,4) + "." + digits.slice(4,8);
+                  setPaidAtDisplay(v);
+                  const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+                  if (m) setPaidAt(`${m[3]}-${m[2]}-${m[1]}`);
+                }}
+                placeholder="dd.mm.yyyy"
+                maxLength={10}
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => datePickerRef.current?.showPicker()}
+                className="px-2 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-500"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <input
+                ref={datePickerRef}
+                type="date"
+                value={paidAt}
+                onChange={(e) => {
+                  const iso = e.target.value;
+                  setPaidAt(iso);
+                  if (iso) {
+                    const [y, m, d] = iso.split("-");
+                    setPaidAtDisplay(`${d}.${m}.${y}`);
+                  }
+                }}
+                className="sr-only"
+                tabIndex={-1}
+              />
+            </div>
           </div>
 
           {/* Method */}
