@@ -14,7 +14,8 @@ async function executeToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
   clientId: string,
-  crmClientId: string
+  crmClientId: string,
+  hotelMarkup = 0
 ): Promise<string> {
   try {
     if (toolName === 'search_hotels') {
@@ -42,14 +43,20 @@ async function executeToolCall(
         regionId, checkIn, checkOut, guests, keyId, apiKey, 'EUR', 5
       )
 
+      const markupMul = 1 + hotelMarkup / 100
+
       const result = serpHotels.map((h) => {
         const cheapestRate = h.rates?.[0]
         const payment = cheapestRate?.payment_options?.payment_types?.[0]
+        const rawPrice = payment?.show_amount ?? 0
+        const clientPrice = hotelMarkup > 0
+          ? Math.ceil(rawPrice * markupMul * 100) / 100
+          : rawPrice
         return {
           name: h.name,
           stars: h.star_rating ?? null,
           address: h.address ?? null,
-          totalPrice: payment ? `${payment.show_amount} ${payment.show_currency_code}` : 'price unavailable',
+          totalPrice: payment ? `${clientPrice} ${payment.show_currency_code}` : 'price unavailable',
           meal: cheapestRate?.meal ?? 'no meal info',
           room: cheapestRate?.room_name ?? null,
         }
@@ -173,9 +180,19 @@ export async function POST(req: NextRequest) {
 
     const { data: party } = await supabaseAdmin
       .from('party')
-      .select('display_name')
+      .select('display_name, company_id')
       .eq('id', profileData?.crm_client_id)
       .single()
+
+    let hotelMarkup = 0
+    if (party?.company_id) {
+      const { data: company } = await supabaseAdmin
+        .from('companies')
+        .select('concierge_hotel_markup')
+        .eq('id', party.company_id)
+        .single()
+      hotelMarkup = parseFloat(company?.concierge_hotel_markup) || 0
+    }
 
     const systemPrompt = buildConciergeSystemPrompt(
       { displayName: party?.display_name ?? 'Client', id: client.clientId }
@@ -221,7 +238,8 @@ export async function POST(req: NextRequest) {
           toolBlock.name,
           toolBlock.input as Record<string, unknown>,
           client.clientId,
-          profileData?.crm_client_id ?? ''
+          profileData?.crm_client_id ?? '',
+          hotelMarkup
         )
         toolResults.push({
           type: 'tool_result',

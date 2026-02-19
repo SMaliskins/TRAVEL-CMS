@@ -126,7 +126,9 @@ export async function PATCH(request: NextRequest) {
       "invoice_languages",
       // Additional
       "working_hours", "emergency_contact", "invoice_prefix",
-      "default_payment_terms"
+      "default_payment_terms",
+      // Concierge
+      "concierge_hotel_markup"
     ];
 
     const updateData: Record<string, unknown> = {

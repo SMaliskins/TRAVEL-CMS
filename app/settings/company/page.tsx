@@ -1243,6 +1243,32 @@ export default function CompanySettingsPage() {
             </div>
           </div>
 
+          {/* Concierge / Client App Settings */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Client App &amp; Concierge</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hotel Markup (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="100"
+                  value={formData.concierge_hotel_markup ?? 0}
+                  onChange={(e) => updateField("concierge_hotel_markup", parseFloat(e.target.value) || 0)}
+                  disabled={readonly}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="e.g., 15"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Applied to hotel prices shown to clients via Concierge (e.g. 15 = +15% to RateHawk price)
+                </p>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* Bottom Save Button */}
