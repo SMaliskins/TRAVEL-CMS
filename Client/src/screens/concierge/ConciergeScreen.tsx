@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ChatBubble } from '../../components/ChatBubble'
 import { conciergeApi } from '../../api/concierge'
 
@@ -32,10 +34,18 @@ function formatTime(): string {
 }
 
 export function ConciergeScreen() {
+  const insets = useSafeAreaInsets()
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>()
+  const [language, setLanguage] = useState('en')
+
+  React.useEffect(() => {
+    AsyncStorage.getItem('concierge_language').then((v) => {
+      if (v) setLanguage(v)
+    })
+  }, [])
   const listRef = useRef<FlatList<Message>>(null)
 
   const scrollToEnd = useCallback(() => {
@@ -59,7 +69,7 @@ export function ConciergeScreen() {
     scrollToEnd()
 
     try {
-      const result = await conciergeApi.sendMessage(text, sessionId)
+      const result = await conciergeApi.sendMessage(text, sessionId, language)
 
       if (!sessionId && result.sessionId) {
         setSessionId(result.sessionId)
@@ -102,7 +112,7 @@ export function ConciergeScreen() {
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerIcon}>
           <Text style={styles.headerIconText}>✈</Text>
         </View>
@@ -165,7 +175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 16,
+    paddingTop: 8,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',

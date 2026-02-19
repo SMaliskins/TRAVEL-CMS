@@ -13,6 +13,22 @@ export interface Booking {
   created_at: string
 }
 
+export interface FlightSegment {
+  id: string
+  flightNumber: string
+  airline?: string
+  departure: string
+  departureCity?: string
+  arrival: string
+  arrivalCity?: string
+  departureDate: string
+  departureTimeScheduled: string
+  arrivalDate: string
+  arrivalTimeScheduled: string
+  departureTerminal?: string
+  arrivalTerminal?: string
+}
+
 export interface BookingService {
   id: string
   category: string
@@ -22,6 +38,16 @@ export interface BookingService {
   res_status: string
   client_price: number | null
   supplier_name: string | null
+  ref_nr: string | null
+  ticket_nr: string | null
+  flight_segments: FlightSegment[] | null
+  cabin_class: string | null
+  ticket_numbers: { clientId: string; clientName: string; ticketNr: string }[] | null
+  hotel_board: string | null
+  hotel_room: string | null
+  hotel_bed_type: string | null
+  payment_deadline_deposit: string | null
+  payment_deadline_final: string | null
 }
 
 export const bookingsApi = {
@@ -34,7 +60,12 @@ export const bookingsApi = {
   getHistory: (): Promise<Booking[]> =>
     apiClient.get('/bookings/history').then((r) => r.data.data),
 
-  getById: (id: string): Promise<Booking & { services: BookingService[] }> =>
+  getById: (id: string): Promise<Booking & {
+    services: BookingService[]
+    amount_debt: number
+    payment_dates: { deposit: string | null; final: string | null }
+    overdue_days: number
+  }> =>
     apiClient.get(`/bookings/${id}`).then((r) => r.data.data),
 
   getItinerary: (id: string): Promise<BookingService[]> =>

@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
+import { enrichOrdersWithTotals } from '@/lib/client-auth/enrichOrders'
 
 export async function GET(req: NextRequest) {
   try {
     const client = await getAuthenticatedClient(req)
 
-    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0]
 
     const { data: orders, error } = await supabaseAdmin
       .from('orders')
@@ -26,7 +27,8 @@ export async function GET(req: NextRequest) {
       return Response.json({ data: null, error: 'INTERNAL_ERROR' }, { status: 500 })
     }
 
-    return Response.json({ data: orders ?? [], error: null })
+    const enriched = await enrichOrdersWithTotals(orders ?? [])
+    return Response.json({ data: enriched, error: null })
   } catch {
     return unauthorizedResponse()
   }

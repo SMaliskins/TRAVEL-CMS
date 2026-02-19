@@ -1,6 +1,7 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { Feather } from '@expo/vector-icons'
 
 import { HomeScreen } from '../screens/home/HomeScreen'
 import { TripsScreen } from '../screens/trips/TripsScreen'
@@ -51,11 +52,27 @@ export function MainStack() {
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="TripsTab" component={TripsNavigator} options={{ title: 'Trips', headerShown: false }} />
-      <Tab.Screen name="Concierge" component={ConciergeScreen} options={{ title: 'Concierge' }} />
-      <Tab.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Documents' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{
+        title: 'Home',
+        tabBarIcon: ({ color, size }) => <Feather name="home" size={size} color={color} />,
+      }} />
+      <Tab.Screen name="TripsTab" component={TripsNavigator} options={{
+        title: 'Trips',
+        headerShown: false,
+        tabBarIcon: ({ color, size }) => <Feather name="map" size={size} color={color} />,
+      }} />
+      <Tab.Screen name="Concierge" component={ConciergeScreen} options={{
+        title: 'Concierge',
+        tabBarIcon: ({ color, size }) => <Feather name="message-circle" size={size} color={color} />,
+      }} />
+      <Tab.Screen name="Documents" component={DocumentsScreen} options={{
+        title: 'Documents',
+        tabBarIcon: ({ color, size }) => <Feather name="file-text" size={size} color={color} />,
+      }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{
+        title: 'Profile',
+        tabBarIcon: ({ color, size }) => <Feather name="user" size={size} color={color} />,
+      }} />
     </Tab.Navigator>
   )
 }
