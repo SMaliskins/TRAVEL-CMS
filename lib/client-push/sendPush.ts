@@ -18,15 +18,27 @@ export async function sendPushToClient(
       .eq('crm_client_id', clientPartyId)
       .single()
 
-    if (!profile) return
+    if (!profile) {
+      console.log('[sendPushToClient] No client_profile found for crm_client_id:', clientPartyId)
+      return
+    }
 
-    await supabaseAdmin.from('client_notifications').insert({
+    console.log('[sendPushToClient] Inserting notification for client_id:', profile.id)
+
+    const { error: insertError } = await supabaseAdmin.from('client_notifications').insert({
       client_id: profile.id,
       title: payload.title,
       body: payload.body,
       type: payload.type ?? 'order_update',
       ref_id: payload.refId ?? null,
     })
+
+    if (insertError) {
+      console.error('[sendPushToClient] Insert error:', insertError.message)
+      return
+    }
+
+    console.log('[sendPushToClient] Notification inserted successfully')
 
     if (profile.notification_token) {
       await fetch('https://exp.host/--/api/v2/push/send', {

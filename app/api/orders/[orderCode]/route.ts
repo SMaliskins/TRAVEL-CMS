@@ -334,16 +334,26 @@ export async function PATCH(
     }
 
     const pushFields = ["status", "date_from", "date_to", "countries_cities"];
-    const hasMeaningfulChange = pushFields.some((f) => body[f] !== undefined);
+    const changedFields = pushFields.filter((f) => body[f] !== undefined);
 
-    if (hasMeaningfulChange && order.client_party_id) {
+    if (changedFields.length > 0 && order.client_party_id) {
       const dest = order.countries_cities
         ? order.countries_cities.split("|").find((p: string) => !p.startsWith("origin:") && !p.startsWith("return:"))?.split(",")[1]?.trim() || "your trip"
         : "your trip";
 
+      const details: string[] = [];
+      if (body.date_from || body.date_to) details.push("dates changed");
+      if (body.status) details.push(`status: ${body.status}`);
+      if (body.countries_cities) details.push("destination changed");
+      const bodyText = details.length > 0
+        ? `${dest}: ${details.join(", ")}`
+        : `Your trip to ${dest} has been updated`;
+
+      console.log("[Push] Sending notification for order", orderCode, "to client", order.client_party_id, ":", bodyText);
+
       sendPushToClient(order.client_party_id, {
         title: "Trip updated",
-        body: `Your trip to ${dest} has been updated`,
+        body: bodyText,
         type: "order_update",
         refId: order.id,
       }).catch((e: unknown) => console.error("[Push] fire-and-forget error:", e));
