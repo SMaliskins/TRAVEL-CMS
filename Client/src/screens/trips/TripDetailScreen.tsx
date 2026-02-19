@@ -171,12 +171,204 @@ function GenericServiceCard({ service }: { service: BookingService }) {
   )
 }
 
-function ServiceCard({ service }: { service: BookingService }) {
-  const cat = service.category?.toLowerCase() ?? ''
-  if (cat.includes('flight')) return <FlightCard service={service} />
-  if (cat.includes('hotel') || cat.includes('accommodation') || cat.includes('package')) return <HotelCard service={service} />
-  if (cat.includes('transfer')) return <TransferCard service={service} />
-  return <GenericServiceCard service={service} />
+interface TimelineEvent {
+  key: string
+  type: 'flight' | 'hotel_checkin' | 'hotel_checkout' | 'transfer' | 'other'
+  sortDate: string
+  service: BookingService
+  segment?: FlightSegment
+}
+
+function isFlightService(cat: string): boolean {
+  return cat.includes('flight') || cat.includes('air ticket')
+}
+
+function isTourWithFlights(cat: string, service: BookingService): boolean {
+  return (cat.includes('tour') || cat.includes('package'))
+    && Array.isArray(service.flight_segments)
+    && service.flight_segments.length > 0
+}
+
+function isHotelService(cat: string): boolean {
+  return cat.includes('hotel') || cat.includes('accommodation')
+}
+
+function buildTimeline(services: BookingService[]): TimelineEvent[] {
+  const events: TimelineEvent[] = []
+
+  for (const svc of services) {
+    const cat = svc.category?.toLowerCase() ?? ''
+
+    if (isFlightService(cat) || isTourWithFlights(cat, svc)) {
+      const segments = svc.flight_segments ?? []
+      if (segments.length > 0) {
+        for (let i = 0; i < segments.length; i++) {
+          events.push({
+            key: `${svc.id}-flight-${i}`,
+            type: 'flight',
+            sortDate: segments[i].departureDate ?? svc.service_date_from ?? '',
+            service: svc,
+            segment: segments[i],
+          })
+        }
+      } else {
+        events.push({
+          key: `${svc.id}-flight`,
+          type: 'flight',
+          sortDate: svc.service_date_from ?? '',
+          service: svc,
+        })
+      }
+
+      if (isTourWithFlights(cat, svc)) {
+        if (svc.service_date_from) {
+          events.push({
+            key: `${svc.id}-checkin`,
+            type: 'hotel_checkin',
+            sortDate: svc.service_date_from,
+            service: svc,
+          })
+        }
+        if (svc.service_date_to) {
+          events.push({
+            key: `${svc.id}-checkout`,
+            type: 'hotel_checkout',
+            sortDate: svc.service_date_to,
+            service: svc,
+          })
+        }
+      }
+    } else if (isHotelService(cat)) {
+      events.push({
+        key: `${svc.id}-checkin`,
+        type: 'hotel_checkin',
+        sortDate: svc.service_date_from ?? '',
+        service: svc,
+      })
+      events.push({
+        key: `${svc.id}-checkout`,
+        type: 'hotel_checkout',
+        sortDate: svc.service_date_to ?? '',
+        service: svc,
+      })
+    } else if (cat.includes('transfer')) {
+      events.push({
+        key: svc.id,
+        type: 'transfer',
+        sortDate: svc.service_date_from ?? '',
+        service: svc,
+      })
+    } else {
+      events.push({
+        key: svc.id,
+        type: 'other',
+        sortDate: svc.service_date_from ?? '',
+        service: svc,
+      })
+    }
+  }
+
+  events.sort((a, b) => {
+    if (a.sortDate === b.sortDate) {
+      const order = { flight: 0, hotel_checkin: 1, transfer: 2, other: 3, hotel_checkout: 4 }
+      return (order[a.type] ?? 3) - (order[b.type] ?? 3)
+    }
+    return a.sortDate.localeCompare(b.sortDate)
+  })
+
+  return events
+}
+
+function FlightSegmentCard({ segment, service }: { segment: FlightSegment; service: BookingService }) {
+  return (
+    <View style={[styles.serviceCard, styles.flightBorder]}>
+      <View style={styles.flightHeader}>
+        <Text style={styles.flightNumber}>{segment.flightNumber}</Text>
+        {segment.airline && <Text style={styles.airline}>{segment.airline}</Text>}
+        {service.cabin_class && service.cabin_class !== 'economy' && (
+          <Text style={styles.cabinClass}>{service.cabin_class}</Text>
+        )}
+      </View>
+      <View style={styles.flightRoute}>
+        <View style={styles.flightPoint}>
+          <Text style={styles.airportCode}>{segment.departure}</Text>
+          {segment.departureCity && <Text style={styles.cityName}>{segment.departureCity}</Text>}
+          <Text style={styles.flightTime}>{segment.departureTimeScheduled}</Text>
+          <Text style={styles.flightDate}>{formatDate(segment.departureDate)}</Text>
+        </View>
+        <View style={styles.flightArrow}>
+          <Text style={styles.arrowText}>→</Text>
+        </View>
+        <View style={[styles.flightPoint, { alignItems: 'flex-end' }]}>
+          <Text style={styles.airportCode}>{segment.arrival}</Text>
+          {segment.arrivalCity && <Text style={styles.cityName}>{segment.arrivalCity}</Text>}
+          <Text style={styles.flightTime}>{segment.arrivalTimeScheduled}</Text>
+          <Text style={styles.flightDate}>{formatDate(segment.arrivalDate)}</Text>
+        </View>
+      </View>
+      {service.ref_nr && <Text style={styles.refNr}>PNR {service.ref_nr}</Text>}
+    </View>
+  )
+}
+
+function CheckinCard({ service }: { service: BookingService }) {
+  const hotelName = service.hotel_name || service.service_name
+  const stars = service.hotel_star_rating ? '★'.repeat(Number(service.hotel_star_rating) || 0) : null
+  return (
+    <View style={[styles.serviceCard, styles.hotelBorder]}>
+      <Text style={styles.categoryLabel}>CHECK-IN</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={styles.serviceName}>{hotelName}</Text>
+        {stars ? <Text style={{ fontSize: 13, color: '#f59e0b' }}>{stars}</Text> : null}
+      </View>
+      <Text style={styles.serviceDate}>{formatDate(service.service_date_from)}</Text>
+      <View style={styles.hotelDetails}>
+        {service.hotel_room && <Text style={styles.hotelDetail}>{service.hotel_room}</Text>}
+        {service.hotel_board && (
+          <Text style={styles.hotelDetail}>{BOARD_LABELS[service.hotel_board] ?? service.hotel_board}</Text>
+        )}
+        {service.hotel_bed_type && <Text style={styles.hotelDetail}>{service.hotel_bed_type}</Text>}
+      </View>
+      {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
+      <StatusBadge status={service.res_status} />
+    </View>
+  )
+}
+
+function CheckoutCard({ service }: { service: BookingService }) {
+  const hotelName = service.hotel_name || service.service_name
+  return (
+    <View style={[styles.serviceCard, styles.hotelBorder]}>
+      <Text style={styles.categoryLabel}>CHECK-OUT</Text>
+      <Text style={styles.serviceName}>{hotelName}</Text>
+      <Text style={styles.serviceDate}>{formatDate(service.service_date_to)}</Text>
+    </View>
+  )
+}
+
+function TimelineEventCard({ event }: { event: TimelineEvent }) {
+  if (event.type === 'flight' && event.segment) {
+    return <FlightSegmentCard segment={event.segment} service={event.service} />
+  }
+  if (event.type === 'flight') {
+    return <FlightCard service={event.service} />
+  }
+  if (event.type === 'hotel_checkin') {
+    return <CheckinCard service={event.service} />
+  }
+  if (event.type === 'hotel_checkout') {
+    return <CheckoutCard service={event.service} />
+  }
+  if (event.type === 'transfer') {
+    return <TransferCard service={event.service} />
+  }
+  return <GenericServiceCard service={event.service} />
+}
+
+function formatDayHeader(dateStr: string): string {
+  const d = new Date(dateStr)
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return `${days[d.getDay()]} ${formatDate(dateStr)}`
 }
 
 export function TripDetailScreen({ route }: Props) {
@@ -208,6 +400,10 @@ export function TripDetailScreen({ route }: Props) {
   const debtAmount = Number(booking.amount_debt) || 0
   const overdue = booking.overdue_days ?? 0
 
+  const timeline = booking.services ? buildTimeline(booking.services) : []
+
+  let lastDay = ''
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.hero}>
@@ -223,7 +419,6 @@ export function TripDetailScreen({ route }: Props) {
         )}
       </View>
 
-      {/* Financial info */}
       <View style={styles.financeRow}>
         <View style={styles.financeItem}>
           <Text style={styles.financeLabel}>Total</Text>
@@ -241,7 +436,6 @@ export function TripDetailScreen({ route }: Props) {
         </View>
       </View>
 
-      {/* Payment deadlines */}
       {(booking.payment_dates?.deposit || booking.payment_dates?.final) && (
         <View style={styles.paymentSection}>
           {booking.payment_dates.deposit && (
@@ -258,18 +452,29 @@ export function TripDetailScreen({ route }: Props) {
         </View>
       )}
 
-      {/* Status */}
       <View style={styles.statusRow}>
         <StatusBadge status={booking.status} />
       </View>
 
-      {/* Itinerary */}
-      {booking.services && booking.services.length > 0 && (
+      {timeline.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Itinerary</Text>
-          {booking.services.map((s: BookingService) => (
-            <ServiceCard key={s.id} service={s} />
-          ))}
+          {timeline.map((event) => {
+            const day = event.sortDate?.split('T')[0] ?? ''
+            let showDayHeader = false
+            if (day && day !== lastDay) {
+              lastDay = day
+              showDayHeader = true
+            }
+            return (
+              <View key={event.key}>
+                {showDayHeader && (
+                  <Text style={styles.dayHeader}>{formatDayHeader(day)}</Text>
+                )}
+                <TimelineEventCard event={event} />
+              </View>
+            )
+          })}
         </View>
       )}
     </ScrollView>
@@ -342,4 +547,6 @@ const styles = StyleSheet.create({
   transferType: { fontSize: 12, color: '#888', marginTop: 2 },
   transferRoute: { marginTop: 6 },
   transferPoint: { fontSize: 13, color: '#555', marginTop: 2 },
+
+  dayHeader: { fontSize: 13, fontWeight: '700', color: '#1a73e8', marginTop: 12, marginBottom: 6 },
 })
