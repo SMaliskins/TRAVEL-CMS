@@ -106,6 +106,7 @@ interface Service {
   hotelKingSizeBed?: boolean | null;
   hotelHoneymooners?: boolean | null;
   hotelSilentRoom?: boolean | null;
+  hotelRepeatGuests?: boolean | null;
   hotelRoomsNextTo?: string | null;
   hotelParking?: boolean | null;
   hotelPreferencesFreeText?: string | null;
@@ -255,6 +256,8 @@ interface OrderServicesBlockProps {
   orderSource?: 'TA' | 'TO' | 'CORP' | 'NON';
   // Company currency from Regional Settings (e.g. EUR, USD) for Pricing display
   companyCurrencyCode?: string;
+  // Callback: emit auto-detected destinations from services (hotel cities, flight routes)
+  onDestinationsFromServices?: (destinations: CityWithCountry[]) => void;
 }
 
 export default function OrderServicesBlock({ 
@@ -267,6 +270,7 @@ export default function OrderServicesBlock({
   itineraryDestinations = [],
   orderSource = 'NON',
   companyCurrencyCode = 'EUR',
+  onDestinationsFromServices,
 }: OrderServicesBlockProps) {
   const router = useRouter();
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
@@ -1165,6 +1169,7 @@ export default function OrderServicesBlock({
           hotelKingSizeBed: (s.hotelKingSizeBed ?? s.hotel_king_size_bed ?? null) as boolean | null,
           hotelHoneymooners: (s.hotelHoneymooners ?? s.hotel_honeymooners ?? null) as boolean | null,
           hotelSilentRoom: (s.hotelSilentRoom ?? s.hotel_silent_room ?? null) as boolean | null,
+          hotelRepeatGuests: (s.hotelRepeatGuests ?? s.hotel_repeat_guests ?? null) as boolean | null,
           hotelRoomsNextTo: (s.hotelRoomsNextTo ?? s.hotel_rooms_next_to ?? null) as string | null,
           hotelParking: (s.hotelParking ?? s.hotel_parking ?? null) as boolean | null,
           hotelPreferencesFreeText: (s.hotelPreferencesFreeText ?? s.hotel_preferences_free_text ?? null) as string | null,
@@ -1210,6 +1215,48 @@ export default function OrderServicesBlock({
     fetchServices();
     fetchTravellers();
   }, [fetchServices, fetchTravellers]);
+
+  // Auto-detect destinations from services and emit via callback
+  useEffect(() => {
+    if (!onDestinationsFromServices || services.length === 0) return;
+    const seenCities = new Set<string>();
+    const destinations: CityWithCountry[] = [];
+    for (const service of services) {
+      if (service.resStatus === "cancelled") continue;
+      const categoryType = (service as any).categoryType as string | undefined;
+      // Hotel: extract city from hotel name
+      if (categoryType === "hotel") {
+        const hotelName = (service as any).hotelName as string | undefined;
+        const cityCandidate = hotelName?.split(",")[0]?.trim() || service.name?.split(",")[0]?.trim();
+        if (cityCandidate && !seenCities.has(cityCandidate.toLowerCase())) {
+          const cityData = getCityByName(cityCandidate);
+          if (cityData) {
+            seenCities.add(cityCandidate.toLowerCase());
+            destinations.push({ city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng });
+          }
+        }
+      }
+      // Flight: extract arrival cities from segments
+      if (categoryType === "flight") {
+        const segments = (service as any).flightSegments as Array<{ arrival?: string }> | undefined;
+        if (segments) {
+          for (const seg of segments) {
+            const arr = seg.arrival;
+            if (arr && !seenCities.has(arr.toLowerCase())) {
+              const cityData = getCityByName(arr);
+              if (cityData) {
+                seenCities.add(arr.toLowerCase());
+                destinations.push({ city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng });
+              }
+            }
+          }
+        }
+      }
+    }
+    if (destinations.length > 0) {
+      onDestinationsFromServices(destinations);
+    }
+  }, [services, onDestinationsFromServices]);
 
   // Load categories for "What service?" chooser
   useEffect(() => {
@@ -2142,6 +2189,15 @@ export default function OrderServicesBlock({
             service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
             orderCode={orderCode}
             companyCurrencyCode={companyCurrencyCode}
+            initialClients={(() => {
+              const svc = services.find(s => s.id === editServiceId);
+              if (!svc) return undefined;
+              const resolved = (svc.assignedTravellerIds || [])
+                .map(id => orderTravellers.find(t => t.id === id))
+                .filter(Boolean)
+                .map(t => ({ id: t!.id, name: `${t!.firstName || ""} ${t!.lastName || ""}`.trim() || t!.id }));
+              return resolved.length > 0 ? resolved : undefined;
+            })()}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated: Partial<Service> & { id: string }) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));

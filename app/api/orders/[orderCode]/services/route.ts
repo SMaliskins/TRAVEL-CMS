@@ -143,6 +143,7 @@ export async function GET(
         hotel_king_size_bed?: boolean | null;
         hotel_honeymooners?: boolean | null;
         hotel_silent_room?: boolean | null;
+        hotel_repeat_guests?: boolean | null;
         hotel_rooms_next_to?: string | null;
         hotel_parking?: boolean | null;
         hotel_preferences_free_text?: string | null;
@@ -204,6 +205,7 @@ export async function GET(
         hotelKingSizeBed: row.hotel_king_size_bed ?? null,
         hotelHoneymooners: row.hotel_honeymooners ?? null,
         hotelSilentRoom: row.hotel_silent_room ?? null,
+        hotelRepeatGuests: row.hotel_repeat_guests ?? null,
         hotelRoomsNextTo: row.hotel_rooms_next_to ?? null,
         hotelParking: row.hotel_parking ?? null,
         hotelPreferencesFreeText: row.hotel_preferences_free_text ?? null,
@@ -304,6 +306,7 @@ export async function POST(
     if (body.hotelKingSizeBed !== undefined) serviceData.hotel_king_size_bed = !!body.hotelKingSizeBed;
     if (body.hotelHoneymooners !== undefined) serviceData.hotel_honeymooners = !!body.hotelHoneymooners;
     if (body.hotelSilentRoom !== undefined) serviceData.hotel_silent_room = !!body.hotelSilentRoom;
+    if (body.hotelRepeatGuests !== undefined) serviceData.hotel_repeat_guests = !!body.hotelRepeatGuests;
     if (body.hotelRoomsNextTo !== undefined) serviceData.hotel_rooms_next_to = body.hotelRoomsNextTo || null;
     if (body.hotelParking !== undefined) serviceData.hotel_parking = !!body.hotelParking;
     if (body.hotelPreferencesFreeText !== undefined) serviceData.hotel_preferences_free_text = body.hotelPreferencesFreeText || null;

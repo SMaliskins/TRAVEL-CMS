@@ -22,6 +22,11 @@ function isValidTab(value: string | null): value is TabType {
 }
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 
+interface PaymentDateItem {
+  type: string;
+  date: string;
+}
+
 interface OrderData {
   id: string;
   order_code: string;
@@ -39,6 +44,8 @@ interface OrderData {
   profit_estimated: number;
   client_phone?: string | null;
   client_email?: string | null;
+  payment_dates?: PaymentDateItem[];
+  overdue_days?: number | null;
   // Agent and creation info
   owner_user_id?: string | null;
   owner_name?: string | null;
@@ -101,6 +108,8 @@ export default function OrderPage({
   const [editReturnCity, setEditReturnCity] = useState<CityWithCountry | null>(null);
   const [isSavingField, setIsSavingField] = useState(false);
   const [draggedDestIdx, setDraggedDestIdx] = useState<number | null>(null);
+  // Auto-detected destinations from services (fallback when countries_cities is empty)
+  const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
   
   // Track Ctrl key for Ctrl+click navigation
   useEffect(() => {
@@ -689,16 +698,18 @@ export default function OrderPage({
                     onClick={startEditingItinerary}
                     title="Click to edit itinerary"
                   >
-                    {parsedItinerary.origin || parsedItinerary.destinations.length > 0 ? (
+                    {parsedItinerary.origin || parsedItinerary.destinations.length > 0 || autoDestinations.length > 0 ? (
                       <>
                         <span className="text-xs text-gray-500 uppercase tracking-wide mr-1">Destination:</span>
                         {/* Only show destinations (where main service is). NOT origin/departure point. */}
                         {(() => {
-                          const allCities = [
+                          const manualDests = [
                             ...parsedItinerary.destinations,
                             ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name 
                               ? [parsedItinerary.returnCity] : [])
                           ];
+                          // If no manually set destinations, use auto-detected from services
+                          const allCities = manualDests.length > 0 ? manualDests : autoDestinations;
                           if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set destination</span>;
                           
                           // Group by country
@@ -790,33 +801,61 @@ export default function OrderPage({
               </div>
             )}
             
-            {/* Right: Amount + Payment Status */}
+            {/* Right: Total (active services) + Payment Status + Dates */}
             {order && (
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex items-center gap-4 shrink-0 flex-wrap justify-end">
                 <div className="text-right">
                   <div className="text-xl font-bold text-gray-900">
-                    €{(order.amount_total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    €{(order.amount_total ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </div>
-                  {order.amount_debt > 0 && (
-                    <div className="text-xs text-red-600">
-                      Debt: €{order.amount_debt.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  <div className="text-xs text-gray-500">Total (active services)</div>
+                </div>
+
+                <div className="flex flex-col items-end gap-0.5">
+                  <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    order.amount_total > 0 && order.amount_paid >= order.amount_total
+                      ? "bg-green-100 text-green-800"
+                      : order.amount_paid > 0
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "bg-red-100 text-red-800"
+                  }`}>
+                    {order.amount_total > 0 && order.amount_paid >= order.amount_total
+                      ? "Paid"
+                      : order.amount_paid > 0
+                      ? "Partially paid"
+                      : "Unpaid"
+                    }
+                  </div>
+                  {order.amount_total > 0 && order.amount_paid >= order.amount_total && (
+                    <span className="text-xs text-green-700">
+                      €{(order.amount_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
+                    </span>
+                  )}
+                  {order.amount_paid > 0 && order.amount_total > 0 && order.amount_paid < order.amount_total && (
+                    <span className="text-xs text-gray-600">
+                      €{(order.amount_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} paid, €{(order.amount_debt ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining
+                    </span>
+                  )}
+                  {order.amount_total > 0 && order.amount_paid < order.amount_total && order.amount_paid === 0 && (
+                    <span className="text-xs text-gray-600">
+                      €{(order.amount_debt ?? order.amount_total).toLocaleString("en-US", { minimumFractionDigits: 2 })} to pay
+                    </span>
+                  )}
+                  {(order.payment_dates?.length ?? 0) > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {order.payment_dates!.map((p, i) => (
+                        <span key={i}>
+                          {p.type === "deposit" ? "Deposit" : "Final"}: {formatDateDDMMYYYY(p.date)}
+                          {i < order.payment_dates!.length - 1 ? "; " : ""}
+                        </span>
+                      ))}
                     </div>
                   )}
-                </div>
-                
-                <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
-                  order.amount_paid >= order.amount_total && order.amount_total > 0
-                    ? "bg-green-100 text-green-800"
-                    : order.amount_paid > 0
-                    ? "bg-yellow-100 text-yellow-800"
-                    : "bg-red-100 text-red-800"
-                }`}>
-                  {order.amount_paid >= order.amount_total && order.amount_total > 0
-                    ? "Paid"
-                    : order.amount_paid > 0
-                    ? `Partial`
-                    : "Unpaid"
-                  }
+                  {order.overdue_days != null && order.overdue_days > 0 && (
+                    <span className="text-xs text-red-600 font-medium">
+                      {order.overdue_days} {order.overdue_days === 1 ? "day" : "days"} overdue
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -998,6 +1037,7 @@ export default function OrderPage({
                 itineraryDestinations={itineraryDestinations}
                 orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 companyCurrencyCode={companyCurrencyCode}
+                onDestinationsFromServices={setAutoDestinations}
                 onIssueInvoice={(services) => {
                   // Filter out cancelled services
                   const activeServices = services.filter(s => s.resStatus !== 'cancelled');

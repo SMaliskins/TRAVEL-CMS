@@ -76,6 +76,48 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    // Sum of active (non-cancelled) services → amount_total for header
+    const { data: services } = await supabaseAdmin
+      .from("order_services")
+      .select("res_status, client_price")
+      .eq("order_id", order.id)
+      .eq("company_id", companyId);
+
+    const activeServices = (services || []).filter((s: { res_status?: string }) => s.res_status !== "cancelled");
+    const amountTotalFromServices = activeServices.reduce(
+      (sum: number, s: { client_price?: string | number }) => sum + (Number(s.client_price) || 0),
+      0
+    );
+    const amountPaid = Number(order.amount_paid) || 0;
+    const amountDebt = Math.max(0, amountTotalFromServices - amountPaid);
+
+    // Payment dates and overdue from invoices (non-cancelled)
+    const { data: invoices } = await supabaseAdmin
+      .from("invoices")
+      .select("deposit_date, final_payment_date, status")
+      .eq("order_id", order.id)
+      .eq("company_id", companyId)
+      .neq("status", "cancelled");
+
+    const paymentDates: { type: string; date: string }[] = [];
+    let overdueDays: number | null = null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    (invoices || []).forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null }) => {
+      if (inv.deposit_date) paymentDates.push({ type: "deposit", date: inv.deposit_date });
+      if (inv.final_payment_date) paymentDates.push({ type: "final", date: inv.final_payment_date });
+    });
+
+    paymentDates.forEach(({ date: dateStr }) => {
+      const d = new Date(dateStr);
+      d.setHours(0, 0, 0, 0);
+      if (d < today) {
+        const days = Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
+        if (overdueDays === null || days > overdueDays) overdueDays = days;
+      }
+    });
+
     // Get owner name from user_profiles or profiles if owner_user_id exists
     let ownerName = null;
     if (order.owner_user_id) {
@@ -166,6 +208,11 @@ export async function GET(
       order: {
         ...order,
         owner_name: ownerName,
+        amount_total: amountTotalFromServices,
+        amount_paid: amountPaid,
+        amount_debt: amountDebt,
+        payment_dates: paymentDates,
+        overdue_days: overdueDays,
       }
     });
   } catch (error: unknown) {

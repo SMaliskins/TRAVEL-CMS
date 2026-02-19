@@ -87,6 +87,7 @@ export async function PATCH(
     if (body.hotel_king_size_bed !== undefined) updates.hotel_king_size_bed = body.hotel_king_size_bed;
     if (body.hotel_honeymooners !== undefined) updates.hotel_honeymooners = body.hotel_honeymooners;
     if (body.hotel_silent_room !== undefined) updates.hotel_silent_room = body.hotel_silent_room;
+    if (body.hotel_repeat_guests !== undefined) updates.hotel_repeat_guests = body.hotel_repeat_guests;
     if (body.hotel_rooms_next_to !== undefined) updates.hotel_rooms_next_to = body.hotel_rooms_next_to;
     if (body.hotel_parking !== undefined) updates.hotel_parking = body.hotel_parking;
     if (body.hotel_preferences_free_text !== undefined) updates.hotel_preferences_free_text = body.hotel_preferences_free_text;

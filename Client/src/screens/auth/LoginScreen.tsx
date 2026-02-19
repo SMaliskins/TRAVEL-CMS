@@ -28,9 +28,12 @@ export function LoginScreen() {
     setLoading(true)
     try {
       await login(trimmedEmail, password)
-      // Navigation happens automatically via RootNavigator (isAuthenticated changes)
-    } catch {
-      Alert.alert('Login Error', 'Invalid email or password. Please try again.')
+    } catch (err: any) {
+      const detail = err?.response?.data?.error
+        || err?.message
+        || 'Unknown error'
+      const url = process.env.EXPO_PUBLIC_API_URL || '(not set)'
+      Alert.alert('Login Error', `${detail}\n\nAPI: ${url}`)
     } finally {
       setLoading(false)
     }
@@ -85,6 +88,17 @@ export function LoginScreen() {
             <Text style={styles.buttonText}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.forgotButton}
+            onPress={() => Alert.alert(
+              'Reset Password',
+              'Please contact your travel agent to reset your password.',
+            )}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.forgotText}>Forgot Password?</Text>
           </TouchableOpacity>
         </View>
 
@@ -162,6 +176,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  forgotButton: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  forgotText: {
+    color: '#1a73e8',
+    fontSize: 14,
+    fontWeight: '500',
   },
   footer: {
     textAlign: 'center',

@@ -622,3 +622,65 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+## [2026-02-19 00:00] CODE_WRITER — TASK 6: Client API bookings list endpoints
+
+**Task:** Task 6 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠 Medium
+
+**Действия:**
+- Прочитал `app/api/orders/route.ts` и `[orderCode]/route.ts` — нашёл реальные имена полей
+- Поле клиента: `client_party_id` (FK → party.id = crmClientId из JWT)
+- Поля дат: `date_from`, `date_to` (не start_date/end_date)
+- Создал `app/api/client/v1/bookings/route.ts` — все заказы клиента
+- Создал `app/api/client/v1/bookings/upcoming/route.ts` — date_from >= today, ascending
+- Создал `app/api/client/v1/bookings/history/route.ts` — date_to < today, descending
+- TypeScript check: exit code 0 (чисто)
+
+**Результат:** 3 файла созданы, TypeScript чист
+**Commit:** d69a4e6
+
+**Next:** QA verification
+
+---
+
+## [2026-02-19 10:00] CODE_WRITER — Task 8: Scaffold Expo project
+
+**Task:** Task 8 (Mobile scaffold) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠 Medium
+
+**Действия:**
+- Создал `Client/package.json` — expo ~51, react-native 0.74, zustand, tanstack-query, axios, react-navigation
+- Создал `Client/app.json` — scheme: "mytravelconcierge", bundleIdentifier, plugins
+- Создал `Client/tsconfig.json` — strict: true, @/* path alias
+- Создал `Client/babel.config.js`, `Client/.env`, `Client/.gitignore`
+- Создал `Client/App.tsx` — placeholder screen
+- Создал `Client/assets/.gitkeep` и 10 директорий `src/` через `.gitkeep`
+
+**Результат:** 18 файлов добавлено, структура Expo проекта полностью создана
+**Commit:** c83bdae
+
+**Next:** Готово / QA
+
+---
+
+## [2026-02-19 09:00] CODE_WRITER — Task 9: Axios API client + Zustand auth store
+
+**Task:** Task 9 (Mobile API client) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠 Medium
+
+**Действия:**
+- Создал `Client/src/api/client.ts` — Axios instance, baseURL `/api/client/v1`, request interceptor (Bearer token из SecureStore), response interceptor (401 → refresh → retry, queue pattern для concurrent 401)
+- Создал `Client/src/store/authStore.ts` — Zustand store: login/logout/checkAuth; refreshToken хранится только в SecureStore, не в state
+- Создал `Client/src/api/bookings.ts` — типизированные хелперы: getAll, getUpcoming, getHistory, getById, getItinerary, getDocuments, getProfile
+- Создал `Client/src/api/concierge.ts` — sendMessage placeholder для AI concierge chat
+
+**Результат:** 4 файла добавлено, 223 строк кода
+**Commit:** 77939f0
+
+**Next:** QA
+
+---
+

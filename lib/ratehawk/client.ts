@@ -183,6 +183,65 @@ export async function getHotelContent(
 }
 
 /**
+ * Search hotel rates to extract available meal types.
+ * POST /api/b2b/v3/search/hp/
+ * Returns unique meal codes (e.g. "nomeal", "breakfast", "half-board", "full-board", "all-inclusive").
+ */
+export async function getHotelMealTypes(
+  hid: number,
+  checkin: string,
+  checkout: string,
+  language: string,
+  keyId: string,
+  apiKey: string,
+  currency = "EUR"
+): Promise<string[]> {
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}/api/b2b/v3/search/hp/`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: getAuthHeader(keyId, apiKey),
+    },
+    body: JSON.stringify({
+      hid,
+      checkin,
+      checkout,
+      residency: "gb",
+      language,
+      guests: [{ adults: 2, children: [] }],
+      currency,
+      timeout: 8,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`RateHawk hotelpage failed: ${response.status} ${errText}`);
+  }
+
+  const json = await response.json();
+  if (json.status !== "ok" || json.error) {
+    throw new Error(json.error || "RateHawk hotelpage error");
+  }
+
+  const meals = new Set<string>();
+  const hotels = json.data?.hotels;
+  if (Array.isArray(hotels)) {
+    for (const hotel of hotels) {
+      if (!Array.isArray(hotel.rates)) continue;
+      for (const rate of hotel.rates) {
+        const m = rate.meal_data?.value ?? rate.meal;
+        if (m && typeof m === "string") meals.add(m);
+      }
+    }
+  }
+
+  return [...meals];
+}
+
+/**
  * Fetch hotel content for multiple hotels in parallel (ETG API: one hotel per request).
  * Limit to 5 hotels to respect rate limits (30/min).
  */
