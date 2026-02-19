@@ -1,12 +1,12 @@
-import React from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { Text, View } from 'react-native';
+import React from 'react'
+import { StatusBar } from 'expo-status-bar'
+import { RootNavigator } from './src/navigation'
 
 export default function App() {
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>MyTravelConcierge</Text>
+    <>
       <StatusBar style="auto" />
-    </View>
-  );
+      <RootNavigator />
+    </>
+  )
 }
