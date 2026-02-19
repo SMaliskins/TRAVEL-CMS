@@ -105,10 +105,9 @@ export async function POST(req: NextRequest) {
       return Response.json({ data: null, error: 'VALIDATION_ERROR' }, { status: 400 })
     }
 
-    const { message, sessionId, language = 'en' } = body as {
+    const { message, sessionId } = body as {
       message: string
       sessionId?: string
-      language?: string
     }
 
     type SessionRow = { id: string; messages: Anthropic.Messages.MessageParam[] }
@@ -151,8 +150,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     const systemPrompt = buildConciergeSystemPrompt(
-      { displayName: party?.display_name ?? 'Client', id: client.clientId },
-      language
+      { displayName: party?.display_name ?? 'Client', id: client.clientId }
     )
 
     let messages: Anthropic.Messages.MessageParam[] = [

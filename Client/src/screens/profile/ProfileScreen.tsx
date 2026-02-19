@@ -8,13 +8,6 @@ import { Feather } from '@expo/vector-icons'
 import { bookingsApi } from '../../api/bookings'
 import { useAuthStore } from '../../store/authStore'
 import { formatDate } from '../../utils/dateFormat'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'ru', label: 'Русский' },
-  { code: 'lv', label: 'Latviešu' },
-]
 
 export function ProfileScreen() {
   const [profile, setProfile] = useState<Awaited<ReturnType<typeof bookingsApi.getProfile>> | null>(null)
@@ -23,7 +16,6 @@ export function ProfileScreen() {
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [saving, setSaving] = useState(false)
-  const [language, setLanguage] = useState('en')
   const logout = useAuthStore((s) => s.logout)
   const insets = useSafeAreaInsets()
 
@@ -37,9 +29,6 @@ export function ProfileScreen() {
       .catch(() => {})
       .finally(() => setLoading(false))
 
-    AsyncStorage.getItem('concierge_language').then((v) => {
-      if (v) setLanguage(v)
-    })
   }, [])
 
   const handleEdit = () => {
@@ -63,11 +52,6 @@ export function ProfileScreen() {
     } finally {
       setSaving(false)
     }
-  }
-
-  const handleLanguageChange = async (code: string) => {
-    setLanguage(code)
-    await AsyncStorage.setItem('concierge_language', code)
   }
 
   const handleLogout = () => {
@@ -156,27 +140,6 @@ export function ProfileScreen() {
         )}
       </View>
 
-      {/* Language selector */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Concierge Language</Text>
-        </View>
-        <View style={styles.langRow}>
-          {LANGUAGES.map((lang) => (
-            <TouchableOpacity
-              key={lang.code}
-              style={[styles.langButton, language === lang.code && styles.langButtonActive]}
-              onPress={() => handleLanguageChange(lang.code)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.langText, language === lang.code && styles.langTextActive]}>
-                {lang.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
       {editing && (
         <TouchableOpacity style={styles.cancelButton} onPress={() => setEditing(false)}>
           <Text style={styles.cancelText}>Cancel</Text>
@@ -211,12 +174,6 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 14, fontWeight: '600', color: '#333' },
 
   editInput: { fontSize: 14, fontWeight: '600', color: '#333', textAlign: 'right', flex: 1, marginLeft: 16, borderBottomWidth: 1, borderBottomColor: '#e0e0e0', paddingBottom: 2 },
-
-  langRow: { flexDirection: 'row', padding: 12, gap: 8 },
-  langButton: { flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center' },
-  langButtonActive: { backgroundColor: '#1a73e8' },
-  langText: { fontSize: 13, fontWeight: '500', color: '#666' },
-  langTextActive: { color: '#fff', fontWeight: '700' },
 
   cancelButton: { margin: 16, marginBottom: 0, backgroundColor: '#fff', borderRadius: 14, padding: 16, alignItems: 'center' },
   cancelText: { color: '#666', fontWeight: '600', fontSize: 15 },

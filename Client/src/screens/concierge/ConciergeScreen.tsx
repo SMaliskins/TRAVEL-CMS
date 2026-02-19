@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ChatBubble } from '../../components/ChatBubble'
 import { conciergeApi } from '../../api/concierge'
 
@@ -39,13 +38,6 @@ export function ConciergeScreen() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>()
-  const [language, setLanguage] = useState('en')
-
-  React.useEffect(() => {
-    AsyncStorage.getItem('concierge_language').then((v) => {
-      if (v) setLanguage(v)
-    })
-  }, [])
   const listRef = useRef<FlatList<Message>>(null)
 
   const scrollToEnd = useCallback(() => {
@@ -69,7 +61,7 @@ export function ConciergeScreen() {
     scrollToEnd()
 
     try {
-      const result = await conciergeApi.sendMessage(text, sessionId, language)
+      const result = await conciergeApi.sendMessage(text, sessionId)
 
       if (!sessionId && result.sessionId) {
         setSessionId(result.sessionId)
