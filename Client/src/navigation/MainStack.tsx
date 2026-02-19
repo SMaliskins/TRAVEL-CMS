@@ -10,7 +10,6 @@ import { ConciergeScreen } from '../screens/concierge/ConciergeScreen'
 import { DocumentsScreen } from '../screens/documents/DocumentsScreen'
 import { ProfileScreen } from '../screens/profile/ProfileScreen'
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
-import { TripDetailScreen } from '../screens/trips/TripDetailScreen'
 
 export type MainTabParamList = {
   Home: undefined
