@@ -115,7 +115,11 @@ export async function GET(
     }
 
     return Response.json({ data: documents, error: null })
-  } catch {
-    return unauthorizedResponse()
+  } catch (err) {
+    if (err instanceof Error && err.message === 'UNAUTHORIZED') {
+      return unauthorizedResponse()
+    }
+    console.error('Bookings error:', err)
+    return Response.json({ data: null, error: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }

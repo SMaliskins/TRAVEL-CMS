@@ -43,7 +43,11 @@ export async function GET(
       data: { ...order, services: services ?? [] },
       error: null,
     })
-  } catch {
-    return unauthorizedResponse()
+  } catch (err) {
+    if (err instanceof Error && err.message === 'UNAUTHORIZED') {
+      return unauthorizedResponse()
+    }
+    console.error('Bookings error:', err)
+    return Response.json({ data: null, error: 'INTERNAL_ERROR' }, { status: 500 })
   }
 }
