@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, TouchableOpacity, AppState } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Feather } from '@expo/vector-icons'
 import { bookingsApi, Booking } from '../../api/bookings'
@@ -10,6 +10,8 @@ import { useAuthStore } from '../../store/authStore'
 import { parseDestination } from '../../utils/parseDestination'
 import { formatDateRange, calcDaysNights, calcDaysUntil } from '../../utils/dateFormat'
 import type { RootStackParamList } from '../../navigation/MainStack'
+
+const POLL_INTERVAL = 30_000
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -37,6 +39,32 @@ export function HomeScreen() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Poll for new notifications every 30s
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useFocusEffect(
+    useCallback(() => {
+      const pollBadge = () => {
+        notificationsApi.getAll()
+          .then((res) => setUnreadCount(res.unreadCount))
+          .catch(() => {})
+      }
+      pollBadge()
+      intervalRef.current = setInterval(pollBadge, POLL_INTERVAL)
+      return () => {
+        if (intervalRef.current) clearInterval(intervalRef.current)
+      }
+    }, [])
+  )
+
+  // Refresh when app comes back to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadData()
+    })
+    return () => sub.remove()
+  }, [loadData])
 
   const insets = useSafeAreaInsets()
   const nextTrip = upcoming[0]
