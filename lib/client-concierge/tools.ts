@@ -3,17 +3,16 @@ import Anthropic from '@anthropic-ai/sdk'
 export const conciergeTools: Anthropic.Messages.Tool[] = [
   {
     name: 'search_hotels',
-    description: 'Search for available hotels at a destination for given dates',
+    description: 'Search for available hotels with real-time pricing via RateHawk. Returns hotel name, star rating, price, meal plan, room type.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        city: { type: 'string', description: 'City or destination name' },
+        city: { type: 'string', description: 'City or destination name (e.g. "Antalya", "Paris", "Barcelona")' },
         check_in: { type: 'string', description: 'Check-in date YYYY-MM-DD' },
         check_out: { type: 'string', description: 'Check-out date YYYY-MM-DD' },
-        guests: { type: 'number', description: 'Number of guests' },
-        rooms: { type: 'number', description: 'Number of rooms, default 1' },
+        guests: { type: 'number', description: 'Number of guests, default 2' },
       },
-      required: ['city', 'check_in', 'check_out', 'guests'],
+      required: ['city', 'check_in', 'check_out'],
     },
   },
   {

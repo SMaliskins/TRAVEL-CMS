@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
 import { conciergeTools } from '@/lib/client-concierge/tools'
 import { buildConciergeSystemPrompt } from '@/lib/client-concierge/systemPrompt'
+import { suggestHotels, searchHotelsByRegion } from '@/lib/ratehawk/client'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -17,22 +18,49 @@ async function executeToolCall(
 ): Promise<string> {
   try {
     if (toolName === 'search_hotels') {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/client/v1/concierge/hotels/search`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            city: toolInput.city,
-            checkIn: toolInput.check_in,
-            checkOut: toolInput.check_out,
-            guests: toolInput.guests ?? 2,
-            rooms: toolInput.rooms ?? 1,
-          }),
-        }
+      const keyId = process.env.RATEHAWK_KEY_ID
+      const apiKey = process.env.RATEHAWK_API_KEY
+      if (!keyId || !apiKey) return JSON.stringify({ error: 'Hotel search not configured' })
+
+      const city = toolInput.city as string
+      const checkIn = toolInput.check_in as string
+      const checkOut = toolInput.check_out as string
+      const guests = (toolInput.guests as number) ?? 2
+
+      const suggestions = await suggestHotels(city, 'en', keyId, apiKey)
+      const regions = suggestions.regions ?? []
+
+      if (regions.length === 0) {
+        return JSON.stringify({ error: `No region found for "${city}". Try a different city name.` })
+      }
+
+      const regionId = typeof regions[0].id === 'number'
+        ? regions[0].id
+        : parseInt(String(regions[0].id), 10)
+
+      const serpHotels = await searchHotelsByRegion(
+        regionId, checkIn, checkOut, guests, keyId, apiKey, 'EUR', 5
       )
-      const data = await res.json()
-      return JSON.stringify(data.data ?? data.error ?? 'No results')
+
+      const result = serpHotels.map((h) => {
+        const cheapestRate = h.rates?.[0]
+        const payment = cheapestRate?.payment_options?.payment_types?.[0]
+        return {
+          name: h.name,
+          stars: h.star_rating ?? null,
+          address: h.address ?? null,
+          totalPrice: payment ? `${payment.show_amount} ${payment.show_currency_code}` : 'price unavailable',
+          meal: cheapestRate?.meal ?? 'no meal info',
+          room: cheapestRate?.room_name ?? null,
+        }
+      })
+
+      return JSON.stringify({
+        region: regions[0].name,
+        dates: `${checkIn} — ${checkOut}`,
+        guests,
+        hotels: result,
+      })
     }
 
     if (toolName === 'get_client_trips') {
@@ -85,7 +113,7 @@ async function executeToolCall(
 
     if (toolName === 'search_transfers') {
       return JSON.stringify({
-        note: 'Transfer search is not yet available. Please contact your travel agent for transfer arrangements.',
+        note: 'Transfer booking is available through your travel agent. I can help you prepare a transfer request with all the details (pickup, destination, date, time, passengers) and forward it to your agent.',
         params: toolInput,
       })
     }

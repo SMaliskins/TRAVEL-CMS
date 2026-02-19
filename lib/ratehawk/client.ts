@@ -241,6 +241,81 @@ export async function getHotelMealTypes(
   return [...meals];
 }
 
+export interface RateHawkSerpHotel {
+  hid: number;
+  name: string;
+  star_rating: number;
+  address: string;
+  rates: {
+    daily_prices: string[];
+    meal: string;
+    room_name: string;
+    payment_options: {
+      payment_types: {
+        show_amount: number;
+        show_currency_code: string;
+        amount: number;
+        currency_code: string;
+      }[];
+    };
+  }[];
+}
+
+/**
+ * Search hotels by region with availability & pricing
+ * POST /api/b2b/v3/search/serp/region/
+ */
+export async function searchHotelsByRegion(
+  regionId: number,
+  checkin: string,
+  checkout: string,
+  guests: number,
+  keyId: string,
+  apiKey: string,
+  currency = "EUR",
+  limit = 5
+): Promise<RateHawkSerpHotel[]> {
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}/api/b2b/v3/search/serp/region/`;
+
+  const guestsArr = [];
+  for (let i = 0; i < Math.ceil(guests / 2); i++) {
+    const adults = Math.min(2, guests - i * 2);
+    guestsArr.push({ adults, children: [] });
+  }
+  if (guestsArr.length === 0) guestsArr.push({ adults: 2, children: [] });
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: getAuthHeader(keyId, apiKey),
+    },
+    body: JSON.stringify({
+      checkin,
+      checkout,
+      residency: "lv",
+      language: "en",
+      guests: guestsArr,
+      region_id: regionId,
+      currency,
+      hotels_limit: limit,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`RateHawk SERP failed: ${response.status} ${errText}`);
+  }
+
+  const json = await response.json();
+  if (json.status !== "ok" || json.error) {
+    throw new Error(json.error || "RateHawk SERP error");
+  }
+
+  return json.data?.hotels ?? [];
+}
+
 /**
  * Fetch hotel content for multiple hotels in parallel (ETG API: one hotel per request).
  * Limit to 5 hotels to respect rate limits (30/min).
