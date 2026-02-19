@@ -270,7 +270,7 @@ function buildTimeline(services: BookingService[]): TimelineEvent[] {
 
   events.sort((a, b) => {
     if (a.sortDate === b.sortDate) {
-      const order = { flight: 0, hotel_checkin: 1, transfer: 2, other: 3, hotel_checkout: 4 }
+      const order = { hotel_checkout: 0, transfer: 1, flight: 2, other: 3, hotel_checkin: 4 }
       return (order[a.type] ?? 3) - (order[b.type] ?? 3)
     }
     return a.sortDate.localeCompare(b.sortDate)
