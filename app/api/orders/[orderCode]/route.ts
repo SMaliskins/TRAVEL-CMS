@@ -345,37 +345,42 @@ export async function PATCH(
     const changedFields = pushFields.filter((f) => body[f] !== undefined);
 
     if (changedFields.length > 0 && order.client_party_id && oldOrder) {
-      const fmtDate = (d: string | null) => {
+      const fmtD = (d: string | null) => {
         if (!d) return "—";
         const dt = new Date(d);
         return `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()}`;
       };
 
       const dest = order.countries_cities
-        ? order.countries_cities.split("|").find((p: string) => !p.startsWith("origin:") && !p.startsWith("return:"))?.split(",")[1]?.trim() || "your trip"
-        : "your trip";
+        ? order.countries_cities.split("|").find((p: string) => !p.startsWith("origin:") && !p.startsWith("return:"))?.split(",")[1]?.trim() || "Your trip"
+        : "Your trip";
 
-      const lines: string[] = [];
-      if (body.date_from && body.date_from !== oldOrder.date_from) {
-        lines.push(`Start: ${fmtDate(oldOrder.date_from)} → ${fmtDate(body.date_from)}`);
+      const blocks: string[] = [];
+
+      const datesChanged =
+        (body.date_from && body.date_from !== oldOrder.date_from) ||
+        (body.date_to && body.date_to !== oldOrder.date_to);
+      if (datesChanged) {
+        const oldFrom = fmtD(oldOrder.date_from);
+        const oldTo = fmtD(oldOrder.date_to);
+        const newFrom = fmtD(body.date_from ?? oldOrder.date_from);
+        const newTo = fmtD(body.date_to ?? oldOrder.date_to);
+        blocks.push(`It was: ${oldFrom} — ${oldTo}\nNow: ${newFrom} — ${newTo}`);
       }
-      if (body.date_to && body.date_to !== oldOrder.date_to) {
-        lines.push(`End: ${fmtDate(oldOrder.date_to)} → ${fmtDate(body.date_to)}`);
-      }
+
       if (body.status && body.status !== oldOrder.status) {
-        lines.push(`Status: ${oldOrder.status || "—"} → ${body.status}`);
+        blocks.push(`It was: ${oldOrder.status || "—"}\nNow: ${body.status}`);
       }
+
       if (body.countries_cities && body.countries_cities !== oldOrder.countries_cities) {
-        lines.push("Destination changed");
+        blocks.push("Destination has been changed");
       }
 
-      if (lines.length === 0) lines.push("Details updated");
+      if (blocks.length === 0) blocks.push("Details updated");
 
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const bodyText = `${dest}\n${lines.join("\n")}\nat ${timeStr}`;
+      const bodyText = `${dest}\n${blocks.join("\n")}`;
 
-      console.log("[Push] Sending notification for order", orderCode, ":", bodyText);
+      console.log("[Push] Notification for", orderCode, ":", bodyText);
 
       sendPushToClient(order.client_party_id, {
         title: "Trip updated",

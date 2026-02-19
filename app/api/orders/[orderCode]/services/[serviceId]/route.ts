@@ -116,6 +116,14 @@ export async function PATCH(
     if (body.baggage !== undefined) updates.baggage = body.baggage;
     if (body.flight_segments !== undefined) updates.flight_segments = body.flight_segments;
 
+    // Fetch old service for notification diff
+    const { data: oldSvc } = await supabaseAdmin
+      .from("order_services")
+      .select("service_name, service_date_from, service_date_to, flight_segments, res_status, category")
+      .eq("id", serviceId)
+      .eq("order_id", order.id)
+      .single();
+
     updates.updated_at = new Date().toISOString();
 
     // Update service
@@ -143,10 +151,60 @@ export async function PATCH(
       .eq("id", order.id)
       .single();
 
-    if (orderForPush?.client_party_id) {
+    if (orderForPush?.client_party_id && oldSvc) {
+      const fmtD = (d: string | null) => {
+        if (!d) return "—";
+        const dt = new Date(d);
+        return `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()}`;
+      };
+      const fmtTime = (t: string | null) => t ? t.substring(0, 5) : "—";
+
+      const blocks: string[] = [];
+      const cat = oldSvc.category || service.category || "";
+      const name = service.service_name || oldSvc.service_name || "Service";
+
+      // Flight schedule changes
+      if (cat.toLowerCase().includes("flight") && body.flight_segments && Array.isArray(oldSvc.flight_segments)) {
+        const oldSegs = oldSvc.flight_segments as { departureCity?: string; arrivalCity?: string; departureDate?: string; departureTimeScheduled?: string; arrivalTimeScheduled?: string }[];
+        const newSegs = body.flight_segments as typeof oldSegs;
+        for (let i = 0; i < Math.max(oldSegs.length, newSegs.length); i++) {
+          const o = oldSegs[i];
+          const n = newSegs[i];
+          if (o && n) {
+            const route = `${o.departureCity || "?"}-${o.arrivalCity || "?"}`;
+            const oldLine = `${route} ${fmtD(o.departureDate || null)} ${fmtTime(o.departureTimeScheduled || null)}-${fmtTime(o.arrivalTimeScheduled || null)}`;
+            const newLine = `${n.departureCity || o.departureCity || "?"}-${n.arrivalCity || o.arrivalCity || "?"} ${fmtD(n.departureDate || o.departureDate || null)} ${fmtTime(n.departureTimeScheduled || o.departureTimeScheduled || null)}-${fmtTime(n.arrivalTimeScheduled || o.arrivalTimeScheduled || null)}`;
+            if (oldLine !== newLine) {
+              blocks.push(`It was: ${oldLine}\nNow: ${newLine}`);
+            }
+          }
+        }
+      }
+
+      // Date changes
+      const datesChanged =
+        (body.service_date_from && body.service_date_from !== oldSvc.service_date_from) ||
+        (body.service_date_to && body.service_date_to !== oldSvc.service_date_to) ||
+        (body.date_from && body.date_from !== oldSvc.service_date_from) ||
+        (body.date_to && body.date_to !== oldSvc.service_date_to);
+      if (datesChanged && blocks.length === 0) {
+        const oldFrom = fmtD(oldSvc.service_date_from);
+        const oldTo = fmtD(oldSvc.service_date_to);
+        const newFrom = fmtD(body.service_date_from ?? body.date_from ?? oldSvc.service_date_from);
+        const newTo = fmtD(body.service_date_to ?? body.date_to ?? oldSvc.service_date_to);
+        blocks.push(`It was: ${oldFrom} — ${oldTo}\nNow: ${newFrom} — ${newTo}`);
+      }
+
+      // Status changes
+      if (body.res_status && body.res_status !== oldSvc.res_status) {
+        blocks.push(`It was: ${oldSvc.res_status || "—"}\nNow: ${body.res_status}`);
+      }
+
+      if (blocks.length === 0) blocks.push("Details updated");
+
       sendPushToClient(orderForPush.client_party_id, {
         title: "Itinerary updated",
-        body: `Service "${service.service_name}" has been updated`,
+        body: `${name}\n${blocks.join("\n")}`,
         type: "service_update",
         refId: order.id,
       }).catch((e: unknown) => console.error("[Push] fire-and-forget:", e));
