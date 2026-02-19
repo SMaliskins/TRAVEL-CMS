@@ -32,9 +32,9 @@ CREATE TABLE IF NOT EXISTS client_profiles (
   notification_token  TEXT,          -- FCM / APNs push token
 
   -- MLM tree: which agent invited this client
-  -- References profiles.id (agent's CRM profile row)
+  -- References profiles.user_id (agent's CRM profile row)
   invited_by_agent_id UUID
-                        REFERENCES profiles(id) ON DELETE SET NULL,
+                        REFERENCES profiles(user_id) ON DELETE SET NULL,
 
   -- Unique referral code used to invite new clients (defaults to a UUID string)
   referral_code       TEXT        NOT NULL UNIQUE DEFAULT gen_random_uuid()::text,
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS client_profiles (
 
 COMMENT ON TABLE  client_profiles IS 'Mobile app auth profiles extending CRM party records (one-to-one).';
 COMMENT ON COLUMN client_profiles.crm_client_id       IS 'FK → party.id — the CRM client this account belongs to.';
-COMMENT ON COLUMN client_profiles.invited_by_agent_id IS 'FK → profiles.id — the agent who invited this client (MLM level-1 parent).';
+COMMENT ON COLUMN client_profiles.invited_by_agent_id IS 'FK → profiles.user_id — the agent who invited this client (MLM level-1 parent).';
 COMMENT ON COLUMN client_profiles.referral_code       IS 'Unique shareable code; new clients who sign up via this code are linked as level-2.';
 
 
@@ -133,18 +133,24 @@ CREATE TABLE IF NOT EXISTS concierge_sessions (
 COMMENT ON TABLE  concierge_sessions IS 'AI concierge chat sessions per client.';
 COMMENT ON COLUMN concierge_sessions.messages IS 'JSONB array of chat messages: [{role, content, ts}, …]';
 
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_concierge_sessions_updated_at
+  BEFORE UPDATE ON concierge_sessions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 
 -- =============================================================================
 -- Indexes
 -- =============================================================================
 
 -- client_profiles
-CREATE INDEX IF NOT EXISTS idx_client_profiles_crm_client_id
-  ON client_profiles(crm_client_id);
-
-CREATE INDEX IF NOT EXISTS idx_client_profiles_referral_code
-  ON client_profiles(referral_code);
-
 CREATE INDEX IF NOT EXISTS idx_client_profiles_invited_by
   ON client_profiles(invited_by_agent_id);
 
