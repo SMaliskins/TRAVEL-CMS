@@ -36,6 +36,8 @@ export async function GET(
         supplier_name, ref_nr, ticket_nr,
         flight_segments, cabin_class, ticket_numbers,
         boarding_passes, hotel_board, hotel_room, hotel_bed_type,
+        hotel_name, hotel_star_rating,
+        transfer_type, pickup_location, dropoff_location, pickup_time,
         payment_deadline_deposit, payment_deadline_final
       `)
       .eq('order_id', id)

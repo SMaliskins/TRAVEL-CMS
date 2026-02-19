@@ -67,10 +67,6 @@ export function HomeScreen() {
   }, [loadData])
 
   const insets = useSafeAreaInsets()
-  const nextTrip = upcoming[0]
-  const dest = nextTrip ? parseDestination(nextTrip.countries_cities) : null
-  const daysNights = nextTrip ? calcDaysNights(nextTrip.date_from, nextTrip.date_to) : null
-  const daysUntil = nextTrip ? calcDaysUntil(nextTrip.date_from) : null
 
   if (loading) {
     return (
@@ -111,36 +107,43 @@ export function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Next Trip</Text>
-        {nextTrip && dest ? (
-          <View style={styles.tripCard}>
-            <Text style={styles.tripDestination}>{dest.label}</Text>
-            {dest.route && (
-              <Text style={styles.tripRoute}>{dest.route}</Text>
-            )}
-            <Text style={styles.tripDates}>
-              {formatDateRange(nextTrip.date_from, nextTrip.date_to)}
-              {daysNights ? `  (${daysNights})` : ''}
-            </Text>
-            <View style={styles.cardFooter}>
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>{nextTrip.status}</Text>
-              </View>
-              {daysUntil != null && daysUntil > 0 && (
-                <Text style={styles.daysUntil}>{daysUntil} days before trip</Text>
-              )}
-            </View>
-          </View>
+        <Text style={styles.sectionTitle}>
+          {upcoming.length > 0 ? `Upcoming trips (${upcoming.length})` : 'Upcoming trips'}
+        </Text>
+        {upcoming.length > 0 ? (
+          upcoming.map((trip) => {
+            const td = parseDestination(trip.countries_cities)
+            const dn = calcDaysNights(trip.date_from, trip.date_to)
+            const du = calcDaysUntil(trip.date_from)
+            return (
+              <TouchableOpacity
+                key={trip.id}
+                style={styles.tripCard}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('TripDetailFromHome', { bookingId: trip.id })}
+              >
+                <Text style={styles.tripDestination}>{td?.label ?? '—'}</Text>
+                {td?.route ? <Text style={styles.tripRoute}>{td.route}</Text> : null}
+                <Text style={styles.tripDates}>
+                  {formatDateRange(trip.date_from, trip.date_to)}
+                  {dn ? `  (${dn})` : ''}
+                </Text>
+                <View style={styles.cardFooter}>
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusText}>{trip.status}</Text>
+                  </View>
+                  {du != null && du > 0 && (
+                    <Text style={styles.daysUntil}>{du} days before trip</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            )
+          })
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No upcoming trips</Text>
           </View>
         )}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Upcoming trips</Text>
-        <Text style={styles.statNumber}>{upcoming.length}</Text>
       </View>
     </ScrollView>
   )
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   section: { margin: 16 },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
-  tripCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, elevation: 3 },
+  tripCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, elevation: 3, marginBottom: 12 },
   tripDestination: { fontSize: 20, fontWeight: '700', color: '#222' },
   tripRoute: { fontSize: 13, color: '#888', marginTop: 2 },
   tripDates: { fontSize: 14, color: '#666', marginTop: 6 },

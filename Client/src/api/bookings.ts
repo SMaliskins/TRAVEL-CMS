@@ -46,6 +46,12 @@ export interface BookingService {
   hotel_board: string | null
   hotel_room: string | null
   hotel_bed_type: string | null
+  hotel_name: string | null
+  hotel_star_rating: string | null
+  transfer_type: string | null
+  pickup_location: string | null
+  dropoff_location: string | null
+  pickup_time: string | null
   payment_deadline_deposit: string | null
   payment_deadline_final: string | null
 }

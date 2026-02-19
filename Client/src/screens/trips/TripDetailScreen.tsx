@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native'
-import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { bookingsApi, BookingService, FlightSegment } from '../../api/bookings'
-import { TripsStackParamList } from '../../navigation/MainStack'
 import { parseDestination } from '../../utils/parseDestination'
 import { formatDateRange, formatDate, calcDaysNights, calcDaysUntil } from '../../utils/dateFormat'
 
-type Props = NativeStackScreenProps<TripsStackParamList, 'TripDetail'>
+type Props = { route: { params: { bookingId: string } } }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   confirmed: { bg: '#dcfce7', text: '#16a34a' },
@@ -89,21 +87,68 @@ function FlightCard({ service }: { service: BookingService }) {
 }
 
 function HotelCard({ service }: { service: BookingService }) {
+  const hotelName = service.hotel_name || service.service_name
+  const stars = service.hotel_star_rating ? '★'.repeat(Number(service.hotel_star_rating) || 0) : null
   return (
     <View style={[styles.serviceCard, styles.hotelBorder]}>
       <Text style={styles.categoryLabel}>HOTEL</Text>
-      <Text style={styles.serviceName}>{service.service_name}</Text>
-      <Text style={styles.serviceDate}>
-        {formatDateRange(service.service_date_from, service.service_date_to)}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={styles.serviceName}>{hotelName}</Text>
+        {stars ? <Text style={{ fontSize: 13, color: '#f59e0b' }}>{stars}</Text> : null}
+      </View>
+
+      <View style={styles.hotelSchedule}>
+        <View style={styles.hotelDateBlock}>
+          <Text style={styles.hotelDateLabel}>Check-in</Text>
+          <Text style={styles.hotelDateValue}>{formatDate(service.service_date_from)}</Text>
+        </View>
+        <Text style={styles.hotelArrow}>→</Text>
+        <View style={styles.hotelDateBlock}>
+          <Text style={styles.hotelDateLabel}>Check-out</Text>
+          <Text style={styles.hotelDateValue}>{formatDate(service.service_date_to)}</Text>
+        </View>
+      </View>
+
       <View style={styles.hotelDetails}>
-        {service.hotel_board && (
-          <Text style={styles.hotelDetail}>{BOARD_LABELS[service.hotel_board] ?? service.hotel_board}</Text>
-        )}
         {service.hotel_room && (
           <Text style={styles.hotelDetail}>{service.hotel_room}</Text>
         )}
+        {service.hotel_board && (
+          <Text style={styles.hotelDetail}>{BOARD_LABELS[service.hotel_board] ?? service.hotel_board}</Text>
+        )}
+        {service.hotel_bed_type && (
+          <Text style={styles.hotelDetail}>{service.hotel_bed_type}</Text>
+        )}
       </View>
+      {service.supplier_name && <Text style={styles.supplierText}>{service.supplier_name}</Text>}
+      {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
+      <StatusBadge status={service.res_status} />
+    </View>
+  )
+}
+
+function TransferCard({ service }: { service: BookingService }) {
+  return (
+    <View style={[styles.serviceCard, styles.transferBorder]}>
+      <Text style={styles.categoryLabel}>TRANSFER</Text>
+      <Text style={styles.serviceName}>{service.service_name}</Text>
+      {service.transfer_type && (
+        <Text style={styles.transferType}>{service.transfer_type}</Text>
+      )}
+      <Text style={styles.serviceDate}>{formatDate(service.service_date_from)}</Text>
+      {(service.pickup_location || service.dropoff_location) && (
+        <View style={styles.transferRoute}>
+          {service.pickup_location && (
+            <Text style={styles.transferPoint}>From: {service.pickup_location}</Text>
+          )}
+          {service.dropoff_location && (
+            <Text style={styles.transferPoint}>To: {service.dropoff_location}</Text>
+          )}
+          {service.pickup_time && (
+            <Text style={styles.transferPoint}>Time: {service.pickup_time}</Text>
+          )}
+        </View>
+      )}
       {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
       <StatusBadge status={service.res_status} />
     </View>
@@ -129,7 +174,8 @@ function GenericServiceCard({ service }: { service: BookingService }) {
 function ServiceCard({ service }: { service: BookingService }) {
   const cat = service.category?.toLowerCase() ?? ''
   if (cat.includes('flight')) return <FlightCard service={service} />
-  if (cat.includes('hotel') || cat.includes('accommodation')) return <HotelCard service={service} />
+  if (cat.includes('hotel') || cat.includes('accommodation') || cat.includes('package')) return <HotelCard service={service} />
+  if (cat.includes('transfer')) return <TransferCard service={service} />
   return <GenericServiceCard service={service} />
 }
 
@@ -283,6 +329,17 @@ const styles = StyleSheet.create({
   arrowText: { fontSize: 20, color: '#ccc' },
   refNr: { fontSize: 11, color: '#888', marginTop: 4 },
 
-  hotelDetails: { flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' },
+  hotelSchedule: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+  hotelDateBlock: { flex: 1 },
+  hotelDateLabel: { fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.5 },
+  hotelDateValue: { fontSize: 14, fontWeight: '600', color: '#333', marginTop: 2 },
+  hotelArrow: { fontSize: 16, color: '#ccc', paddingHorizontal: 4 },
+  hotelDetails: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   hotelDetail: { fontSize: 12, color: '#666', backgroundColor: '#f5f5f5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, overflow: 'hidden' },
+  supplierText: { fontSize: 11, color: '#999', marginTop: 4 },
+
+  transferBorder: { borderLeftColor: '#f59e0b' },
+  transferType: { fontSize: 12, color: '#888', marginTop: 2 },
+  transferRoute: { marginTop: 6 },
+  transferPoint: { fontSize: 13, color: '#555', marginTop: 2 },
 })

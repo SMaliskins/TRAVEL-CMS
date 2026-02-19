@@ -10,6 +10,7 @@ import { ConciergeScreen } from '../screens/concierge/ConciergeScreen'
 import { DocumentsScreen } from '../screens/documents/DocumentsScreen'
 import { ProfileScreen } from '../screens/profile/ProfileScreen'
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
+import { TripDetailScreen } from '../screens/trips/TripDetailScreen'
 
 export type MainTabParamList = {
   Home: undefined
@@ -27,6 +28,7 @@ export type TripsStackParamList = {
 export type RootStackParamList = {
   Tabs: undefined
   Notifications: undefined
+  TripDetailFromHome: { bookingId: string }
 }
 
 const Tab = createBottomTabNavigator<MainTabParamList>()
@@ -92,6 +94,11 @@ export function MainStack() {
         name="Notifications"
         component={NotificationsScreen}
         options={{ animation: 'slide_from_right' }}
+      />
+      <RootStack.Screen
+        name="TripDetailFromHome"
+        component={TripDetailScreen}
+        options={{ animation: 'slide_from_right', title: 'Trip Details' }}
       />
     </RootStack.Navigator>
   )
