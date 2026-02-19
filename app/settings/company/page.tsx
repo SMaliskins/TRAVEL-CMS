@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
+import BankAccountsManager from "./_components/BankAccountsManager";
 
 // Company types for classification
 const COMPANY_TYPES = [
@@ -1002,6 +1003,9 @@ export default function CompanySettingsPage() {
               </div>
               </div>
             </div>
+
+            {/* Payment Accounts (for Finances module) */}
+            <BankAccountsManager readonly={readonly} />
           </div>
 
           {/* Licenses & Certifications + IATA */}

@@ -27,6 +27,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
+import AddPaymentModal from "@/app/finances/payments/_components/AddPaymentModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
@@ -288,6 +289,7 @@ export default function OrderServicesBlock({
   const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
   const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   
   // Cancelled filter with localStorage persistence
@@ -1671,6 +1673,15 @@ export default function OrderServicesBlock({
               {hideCancelled ? "Show" : "Hide"} Cancelled
             </button>
             <button
+              onClick={() => setShowAddPaymentModal(true)}
+              className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Payment
+            </button>
+            <button
               onClick={() => {
                 if (serviceCategories.length > 0) {
                   setShowChooseCategoryModal(true);
@@ -2180,6 +2191,17 @@ export default function OrderServicesBlock({
           onServiceAdded={handleServiceAdded}
         />
       )}
+
+      {/* Add Payment Modal */}
+      <AddPaymentModal
+        open={showAddPaymentModal}
+        onClose={() => setShowAddPaymentModal(false)}
+        onCreated={() => {
+          setShowAddPaymentModal(false);
+          router.refresh();
+        }}
+        preselectedOrderCode={orderCode}
+      />
 
       {/* Edit Service Modal - simple inline editor */}
       {editServiceId && (

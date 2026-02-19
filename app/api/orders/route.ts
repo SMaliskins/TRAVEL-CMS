@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const orderType = searchParams.get("order_type");
+    const search = searchParams.get("search");
 
     // Build query - only select columns that definitely exist
     // client_display_name and countries_cities may not exist in all deployments
@@ -92,6 +93,12 @@ export async function GET(request: NextRequest) {
     }
     if (orderType) {
       query = query.eq("order_type", orderType);
+    }
+    if (search) {
+      const s = search.trim();
+      query = query.or(
+        `order_code.ilike.%${s}%,client_display_name.ilike.%${s}%`
+      );
     }
 
     const { data: orders, error } = await query;

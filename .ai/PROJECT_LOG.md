@@ -5,6 +5,45 @@
 
 ---
 
+### 📅 [2026-02-19] | [14:15]
+**Агент:** `Code Writer`
+**Задача:** `Finance Payments Module`
+**Статус:** `SUCCESS`
+**Complexity:** 🟠
+
+**Действия:**
+- SQL migration: `company_bank_accounts` table + extend `payments` with `account_id`, `payer_name`, `payer_party_id`
+- API: CRUD for company bank accounts (`/api/company/bank-accounts`)
+- API: Payments CRUD (`/api/finances/payments`) with order sync (amount_paid/amount_debt)
+- API: Cash flow / Z-report (`/api/finances/cashflow`) with daily grouping
+- Finances layout with sub-navigation tabs (Invoices, Payments, Cash Flow, IATA, Reconciliation)
+- Sidebar updated with Finances children menu items
+- Payments page with table, filters (method, date range), and Add Payment modal
+- Cash Flow page with Z-Report (cash) and Bank Movements tabs, daily grouping, grand totals
+- IATA and Reconciliation placeholder pages
+- Add Payment modal: order search, invoice selection, method toggle, bank account dropdown, payer input
+
+**Файлы созданы:**
+- `migrations/add_finance_payments.sql`
+- `app/finances/layout.tsx`
+- `app/api/company/bank-accounts/route.ts`, `[id]/route.ts`
+- `app/api/finances/payments/route.ts`, `[id]/route.ts`
+- `app/api/finances/cashflow/route.ts`
+- `app/finances/payments/page.tsx`, `_components/AddPaymentModal.tsx`
+- `app/finances/cashflow/page.tsx`
+- `app/finances/iata/page.tsx`
+- `app/finances/reconciliation/page.tsx`
+
+**Файлы изменены:**
+- `components/Sidebar.tsx` — Finances с children подменю
+- `app/finances/invoices/page.tsx` — убран префикс "Finances -" из заголовка
+
+**Результат:** Build проходит (pre-existing error в parse-flight-itinerary не связан с изменениями)
+
+**Next Step:** QA, run migration в Supabase
+
+---
+
 ### 📅 [2026-02-14] | [12:57]
 **Агент:** `Code Writer`
 **Задача:** `Fix Vercel + local build errors`

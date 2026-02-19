@@ -18,7 +18,18 @@ type NavElement = NavItem;
 const navConfig: NavElement[] = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
   { name: "Orders", href: "/orders", icon: "📋" },
-  { name: "Finances", href: "/finances/invoices", icon: "💰" },
+  {
+    name: "Finances",
+    href: "/finances/invoices",
+    icon: "💰",
+    children: [
+      { name: "Invoices", href: "/finances/invoices", icon: "📄" },
+      { name: "Payments", href: "/finances/payments", icon: "💳" },
+      { name: "Cash Flow", href: "/finances/cashflow", icon: "📊" },
+      { name: "IATA", href: "/finances/iata", icon: "✈️" },
+      { name: "Reconciliation", href: "/finances/reconciliation", icon: "🔄" },
+    ],
+  },
   { name: "Analytics", href: "/analytics/orders", icon: "📈" },
   { name: "Directory", href: "/directory", icon: "📁" },
 ];
