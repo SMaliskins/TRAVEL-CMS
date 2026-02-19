@@ -19,19 +19,19 @@ export function DocumentsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Документы</Text>
-      <Text style={styles.subtitle}>Нажмите на поездку, чтобы увидеть документы</Text>
+      <Text style={styles.header}>Documents</Text>
+      <Text style={styles.subtitle}>Tap a trip to view documents</Text>
       <FlatList
         data={bookings}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.bookingRow}>
-            <Text style={styles.bookingName}>{item.countries_cities ?? 'Поездка'}</Text>
+            <Text style={styles.bookingName}>{item.countries_cities ?? 'Trip'}</Text>
             <Text style={styles.bookingCode}>{item.order_code}</Text>
           </View>
         )}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={<Text style={styles.empty}>Документы не найдены</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>No documents found</Text>}
       />
     </View>
   )

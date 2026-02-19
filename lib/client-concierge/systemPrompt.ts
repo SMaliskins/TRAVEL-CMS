@@ -3,7 +3,7 @@ interface ClientInfo {
   id: string
 }
 
-export function buildConciergeSystemPrompt(client: ClientInfo, language = 'ru'): string {
+export function buildConciergeSystemPrompt(client: ClientInfo, language = 'en'): string {
   const langLabel =
     language === 'ru' ? 'Russian' : language === 'lv' ? 'Latvian' : 'English'
   const today = new Date().toISOString().split('T')[0]

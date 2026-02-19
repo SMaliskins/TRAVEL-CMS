@@ -17,11 +17,11 @@ export function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Выйти из аккаунта',
-      'Вы уверены, что хотите выйти?',
+      'Sign Out',
+      'Are you sure you want to sign out?',
       [
-        { text: 'Отмена', style: 'cancel' },
-        { text: 'Выйти', style: 'destructive', onPress: logout },
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: logout },
       ]
     )
   }
@@ -38,27 +38,27 @@ export function ProfileScreen() {
             {(profile?.displayName ?? 'U').charAt(0).toUpperCase()}
           </Text>
         </View>
-        <Text style={styles.name}>{profile?.displayName ?? 'Пользователь'}</Text>
+        <Text style={styles.name}>{profile?.displayName ?? 'User'}</Text>
         <Text style={styles.email}>{profile?.email ?? ''}</Text>
       </View>
 
       <View style={styles.section}>
         {profile?.phone && (
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Телефон</Text>
+            <Text style={styles.rowLabel}>Phone</Text>
             <Text style={styles.rowValue}>{profile.phone}</Text>
           </View>
         )}
         {profile?.referralCode && (
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Реферальный код</Text>
+            <Text style={styles.rowLabel}>Referral Code</Text>
             <Text style={styles.rowValue}>{profile.referralCode}</Text>
           </View>
         )}
       </View>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Выйти из аккаунта</Text>
+        <Text style={styles.logoutText}>Sign Out</Text>
       </TouchableOpacity>
     </ScrollView>
   )

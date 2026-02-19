@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ data: null, error: 'VALIDATION_ERROR' }, { status: 400 })
     }
 
-    const { message, sessionId, language = 'ru' } = body as {
+    const { message, sessionId, language = 'en' } = body as {
       message: string
       sessionId?: string
       language?: string

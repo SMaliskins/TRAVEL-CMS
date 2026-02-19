@@ -23,35 +23,35 @@ export function TripDetailScreen({ route }: Props) {
   }
 
   if (!booking) {
-    return <View style={styles.centered}><Text style={styles.error}>Бронирование не найдено</Text></View>
+    return <View style={styles.centered}><Text style={styles.error}>Booking not found</Text></View>
   }
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.hero}>
-        <Text style={styles.destination}>{booking.countries_cities ?? 'Поездка'}</Text>
+        <Text style={styles.destination}>{booking.countries_cities ?? 'Trip'}</Text>
         <Text style={styles.code}>{booking.order_code}</Text>
         <Text style={styles.dates}>
-          {booking.date_from ? new Date(booking.date_from).toLocaleDateString('ru-RU') : '?'}
+          {booking.date_from ? new Date(booking.date_from).toLocaleDateString('en-US') : '?'}
           {' — '}
-          {booking.date_to ? new Date(booking.date_to).toLocaleDateString('ru-RU') : '?'}
+          {booking.date_to ? new Date(booking.date_to).toLocaleDateString('en-US') : '?'}
         </Text>
       </View>
 
       <View style={styles.infoRow}>
         <View style={styles.infoItem}>
-          <Text style={styles.infoLabel}>Статус</Text>
+          <Text style={styles.infoLabel}>Status</Text>
           <Text style={styles.infoValue}>{booking.status}</Text>
         </View>
         {booking.amount_total != null && (
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Итого</Text>
+            <Text style={styles.infoLabel}>Total</Text>
             <Text style={styles.infoValue}>€{booking.amount_total.toFixed(2)}</Text>
           </View>
         )}
         {booking.amount_paid != null && (
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Оплачено</Text>
+            <Text style={styles.infoLabel}>Paid</Text>
             <Text style={styles.infoValue}>€{booking.amount_paid.toFixed(2)}</Text>
           </View>
         )}
@@ -59,14 +59,14 @@ export function TripDetailScreen({ route }: Props) {
 
       {booking.services && booking.services.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Маршрут</Text>
+          <Text style={styles.sectionTitle}>Itinerary</Text>
           {booking.services.map((s: BookingService) => (
             <View key={s.id} style={styles.serviceCard}>
               <Text style={styles.serviceName}>{s.service_name}</Text>
               <Text style={styles.serviceCategory}>{s.category}</Text>
               {s.service_date_from && (
                 <Text style={styles.serviceDate}>
-                  {new Date(s.service_date_from).toLocaleDateString('ru-RU')}
+                  {new Date(s.service_date_from).toLocaleDateString('en-US')}
                 </Text>
               )}
               <Text style={styles.serviceStatus}>{s.res_status}</Text>

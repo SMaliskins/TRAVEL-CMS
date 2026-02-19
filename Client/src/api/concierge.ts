@@ -9,6 +9,6 @@ export interface ChatResponse {
 export const conciergeApi = {
   sendMessage: (message: string, sessionId?: string): Promise<ChatResponse> =>
     apiClient
-      .post('/concierge/chat', { message, sessionId, language: 'ru' })
+      .post('/concierge/chat', { message, sessionId, language: 'en' })
       .then((r) => r.data.data),
 }

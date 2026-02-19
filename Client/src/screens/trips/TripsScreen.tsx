@@ -10,13 +10,13 @@ function TripCard({ booking, onPress }: { booking: Booking; onPress: () => void 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.cardTop}>
-        <Text style={styles.destination}>{booking.countries_cities ?? 'Поездка'}</Text>
+        <Text style={styles.destination}>{booking.countries_cities ?? 'Trip'}</Text>
         <Text style={styles.code}>{booking.order_code}</Text>
       </View>
       <Text style={styles.dates}>
-        {booking.date_from ? new Date(booking.date_from).toLocaleDateString('ru-RU') : '?'}
+        {booking.date_from ? new Date(booking.date_from).toLocaleDateString('en-US') : '?'}
         {' — '}
-        {booking.date_to ? new Date(booking.date_to).toLocaleDateString('ru-RU') : '?'}
+        {booking.date_to ? new Date(booking.date_to).toLocaleDateString('en-US') : '?'}
       </Text>
       <View style={styles.cardBottom}>
         <Text style={styles.status}>{booking.status}</Text>
@@ -59,7 +59,7 @@ export function TripsScreen({ navigation }: Props) {
           onPress={() => setTab('upcoming')}
         >
           <Text style={[styles.tabText, tab === 'upcoming' && styles.tabTextActive]}>
-            Предстоящие ({upcoming.length})
+            Upcoming ({upcoming.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -67,7 +67,7 @@ export function TripsScreen({ navigation }: Props) {
           onPress={() => setTab('history')}
         >
           <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>
-            История ({history.length})
+            Past ({history.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -90,7 +90,7 @@ export function TripsScreen({ navigation }: Props) {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} />}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              {tab === 'upcoming' ? 'Нет предстоящих поездок' : 'История поездок пуста'}
+              {tab === 'upcoming' ? 'No upcoming trips' : 'No past trips'}
             </Text>
           }
         />

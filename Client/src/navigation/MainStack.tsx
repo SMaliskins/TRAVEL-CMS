@@ -31,12 +31,12 @@ function TripsNavigator() {
       <TripsStack.Screen
         name="TripsList"
         component={TripsScreen}
-        options={{ title: 'Поездки' }}
+        options={{ title: 'Trips' }}
       />
       <TripsStack.Screen
         name="TripDetail"
         component={TripDetailScreen}
-        options={{ title: 'Детали поездки' }}
+        options={{ title: 'Trip Details' }}
       />
     </TripsStack.Navigator>
   )
@@ -51,11 +51,11 @@ export function MainStack() {
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Главная' }} />
-      <Tab.Screen name="TripsTab" component={TripsNavigator} options={{ title: 'Поездки', headerShown: false }} />
-      <Tab.Screen name="Concierge" component={ConciergeScreen} options={{ title: 'Консьерж' }} />
-      <Tab.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Документы' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Профиль' }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
+      <Tab.Screen name="TripsTab" component={TripsNavigator} options={{ title: 'Trips', headerShown: false }} />
+      <Tab.Screen name="Concierge" component={ConciergeScreen} options={{ title: 'Concierge' }} />
+      <Tab.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Documents' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   )
 }

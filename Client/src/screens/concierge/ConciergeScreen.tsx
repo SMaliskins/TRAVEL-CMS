@@ -22,13 +22,13 @@ interface Message {
 
 const INITIAL_MESSAGE: Message = {
   id: 'welcome',
-  text: 'Привет! Я ваш AI консьерж ✈\n\nПомогу найти отели, трансферы и отвечу на вопросы о путешествиях. Чем могу помочь?',
+  text: 'Hello! I\'m your AI travel concierge ✈\n\nI can help you find hotels, transfers, and answer travel questions. How can I help?',
   isUser: false,
   timestamp: '',
 }
 
 function formatTime(): string {
-  return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
 export function ConciergeScreen() {
@@ -67,7 +67,7 @@ export function ConciergeScreen() {
 
       const aiMessage: Message = {
         id: `ai-${Date.now()}`,
-        text: result.message || 'Извините, не смог ответить. Попробуйте снова.',
+        text: result.message || 'Sorry, I could not respond. Please try again.',
         isUser: false,
         timestamp: formatTime(),
       }
@@ -76,7 +76,7 @@ export function ConciergeScreen() {
     } catch {
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
-        text: 'Ошибка соединения. Проверьте интернет и попробуйте снова.',
+        text: 'Connection error. Check your internet and try again.',
         isUser: false,
         timestamp: formatTime(),
       }
@@ -107,8 +107,8 @@ export function ConciergeScreen() {
           <Text style={styles.headerIconText}>✈</Text>
         </View>
         <View>
-          <Text style={styles.headerTitle}>AI Консьерж</Text>
-          <Text style={styles.headerSub}>Поможет с отелями и трансферами</Text>
+          <Text style={styles.headerTitle}>AI Concierge</Text>
+          <Text style={styles.headerSub}>Hotels, transfers & travel advice</Text>
         </View>
       </View>
 
@@ -125,7 +125,7 @@ export function ConciergeScreen() {
       {isLoading && (
         <View style={styles.typingIndicator}>
           <ActivityIndicator size="small" color="#1a73e8" />
-          <Text style={styles.typingText}>AI печатает...</Text>
+          <Text style={styles.typingText}>AI is typing...</Text>
         </View>
       )}
 
@@ -134,7 +134,7 @@ export function ConciergeScreen() {
           style={styles.input}
           value={input}
           onChangeText={setInput}
-          placeholder="Напишите сообщение..."
+          placeholder="Type a message..."
           placeholderTextColor="#aaa"
           multiline
           maxLength={500}

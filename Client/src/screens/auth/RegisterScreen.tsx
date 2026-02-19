@@ -27,15 +27,15 @@ export function RegisterScreen({ route }: Props) {
 
   const handleRegister = async () => {
     if (!invitationToken) {
-      Alert.alert('Ошибка', 'Приглашение недействительно. Запросите новую ссылку у агента.')
+      Alert.alert('Error', 'Invalid invitation. Request a new link from your agent.')
       return
     }
     if (password.length < 8) {
-      Alert.alert('Ошибка', 'Пароль должен содержать не менее 8 символов.')
+      Alert.alert('Error', 'Password must be at least 8 characters.')
       return
     }
     if (password !== confirmPassword) {
-      Alert.alert('Ошибка', 'Пароли не совпадают.')
+      Alert.alert('Error', 'Passwords do not match.')
       return
     }
 
@@ -54,7 +54,7 @@ export function RegisterScreen({ route }: Props) {
       // Trigger auth state update — RootNavigator will redirect to MainStack
       await checkAuth()
     } catch {
-      Alert.alert('Ошибка', 'Не удалось завершить регистрацию. Возможно, ссылка устарела.')
+      Alert.alert('Error', 'Registration failed. The link may have expired.')
     } finally {
       setLoading(false)
     }
@@ -68,22 +68,22 @@ export function RegisterScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.logo}>✈ MyTravelConcierge</Text>
-          <Text style={styles.subtitle}>Создайте пароль для вашего аккаунта</Text>
+          <Text style={styles.subtitle}>Create a password for your account</Text>
         </View>
 
         {!invitationToken && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>
-              Ссылка-приглашение недействительна. Запросите новую ссылку у вашего агента.
+              Invalid invitation link. Please request a new one from your agent.
             </Text>
           </View>
         )}
 
         <View style={styles.form}>
-          <Text style={styles.label}>Новый пароль</Text>
+          <Text style={styles.label}>New Password</Text>
           <TextInput
             style={styles.input}
-            placeholder="Минимум 8 символов"
+            placeholder="At least 8 characters"
             placeholderTextColor="#aaa"
             value={password}
             onChangeText={setPassword}
@@ -91,10 +91,10 @@ export function RegisterScreen({ route }: Props) {
             returnKeyType="next"
           />
 
-          <Text style={styles.label}>Подтвердите пароль</Text>
+          <Text style={styles.label}>Confirm Password</Text>
           <TextInput
             style={styles.input}
-            placeholder="Повторите пароль"
+            placeholder="Repeat password"
             placeholderTextColor="#aaa"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
@@ -110,7 +110,7 @@ export function RegisterScreen({ route }: Props) {
             activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Регистрация...' : 'Создать аккаунт'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </Text>
           </TouchableOpacity>
         </View>

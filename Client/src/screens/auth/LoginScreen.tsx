@@ -21,7 +21,7 @@ export function LoginScreen() {
   const handleLogin = async () => {
     const trimmedEmail = email.trim()
     if (!trimmedEmail || !password) {
-      Alert.alert('Ошибка', 'Введите email и пароль')
+      Alert.alert('Error', 'Enter email and password')
       return
     }
 
@@ -30,7 +30,7 @@ export function LoginScreen() {
       await login(trimmedEmail, password)
       // Navigation happens automatically via RootNavigator (isAuthenticated changes)
     } catch {
-      Alert.alert('Ошибка входа', 'Неверный email или пароль. Попробуйте снова.')
+      Alert.alert('Login Error', 'Invalid email or password. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -47,7 +47,7 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.logo}>✈ MyTravelConcierge</Text>
-          <Text style={styles.subtitle}>Ваш персональный тревел-консьерж</Text>
+          <Text style={styles.subtitle}>Your personal travel concierge</Text>
         </View>
 
         <View style={styles.form}>
@@ -64,7 +64,7 @@ export function LoginScreen() {
             returnKeyType="next"
           />
 
-          <Text style={styles.label}>Пароль</Text>
+          <Text style={styles.label}>Password</Text>
           <TextInput
             style={styles.input}
             placeholder="••••••••"
@@ -83,13 +83,13 @@ export function LoginScreen() {
             activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Вход...' : 'Войти'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.footer}>
-          Нет доступа? Обратитесь к своему агенту для получения приглашения.
+          No access? Contact your travel agent for an invitation.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -43,20 +43,20 @@ export function HomeScreen() {
     >
       <View style={styles.header}>
         <Text style={styles.greeting}>
-          Привет, {profile?.displayName ?? 'путешественник'} 👋
+          Hi, {profile?.displayName ?? 'traveler'} 👋
         </Text>
         <Text style={styles.headerSub}>MyTravelConcierge</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Следующая поездка</Text>
+        <Text style={styles.sectionTitle}>Next Trip</Text>
         {nextTrip ? (
           <View style={styles.tripCard}>
             <Text style={styles.tripDestination}>{nextTrip.countries_cities ?? '—'}</Text>
             <Text style={styles.tripDates}>
-              {nextTrip.date_from ? new Date(nextTrip.date_from).toLocaleDateString('ru-RU') : '?'}{' '}
+              {nextTrip.date_from ? new Date(nextTrip.date_from).toLocaleDateString('en-US') : '?'}{' '}
               —{' '}
-              {nextTrip.date_to ? new Date(nextTrip.date_to).toLocaleDateString('ru-RU') : '?'}
+              {nextTrip.date_to ? new Date(nextTrip.date_to).toLocaleDateString('en-US') : '?'}
             </Text>
             <View style={styles.statusBadge}>
               <Text style={styles.statusText}>{nextTrip.status}</Text>
@@ -64,13 +64,13 @@ export function HomeScreen() {
           </View>
         ) : (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>Нет запланированных поездок</Text>
+            <Text style={styles.emptyText}>No upcoming trips</Text>
           </View>
         )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Всего поездок</Text>
+        <Text style={styles.sectionTitle}>Upcoming trips</Text>
         <Text style={styles.statNumber}>{upcoming.length}</Text>
       </View>
     </ScrollView>

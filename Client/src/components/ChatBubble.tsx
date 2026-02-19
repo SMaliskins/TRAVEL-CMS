@@ -16,7 +16,7 @@ export function ChatBubble({ message, isUser, timestamp }: ChatBubbleProps) {
         </View>
       )}
       <View style={styles.bubbleWrapper}>
-        {!isUser && <Text style={styles.aiLabel}>AI Консьерж</Text>}
+        {!isUser && <Text style={styles.aiLabel}>AI Concierge</Text>}
         <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
           <Text style={[styles.text, isUser ? styles.userText : styles.aiText]}>
             {message}
