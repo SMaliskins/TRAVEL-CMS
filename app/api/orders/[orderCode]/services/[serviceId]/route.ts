@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
+import { sendPushToClient } from "@/lib/client-push/sendPush";
 
 /**
  * PATCH /api/orders/[orderCode]/services/[serviceId]
@@ -135,6 +136,21 @@ export async function PATCH(
     }
 
     upsertOrderServiceEmbedding(serviceId).catch((e) => console.warn("[PATCH service] upsertOrderServiceEmbedding:", e));
+
+    const { data: orderForPush } = await supabaseAdmin
+      .from("orders")
+      .select("client_party_id, countries_cities")
+      .eq("id", order.id)
+      .single();
+
+    if (orderForPush?.client_party_id) {
+      sendPushToClient(orderForPush.client_party_id, {
+        title: "Itinerary updated",
+        body: `Service "${service.service_name}" has been updated`,
+        type: "service_update",
+        refId: order.id,
+      }).catch((e: unknown) => console.error("[Push] fire-and-forget:", e));
+    }
 
     return NextResponse.json({ service });
   } catch (err) {

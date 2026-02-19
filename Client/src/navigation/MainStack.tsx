@@ -9,6 +9,7 @@ import { TripDetailScreen } from '../screens/trips/TripDetailScreen'
 import { ConciergeScreen } from '../screens/concierge/ConciergeScreen'
 import { DocumentsScreen } from '../screens/documents/DocumentsScreen'
 import { ProfileScreen } from '../screens/profile/ProfileScreen'
+import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
 
 export type MainTabParamList = {
   Home: undefined
@@ -23,8 +24,14 @@ export type TripsStackParamList = {
   TripDetail: { bookingId: string }
 }
 
+export type RootStackParamList = {
+  Tabs: undefined
+  Notifications: undefined
+}
+
 const Tab = createBottomTabNavigator<MainTabParamList>()
 const TripsStack = createNativeStackNavigator<TripsStackParamList>()
+const RootStack = createNativeStackNavigator<RootStackParamList>()
 
 function TripsNavigator() {
   return (
@@ -43,7 +50,7 @@ function TripsNavigator() {
   )
 }
 
-export function MainStack() {
+function TabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -74,5 +81,18 @@ export function MainStack() {
         tabBarIcon: ({ color, size }) => <Feather name="user" size={size} color={color} />,
       }} />
     </Tab.Navigator>
+  )
+}
+
+export function MainStack() {
+  return (
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Screen name="Tabs" component={TabNavigator} />
+      <RootStack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+    </RootStack.Navigator>
   )
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { sendPushToClient } from "@/lib/client-push/sendPush";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -330,6 +331,22 @@ export async function PATCH(
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const pushFields = ["status", "date_from", "date_to", "countries_cities"];
+    const hasMeaningfulChange = pushFields.some((f) => body[f] !== undefined);
+
+    if (hasMeaningfulChange && order.client_party_id) {
+      const dest = order.countries_cities
+        ? order.countries_cities.split("|").find((p: string) => !p.startsWith("origin:") && !p.startsWith("return:"))?.split(",")[1]?.trim() || "your trip"
+        : "your trip";
+
+      sendPushToClient(order.client_party_id, {
+        title: "Trip updated",
+        body: `Your trip to ${dest} has been updated`,
+        type: "order_update",
+        refId: order.id,
+      }).catch((e: unknown) => console.error("[Push] fire-and-forget error:", e));
     }
 
     return NextResponse.json({ order });

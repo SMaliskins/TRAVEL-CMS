@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import * as SecureStore from 'expo-secure-store'
 import { apiClient } from '../api/client'
+import { registerForPushNotificationsAsync } from '../utils/pushNotifications'
 
 interface AuthState {
   accessToken: string | null
@@ -46,6 +47,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     await SecureStore.setItemAsync('clientId', clientId)
 
     set({ accessToken, isAuthenticated: true, clientId })
+
+    registerForPushNotificationsAsync().catch(() => {})
   },
 
   logout: async () => {

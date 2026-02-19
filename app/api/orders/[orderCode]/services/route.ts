@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
+import { sendPushToClient } from "@/lib/client-push/sendPush";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -417,6 +418,21 @@ export async function POST(
     }
 
     upsertOrderServiceEmbedding(service.id).catch((e) => console.warn("[POST services] upsertOrderServiceEmbedding:", e));
+
+    const { data: orderForPush } = await supabaseAdmin
+      .from("orders")
+      .select("client_party_id")
+      .eq("id", orderId)
+      .single();
+
+    if (orderForPush?.client_party_id) {
+      sendPushToClient(orderForPush.client_party_id, {
+        title: "New service added",
+        body: `${body.category || "Service"}: ${body.serviceName}`,
+        type: "service_update",
+        refId: orderId,
+      }).catch((e: unknown) => console.error("[Push] fire-and-forget:", e));
+    }
 
     const inserted = service as { ticket_numbers?: unknown };
     return NextResponse.json({
