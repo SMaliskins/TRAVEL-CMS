@@ -9,6 +9,7 @@ import ClientMultiSelectDropdown from "@/components/ClientMultiSelectDropdown";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useDraggableModal } from '@/hooks/useDraggableModal';
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import type { SupplierCommission } from "@/lib/types/directory";
 
@@ -679,6 +680,7 @@ export default function AddServiceModal({
 
   // ESC key handler
   useEscapeKey(onClose);
+  const { modalStyle, onHeaderMouseDown } = useDraggableModal();
 
   // Close room/board dropdowns on outside click
   useEffect(() => {
@@ -1474,14 +1476,135 @@ export default function AddServiceModal({
     }
   };
 
-  const RightWrapper = categoryType === "hotel" ? "div" : React.Fragment;
-  const rightWrapperProps = categoryType === "hotel" ? { className: "md:col-span-1 space-y-3" as const } : {};
+  const needsRightWrapper = categoryType === "hotel" || categoryType === "flight";
+  const RightWrapper = needsRightWrapper ? "div" : React.Fragment;
+  const rightWrapperProps = needsRightWrapper ? { className: "md:col-span-1 space-y-3" as const } : {};
+
+  const addFlightScheduleBlock = flightSegments.length > 0 ? (
+    <div className={`mt-3 p-3 rounded-lg border ${parseAttemptedButEmpty.has("flightSegments") ? "bg-red-50 border-red-200 ring-2 ring-red-300" : parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
+      <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parseAttemptedButEmpty.has("flightSegments") ? "text-red-700" : parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>FLIGHT SCHEDULE</h4>
+      <div className="space-y-2">
+        {flightSegments.map((seg, idx) => {
+          let gapInfo: { type: "layover" | "stay" | null; time: string; location: string } = { type: null, time: "", location: "" };
+          if (idx > 0) {
+            const prevSeg = flightSegments[idx - 1];
+            if (prevSeg.arrivalDate && prevSeg.arrivalTimeScheduled && seg.departureDate && seg.departureTimeScheduled) {
+              const prevArrTzOffset = getAirportTimezoneOffset(prevSeg.arrival);
+              const currDepTzOffset = getAirportTimezoneOffset(seg.departure);
+              const prevArrival = new Date(`${prevSeg.arrivalDate}T${prevSeg.arrivalTimeScheduled}`);
+              const currDeparture = new Date(`${seg.departureDate}T${seg.departureTimeScheduled}`);
+              const prevArrivalUTC = prevArrival.getTime() - (prevArrTzOffset * 60 * 60 * 1000);
+              const currDepartureUTC = currDeparture.getTime() - (currDepTzOffset * 60 * 60 * 1000);
+              const diffMs = currDepartureUTC - prevArrivalUTC;
+              if (diffMs > 0) {
+                const totalMinutes = Math.floor(diffMs / (1000 * 60));
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                const shortTimeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                const days = Math.floor(hours / 24);
+                const remainingHours = hours % 24;
+                const longTimeStr = days > 0 ? `${days} day${days > 1 ? "s" : ""} ${remainingHours}h ${minutes}m` : shortTimeStr;
+                if (prevSeg.arrival === seg.departure && hours < 12) {
+                  gapInfo = { type: "layover", time: shortTimeStr, location: prevSeg.arrivalCity || prevSeg.arrival };
+                } else if (hours >= 6) {
+                  gapInfo = { type: "stay", time: longTimeStr, location: prevSeg.arrivalCity || prevSeg.arrival };
+                }
+              }
+            }
+          }
+          const fmtDate = (dateStr: string) => (dateStr ? formatDateDDMMYYYY(dateStr) : "");
+          return (
+            <div key={seg.id || idx}>
+              {gapInfo.type === "layover" && (
+                <div className="flex items-center justify-center py-1 text-xs text-amber-600">
+                  <span className="bg-amber-100 px-2 py-0.5 rounded">⏱ Layover: {gapInfo.time} in {gapInfo.location}</span>
+                </div>
+              )}
+              {gapInfo.type === "stay" && (
+                <div className="flex items-center justify-center py-1 text-xs text-green-600">
+                  <span className="bg-green-100 px-2 py-0.5 rounded">🏨 Stay in {gapInfo.location}: {gapInfo.time}</span>
+                </div>
+              )}
+              <div className="bg-white rounded-lg px-3 py-2 border border-sky-100">
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="flex flex-col items-center">
+                    <span className="font-semibold text-sky-700">{seg.flightNumber}</span>
+                    <span className="text-[10px] text-gray-400">{seg.airline}</span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="text-center min-w-[80px]">
+                        <div className="text-xs text-gray-400">{fmtDate(seg.departureDate)}</div>
+                        <div className="font-medium">{seg.departure}</div>
+                        <div className="text-[10px] text-gray-500">{seg.departureCity}</div>
+                        <div className="text-sm font-semibold">{seg.departureTimeScheduled}</div>
+                        {seg.departureTerminal && <div className="text-[10px] text-gray-400">{seg.departureTerminal.toLowerCase().startsWith("terminal") ? seg.departureTerminal : `T${seg.departureTerminal}`}</div>}
+                      </div>
+                      <div className="flex-1 flex flex-col items-center px-2">
+                        <div className="text-[10px] text-gray-400">{seg.duration || "—"}</div>
+                        <div className="w-full h-px bg-gray-300 relative">
+                          <span className="absolute left-1/2 -translate-x-1/2 -top-1 text-gray-400">✈</span>
+                        </div>
+                      </div>
+                      <div className="text-center min-w-[80px]">
+                        <div className="text-xs text-gray-400">{fmtDate(seg.arrivalDate)}</div>
+                        <div className="font-medium">{seg.arrival}</div>
+                        <div className="text-[10px] text-gray-500">{seg.arrivalCity}</div>
+                        <div className="text-sm font-semibold">{seg.arrivalTimeScheduled}</div>
+                        {seg.arrivalTerminal && <div className="text-[10px] text-gray-400">{seg.arrivalTerminal.toLowerCase().startsWith("terminal") ? seg.arrivalTerminal : `T${seg.arrivalTerminal}`}</div>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {seg.cabinClass && (
+                      <span className="text-xs bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded capitalize">{seg.cabinClass.replace("_", " ")}</span>
+                    )}
+                    {seg.baggage && (
+                      <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">🧳 {seg.baggage}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {flightSegments.length > 0 && (
+          <div className="text-xs text-gray-500 text-right pt-1">
+            Total travel time: {(() => {
+              const first = flightSegments[0];
+              const last = flightSegments[flightSegments.length - 1];
+              if (first.departureDate && first.departureTimeScheduled && last.arrivalDate && last.arrivalTimeScheduled) {
+                const depTzOffset = getAirportTimezoneOffset(first.departure);
+                const arrTzOffset = getAirportTimezoneOffset(last.arrival);
+                const start = new Date(`${first.departureDate}T${first.departureTimeScheduled}`);
+                const end = new Date(`${last.arrivalDate}T${last.arrivalTimeScheduled}`);
+                const startUTC = start.getTime() - (depTzOffset * 60 * 60 * 1000);
+                const endUTC = end.getTime() - (arrTzOffset * 60 * 60 * 1000);
+                const diffMs = endUTC - startUTC;
+                if (diffMs > 0) {
+                  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+                  const dys = Math.floor(totalMinutes / (24 * 60));
+                  const hrs = Math.floor((totalMinutes % (24 * 60)) / 60);
+                  const mns = totalMinutes % 60;
+                  const parts: string[] = [];
+                  if (dys > 0) parts.push(`${dys} day${dys > 1 ? "s" : ""}`);
+                  if (hrs > 0) parts.push(`${hrs}h`);
+                  if (mns > 0) parts.push(`${mns}m`);
+                  return parts.join(", ") || "—";
+                }
+              }
+              return "—";
+            })()}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-lg">
-        {/* Header: divider #E0E0E0, title #343A40, close #6C757D */}
-        <div className="sticky top-0 bg-white border-b border-[#E0E0E0] px-6 py-4 flex items-center justify-between z-10">
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-lg" style={modalStyle}>
+        <div className="sticky top-0 bg-white border-b border-[#E0E0E0] px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
               <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1751,7 +1874,7 @@ export default function AddServiceModal({
           )}
 
           {/* Two-column layout: Left = BASIC INFO + PARTIES (flight) / Preferences (hotel), Right = CLIENT(S) + PRICING + REFERENCES */}
-          <div className={`grid grid-cols-1 gap-3 ${categoryType === "flight" ? "md:grid-cols-2" : categoryType === "hotel" ? "md:grid-cols-[1.65fr_1fr]" : "md:grid-cols-3"}`}>
+          <div className={`grid grid-cols-1 gap-3 ${categoryType === "flight" ? "md:grid-cols-[3fr_2fr]" : categoryType === "hotel" ? "md:grid-cols-[1.65fr_1fr]" : "md:grid-cols-3"}`}>
             
             {/* Left column */}
             <div className={`space-y-3 ${categoryType === "hotel" ? "md:col-span-1" : ""}`}>
@@ -2026,16 +2149,44 @@ export default function AddServiceModal({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
-                  <DateRangePicker
-                    label=""
-                    from={dateFrom}
-                    to={dateTo}
-                    onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
-                    triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
-                  />
-                </div>
+                {categoryType === "flight" ? (
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
+                      <DateRangePicker
+                        label=""
+                        from={dateFrom}
+                        to={dateTo}
+                        onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                        triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cabin Class</label>
+                      <select
+                        value={cabinClass}
+                        onChange={(e) => setCabinClass(e.target.value as "economy" | "premium_economy" | "business" | "first")}
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="economy">Economy</option>
+                        <option value="premium_economy">Premium Economy</option>
+                        <option value="business">Business</option>
+                        <option value="first">First</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
+                    <DateRangePicker
+                      label=""
+                      from={dateFrom}
+                      to={dateTo}
+                      onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                      triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
+                    />
+                  </div>
+                )}
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
@@ -2120,34 +2271,18 @@ export default function AddServiceModal({
                   </>
                 )}
                 
-                {/* Cabin Class + Change Fee - for Flight in main section */}
+                {/* Baggage - for Flight (Cabin Class already in Dates row) */}
                 {categoryType === "flight" ? (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cabin Class</label>
-                      <select
-                        value={cabinClass}
-                        onChange={(e) => setCabinClass(e.target.value as "economy" | "premium_economy" | "business" | "first")}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="economy">Economy</option>
-                        <option value="premium_economy">Premium Economy</option>
-                        <option value="business">Business</option>
-                        <option value="first">First</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Change Fee €</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Baggage</label>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={changeFee}
-                        onChange={(e) => setChangeFee(e.target.value)}
-                        placeholder="0 = free"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        type="text"
+                        value={baggage}
+                        onChange={(e) => setBaggage(e.target.value)}
+                        placeholder="e.g., personal+cabin+1bag"
+                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
                       />
-                      <span className="text-[10px] text-gray-400">+ class diff</span>
                     </div>
                   </>
                 ) : (
@@ -2166,6 +2301,47 @@ export default function AddServiceModal({
                 )}
               </div>
               )}
+
+            {/* PARTIES — Supplier + Ref Nr + Status (flight only) */}
+            {categoryType === "flight" && (
+              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
+                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">PARTIES</h4>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                <PartySelect
+                  value={supplierPartyId}
+                  onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                  roleFilter="supplier"
+                  initialDisplayName={supplierName}
+                />
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr</label>
+                    <input
+                      type="text"
+                      value={refNr}
+                      onChange={(e) => setRefNr(e.target.value)}
+                      placeholder="Booking ref"
+                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
+                    <select
+                      value={resStatus}
+                      onChange={(e) => setResStatus(e.target.value as ServiceData["resStatus"])}
+                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      {RES_STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Flight Schedule — in the left column */}
+            {categoryType === "flight" && addFlightScheduleBlock}
             </div>
 
             {/* Right side: Parties + Pricing (when Hotel: one column 1/3) */}
@@ -2174,8 +2350,8 @@ export default function AddServiceModal({
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
                 <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">{categoryType === "hotel" ? "CLIENTS" : "CLIENT"}</h4>
 
-                {/* Supplier — only for non-hotel (hotel has PARTIES in left column) */}
-                {categoryType !== "hotel" && (
+                {/* Supplier — only for non-hotel, non-flight (both have PARTIES in left column) */}
+                {categoryType !== "hotel" && categoryType !== "flight" && (
                   <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                     <PartySelect
@@ -2221,8 +2397,47 @@ export default function AddServiceModal({
                       placeholder="+ Add Accompanying Persons"
                     />
                   </div>
+                ) : categoryType === "flight" ? (
+                  /* Flight: pill tags + ClientMultiSelectDropdown */
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {clients.filter(c => c.id || c.name).map((client) => {
+                        const realIndex = clients.indexOf(client);
+                        const ticket = ticketNumbers.find(t => t.clientId === client.id);
+                        const displayName = client.name || "-";
+                        return (
+                          <span key={client.id || realIndex} className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40]">
+                            {displayName}
+                            {ticket?.ticketNr && (
+                              <span className="text-[11px] text-gray-500 ml-0.5">{ticket.ticketNr}</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeClient(realIndex)}
+                              className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
+                              aria-label={`Remove ${displayName}`}
+                            >
+                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <ClientMultiSelectDropdown
+                      onAddClients={(toAdd) => setClients(prev => {
+                        const existing = prev.filter(c => c.id || c.name);
+                        const newOnes = toAdd.filter(nc => !existing.some(c => c.id === nc.id));
+                        const next = [...existing, ...newOnes];
+                        return next.length > 0 ? next : [{ id: null, name: "" }];
+                      })}
+                      existingClientIds={clients.filter(c => c.id).map(c => c.id).filter((id): id is string => id !== null)}
+                      placeholder="+ Add Accompanying Persons"
+                    />
+                  </div>
                 ) : (
-                  /* Flight / Tour / other: original chips UI */
+                  /* Tour / other: original chips UI */
                   <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                     <div className="flex items-center justify-between mb-0.5">
                       <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
@@ -2237,7 +2452,6 @@ export default function AddServiceModal({
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {clients.filter(c => c.id || c.name).map((client, index) => {
-                        const ticket = ticketNumbers.find(t => t.clientId === client.id);
                         const displayName = client.name || (index === 0 ? defaultClientName : "") || "-";
                         return (
                           <div key={client.id || index} className="flex items-center gap-1">
@@ -2259,22 +2473,6 @@ export default function AddServiceModal({
                                 </button>
                               )}
                             </span>
-                            {showTicketNr && categoryType === "flight" && client.id && (
-                              <input
-                                type="text"
-                                value={ticket?.ticketNr || ""}
-                                onChange={(e) => {
-                                  const ticketIndex = ticketNumbers.findIndex(t => t.clientId === client.id);
-                                  if (ticketIndex >= 0) {
-                                    const updated = [...ticketNumbers];
-                                    updated[ticketIndex] = { ...updated[ticketIndex], ticketNr: e.target.value };
-                                    setTicketNumbers(updated);
-                                  }
-                                }}
-                                placeholder="Ticket"
-                                className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              />
-                            )}
                           </div>
                         );
                       })}
@@ -2527,40 +2725,21 @@ export default function AddServiceModal({
                 )}
               </div>
 
-              {categoryType !== "hotel" && (
+              {/* REFERENCES — for tour/other (flight refs moved to PARTIES in left column) */}
+              {categoryType !== "hotel" && categoryType !== "flight" && (
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
                 <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">REFERENCES</h4>
-                
-                <div className={categoryType === "flight" ? "grid grid-cols-2 gap-2" : ""}>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}</label>
-                    <input
-                      type="text"
-                      value={refNr}
-                      onChange={(e) => setRefNr(e.target.value)}
-                      placeholder="Booking ref"
-                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
-                    />
-                  </div>
-                  
-                  {/* Status - for Flight in References section */}
-                  {categoryType === "flight" && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
-                      <select
-                        value={resStatus}
-                        onChange={(e) => setResStatus(e.target.value as ServiceData["resStatus"])}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      >
-                        {RES_STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}</label>
+                  <input
+                    type="text"
+                    value={refNr}
+                    onChange={(e) => setRefNr(e.target.value)}
+                    placeholder="Booking ref"
+                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
+                  />
                 </div>
-                
-                {showTicketNr && categoryType !== "flight" && (
+                {showTicketNr && (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Ticket Nr</label>
                     <input
@@ -2718,8 +2897,8 @@ export default function AddServiceModal({
           </RightWrapper>
           </div>
 
-          {/* Flight Schedule - show parsed segments (Flight or Tour) */}
-          {(categoryType === "flight" || categoryType === "tour") && flightSegments.length > 0 && (
+          {/* Flight Schedule for Tour (Flight uses left column) */}
+          {categoryType === "tour" && flightSegments.length > 0 && (
             <div className={`mt-3 p-3 rounded-lg border ${parseAttemptedButEmpty.has("flightSegments") ? "bg-red-50 border-red-200 ring-2 ring-red-300" : parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
               <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parseAttemptedButEmpty.has("flightSegments") ? "text-red-700" : parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
               <div className="space-y-2">

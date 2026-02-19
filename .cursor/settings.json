@@ -1,0 +1,13 @@
+{
+  "plugins": {
+    "superpowers": {
+      "enabled": true
+    },
+    "deploy-on-aws": {
+      "enabled": true
+    },
+    "stripe": {
+      "enabled": true
+    }
+  }
+}
