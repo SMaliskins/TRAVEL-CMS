@@ -723,3 +723,25 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+## [2026-02-19 21:00] CW — Dynamic Date Format from Company Settings
+
+**Task:** Date Format Centralization | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Обновил `utils/dateFormat.ts`: `formatDateDDMMYYYY` и `formatDateRange` теперь читают глобальный формат (dd.mm.yyyy / mm.dd.yyyy / yyyy-mm-dd)
+- Экспортировал `formatDateShort` для коротких дат (DD.MM)
+- Создал `contexts/CompanySettingsContext.tsx` с `CompanySettingsProvider` и хуком `useDateFormat()`
+- Провайдер загружает `companies.date_format` при старте и устанавливает глобальный формат через `setGlobalDateFormat()`
+- Подключил `CompanySettingsProvider` в `app/layout-client-wrapper.tsx`
+- Обновил `handleSave` в Company Settings для немедленного применения нового формата
+- Заменил inline-форматирование дат в: `OrderServicesBlock.tsx`, `orders/page.tsx`, `AddPaymentModal.tsx`, `AddServiceModal.tsx`, `EditServiceModalNew.tsx`
+- Создал Cursor-правило `.cursor/rules/date-format.mdc` для обеспечения соблюдения в будущем
+
+**Результат:** Все форматы дат в CMS теперь определяются настройкой в Company Settings > Regional Settings > Date Format
+
+**Next Step:** Проверка остальных файлов на соответствие
+
+---
+

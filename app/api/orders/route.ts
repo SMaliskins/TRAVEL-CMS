@@ -230,6 +230,7 @@ export async function GET(request: NextRequest) {
       const owner = ownerId ? (ownerNames.get(ownerId) || "") : "";
       
       return {
+        id: orderId,
         orderId: order.order_code || order.order_number || `#${orderId}`,
         client: (order.client_display_name as string) || "—",
         countriesCities: (order.countries_cities as string) || "",

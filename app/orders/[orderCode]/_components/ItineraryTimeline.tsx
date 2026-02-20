@@ -194,6 +194,8 @@ interface ItineraryTimelineProps {
   travellerIdToColor?: Record<string, string>;
   /** Hex colors already used for flight routes; hotel uses colors not in this set */
   routeColorsUsed?: string[];
+  /** Pixel offset for sticky header (bottom of page's sticky header) */
+  stickyTopOffset?: number;
 }
 
 // Category icons
@@ -674,6 +676,7 @@ export default function ItineraryTimeline({
   onToggleBoardingPassSelection,
   travellerIdToColor = {},
   routeColorsUsed = [],
+  stickyTopOffset = 0,
 }: ItineraryTimelineProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -718,9 +721,9 @@ export default function ItineraryTimeline({
   }
 
   return (
-    <div className="rounded-lg bg-white shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="border-b border-gray-200 px-4 py-2">
+    <div>
+      {/* Sticky header - outside the card so it sticks to viewport */}
+      <div className="sticky z-10 bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 py-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-4 before:bg-gray-50 before:-mx-px" style={{ top: stickyTopOffset }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-lg">📅</span>
@@ -762,7 +765,8 @@ export default function ItineraryTimeline({
         </div>
       </div>
 
-      {/* Timeline — each day is one band: left border + light bg so date clearly owns its events */}
+      {/* Timeline card body */}
+      <div className="rounded-b-lg bg-white shadow-sm border border-t-0 border-gray-200">
       <div className="p-3 space-y-3">
         {sortedDates.map((dateKey) => {
           const dayEvents = groupedByDate[dateKey];
@@ -974,13 +978,13 @@ export default function ItineraryTimeline({
 
       {/* Note: check-in/check-out times may vary — shown only when hotel is present in Itinerary */}
       {events.some(e => e.type === 'hotel_checkin' || e.type === 'hotel_checkout') && (
-        <div className="border-t border-gray-200 px-4 py-2 bg-gray-50">
+        <div className="border-t border-gray-200 px-4 py-2 bg-gray-50 rounded-b-lg">
           <p className="text-xs text-gray-500 italic">
             Check-in and check-out times may vary by hotel.
           </p>
         </div>
       )}
-      
+      </div>
     </div>
   );
 }

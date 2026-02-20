@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
+import { setGlobalDateFormat, DateFormatPattern } from "@/utils/dateFormat";
 import BankAccountsManager from "./_components/BankAccountsManager";
 
 // Company types for classification
@@ -299,6 +300,9 @@ export default function CompanySettingsPage() {
         const data = await response.json();
         setCompany(data.company);
         setFormData(data.company);
+        if (data.company?.date_format) {
+          setGlobalDateFormat(data.company.date_format as DateFormatPattern);
+        }
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {

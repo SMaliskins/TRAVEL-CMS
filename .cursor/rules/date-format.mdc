@@ -1,0 +1,48 @@
+---
+description: Date formatting must use company settings, never hardcode
+globs: **/*.{ts,tsx}
+alwaysApply: true
+---
+
+# Date Format Rule — Company Settings
+
+**All dates displayed to users MUST use the centralized formatting utility from `@/utils/dateFormat`.**
+
+The date format is configured per company in **Company Settings > Regional Settings > Date Format** and stored in `companies.date_format`.
+
+## How it works
+
+1. `CompanySettingsProvider` (in `contexts/CompanySettingsContext.tsx`) loads the company's `date_format` on app start and calls `setGlobalDateFormat()`.
+2. All formatting functions in `@/utils/dateFormat` read the global format automatically.
+3. Components just call the utility — no format parameter needed.
+
+## Functions to use
+
+| Function | Use case | Example output (dd.mm.yyyy) |
+|---|---|---|
+| `formatDateDDMMYYYY(dateString)` | Full date | `15.03.2025` |
+| `formatDateShort(dateString)` | Short date (no year) | `15.03` |
+| `formatDateRange(from, to, full?)` | Date range | `15.03 — 22.03` |
+
+## Import
+
+```typescript
+import { formatDateDDMMYYYY, formatDateShort, formatDateRange } from "@/utils/dateFormat";
+```
+
+## FORBIDDEN
+
+- ❌ `new Date(x).toLocaleDateString(...)` for user-facing dates
+- ❌ `date.getDate() + "." + date.getMonth()` — manual inline formatting
+- ❌ Hardcoding `dd.mm.yyyy` or any other date pattern in components
+- ❌ Using `toLocaleString()` for date display (currency formatting is fine)
+
+## ALLOWED
+
+- ✅ `new Date().toISOString().slice(0, 10)` for creating ISO strings for form inputs / API calls
+- ✅ `date.getFullYear()` etc. for date arithmetic (age calculation, period math)
+- ✅ `toLocaleDateString("en-GB", { weekday: "short" })` for weekday names only
+
+## Client App (React Native)
+
+The Client app (`Client/src/`) has its own copy at `Client/src/utils/dateFormat.ts`. The same rule applies — always use the utility, never hardcode.

@@ -259,6 +259,10 @@ interface OrderServicesBlockProps {
   companyCurrencyCode?: string;
   // Callback: emit auto-detected destinations from services (hotel cities, flight routes)
   onDestinationsFromServices?: (destinations: CityWithCountry[]) => void;
+  // Callback: emit recalculated totals when services change
+  onTotalsChanged?: (totals: { amount_total: number; profit_estimated: number }) => void;
+  // Pixel offset for sticky sub-headers (bottom of the page's sticky header)
+  stickyTopOffset?: number;
 }
 
 export default function OrderServicesBlock({ 
@@ -272,6 +276,8 @@ export default function OrderServicesBlock({
   orderSource = 'NON',
   companyCurrencyCode = 'EUR',
   onDestinationsFromServices,
+  onTotalsChanged,
+  stickyTopOffset = 0,
 }: OrderServicesBlockProps) {
   const router = useRouter();
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
@@ -1218,6 +1224,20 @@ export default function OrderServicesBlock({
     fetchTravellers();
   }, [fetchServices, fetchTravellers]);
 
+  // Recalculate totals whenever services change
+  const prevTotalsRef = React.useRef<{ amount_total: number; profit_estimated: number } | null>(null);
+  useEffect(() => {
+    if (!onTotalsChanged) return;
+    const active = services.filter(s => s.resStatus !== "cancelled");
+    const amount_total = active.reduce((sum, s) => sum + (Number(s.clientPrice) || 0), 0);
+    const profit_estimated = active.reduce((sum, s) => sum + ((Number(s.clientPrice) || 0) - (Number(s.servicePrice) || 0)), 0);
+    const prev = prevTotalsRef.current;
+    if (prev && prev.amount_total === amount_total && prev.profit_estimated === profit_estimated) return;
+    prevTotalsRef.current = { amount_total, profit_estimated };
+    onTotalsChanged({ amount_total, profit_estimated });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services]);
+
   // Auto-detect destinations from services and emit via callback
   useEffect(() => {
     if (!onDestinationsFromServices || services.length === 0) return;
@@ -1388,17 +1408,7 @@ export default function OrderServicesBlock({
   };
 
   const formatDateForGrouping = (dateString?: string | null): string => {
-    if (!dateString) return "-";
-    try {
-      const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
-      if (isNaN(date.getTime())) return "-";
-      const day = String(date.getDate()).padStart(2, "0");
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
-    } catch {
-      return "-";
-    }
+    return formatDateDDMMYYYY(dateString);
   };
   const getDateRangeKey = (service: Service) => {
     const startDate = formatDateForGrouping(service.dateFrom);
@@ -2067,7 +2077,7 @@ export default function OrderServicesBlock({
         )}
 
         {/* Itinerary Timeline + Map - side by side */}
-        <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
           <div className="lg:col-span-2">
             <ItineraryTimeline
               services={visibleServices.map(s => ({
@@ -2117,9 +2127,10 @@ export default function OrderServicesBlock({
               onToggleBoardingPassSelection={handleToggleBoardingPassSelection}
               travellerIdToColor={travellerIdToColor}
               routeColorsUsed={routeColorsUsed}
+              stickyTopOffset={stickyTopOffset}
             />
           </div>
-          <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+          <div className="rounded-lg bg-white shadow-sm lg:sticky lg:self-start" style={{ top: stickyTopOffset }}>
             <div className="border-b border-gray-200 px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-base">🗺️</span>

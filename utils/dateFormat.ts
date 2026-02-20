@@ -1,73 +1,100 @@
 /**
- * Format date to dd.mm.yyyy format
- * @param dateString - Date string (YYYY-MM-DD or ISO format)
- * @returns Formatted string like "15.03.2025" or "-" if invalid
+ * Central date formatting utility.
+ * Format is determined by company settings (Company Settings > Regional Settings > Date Format).
+ * Supported patterns: 'dd.mm.yyyy' | 'mm.dd.yyyy' | 'yyyy-mm-dd'
  */
-export function formatDateDDMMYYYY(dateString?: string | null): string {
+
+export type DateFormatPattern = 'dd.mm.yyyy' | 'mm.dd.yyyy' | 'yyyy-mm-dd';
+
+let _globalDateFormat: DateFormatPattern = 'dd.mm.yyyy';
+
+export function setGlobalDateFormat(pattern: DateFormatPattern) {
+  _globalDateFormat = pattern;
+}
+
+export function getGlobalDateFormat(): DateFormatPattern {
+  return _globalDateFormat;
+}
+
+function parseDateSafe(dateString: string): Date | null {
+  try {
+    const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
+    return isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
+function parts(date: Date) {
+  return {
+    dd: String(date.getDate()).padStart(2, "0"),
+    mm: String(date.getMonth() + 1).padStart(2, "0"),
+    yyyy: String(date.getFullYear()),
+  };
+}
+
+function applyPattern(date: Date, pattern: DateFormatPattern): string {
+  const p = parts(date);
+  switch (pattern) {
+    case 'mm.dd.yyyy': return `${p.mm}.${p.dd}.${p.yyyy}`;
+    case 'yyyy-mm-dd': return `${p.yyyy}-${p.mm}-${p.dd}`;
+    case 'dd.mm.yyyy':
+    default: return `${p.dd}.${p.mm}.${p.yyyy}`;
+  }
+}
+
+function applyShortPattern(date: Date, pattern: DateFormatPattern): string {
+  const p = parts(date);
+  switch (pattern) {
+    case 'mm.dd.yyyy': return `${p.mm}.${p.dd}`;
+    case 'yyyy-mm-dd': return `${p.mm}-${p.dd}`;
+    case 'dd.mm.yyyy':
+    default: return `${p.dd}.${p.mm}`;
+  }
+}
+
+/**
+ * Format date according to company date format setting.
+ * @param dateString - ISO date (YYYY-MM-DD or full ISO)
+ * @param pattern - Override pattern (defaults to global company setting)
+ */
+export function formatDateDDMMYYYY(dateString?: string | null, pattern?: DateFormatPattern): string {
   if (!dateString) return "-";
-  try {
-    const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
-    if (isNaN(date.getTime())) return "-";
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`.replace(/\//g, ".");
-  } catch {
-    return "-";
-  }
+  const date = parseDateSafe(dateString);
+  if (!date) return "-";
+  return applyPattern(date, pattern ?? _globalDateFormat);
+}
+
+export function formatDateShort(dateString: string, pattern?: DateFormatPattern): string {
+  const date = parseDateSafe(dateString);
+  if (!date) return "-";
+  return applyShortPattern(date, pattern ?? _globalDateFormat);
 }
 
 /**
- * Format date to dd.mm format (e.g., "15.03")
- */
-function formatDateDDMM(dateString: string): string {
-  try {
-    const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
-    if (isNaN(date.getTime())) return "-";
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    return `${day}.${month}`;
-  } catch {
-    return "-";
-  }
-}
-
-/**
- * Format date range for display (compact format: "15.03 — 22.03" or full: "15.03.2025 — 22.03.2025")
- * @param from - Start date in YYYY-MM-DD format
- * @param to - End date in YYYY-MM-DD format
- * @param full - If true, include year in format
- * @returns Formatted string like "15.03 — 22.03" or "Select range"
+ * Format date range.
+ * @param from - Start date
+ * @param to - End date
+ * @param full - Include year if true
+ * @param pattern - Override pattern (defaults to global company setting)
  */
 export function formatDateRange(
   from: string | undefined,
   to: string | undefined,
-  full: boolean = false
+  full: boolean = false,
+  pattern?: DateFormatPattern
 ): string {
-  if (!from && !to) {
-    return "Select range";
-  }
+  if (!from && !to) return "Select range";
+
+  const fmt = pattern ?? _globalDateFormat;
 
   if (full) {
-    // Full format with year: "15.03.2025 — 22.03.2025"
-    if (from && !to) {
-      return `${formatDateDDMMYYYY(from)} — ...`;
-    }
-    if (from && to) {
-      return `${formatDateDDMMYYYY(from)} — ${formatDateDDMMYYYY(to)}`;
-    }
+    if (from && !to) return `${formatDateDDMMYYYY(from, fmt)} — ...`;
+    if (from && to) return `${formatDateDDMMYYYY(from, fmt)} — ${formatDateDDMMYYYY(to, fmt)}`;
     return "Select range";
   }
 
-  // Compact format: "15.03 — 22.03"
-  if (from && !to) {
-    return `${formatDateDDMM(from)} — ...`;
-  }
-
-  if (from && to) {
-    return `${formatDateDDMM(from)} — ${formatDateDDMM(to)}`;
-  }
-
+  if (from && !to) return `${formatDateShort(from, fmt)} — ...`;
+  if (from && to) return `${formatDateShort(from, fmt)} — ${formatDateShort(to, fmt)}`;
   return "Select range";
 }
-

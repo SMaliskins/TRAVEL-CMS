@@ -172,8 +172,7 @@ function buildOrdersTree(orders: OrderRow[]): OrderTree {
           return b.orderId.localeCompare(a.orderId);
         });
 
-        const date = new Date(dayKey);
-        const dayLabel = `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1).toString().padStart(2, "0")}/${date.getFullYear()}`;
+        const dayLabel = formatDateDDMMYYYY(dayKey);
 
         days.push({
           dayKey,

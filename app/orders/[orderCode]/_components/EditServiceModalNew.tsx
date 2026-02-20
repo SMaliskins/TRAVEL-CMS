@@ -8,7 +8,7 @@ import { FlightSegment } from '@/components/FlightItineraryInput';
 import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
-import { formatDateDDMMYYYY } from '@/utils/dateFormat';
+import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
 import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
 import HotelSuggestInput from '@/components/HotelSuggestInput';
@@ -1416,10 +1416,8 @@ export default function EditServiceModalNew({
     // Generate route name
     if (segments.length > 0) {
       const routeParts = segments.map(seg => {
-        const date = new Date(seg.departureDate);
-        const dd = date.getDate().toString().padStart(2, "0");
-        const mm = (date.getMonth() + 1).toString().padStart(2, "0");
-        return `${dd}.${mm} ${seg.departure}-${seg.arrival}`;
+        const dateStr = formatDateShort(seg.departureDate);
+        return `${dateStr} ${seg.departure}-${seg.arrival}`;
       });
       setServiceName(routeParts.join(" / "));
     }

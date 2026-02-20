@@ -187,7 +187,7 @@ export default function PartySelect({
       
       const payload: Record<string, unknown> = {
         type: createType,
-        roles: [roleFilter],
+        roles: roleFilter ? [roleFilter] : ["client"],
         isActive: true,
       };
 

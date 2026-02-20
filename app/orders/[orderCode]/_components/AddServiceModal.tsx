@@ -10,7 +10,7 @@ import { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { formatDateDDMMYYYY, formatDateShort } from "@/utils/dateFormat";
 import type { SupplierCommission } from "@/lib/types/directory";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
@@ -763,15 +763,12 @@ export default function AddServiceModal({
       });
       
       const routeParts = Object.entries(groupedByDate).map(([date, segs]) => {
-        // Format date as DD.MM
-        const d = new Date(date + "T00:00:00");
-        const dateStr = isNaN(d.getTime()) ? "" : `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const dateStr = formatDateShort(date);
         
-        // Build route for this day: DEP1-ARR1-ARR2...
         const cities = segs.map(s => s.departure).concat(segs[segs.length - 1]?.arrival || "").filter(Boolean);
         const routeStr = cities.join("-");
         
-        return dateStr ? `${dateStr} ${routeStr}` : routeStr;
+        return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
       });
       
       const newRoute = routeParts.join(" / ");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
@@ -82,6 +82,22 @@ export default function OrderPage({
     },
     [pathname, searchParams, router]
   );
+
+  const stickyHeaderRef = useRef<HTMLDivElement>(null);
+  const [stickyHeaderBottom, setStickyHeaderBottom] = useState(280);
+
+  useEffect(() => {
+    if (!stickyHeaderRef.current) return;
+    const STICKY_TOP = 92;
+    const measure = () => {
+      const el = stickyHeaderRef.current;
+      if (el) setStickyHeaderBottom(STICKY_TOP + el.offsetHeight);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(stickyHeaderRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   const [orderCode, setOrderCode] = useState<string>("");
   const [order, setOrder] = useState<OrderData | null>(null);
@@ -488,7 +504,7 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
-        <div className="mb-4">
+        <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 -mx-4 px-4 pt-2 pb-2 border-b border-gray-200">
           {/* Main Row: Order Code | Client + Itinerary + Dates | Amount + Payment */}
           <div className="flex items-start justify-between gap-6 flex-wrap">
             {/* Left: Order Code + Status + Created/Agent */}
@@ -509,6 +525,102 @@ export default function OrderPage({
               {order?.created_at && (
                 <div className="mt-0.5 text-xs text-gray-400">
                   Created on {formatDateDDMMYYYY(order.created_at)} by {order.owner_name || "Unknown"}
+                </div>
+              )}
+              {/* Order Type & Source Radio Bars */}
+              {order && (
+                <div className="mt-1.5 flex flex-col gap-1">
+                  <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
+                    {[
+                      { value: "leisure", label: "Leisure" },
+                      { value: "business", label: "Business" },
+                      { value: "lifestyle", label: "Lifestyle" },
+                    ].map((type) => (
+                      <button
+                        key={type.value}
+                        type="button"
+                        onClick={() => {
+                          if (order.order_type === type.value) return;
+                          const prevValue = order.order_type;
+                          setOrder({ ...order, order_type: type.value });
+                          (async () => {
+                            try {
+                              const { data: { session } } = await supabase.auth.getSession();
+                              const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                                method: "PATCH",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                                },
+                                credentials: "include",
+                                body: JSON.stringify({ order_type: type.value }),
+                              });
+                              if (!response.ok) {
+                                setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
+                              }
+                            } catch (err) {
+                              console.error("Update error:", err);
+                              setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
+                            }
+                          })();
+                        }}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                          order.order_type === type.value
+                            ? "bg-gray-700 text-white shadow-sm"
+                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        }`}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+                  {showOrderSource && (
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
+                      {[
+                        { value: "TA", label: "TA" },
+                        { value: "TO", label: "TO" },
+                        { value: "CORP", label: "CORP" },
+                        { value: "NON", label: "NON" },
+                      ].map((source) => (
+                        <button
+                          key={source.value}
+                          type="button"
+                          onClick={() => {
+                            if (order.order_source === source.value) return;
+                            const prevValue = order.order_source;
+                            setOrder({ ...order, order_source: source.value });
+                            (async () => {
+                              try {
+                                const { data: { session } } = await supabase.auth.getSession();
+                                const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                                  method: "PATCH",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                    ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                                  },
+                                  credentials: "include",
+                                  body: JSON.stringify({ order_source: source.value }),
+                                });
+                                if (!response.ok) {
+                                  setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
+                                }
+                              } catch (err) {
+                                console.error("Update error:", err);
+                                setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
+                              }
+                            })();
+                          }}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                            order.order_source === source.value
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                          } disabled:opacity-50`}
+                        >
+                          {source.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -860,119 +972,12 @@ export default function OrderPage({
               </div>
             )}
           </div>
-          
-          
-          {/* Order Type & Source Radio Bars - stacked vertically */}
-          <div className="mt-3 flex flex-col gap-1.5">
-            {/* Order Type (Leisure/Business/Lifestyle) - on top */}
-            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
-              {[
-                { value: "leisure", label: "Leisure" },
-                { value: "business", label: "Business" },
-                { value: "lifestyle", label: "Lifestyle" },
-              ].map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => {
-                    if (!order || order.order_type === type.value) return;
-                    const prevValue = order.order_type;
-                    // Optimistic update - instant UI change
-                    setOrder({ ...order, order_type: type.value });
-                    // Background save
-                    (async () => {
-                      try {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
-                          method: "PATCH",
-                          headers: {
-                            "Content-Type": "application/json",
-                            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-                          },
-                          credentials: "include",
-                          body: JSON.stringify({ order_type: type.value }),
-                        });
-                        if (!response.ok) {
-                          // Rollback on error
-                          setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
-                        }
-                      } catch (err) {
-                        console.error("Update error:", err);
-                        setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
-                      }
-                    })();
-                  }}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                    order?.order_type === type.value
-                      ? "bg-gray-700 text-white shadow-sm"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                  }`}
-                >
-                  {type.label}
-                </button>
-              ))}
-            </div>
-            
-            {/* Order Source (TA/TO/CORP/NON) - below, shown only if enabled */}
-            {showOrderSource && (
-              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
-                {[
-                  { value: "TA", label: "TA" },
-                  { value: "TO", label: "TO" },
-                  { value: "CORP", label: "CORP" },
-                  { value: "NON", label: "NON" },
-                ].map((source) => (
-                  <button
-                    key={source.value}
-                    type="button"
-                    onClick={() => {
-                      if (!order || order.order_source === source.value) return;
-                      const prevValue = order.order_source;
-                      // Optimistic update - instant UI change
-                      setOrder({ ...order, order_source: source.value });
-                      // Background save
-                      (async () => {
-                        try {
-                          const { data: { session } } = await supabase.auth.getSession();
-                          const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
-                            method: "PATCH",
-                            headers: {
-                              "Content-Type": "application/json",
-                              ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-                            },
-                            credentials: "include",
-                            body: JSON.stringify({ order_source: source.value }),
-                          });
-                          if (!response.ok) {
-                            // Rollback on error
-                            setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
-                          }
-                        } catch (err) {
-                          console.error("Update error:", err);
-                          setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
-                        }
-                      })();
-                    }}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                      order?.order_source === source.value
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                    } disabled:opacity-50`}
-                  >
-                    {source.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* B) Tabs */}
-        <div className="mb-4 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-6">
+          {/* B) Tabs */}
+          <nav className="-mb-px flex space-x-6 border-t border-gray-200 mt-2">
             <button
               onClick={() => setActiveTab("client")}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium ${
+              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
                 activeTab === "client"
                   ? "border-black text-black"
                   : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -982,7 +987,7 @@ export default function OrderPage({
             </button>
             <button
               onClick={() => setActiveTab("finance")}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium ${
+              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
                 activeTab === "finance"
                   ? "border-black text-black"
                   : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -992,7 +997,7 @@ export default function OrderPage({
             </button>
             <button
               onClick={() => setActiveTab("documents")}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium ${
+              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
                 activeTab === "documents"
                   ? "border-black text-black"
                   : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -1002,7 +1007,7 @@ export default function OrderPage({
             </button>
             <button
               onClick={() => setActiveTab("communication")}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium ${
+              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
                 activeTab === "communication"
                   ? "border-black text-black"
                   : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -1012,7 +1017,7 @@ export default function OrderPage({
             </button>
             <button
               onClick={() => setActiveTab("log")}
-              className={`whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium ${
+              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
                 activeTab === "log"
                   ? "border-black text-black"
                   : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -1024,7 +1029,7 @@ export default function OrderPage({
         </div>
 
         {/* Tab Content */}
-        <div className="mb-6">
+        <div className="mb-6 relative z-0">
           {activeTab === "client" && (
             <div className="space-y-6">
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}
@@ -1034,10 +1039,19 @@ export default function OrderPage({
                 defaultClientName={order?.client_display_name || undefined}
                 orderDateFrom={order?.date_from}
                 orderDateTo={order?.date_to}
+                stickyTopOffset={stickyHeaderBottom}
                 itineraryDestinations={itineraryDestinations}
                 orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 companyCurrencyCode={companyCurrencyCode}
                 onDestinationsFromServices={setAutoDestinations}
+                onTotalsChanged={(totals) => {
+                  setOrder(prev => prev ? {
+                    ...prev,
+                    amount_total: totals.amount_total,
+                    amount_debt: Math.max(0, totals.amount_total - (prev.amount_paid || 0)),
+                    profit_estimated: totals.profit_estimated,
+                  } : prev);
+                }}
                 onIssueInvoice={(services) => {
                   // Filter out cancelled services
                   const activeServices = services.filter(s => s.resStatus !== 'cancelled');

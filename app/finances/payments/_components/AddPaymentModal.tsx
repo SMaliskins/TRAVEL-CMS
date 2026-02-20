@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useDraggableModal } from "@/hooks/useDraggableModal";
+import { useDateFormat } from "@/contexts/CompanySettingsContext";
+import { formatDateDDMMYYYY, type DateFormatPattern } from "@/utils/dateFormat";
+import PartySelect from "@/components/PartySelect";
 
 interface BankAccount {
   id: string;
@@ -31,12 +33,6 @@ interface InvoiceOption {
   payer_name: string | null;
 }
 
-interface PartyOption {
-  id: string;
-  display_name: string;
-  type: string;
-}
-
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -52,12 +48,29 @@ export default function AddPaymentModal({
   preselectedOrderId,
   preselectedOrderCode,
 }: Props) {
+  const dateFormat = useDateFormat();
+
+  const isoToDisplay = useCallback((iso: string, fmt: DateFormatPattern) => formatDateDDMMYYYY(iso, fmt), []);
+
+  const separator = useMemo(() => dateFormat === "yyyy-mm-dd" ? "-" : ".", [dateFormat]);
+  const placeholder = dateFormat;
+
+  const parseDisplayToIso = useCallback((display: string): string | null => {
+    const sep = dateFormat === "yyyy-mm-dd" ? "-" : ".";
+    const parts = display.split(sep);
+    if (parts.length !== 3) return null;
+    let d: string, m: string, y: string;
+    if (dateFormat === "dd.mm.yyyy") { [d, m, y] = parts; }
+    else if (dateFormat === "mm.dd.yyyy") { [m, d, y] = parts; }
+    else { [y, m, d] = parts; }
+    if (d.length === 2 && m.length === 2 && y.length === 4) return `${y}-${m}-${d}`;
+    return null;
+  }, [dateFormat]);
+
   const [orderId, setOrderId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
-  const [paidAtDisplay, setPaidAtDisplay] = useState(() => {
-    const d = new Date(); return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
-  });
+  const [paidAtDisplay, setPaidAtDisplay] = useState(() => formatDateDDMMYYYY(new Date().toISOString().slice(0, 10)));
 
   const [method, setMethod] = useState<"cash" | "bank" | "card">("bank");
   const [amount, setAmount] = useState("");
@@ -75,16 +88,12 @@ export default function AddPaymentModal({
   const [selectedOrder, setSelectedOrder] = useState<OrderOption | null>(null);
 
   const [payerSearch, setPayerSearch] = useState("");
-  const [payerOptions, setPayerOptions] = useState<PartyOption[]>([]);
-  const [showPayerDropdown, setShowPayerDropdown] = useState(false);
 
   const [invoiceOptions, setInvoiceOptions] = useState<InvoiceOption[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
   const orderSearchRef = useRef<HTMLInputElement>(null);
   const orderDropdownRef = useRef<HTMLDivElement>(null);
-  const payerSearchRef = useRef<HTMLInputElement>(null);
-  const payerDropdownRef = useRef<HTMLDivElement>(null);
   const { modalStyle, onHeaderMouseDown, resetPosition } = useDraggableModal();
 
   useEffect(() => {
@@ -97,12 +106,12 @@ export default function AddPaymentModal({
 
   useEffect(() => {
     if (!open) return;
-    loadBankAccounts();
     setOrderId(preselectedOrderId || "");
     setInvoiceId("");
     const now = new Date();
-    setPaidAt(now.toISOString().slice(0, 10));
-    setPaidAtDisplay(`${String(now.getDate()).padStart(2,"0")}.${String(now.getMonth()+1).padStart(2,"0")}.${now.getFullYear()}`);
+    const iso = now.toISOString().slice(0, 10);
+    setPaidAt(iso);
+    setPaidAtDisplay(isoToDisplay(iso, dateFormat));
     setMethod("bank");
     setAmount("");
     setCurrency("EUR");
@@ -113,9 +122,22 @@ export default function AddPaymentModal({
     setNote("");
     setError("");
     setOrderSearch(preselectedOrderCode || "");
-    setSelectedOrder(null);
     setInvoiceOptions([]);
 
+    if (preselectedOrderCode) {
+      setSelectedOrder({
+        id: preselectedOrderId || "",
+        order_code: preselectedOrderCode,
+        client_display_name: null,
+        amount_total: 0,
+        amount_paid: 0,
+        amount_debt: 0,
+      });
+    } else {
+      setSelectedOrder(null);
+    }
+
+    loadBankAccounts();
     if (preselectedOrderCode) {
       loadOrderDetails(preselectedOrderId || "", preselectedOrderCode);
     }
@@ -213,36 +235,6 @@ export default function AddPaymentModal({
     return () => clearTimeout(timer);
   }, [orderSearch, selectedOrder, getToken]);
 
-  // Search payer from Directory
-  useEffect(() => {
-    if (payerSearch.length < 2 || payerPartyId) {
-      if (!payerPartyId) setPayerOptions([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(
-        `/api/directory?search=${encodeURIComponent(payerSearch)}&limit=8`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setPayerOptions(
-          (json.data ?? json.parties ?? []).slice(0, 8).map(
-            (p: Record<string, unknown>) => ({
-              id: p.id,
-              display_name: p.display_name || p.name || "",
-              type: p.type || "person",
-            })
-          )
-        );
-        setShowPayerDropdown(true);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [payerSearch, payerPartyId, getToken]);
-
   // Load invoices when order selected
   useEffect(() => {
     if (!orderId || !selectedOrder) {
@@ -275,14 +267,6 @@ export default function AddPaymentModal({
       ) {
         setShowOrderDropdown(false);
       }
-      if (
-        payerDropdownRef.current &&
-        !payerDropdownRef.current.contains(e.target as Node) &&
-        payerSearchRef.current &&
-        !payerSearchRef.current.contains(e.target as Node)
-      ) {
-        setShowPayerDropdown(false);
-      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -299,13 +283,6 @@ export default function AddPaymentModal({
       setPayerName(o.client_display_name);
     }
     if (o.amount_debt > 0) setAmount(String(o.amount_debt));
-  };
-
-  const handleSelectPayer = (p: PartyOption) => {
-    setPayerPartyId(p.id);
-    setPayerName(p.display_name);
-    setPayerSearch(p.display_name);
-    setShowPayerDropdown(false);
   };
 
   const handleSave = async () => {
@@ -369,41 +346,45 @@ export default function AddPaymentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-lg shadow-xl" style={modalStyle}>
-        <div className="flex items-center justify-between border-b px-5 py-4 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
-          <h2 className="text-lg font-semibold text-gray-900">Add Payment</h2>
+      <div className="relative z-10 w-full max-w-md bg-white rounded-lg shadow-xl" style={modalStyle}>
+        <div className="flex items-center justify-between border-b px-4 py-2.5 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
+          <h2 className="text-sm font-semibold text-gray-900">Add Payment</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
           >
             &times;
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-4 py-3 space-y-2.5 max-h-[70vh] overflow-y-auto">
           {error && (
-            <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
+            <div className="text-xs text-red-600 bg-red-50 px-2.5 py-1.5 rounded">
               {error}
             </div>
           )}
 
           {/* Order search */}
           <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
               Order <span className="text-red-500">*</span>
             </label>
             {selectedOrder ? (
-              <div className="flex items-center justify-between border border-gray-300 rounded-md px-3 py-2 bg-gray-50">
+              <div className="flex items-center justify-between border border-gray-300 rounded-md px-2.5 py-1.5 bg-gray-50">
                 <div>
                   <span className="font-medium text-sm text-gray-900">
                     {selectedOrder.order_code}
                   </span>
-                  <span className="text-gray-500 text-xs ml-2">
-                    {selectedOrder.client_display_name || ""}
-                  </span>
-                  <span className="text-gray-400 text-xs ml-2">
-                    Debt: {selectedOrder.amount_debt?.toFixed(2)}
-                  </span>
+                  {selectedOrder.client_display_name && (
+                    <span className="text-gray-500 text-xs ml-2">
+                      {selectedOrder.client_display_name}
+                    </span>
+                  )}
+                  {selectedOrder.amount_debt > 0 && (
+                    <span className="text-gray-400 text-xs ml-2">
+                      Debt: {selectedOrder.amount_debt.toFixed(2)}
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={() => {
@@ -432,7 +413,7 @@ export default function AddPaymentModal({
                     orderOptions.length > 0 && setShowOrderDropdown(true)
                   }
                   placeholder="Search by order code or client name..."
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 />
                 {showOrderDropdown && orderOptions.length > 0 && (
                   <div
@@ -443,7 +424,7 @@ export default function AddPaymentModal({
                       <button
                         key={o.id || idx}
                         onClick={() => handleSelectOrder(o)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-100"
                       >
                         <span className="font-semibold text-gray-900">
                           {o.order_code}
@@ -465,13 +446,13 @@ export default function AddPaymentModal({
           {/* Invoice (optional) */}
           {invoiceOptions.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Invoice (optional)
               </label>
               <select
                 value={invoiceId}
                 onChange={(e) => setInvoiceId(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">-- No invoice --</option>
                 {invoiceOptions.map((inv) => (
@@ -485,51 +466,92 @@ export default function AddPaymentModal({
           )}
 
           {/* Date + Method */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Payment Date <span className="text-red-500">*</span>
               </label>
               <input
-                type="date"
-                value={paidAt}
+                type="text"
+                value={paidAtDisplay}
                 onChange={(e) => {
-                  const iso = e.target.value;
-                  setPaidAt(iso);
-                  if (iso) {
-                    const [y, m, d] = iso.split("-");
-                    setPaidAtDisplay(`${d}.${m}.${y}`);
+                  const sepChar = separator;
+                  const allowed = sepChar === "-" ? /[^\d-]/g : /[^\d.]/g;
+                  let v = e.target.value.replace(allowed, "");
+                  const digits = v.replace(/[.\-]/g, "");
+                  if (dateFormat === "yyyy-mm-dd") {
+                    if (digits.length <= 4) v = digits;
+                    else if (digits.length <= 6) v = digits.slice(0,4) + sepChar + digits.slice(4);
+                    else v = digits.slice(0,4) + sepChar + digits.slice(4,6) + sepChar + digits.slice(6,8);
+                  } else {
+                    if (digits.length <= 2) v = digits;
+                    else if (digits.length <= 4) v = digits.slice(0,2) + sepChar + digits.slice(2);
+                    else v = digits.slice(0,2) + sepChar + digits.slice(2,4) + sepChar + digits.slice(4,8);
                   }
+                  setPaidAtDisplay(v);
+                  const iso = parseDisplayToIso(v);
+                  if (iso) setPaidAt(iso);
                 }}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                placeholder={placeholder}
+                maxLength={10}
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Payment Method <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-1">
-                {(["bank", "cash", "card"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMethod(m)}
-                    className={`flex-1 px-2 py-2 text-sm font-medium rounded-md border transition-colors ${
-                      method === m
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    {m === "bank" ? "Bank" : m === "cash" ? "Cash" : "Card"}
-                  </button>
-                ))}
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMethod("bank")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                    method === "bank"
+                      ? "bg-blue-50 text-blue-700 border-blue-500 shadow-sm"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" />
+                  </svg>
+                  Bank
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMethod("cash")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                    method === "cash"
+                      ? "bg-green-50 text-green-700 border-green-500 shadow-sm"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMethod("card")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                    method === "card"
+                      ? "bg-purple-50 text-purple-700 border-purple-500 shadow-sm"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  Card
+                </button>
               </div>
             </div>
           </div>
 
           {/* Amount + Currency */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Amount <span className="text-red-500">*</span>
               </label>
               <input
@@ -539,17 +561,17 @@ export default function AddPaymentModal({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Currency
               </label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
@@ -560,11 +582,11 @@ export default function AddPaymentModal({
 
           {/* Account */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
               Credit to Account
             </label>
             {bankAccounts.length === 0 ? (
-              <p className="text-sm text-gray-500 italic">
+              <p className="text-xs text-gray-500 italic">
                 No bank accounts configured.{" "}
                 <a
                   href="/settings/company"
@@ -577,7 +599,7 @@ export default function AddPaymentModal({
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">-- Select account --</option>
                 {bankAccounts.map((acc) => (
@@ -591,56 +613,27 @@ export default function AddPaymentModal({
             )}
           </div>
 
-          {/* Payer - search from Directory */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          {/* Payer - from Directory with create option */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
               Payer
             </label>
-            <input
-              ref={payerSearchRef}
-              type="text"
-              value={payerSearch}
-              onChange={(e) => {
-                setPayerSearch(e.target.value);
-                setPayerName(e.target.value);
-                setPayerPartyId(null);
-                if (e.target.value.length >= 2) setShowPayerDropdown(true);
+            <PartySelect
+              key={`payer-${payerPartyId || "empty"}`}
+              value={payerPartyId}
+              onChange={(id, name) => {
+                setPayerPartyId(id);
+                setPayerName(name);
+                setPayerSearch(name);
               }}
-              onFocus={() =>
-                payerOptions.length > 0 && setShowPayerDropdown(true)
-              }
-              placeholder="Search by name in Directory or type manually..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              roleFilter=""
+              initialDisplayName={payerName || payerSearch}
             />
-            {payerPartyId && (
-              <span className="absolute right-3 top-8 text-xs text-green-600">
-                Linked
-              </span>
-            )}
-            {showPayerDropdown && payerOptions.length > 0 && (
-              <div
-                ref={payerDropdownRef}
-                className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto"
-              >
-                {payerOptions.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handleSelectPayer(p)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <span className="text-gray-400 text-xs">
-                      {p.type === "company" ? "Co" : "P"}
-                    </span>
-                    <span className="text-gray-900">{p.display_name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Note */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
               Note
             </label>
             <textarea
@@ -648,22 +641,22 @@ export default function AddPaymentModal({
               onChange={(e) => setNote(e.target.value)}
               rows={2}
               placeholder="Optional note..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
+              className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t px-5 py-4">
+        <div className="flex items-center justify-end gap-2 border-t px-4 py-2.5">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? "Saving..." : "Add Payment"}
           </button>
