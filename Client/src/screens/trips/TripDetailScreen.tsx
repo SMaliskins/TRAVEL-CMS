@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native'
+import React, { useEffect, useState, useMemo } from 'react'
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { bookingsApi, BookingService, FlightSegment } from '../../api/bookings'
 import { parseDestination } from '../../utils/parseDestination'
 import { formatDateRange, formatDate, calcDaysNights, calcDaysUntil } from '../../utils/dateFormat'
@@ -33,96 +33,95 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function FlightCard({ service }: { service: BookingService }) {
-  const segments: FlightSegment[] = service.flight_segments ?? []
-
-  if (segments.length === 0) {
-    return (
-      <View style={[styles.serviceCard, styles.flightBorder]}>
-        <Text style={styles.categoryLabel}>FLIGHT</Text>
-        <Text style={styles.serviceName}>{service.service_name}</Text>
-        <Text style={styles.serviceDate}>{formatDateRange(service.service_date_from, service.service_date_to)}</Text>
-        <StatusBadge status={service.res_status} />
-      </View>
-    )
-  }
-
+function TravellerBadges({ names }: { names: string[] }) {
+  if (!names.length) return null
   return (
-    <>
-      {segments.map((seg, i) => (
-        <View key={seg.id || i} style={[styles.serviceCard, styles.flightBorder]}>
-          <View style={styles.flightHeader}>
-            <Text style={styles.flightNumber}>{seg.flightNumber}</Text>
-            {seg.airline && <Text style={styles.airline}>{seg.airline}</Text>}
-            {service.cabin_class && service.cabin_class !== 'economy' && (
-              <Text style={styles.cabinClass}>{service.cabin_class}</Text>
-            )}
-          </View>
-
-          <View style={styles.flightRoute}>
-            <View style={styles.flightPoint}>
-              <Text style={styles.airportCode}>{seg.departure}</Text>
-              {seg.departureCity && <Text style={styles.cityName}>{seg.departureCity}</Text>}
-              <Text style={styles.flightTime}>{seg.departureTimeScheduled}</Text>
-              <Text style={styles.flightDate}>{formatDate(seg.departureDate)}</Text>
-            </View>
-            <View style={styles.flightArrow}>
-              <Text style={styles.arrowText}>→</Text>
-            </View>
-            <View style={[styles.flightPoint, { alignItems: 'flex-end' }]}>
-              <Text style={styles.airportCode}>{seg.arrival}</Text>
-              {seg.arrivalCity && <Text style={styles.cityName}>{seg.arrivalCity}</Text>}
-              <Text style={styles.flightTime}>{seg.arrivalTimeScheduled}</Text>
-              <Text style={styles.flightDate}>{formatDate(seg.arrivalDate)}</Text>
-            </View>
-          </View>
-
-          {service.ref_nr && (
-            <Text style={styles.refNr}>PNR {service.ref_nr}</Text>
-          )}
+    <View style={styles.travellerRow}>
+      {names.map((n, i) => (
+        <View key={i} style={styles.travellerBadge}>
+          <Text style={styles.travellerBadgeText}>{n.split(' ').pop()}</Text>
         </View>
       ))}
-    </>
+    </View>
   )
 }
 
-function HotelCard({ service }: { service: BookingService }) {
+function FlightSegmentCard({ segment, service }: { segment: FlightSegment; service: BookingService }) {
+  return (
+    <View style={[styles.serviceCard, styles.flightBorder]}>
+      <View style={styles.flightHeader}>
+        <Text style={styles.flightNumber}>{segment.flightNumber}</Text>
+        {segment.airline && <Text style={styles.airline}>{segment.airline}</Text>}
+        {service.cabin_class && service.cabin_class !== 'economy' && (
+          <Text style={styles.cabinClass}>{service.cabin_class}</Text>
+        )}
+      </View>
+      <View style={styles.flightRoute}>
+        <View style={styles.flightPoint}>
+          <Text style={styles.airportCode}>{segment.departure}</Text>
+          {segment.departureCity && <Text style={styles.cityName}>{segment.departureCity}</Text>}
+          <Text style={styles.flightTime}>{segment.departureTimeScheduled}</Text>
+          <Text style={styles.flightDate}>{formatDate(segment.departureDate)}</Text>
+        </View>
+        <View style={styles.flightArrow}><Text style={styles.arrowText}>→</Text></View>
+        <View style={[styles.flightPoint, { alignItems: 'flex-end' }]}>
+          <Text style={styles.airportCode}>{segment.arrival}</Text>
+          {segment.arrivalCity && <Text style={styles.cityName}>{segment.arrivalCity}</Text>}
+          <Text style={styles.flightTime}>{segment.arrivalTimeScheduled}</Text>
+          <Text style={styles.flightDate}>{formatDate(segment.arrivalDate)}</Text>
+        </View>
+      </View>
+      {service.ref_nr && <Text style={styles.refNr}>PNR {service.ref_nr}</Text>}
+      <TravellerBadges names={service.traveller_names ?? []} />
+    </View>
+  )
+}
+
+function FlightCard({ service }: { service: BookingService }) {
+  return (
+    <View style={[styles.serviceCard, styles.flightBorder]}>
+      <Text style={styles.categoryLabel}>FLIGHT</Text>
+      <Text style={styles.serviceName}>{service.service_name}</Text>
+      <Text style={styles.serviceDate}>{formatDateRange(service.service_date_from, service.service_date_to)}</Text>
+      <StatusBadge status={service.res_status} />
+      <TravellerBadges names={service.traveller_names ?? []} />
+    </View>
+  )
+}
+
+function CheckinCard({ service }: { service: BookingService }) {
   const hotelName = service.hotel_name || service.service_name
   const stars = service.hotel_star_rating ? '★'.repeat(Number(service.hotel_star_rating) || 0) : null
   return (
     <View style={[styles.serviceCard, styles.hotelBorder]}>
-      <Text style={styles.categoryLabel}>HOTEL</Text>
+      <Text style={styles.categoryLabel}>CHECK-IN</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={styles.serviceName}>{hotelName}</Text>
         {stars ? <Text style={{ fontSize: 13, color: '#f59e0b' }}>{stars}</Text> : null}
       </View>
-
-      <View style={styles.hotelSchedule}>
-        <View style={styles.hotelDateBlock}>
-          <Text style={styles.hotelDateLabel}>Check-in</Text>
-          <Text style={styles.hotelDateValue}>{formatDate(service.service_date_from)}</Text>
-        </View>
-        <Text style={styles.hotelArrow}>→</Text>
-        <View style={styles.hotelDateBlock}>
-          <Text style={styles.hotelDateLabel}>Check-out</Text>
-          <Text style={styles.hotelDateValue}>{formatDate(service.service_date_to)}</Text>
-        </View>
-      </View>
-
+      <Text style={styles.serviceDate}>{formatDate(service.service_date_from)}</Text>
       <View style={styles.hotelDetails}>
-        {service.hotel_room && (
-          <Text style={styles.hotelDetail}>{service.hotel_room}</Text>
-        )}
+        {service.hotel_room && <Text style={styles.hotelDetail}>{service.hotel_room}</Text>}
         {service.hotel_board && (
           <Text style={styles.hotelDetail}>{BOARD_LABELS[service.hotel_board] ?? service.hotel_board}</Text>
         )}
-        {service.hotel_bed_type && (
-          <Text style={styles.hotelDetail}>{service.hotel_bed_type}</Text>
-        )}
+        {service.hotel_bed_type && <Text style={styles.hotelDetail}>{service.hotel_bed_type}</Text>}
       </View>
-      {service.supplier_name && <Text style={styles.supplierText}>{service.supplier_name}</Text>}
       {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
       <StatusBadge status={service.res_status} />
+      <TravellerBadges names={service.traveller_names ?? []} />
+    </View>
+  )
+}
+
+function CheckoutCard({ service }: { service: BookingService }) {
+  const hotelName = service.hotel_name || service.service_name
+  return (
+    <View style={[styles.serviceCard, styles.hotelBorder]}>
+      <Text style={styles.categoryLabel}>CHECK-OUT</Text>
+      <Text style={styles.serviceName}>{hotelName}</Text>
+      <Text style={styles.serviceDate}>{formatDate(service.service_date_to)}</Text>
+      <TravellerBadges names={service.traveller_names ?? []} />
     </View>
   )
 }
@@ -132,41 +131,33 @@ function TransferCard({ service }: { service: BookingService }) {
     <View style={[styles.serviceCard, styles.transferBorder]}>
       <Text style={styles.categoryLabel}>TRANSFER</Text>
       <Text style={styles.serviceName}>{service.service_name}</Text>
-      {service.transfer_type && (
-        <Text style={styles.transferType}>{service.transfer_type}</Text>
-      )}
+      {service.transfer_type && <Text style={styles.transferType}>{service.transfer_type}</Text>}
       <Text style={styles.serviceDate}>{formatDate(service.service_date_from)}</Text>
       {(service.pickup_location || service.dropoff_location) && (
         <View style={styles.transferRoute}>
-          {service.pickup_location && (
-            <Text style={styles.transferPoint}>From: {service.pickup_location}</Text>
-          )}
-          {service.dropoff_location && (
-            <Text style={styles.transferPoint}>To: {service.dropoff_location}</Text>
-          )}
-          {service.pickup_time && (
-            <Text style={styles.transferPoint}>Time: {service.pickup_time}</Text>
-          )}
+          {service.pickup_location && <Text style={styles.transferPoint}>From: {service.pickup_location}</Text>}
+          {service.dropoff_location && <Text style={styles.transferPoint}>To: {service.dropoff_location}</Text>}
+          {service.pickup_time && <Text style={styles.transferPoint}>Time: {service.pickup_time}</Text>}
         </View>
       )}
       {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
       <StatusBadge status={service.res_status} />
+      <TravellerBadges names={service.traveller_names ?? []} />
     </View>
   )
 }
 
 function GenericServiceCard({ service }: { service: BookingService }) {
   const cat = service.category?.toLowerCase() ?? ''
-  const borderColor = cat.includes('transfer') ? '#f59e0b' : '#6b7280'
+  const borderColor = cat.includes('insurance') ? '#22c55e' : cat.includes('visa') ? '#8b5cf6' : '#6b7280'
   return (
     <View style={[styles.serviceCard, { borderLeftColor: borderColor }]}>
       <Text style={styles.categoryLabel}>{(service.category ?? 'SERVICE').toUpperCase()}</Text>
       <Text style={styles.serviceName}>{service.service_name}</Text>
       <Text style={styles.serviceDate}>{formatDateRange(service.service_date_from, service.service_date_to)}</Text>
-      {service.client_price != null && service.client_price > 0 && (
-        <Text style={styles.servicePrice}>€{Number(service.client_price).toFixed(2)}</Text>
-      )}
+      {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
       <StatusBadge status={service.res_status} />
+      <TravellerBadges names={service.traveller_names ?? []} />
     </View>
   )
 }
@@ -193,8 +184,40 @@ function isHotelService(cat: string): boolean {
   return cat.includes('hotel') || cat.includes('accommodation')
 }
 
-function buildTimeline(services: BookingService[]): TimelineEvent[] {
+function mergeDuplicateServices(services: BookingService[]): BookingService[] {
+  const groupMap = new Map<string, BookingService>()
+
+  for (const svc of services) {
+    if (svc.res_status === 'cancelled') continue
+    const key = svc.split_group_id
+      || `${svc.category}|${svc.service_name}|${svc.service_date_from}|${svc.service_date_to}`
+
+    const existing = groupMap.get(key)
+    if (existing) {
+      const mergedIds = new Set([...(existing.traveller_ids ?? []), ...(svc.traveller_ids ?? [])])
+      existing.traveller_ids = Array.from(mergedIds)
+      const mergedNames = new Set([...(existing.traveller_names ?? []), ...(svc.traveller_names ?? [])])
+      existing.traveller_names = Array.from(mergedNames)
+      if (svc.ticket_numbers?.length) {
+        const seen = new Set((existing.ticket_numbers ?? []).map(t => `${t.clientId}|${t.ticketNr}`))
+        for (const t of svc.ticket_numbers) {
+          if (!seen.has(`${t.clientId}|${t.ticketNr}`)) {
+            existing.ticket_numbers = [...(existing.ticket_numbers ?? []), t]
+          }
+        }
+      }
+    } else {
+      groupMap.set(key, { ...svc })
+    }
+  }
+
+  return Array.from(groupMap.values())
+}
+
+function buildTimeline(rawServices: BookingService[]): TimelineEvent[] {
+  const services = mergeDuplicateServices(rawServices)
   const events: TimelineEvent[] = []
+  const seenSegmentKeys = new Set<string>()
 
   for (const svc of services) {
     const cat = svc.category?.toLowerCase() ?? ''
@@ -203,12 +226,16 @@ function buildTimeline(services: BookingService[]): TimelineEvent[] {
       const segments = svc.flight_segments ?? []
       if (segments.length > 0) {
         for (let i = 0; i < segments.length; i++) {
+          const seg = segments[i]
+          const segKey = `${seg.departureDate}-${seg.departureTimeScheduled}-${seg.flightNumber}-${seg.departure}-${seg.arrival}`
+          if (seenSegmentKeys.has(segKey)) continue
+          seenSegmentKeys.add(segKey)
           events.push({
             key: `${svc.id}-flight-${i}`,
             type: 'flight',
-            sortDate: segments[i].departureDate ?? svc.service_date_from ?? '',
+            sortDate: seg.departureDate ?? svc.service_date_from ?? '',
             service: svc,
-            segment: segments[i],
+            segment: seg,
           })
         }
       } else {
@@ -222,49 +249,19 @@ function buildTimeline(services: BookingService[]): TimelineEvent[] {
 
       if (isTourWithFlights(cat, svc)) {
         if (svc.service_date_from) {
-          events.push({
-            key: `${svc.id}-checkin`,
-            type: 'hotel_checkin',
-            sortDate: svc.service_date_from,
-            service: svc,
-          })
+          events.push({ key: `${svc.id}-checkin`, type: 'hotel_checkin', sortDate: svc.service_date_from, service: svc })
         }
         if (svc.service_date_to) {
-          events.push({
-            key: `${svc.id}-checkout`,
-            type: 'hotel_checkout',
-            sortDate: svc.service_date_to,
-            service: svc,
-          })
+          events.push({ key: `${svc.id}-checkout`, type: 'hotel_checkout', sortDate: svc.service_date_to, service: svc })
         }
       }
     } else if (isHotelService(cat)) {
-      events.push({
-        key: `${svc.id}-checkin`,
-        type: 'hotel_checkin',
-        sortDate: svc.service_date_from ?? '',
-        service: svc,
-      })
-      events.push({
-        key: `${svc.id}-checkout`,
-        type: 'hotel_checkout',
-        sortDate: svc.service_date_to ?? '',
-        service: svc,
-      })
+      events.push({ key: `${svc.id}-checkin`, type: 'hotel_checkin', sortDate: svc.service_date_from ?? '', service: svc })
+      events.push({ key: `${svc.id}-checkout`, type: 'hotel_checkout', sortDate: svc.service_date_to ?? '', service: svc })
     } else if (cat.includes('transfer')) {
-      events.push({
-        key: svc.id,
-        type: 'transfer',
-        sortDate: svc.service_date_from ?? '',
-        service: svc,
-      })
+      events.push({ key: svc.id, type: 'transfer', sortDate: svc.service_date_from ?? '', service: svc })
     } else {
-      events.push({
-        key: svc.id,
-        type: 'other',
-        sortDate: svc.service_date_from ?? '',
-        service: svc,
-      })
+      events.push({ key: svc.id, type: 'other', sortDate: svc.service_date_from ?? '', service: svc })
     }
   }
 
@@ -279,89 +276,12 @@ function buildTimeline(services: BookingService[]): TimelineEvent[] {
   return events
 }
 
-function FlightSegmentCard({ segment, service }: { segment: FlightSegment; service: BookingService }) {
-  return (
-    <View style={[styles.serviceCard, styles.flightBorder]}>
-      <View style={styles.flightHeader}>
-        <Text style={styles.flightNumber}>{segment.flightNumber}</Text>
-        {segment.airline && <Text style={styles.airline}>{segment.airline}</Text>}
-        {service.cabin_class && service.cabin_class !== 'economy' && (
-          <Text style={styles.cabinClass}>{service.cabin_class}</Text>
-        )}
-      </View>
-      <View style={styles.flightRoute}>
-        <View style={styles.flightPoint}>
-          <Text style={styles.airportCode}>{segment.departure}</Text>
-          {segment.departureCity && <Text style={styles.cityName}>{segment.departureCity}</Text>}
-          <Text style={styles.flightTime}>{segment.departureTimeScheduled}</Text>
-          <Text style={styles.flightDate}>{formatDate(segment.departureDate)}</Text>
-        </View>
-        <View style={styles.flightArrow}>
-          <Text style={styles.arrowText}>→</Text>
-        </View>
-        <View style={[styles.flightPoint, { alignItems: 'flex-end' }]}>
-          <Text style={styles.airportCode}>{segment.arrival}</Text>
-          {segment.arrivalCity && <Text style={styles.cityName}>{segment.arrivalCity}</Text>}
-          <Text style={styles.flightTime}>{segment.arrivalTimeScheduled}</Text>
-          <Text style={styles.flightDate}>{formatDate(segment.arrivalDate)}</Text>
-        </View>
-      </View>
-      {service.ref_nr && <Text style={styles.refNr}>PNR {service.ref_nr}</Text>}
-    </View>
-  )
-}
-
-function CheckinCard({ service }: { service: BookingService }) {
-  const hotelName = service.hotel_name || service.service_name
-  const stars = service.hotel_star_rating ? '★'.repeat(Number(service.hotel_star_rating) || 0) : null
-  return (
-    <View style={[styles.serviceCard, styles.hotelBorder]}>
-      <Text style={styles.categoryLabel}>CHECK-IN</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={styles.serviceName}>{hotelName}</Text>
-        {stars ? <Text style={{ fontSize: 13, color: '#f59e0b' }}>{stars}</Text> : null}
-      </View>
-      <Text style={styles.serviceDate}>{formatDate(service.service_date_from)}</Text>
-      <View style={styles.hotelDetails}>
-        {service.hotel_room && <Text style={styles.hotelDetail}>{service.hotel_room}</Text>}
-        {service.hotel_board && (
-          <Text style={styles.hotelDetail}>{BOARD_LABELS[service.hotel_board] ?? service.hotel_board}</Text>
-        )}
-        {service.hotel_bed_type && <Text style={styles.hotelDetail}>{service.hotel_bed_type}</Text>}
-      </View>
-      {service.ref_nr && <Text style={styles.refNr}>Ref: {service.ref_nr}</Text>}
-      <StatusBadge status={service.res_status} />
-    </View>
-  )
-}
-
-function CheckoutCard({ service }: { service: BookingService }) {
-  const hotelName = service.hotel_name || service.service_name
-  return (
-    <View style={[styles.serviceCard, styles.hotelBorder]}>
-      <Text style={styles.categoryLabel}>CHECK-OUT</Text>
-      <Text style={styles.serviceName}>{hotelName}</Text>
-      <Text style={styles.serviceDate}>{formatDate(service.service_date_to)}</Text>
-    </View>
-  )
-}
-
 function TimelineEventCard({ event }: { event: TimelineEvent }) {
-  if (event.type === 'flight' && event.segment) {
-    return <FlightSegmentCard segment={event.segment} service={event.service} />
-  }
-  if (event.type === 'flight') {
-    return <FlightCard service={event.service} />
-  }
-  if (event.type === 'hotel_checkin') {
-    return <CheckinCard service={event.service} />
-  }
-  if (event.type === 'hotel_checkout') {
-    return <CheckoutCard service={event.service} />
-  }
-  if (event.type === 'transfer') {
-    return <TransferCard service={event.service} />
-  }
+  if (event.type === 'flight' && event.segment) return <FlightSegmentCard segment={event.segment} service={event.service} />
+  if (event.type === 'flight') return <FlightCard service={event.service} />
+  if (event.type === 'hotel_checkin') return <CheckinCard service={event.service} />
+  if (event.type === 'hotel_checkout') return <CheckoutCard service={event.service} />
+  if (event.type === 'transfer') return <TransferCard service={event.service} />
   return <GenericServiceCard service={event.service} />
 }
 
@@ -375,17 +295,38 @@ export function TripDetailScreen({ route }: Props) {
   const { bookingId } = route.params
   const [booking, setBooking] = useState<Awaited<ReturnType<typeof bookingsApi.getById>> | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedTraveller, setSelectedTraveller] = useState<string | null>(null)
 
   useEffect(() => {
     bookingsApi.getById(bookingId)
       .then(setBooking)
-      .catch(() => {/* silent */})
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [bookingId])
 
   const dest = booking ? parseDestination(booking.countries_cities) : null
   const daysNights = booking ? calcDaysNights(booking.date_from, booking.date_to) : null
   const daysUntil = booking ? calcDaysUntil(booking.date_from) : null
+
+  const allTravellers = useMemo(() => {
+    if (!booking?.services) return []
+    const nameSet = new Set<string>()
+    for (const s of booking.services) {
+      for (const n of (s.traveller_names ?? [])) nameSet.add(n)
+    }
+    return Array.from(nameSet)
+  }, [booking?.services])
+
+  const timeline = useMemo(() => {
+    if (!booking?.services) return []
+    let filtered = booking.services
+    if (selectedTraveller) {
+      filtered = filtered.filter(s =>
+        !s.traveller_names?.length || s.traveller_names.includes(selectedTraveller)
+      )
+    }
+    return buildTimeline(filtered)
+  }, [booking?.services, selectedTraveller])
 
   if (loading) {
     return <View style={styles.centered}><ActivityIndicator size="large" color="#1a73e8" /></View>
@@ -399,8 +340,6 @@ export function TripDetailScreen({ route }: Props) {
   const paidAmount = Number(booking.amount_paid) || 0
   const debtAmount = Number(booking.amount_debt) || 0
   const overdue = booking.overdue_days ?? 0
-
-  const timeline = booking.services ? buildTimeline(booking.services) : []
 
   let lastDay = ''
 
@@ -459,6 +398,29 @@ export function TripDetailScreen({ route }: Props) {
       {timeline.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Itinerary</Text>
+          {allTravellers.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+              <TouchableOpacity
+                style={[styles.filterChip, !selectedTraveller && styles.filterChipActive]}
+                onPress={() => setSelectedTraveller(null)}
+              >
+                <Text style={[styles.filterChipText, !selectedTraveller && styles.filterChipTextActive]}>All</Text>
+              </TouchableOpacity>
+              {allTravellers.map((name) => {
+                const surname = name.split(' ').pop() ?? name
+                const active = selectedTraveller === name
+                return (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => setSelectedTraveller(active ? null : name)}
+                  >
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{surname}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          )}
           {timeline.map((event) => {
             const day = event.sortDate?.split('T')[0] ?? ''
             let showDayHeader = false
@@ -468,9 +430,7 @@ export function TripDetailScreen({ route }: Props) {
             }
             return (
               <View key={event.key}>
-                {showDayHeader && (
-                  <Text style={styles.dayHeader}>{formatDayHeader(day)}</Text>
-                )}
+                {showDayHeader && <Text style={styles.dayHeader}>{formatDayHeader(day)}</Text>}
                 <TimelineEventCard event={event} />
               </View>
             )
@@ -507,17 +467,26 @@ const styles = StyleSheet.create({
 
   section: { margin: 16 },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  filterRow: { marginBottom: 10, flexGrow: 0 },
+  filterChip: { backgroundColor: '#f0f0f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6, marginRight: 8 },
+  filterChipActive: { backgroundColor: '#1a73e8' },
+  filterChipText: { fontSize: 13, fontWeight: '600', color: '#666' },
+  filterChipTextActive: { color: '#fff' },
 
   serviceCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#1a73e8' },
   flightBorder: { borderLeftColor: '#3b82f6' },
   hotelBorder: { borderLeftColor: '#f59e0b' },
+  transferBorder: { borderLeftColor: '#f59e0b' },
   categoryLabel: { fontSize: 10, fontWeight: '700', color: '#999', letterSpacing: 1, marginBottom: 4 },
   serviceName: { fontSize: 15, fontWeight: '600', color: '#333' },
   serviceDate: { fontSize: 13, color: '#666', marginTop: 4 },
-  servicePrice: { fontSize: 14, fontWeight: '600', color: '#333', marginTop: 4 },
 
   badge: { marginTop: 8, alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 11, fontWeight: '600' },
+
+  travellerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
+  travellerBadge: { backgroundColor: '#e8f0fe', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  travellerBadgeText: { fontSize: 11, fontWeight: '600', color: '#1a73e8' },
 
   flightHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   flightNumber: { fontSize: 16, fontWeight: '700', color: '#2563eb' },
@@ -534,16 +503,9 @@ const styles = StyleSheet.create({
   arrowText: { fontSize: 20, color: '#ccc' },
   refNr: { fontSize: 11, color: '#888', marginTop: 4 },
 
-  hotelSchedule: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
-  hotelDateBlock: { flex: 1 },
-  hotelDateLabel: { fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.5 },
-  hotelDateValue: { fontSize: 14, fontWeight: '600', color: '#333', marginTop: 2 },
-  hotelArrow: { fontSize: 16, color: '#ccc', paddingHorizontal: 4 },
   hotelDetails: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   hotelDetail: { fontSize: 12, color: '#666', backgroundColor: '#f5f5f5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, overflow: 'hidden' },
-  supplierText: { fontSize: 11, color: '#999', marginTop: 4 },
 
-  transferBorder: { borderLeftColor: '#f59e0b' },
   transferType: { fontSize: 12, color: '#888', marginTop: 2 },
   transferRoute: { marginTop: 6 },
   transferPoint: { fontSize: 13, color: '#555', marginTop: 2 },

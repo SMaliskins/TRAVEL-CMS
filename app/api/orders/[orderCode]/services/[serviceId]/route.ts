@@ -45,13 +45,10 @@ export async function PATCH(
     if (body.category !== undefined) updates.category = body.category;
     if (body.service_price !== undefined) updates.service_price = body.service_price;
     if (body.client_price !== undefined) {
-      if (isInvoiced) {
-        return NextResponse.json(
-          { error: "Cannot change amount to pay: service is already on an invoice" },
-          { status: 400 }
-        );
+      if (!isInvoiced) {
+        updates.client_price = body.client_price;
       }
-      updates.client_price = body.client_price;
+      // If invoiced, silently skip client_price update (field is locked on frontend)
     }
     if (body.res_status !== undefined) updates.res_status = body.res_status;
     if (body.ref_nr !== undefined) updates.ref_nr = body.ref_nr;

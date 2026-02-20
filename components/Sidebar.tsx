@@ -5,33 +5,49 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
+import {
+  LayoutDashboard,
+  ClipboardList,
+  Wallet,
+  FileText,
+  CreditCard,
+  TrendingUp,
+  Plane,
+  RefreshCcw,
+  BarChart3,
+  Users,
+  Settings,
+} from "lucide-react";
 
 interface NavItem {
   name: string;
   href: string;
-  icon: string;
+  icon: React.ReactNode;
   children?: NavItem[];
 }
 
 type NavElement = NavItem;
 
+const ICON_SIZE = 20;
+const ICON_STROKE = 1.6;
+
 const navConfig: NavElement[] = [
-  { name: "Dashboard", href: "/dashboard", icon: "📊" },
-  { name: "Orders", href: "/orders", icon: "📋" },
+  { name: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Orders", href: "/orders", icon: <ClipboardList size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
   {
     name: "Finances",
     href: "/finances/invoices",
-    icon: "💰",
+    icon: <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} />,
     children: [
-      { name: "Invoices", href: "/finances/invoices", icon: "📄" },
-      { name: "Payments", href: "/finances/payments", icon: "💳" },
-      { name: "Cash Flow", href: "/finances/cashflow", icon: "📊" },
-      { name: "IATA", href: "/finances/iata", icon: "✈️" },
-      { name: "Reconciliation", href: "/finances/reconciliation", icon: "🔄" },
+      { name: "Invoices", href: "/finances/invoices", icon: <FileText size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Payments", href: "/finances/payments", icon: <CreditCard size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Cash Flow", href: "/finances/cashflow", icon: <TrendingUp size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "IATA", href: "/finances/iata", icon: <Plane size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Reconciliation", href: "/finances/reconciliation", icon: <RefreshCcw size={18} strokeWidth={ICON_STROKE} /> },
     ],
   },
-  { name: "Analytics", href: "/analytics/orders", icon: "📈" },
-  { name: "Directory", href: "/directory", icon: "📁" },
+  { name: "Analytics", href: "/analytics/orders", icon: <BarChart3 size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Directory", href: "/directory", icon: <Users size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
 ];
 
 const modeLabels: Record<SidebarMode, string> = {
@@ -179,7 +195,7 @@ export default function Sidebar() {
                 onMouseEnter={() => setHoveredItem(item.href)}
                 onMouseLeave={() => setHoveredItem(null)}
               >
-                <span className="text-lg leading-none">{item.icon}</span>
+                <span className="flex-shrink-0">{item.icon}</span>
               </Link>
               {/* Tooltip */}
               {hoveredItem === item.href && (
@@ -204,7 +220,7 @@ export default function Sidebar() {
                       : "text-gray-700 hover:bg-gray-900/5"
                   }`}
                 >
-                  <span className="text-lg flex-shrink-0">{item.icon}</span>
+                  <span className="flex-shrink-0">{item.icon}</span>
                   <span>{item.name}</span>
                 </Link>
               </li>
@@ -224,7 +240,7 @@ export default function Sidebar() {
                           : "text-gray-700 hover:bg-gray-900/5"
                       }`}
                     >
-                      <span className="text-base flex-shrink-0">{child.icon}</span>
+                      <span className="flex-shrink-0">{child.icon}</span>
                       <span>{child.name}</span>
                     </Link>
                   </li>
@@ -252,7 +268,7 @@ export default function Sidebar() {
               onMouseEnter={() => showTooltip && setHoveredItem(item.href)}
               onMouseLeave={() => setHoveredItem(null)}
             >
-              <span className={`${showTooltip ? "text-lg leading-none" : "text-lg flex-shrink-0"}`}>{item.icon}</span>
+              <span className="flex-shrink-0">{item.icon}</span>
               {!showTooltip && <span>{item.name}</span>}
             </Link>
             {/* Tooltip for collapsed/hover mode */}
@@ -371,7 +387,7 @@ export default function Sidebar() {
                 } text-gray-700 hover:bg-gray-900/5`}
                 title={isCollapsed ? "Sidebar settings" : undefined}
               >
-                <span className="text-base">⚙️</span>
+                <Settings size={18} strokeWidth={1.6} />
                 {isExpanded && (
                   <>
                     <span className="flex-1 text-left">{modeLabels[mode]}</span>
@@ -470,7 +486,7 @@ export default function Sidebar() {
                   }}
                   className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-gray-700 hover:bg-gray-900/5"
                 >
-                  <span className="text-base">⚙️</span>
+                  <Settings size={18} strokeWidth={1.6} />
                   <span className="flex-1 text-left">{modeLabels[mode]}</span>
                   <span className={`text-xs transition-transform ${isPopoverOpen ? "rotate-180" : ""}`}>▼</span>
                 </button>

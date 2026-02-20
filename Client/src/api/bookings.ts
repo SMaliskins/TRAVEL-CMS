@@ -54,6 +54,9 @@ export interface BookingService {
   pickup_time: string | null
   payment_deadline_deposit: string | null
   payment_deadline_final: string | null
+  split_group_id: string | null
+  traveller_ids: string[]
+  traveller_names: string[]
 }
 
 export const bookingsApi = {
@@ -77,8 +80,27 @@ export const bookingsApi = {
   getItinerary: (id: string): Promise<BookingService[]> =>
     apiClient.get(`/bookings/${id}/itinerary`).then((r) => r.data.data),
 
-  getDocuments: (id: string): Promise<unknown[]> =>
-    apiClient.get(`/bookings/${id}/documents`).then((r) => r.data.data),
+  getDocuments: (id: string): Promise<{
+    boardingPasses: {
+      id: string
+      fileName: string
+      downloadUrl: string
+      clientName: string
+      flightNumber: string
+    }[]
+    invoices: {
+      id: string
+      type: 'invoice'
+      fileName: string
+      invoiceNumber: string
+      invoiceDate: string | null
+      dueDate: string | null
+      totalAmount: number | null
+      currency: string
+      invoiceStatus: string | null
+      downloadUrl: string
+    }[]
+  }> => apiClient.get(`/bookings/${id}/documents`).then((r) => r.data.data),
 
   getProfile: (): Promise<{
     id: string

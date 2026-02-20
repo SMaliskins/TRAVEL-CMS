@@ -38,7 +38,8 @@ export async function GET(
         boarding_passes, hotel_board, hotel_room, hotel_bed_type,
         hotel_name, hotel_star_rating,
         transfer_type, pickup_location, dropoff_location, pickup_time,
-        payment_deadline_deposit, payment_deadline_final
+        payment_deadline_deposit, payment_deadline_final,
+        split_group_id
       `)
       .eq('order_id', id)
       .neq('res_status', 'cancelled')
@@ -46,17 +47,56 @@ export async function GET(
 
     const svcList = services ?? []
 
-    const amountTotal = svcList.reduce(
+    const serviceIds = svcList.map((s) => s.id)
+    let travellerMap: Record<string, string[]> = {}
+    let travellerNameMap: Record<string, string> = {}
+
+    if (serviceIds.length > 0) {
+      const { data: st } = await supabaseAdmin
+        .from('order_service_travellers')
+        .select('service_id, traveller_id')
+        .in('service_id', serviceIds)
+      if (st) {
+        travellerMap = st.reduce((acc, r) => {
+          if (!acc[r.service_id]) acc[r.service_id] = []
+          acc[r.service_id].push(r.traveller_id)
+          return acc
+        }, {} as Record<string, string[]>)
+      }
+
+      const allTravellerIds = [...new Set(Object.values(travellerMap).flat())]
+      if (allTravellerIds.length > 0) {
+        const { data: parties } = await supabaseAdmin
+          .from('party')
+          .select('id, last_name, first_name')
+          .in('id', allTravellerIds)
+        if (parties) {
+          for (const p of parties) {
+            travellerNameMap[p.id] = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim()
+          }
+        }
+      }
+    }
+
+    const enrichedServices = svcList.map((s) => ({
+      ...s,
+      traveller_ids: travellerMap[s.id] ?? [],
+      traveller_names: (travellerMap[s.id] ?? [])
+        .map((tid: string) => travellerNameMap[tid])
+        .filter(Boolean),
+    }))
+
+    const amountTotal = enrichedServices.reduce(
       (sum, s) => sum + (Number(s.client_price) || 0), 0
     )
     const amountPaid = Number(order.amount_paid) || 0
     const amountDebt = Math.max(0, amountTotal - amountPaid)
 
-    const deposits = svcList
+    const deposits = enrichedServices
       .map((s) => s.payment_deadline_deposit)
       .filter(Boolean)
       .sort()
-    const finals = svcList
+    const finals = enrichedServices
       .map((s) => s.payment_deadline_final)
       .filter(Boolean)
       .sort()
@@ -80,7 +120,7 @@ export async function GET(
           final: finals[0] ?? null,
         },
         overdue_days: overdueDays,
-        services: svcList,
+        services: enrichedServices,
       },
       error: null,
     })

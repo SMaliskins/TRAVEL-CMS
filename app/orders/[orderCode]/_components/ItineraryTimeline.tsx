@@ -7,7 +7,7 @@
  * Tour Package with flight segments uses the same layout.
  * See .ai/specs/itinerary-flight-layout-approved.md
  */
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getCheckinUrl, isCheckinAvailable } from "@/lib/flights/airlineCheckin";
 import CheckinCountdown from "@/components/CheckinCountdown";
@@ -158,6 +158,7 @@ interface TimelineService {
   ticketNumbers?: TicketNumber[]; // Clients with ticket numbers
   boardingPasses?: BoardingPass[]; // Uploaded boarding passes
   baggage?: string; // Baggage info: "personal", "personal+cabin", "personal+cabin+1bag", etc.
+  transferType?: string | null;
   splitGroupId?: string | null;
   assignedTravellerIds?: string[];
 }
@@ -198,15 +199,16 @@ interface ItineraryTimelineProps {
   stickyTopOffset?: number;
 }
 
-// Category icons
-const categoryIcons: Record<string, string> = {
-  Flight: "✈️",
-  Hotel: "🏨",
-  Transfer: "🚐",
-  Tour: "🎫",
-  Insurance: "🛡️",
-  Visa: "📋",
-  Other: "📌",
+// Category icons (Lucide)
+import { Plane, Hotel, Bus, CarTaxiFront, Ticket, ShieldCheck, FileCheck, Pin, MapPin, Phone, CalendarRange, Luggage } from "lucide-react";
+const categoryIcons: Record<string, React.ReactNode> = {
+  Flight: <Plane size={16} strokeWidth={1.8} />,
+  Hotel: <Hotel size={16} strokeWidth={1.8} />,
+  Transfer: <CarTaxiFront size={16} strokeWidth={1.8} />,
+  Tour: <Ticket size={16} strokeWidth={1.8} />,
+  Insurance: <ShieldCheck size={16} strokeWidth={1.8} />,
+  Visa: <FileCheck size={16} strokeWidth={1.8} />,
+  Other: <Pin size={16} strokeWidth={1.8} />,
 };
 
 // Format date as dd.mm.yyyy (project standard)
@@ -229,8 +231,8 @@ function getHotelColors(routeColorsUsed: string[] = []): { checkin: string; chec
 interface TimelineEvent {
   id: string;
   date: string;
-  type: 'flight' | 'hotel_checkin' | 'hotel_checkout' | 'transfer' | 'other';
-  icon: string;
+  type: 'flight' | 'hotel_checkin' | 'hotel_checkout' | 'transfer' | 'transfer_inbound' | 'transfer_outbound' | 'other';
+  icon: string | React.ReactNode;
   title: string;
   subtitle?: string;
   sortOrder: number; // For sorting within same date
@@ -269,6 +271,11 @@ interface TimelineEvent {
   travellerSurnames?: string;
   /** Assigned traveller ids (for route color when no ticketNumbers yet) */
   assignedTravellerIds?: string[];
+  /** Transfer: airport IATA and hotel for distance lookup & card display */
+  transferAirportCode?: string;
+  transferHotelName?: string;
+  transferHotelAddress?: string;
+  transferInfo?: string;
 }
 
 // Ensure airport is shown as IATA code (3 letters). If value is a city name, resolve via cities DB.
@@ -330,7 +337,8 @@ function renderFlightCard(event: TimelineEvent, leftBorderColor?: string): React
         className={`bg-white rounded-lg pl-3 pr-3 pt-2 pb-2 border border-sky-100 border-l-4 ${!leftBorderColor ? "border-l-sky-400" : ""}`}
         style={leftBorderColor ? { borderLeftColor: leftBorderColor } : undefined}
       >
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-start gap-2 text-sm">
+          <span className="flex-shrink-0 text-sky-500 mt-0.5"><Plane size={18} strokeWidth={1.6} /></span>
           <div className="w-24 flex-shrink-0 flex flex-col items-center gap-1 text-center">
             <span className="font-semibold text-sky-700">{event.flightNumber}</span>
             {event.airline && <span className="text-[10px] text-gray-400">{event.airline}</span>}
@@ -349,7 +357,7 @@ function renderFlightCard(event: TimelineEvent, leftBorderColor?: string): React
             )}
             {event.baggage && (
               <span className="text-[10px] text-gray-500" title={formatBaggageTooltip(event.baggage)}>
-                🧳 {formatBaggageShort(event.baggage)}
+                <Luggage size={11} strokeWidth={1.8} className="inline -mt-px" /> {formatBaggageShort(event.baggage)}
               </span>
             )}
           </div>
@@ -363,9 +371,9 @@ function renderFlightCard(event: TimelineEvent, leftBorderColor?: string): React
                   <div className="text-sm font-semibold">{event.departureTime || ""}</div>
                   {depT && <div className="text-[10px] text-gray-400">{depT}</div>}
                 </div>
-                <div className="flex-1 flex flex-col items-center justify-center px-2 gap-1">
+                <div className="flex-1 flex flex-col items-center justify-center px-2 gap-3">
                   {event.duration ? <div className="text-xs font-medium text-gray-700">{event.duration}</div> : <div className="text-[10px] text-gray-400">—</div>}
-                  <div className="w-full h-px bg-gray-300 relative"><span className="absolute left-1/2 -translate-x-1/2 -top-1 text-gray-400">✈</span></div>
+                  <div className="w-full h-px bg-gray-300 relative"><span className="absolute left-1/2 -translate-x-1/2 -top-[7px] text-gray-400"><Plane size={14} strokeWidth={1.5} /></span></div>
                 </div>
                 <div className="text-center min-w-[80px]">
                   <div className="text-xs text-gray-400">{event.arrivalDate ? formatDateShort(event.arrivalDate) : formatDateShort(event.date)}</div>
@@ -385,52 +393,84 @@ function renderFlightCard(event: TimelineEvent, leftBorderColor?: string): React
   );
 }
 
-// Helper: get traveller surnames for contributing services (splitted deduplication)
-function getTravellerSurnames(
-  contributingServiceIds: string[],
-  services: TimelineService[],
+// Helper: get traveller surnames from an array of traveller IDs
+function getTravellerSurnamesFromIds(
+  travellerIds: string[],
   travellers: Traveller[]
 ): string {
-  const travellerIds = new Set<string>();
-  for (const svc of services) {
-    if (contributingServiceIds.includes(svc.id) && svc.assignedTravellerIds?.length) {
-      svc.assignedTravellerIds.forEach((tid) => travellerIds.add(tid));
-    }
-  }
-  const surnames = Array.from(travellerIds)
+  const surnames = travellerIds
     .map((tid) => travellers.find((t) => t.id === tid)?.lastName)
     .filter(Boolean) as string[];
   return [...new Set(surnames)].join(", ");
 }
 
-// Convert services to timeline events
-function servicesToEvents(services: TimelineService[], travellers: Traveller[]): TimelineEvent[] {
-  const events: TimelineEvent[] = [];
-  const seenSegmentKeys = new Set<string>(); // Deduplication: parent and change may share same segments
-  const seenSplitGroupHotelIds = new Set<string>();
-  const seenSplitGroupTransferIds = new Set<string>();
-  const seenSplitGroupOtherIds = new Set<string>();
-  
+// Pre-merge duplicate services (split or identical content) — collect all traveller IDs, tickets, BPs
+function mergeDuplicateServices(services: TimelineService[], travellers: Traveller[]): TimelineService[] {
+  const groupMap = new Map<string, TimelineService>();
+
   for (const service of services) {
     if (service.resStatus === "cancelled") continue;
-    
+
+    const key =
+      service.splitGroupId ||
+      `${service.category}|${service.name}|${service.dateFrom}|${service.dateTo}`;
+
+    const existing = groupMap.get(key);
+    if (existing) {
+      const merged = new Set([
+        ...(existing.assignedTravellerIds || []),
+        ...(service.assignedTravellerIds || []),
+      ]);
+      existing.assignedTravellerIds = Array.from(merged);
+      if (service.ticketNumbers?.length) {
+        const seen = new Set(
+          (existing.ticketNumbers || []).map((t) => `${t.clientId}|${t.ticketNr}`)
+        );
+        for (const t of service.ticketNumbers) {
+          if (!seen.has(`${t.clientId}|${t.ticketNr}`)) {
+            existing.ticketNumbers = [...(existing.ticketNumbers || []), t];
+          }
+        }
+      }
+      if (service.boardingPasses?.length) {
+        const seen = new Set((existing.boardingPasses || []).map((b) => b.id));
+        for (const b of service.boardingPasses) {
+          if (!seen.has(b.id)) {
+            existing.boardingPasses = [...(existing.boardingPasses || []), b];
+          }
+        }
+      }
+    } else {
+      groupMap.set(key, { ...service });
+    }
+  }
+
+  return Array.from(groupMap.values());
+}
+
+// Convert services to timeline events
+function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[]): TimelineEvent[] {
+  const services = mergeDuplicateServices(rawServices, travellers);
+  const events: TimelineEvent[] = [];
+  const seenSegmentKeys = new Set<string>();
+  const seenHotelKeys = new Set<string>();
+  const seenTransferKeys = new Set<string>();
+  const seenOtherKeys = new Set<string>();
+  
+  for (const service of services) {
     const icon = categoryIcons[service.category] || categoryIcons.Other;
-    const splitGroupId = service.splitGroupId ?? null;
-    const contributingIds = splitGroupId
-      ? services.filter((s) => (s.splitGroupId ?? null) === splitGroupId).map((s) => s.id)
-      : [service.id];
-    const travellerSurnames = getTravellerSurnames(contributingIds, services, travellers);
+    const travellerSurnames = getTravellerSurnamesFromIds(service.assignedTravellerIds || [], travellers);
     
     if (service.category === "Hotel") {
-      // Deduplicate: splitted services show hotel once
-      if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) continue;
-      if (splitGroupId) seenSplitGroupHotelIds.add(splitGroupId);
+      const hotelKey = `${service.name}|${service.dateFrom}|${service.dateTo}`;
+      if (seenHotelKeys.has(hotelKey)) continue;
+      seenHotelKeys.add(hotelKey);
       // Hotel: check-in 13:00-14:00, check-out 11:00-12:00
       events.push({
         id: `${service.id}-checkin`,
         date: service.dateFrom,
         type: 'hotel_checkin',
-        icon: "🏨",
+        icon: "hotel",
         title: `Check-in 13:00-14:00: ${service.name}`,
         sortOrder: 50,
         serviceId: service.id,
@@ -443,7 +483,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
           id: `${service.id}-checkout`,
           date: service.dateTo,
           type: 'hotel_checkout',
-          icon: "🏨",
+          icon: "hotel",
           title: `Check-out 11:00-12:00: ${service.name}`,
           sortOrder: 10,
           serviceId: service.id,
@@ -456,7 +496,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
       // Flight or Tour Package with flight segments — same approved layout
       const firstFlightNumber = service.flightSegments?.[0]?.flightNumber || "";
       const checkinUrl = getCheckinUrl(firstFlightNumber);
-      const flightIcon = categoryIcons.Flight; // ✈️ for all flights (Flight and Tour Package)
+      const flightIcon = categoryIcons.Flight;
       
       // If we have flight segments, create an event for each segment
       if (service.flightSegments && service.flightSegments.length > 0) {
@@ -541,16 +581,15 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
       // Tour Package: hotel check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate for splitted)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
       if (isTour && service.dateFrom && service.dateTo) {
-        if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) {
-          // skip - already added for this split group
-        } else {
-          if (splitGroupId) seenSplitGroupHotelIds.add(splitGroupId);
+        const tourHotelKey = `tour-hotel|${service.name}|${service.dateFrom}|${service.dateTo}`;
+        if (!seenHotelKeys.has(tourHotelKey)) {
+          seenHotelKeys.add(tourHotelKey);
           const hotelTitle = (service as { hotelName?: string }).hotelName || service.name;
           events.push({
             id: `${service.id}-checkin`,
             date: service.dateFrom,
             type: 'hotel_checkin',
-            icon: "🏨",
+            icon: "hotel",
             title: `Check-in 13:00-14:00: ${hotelTitle}`,
             sortOrder: 50,
             serviceId: service.id,
@@ -563,7 +602,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
               id: `${service.id}-checkout`,
               date: service.dateTo,
               type: 'hotel_checkout',
-              icon: "🏨",
+              icon: "hotel",
               title: `Check-out 11:00-12:00: ${hotelTitle}`,
               sortOrder: 10,
               serviceId: service.id,
@@ -572,11 +611,67 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
               hotelPhone: service.hotelPhone,
             });
           }
+          // Package Tour transfers (inbound: airport->hotel, outbound: hotel->airport)
+          const txType = (service as { transferType?: string | null }).transferType;
+          if (txType && txType !== "—") {
+            const isGroup = txType.toLowerCase() === "group";
+            const txTitle = isGroup ? "Group Transfer" : `Transfer: ${txType}`;
+            const txIcon = isGroup ? <Bus size={16} strokeWidth={1.8} /> : <CarTaxiFront size={16} strokeWidth={1.8} />;
+            const segments = service.flightSegments || [];
+            const firstSeg = segments.length > 0 ? segments[0] as Record<string, unknown> : null;
+            const arrivalAirport = firstSeg
+              ? toAirportCode(String(firstSeg.arrival_code ?? firstSeg.arrival ?? ""))
+              : "";
+            const arrivalCity = firstSeg
+              ? String(firstSeg.arrivalCity ?? firstSeg.arrival_city ?? "")
+              : "";
+            const hotelTitle = (service as { hotelName?: string }).hotelName || service.name;
+            events.push({
+              id: `${service.id}-transfer-in`,
+              date: service.dateFrom,
+              type: 'transfer_inbound',
+              icon: txIcon,
+              title: txTitle,
+              subtitle: "Airport → Hotel",
+              sortOrder: 45,
+              serviceId: service.id,
+              travellerSurnames: travellerSurnames || undefined,
+              transferAirportCode: arrivalAirport,
+              arrivalCity: arrivalCity || undefined,
+              transferHotelName: hotelTitle,
+              transferHotelAddress: service.hotelAddress || hotelTitle,
+            });
+            if (service.dateTo !== service.dateFrom) {
+              const lastSeg = segments.length > 0 ? segments[segments.length - 1] as Record<string, unknown> : null;
+              const departureAirport = lastSeg
+                ? toAirportCode(String(lastSeg.departure_code ?? lastSeg.departure ?? ""))
+                : arrivalAirport;
+              const depCity = lastSeg
+                ? String(lastSeg.departureCity ?? lastSeg.departure_city ?? "")
+                : arrivalCity;
+              events.push({
+                id: `${service.id}-transfer-out`,
+                date: service.dateTo,
+                type: 'transfer_outbound',
+                icon: txIcon,
+                title: txTitle,
+                subtitle: "Hotel → Airport",
+                sortOrder: 15,
+                serviceId: service.id,
+                travellerSurnames: travellerSurnames || undefined,
+                transferAirportCode: departureAirport,
+                arrivalCity: depCity || undefined,
+                transferHotelName: hotelTitle,
+                transferHotelAddress: service.hotelAddress || hotelTitle,
+              });
+            }
+          }
         }
       }
     } else if (service.category === "Transfer") {
-      if (splitGroupId && seenSplitGroupTransferIds.has(splitGroupId)) continue;
-      if (splitGroupId) seenSplitGroupTransferIds.add(splitGroupId);
+      const txKey = `transfer|${service.name}|${service.dateFrom}`;
+      if (seenTransferKeys.has(txKey)) continue;
+      seenTransferKeys.add(txKey);
       events.push({
         id: service.id,
         date: service.dateFrom,
@@ -591,16 +686,15 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
       // Tour Package without flight segments: hotel check-in 13:00-14:00, check-out 11:00-12:00 only (deduplicate)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
       if (isTour && service.dateFrom && service.dateTo) {
-        if (splitGroupId && seenSplitGroupHotelIds.has(splitGroupId)) {
-          // skip
-        } else {
-          if (splitGroupId) seenSplitGroupHotelIds.add(splitGroupId);
+        const tourKey2 = `tour-nofl|${service.name}|${service.dateFrom}|${service.dateTo}`;
+        if (!seenHotelKeys.has(tourKey2)) {
+          seenHotelKeys.add(tourKey2);
           const hotelTitle = (service as { hotelName?: string }).hotelName || service.name;
           events.push({
             id: `${service.id}-checkin`,
             date: service.dateFrom,
             type: 'hotel_checkin',
-            icon: "🏨",
+            icon: "hotel",
             title: `Check-in 13:00-14:00: ${hotelTitle}`,
             sortOrder: 50,
             serviceId: service.id,
@@ -613,7 +707,7 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
               id: `${service.id}-checkout`,
               date: service.dateTo,
               type: 'hotel_checkout',
-              icon: "🏨",
+              icon: "hotel",
               title: `Check-out 11:00-12:00: ${hotelTitle}`,
               sortOrder: 10,
               serviceId: service.id,
@@ -622,11 +716,41 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
               hotelPhone: service.hotelPhone,
             });
           }
+          const txType2 = (service as { transferType?: string | null }).transferType;
+          if (txType2 && txType2 !== "—") {
+            const isGroup2 = txType2.toLowerCase() === "group";
+            const txTitle2 = isGroup2 ? "Group Transfer" : `Transfer: ${txType2}`;
+            const txIcon2 = isGroup2 ? <Bus size={16} strokeWidth={1.8} /> : <CarTaxiFront size={16} strokeWidth={1.8} />;
+            events.push({
+              id: `${service.id}-transfer-in`,
+              date: service.dateFrom,
+              type: 'transfer_inbound',
+              icon: txIcon2,
+              title: txTitle2,
+              subtitle: "Airport → Hotel",
+              sortOrder: 45,
+              serviceId: service.id,
+              travellerSurnames: travellerSurnames || undefined,
+            });
+            if (service.dateTo !== service.dateFrom) {
+              events.push({
+                id: `${service.id}-transfer-out`,
+                date: service.dateTo,
+                type: 'transfer_outbound',
+                icon: txIcon2,
+                title: txTitle2,
+                subtitle: "Hotel → Airport",
+                sortOrder: 15,
+                serviceId: service.id,
+                travellerSurnames: travellerSurnames || undefined,
+              });
+            }
+          }
         }
       } else {
-        // Other services (excursions, VIP, etc.) - deduplicate for splitted
-        if (splitGroupId && seenSplitGroupOtherIds.has(splitGroupId)) continue;
-        if (splitGroupId) seenSplitGroupOtherIds.add(splitGroupId);
+        const otherKey = `other|${service.category}|${service.name}|${service.dateFrom}`;
+        if (seenOtherKeys.has(otherKey)) continue;
+        seenOtherKeys.add(otherKey);
         events.push({
           id: service.id,
           date: service.dateFrom,
@@ -641,6 +765,15 @@ function servicesToEvents(services: TimelineService[], travellers: Traveller[]):
     }
   }
   
+  for (const event of events) {
+    if (!event.assignedTravellerIds && event.serviceId) {
+      const svc = services.find((s) => s.id === event.serviceId);
+      if (svc?.assignedTravellerIds) {
+        event.assignedTravellerIds = svc.assignedTravellerIds;
+      }
+    }
+  }
+
   return events;
 }
 
@@ -690,15 +823,20 @@ export default function ItineraryTimeline({
   const servicesFilteredByCategory = selectedCategory
     ? services.filter((s) => s.category === selectedCategory)
     : services;
-  const events = servicesToEvents(servicesFilteredByCategory, travellers);
+  const allEvents = servicesToEvents(servicesFilteredByCategory, travellers);
+
+  const events = useMemo(() => {
+    if (!selectedTravellerId) return allEvents;
+    return allEvents.filter((e) => {
+      if (!e.assignedTravellerIds?.length) return true;
+      return e.assignedTravellerIds.includes(selectedTravellerId);
+    });
+  }, [allEvents, selectedTravellerId]);
+
   const groupedByDate = groupByDate(events);
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
     new Date(a).getTime() - new Date(b).getTime()
   );
-  
-  const displayTravellers = selectedTravellerId 
-    ? travellers.filter(t => t.id === selectedTravellerId)
-    : travellers;
 
   // Request notification permission on mount (for flight check-in reminders)
   useEffect(() => {
@@ -708,11 +846,67 @@ export default function ItineraryTimeline({
     }
   }, [services]);
 
+  // Async: fetch real driving distance for transfer events via OSRM
+  const [transferDistances, setTransferDistances] = useState<Record<string, string>>({});
+  const fetchedCacheRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    const transferEvents = events.filter(
+      (e) => (e.type === "transfer_inbound" || e.type === "transfer_outbound") && e.transferAirportCode
+    );
+    if (transferEvents.length === 0) return;
+
+    let cancelled = false;
+
+    async function fetchDistances() {
+      const results: Record<string, string> = {};
+
+      const uniqueQueries = new Map<string, string[]>();
+      for (const ev of transferEvents) {
+        const cacheKey = `${ev.transferAirportCode}|${ev.transferHotelAddress || ""}|${ev.transferHotelName || ""}`;
+        if (fetchedCacheRef.current[cacheKey]) {
+          results[ev.id] = fetchedCacheRef.current[cacheKey];
+          continue;
+        }
+        const existing = uniqueQueries.get(cacheKey) || [];
+        existing.push(ev.id);
+        uniqueQueries.set(cacheKey, existing);
+      }
+
+      for (const [cacheKey, eventIds] of uniqueQueries) {
+        const [airport, address, hName] = cacheKey.split("|");
+        try {
+          const params = new URLSearchParams({ airport });
+          if (address) params.set("address", address);
+          if (hName) params.set("hotelName", hName);
+          const res = await fetch(`/api/geo/transfer-distance?${params}`);
+          if (!res.ok) continue;
+          const json = await res.json();
+          if (json.data?.label) {
+            const approxPrefix = json.data.source === "osrm-approx" || json.data.source === "haversine" ? "≈" : "";
+            const val = `${approxPrefix}${json.data.label}`;
+            fetchedCacheRef.current[cacheKey] = val;
+            for (const id of eventIds) {
+              results[id] = val;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!cancelled && Object.keys(results).length > 0) {
+        setTransferDistances((prev) => ({ ...prev, ...results }));
+      }
+    }
+
+    fetchDistances();
+    return () => { cancelled = true; };
+  }, [events]);
+
   if (services.length === 0) {
     return (
       <div className="rounded-lg bg-white shadow-sm p-4">
         <div className="flex items-center gap-2">
-          <span className="text-lg">📅</span>
+          <CalendarRange size={18} strokeWidth={1.6} className="text-gray-500" />
           <h2 className="text-base font-semibold text-gray-900">Itinerary</h2>
         </div>
         <p className="text-gray-400 text-sm text-center py-4">No services added yet</p>
@@ -726,7 +920,7 @@ export default function ItineraryTimeline({
       <div className="sticky z-10 bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 py-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-4 before:bg-gray-50 before:-mx-px" style={{ top: stickyTopOffset }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-lg">📅</span>
+            <CalendarRange size={18} strokeWidth={1.6} className="text-gray-500" />
             <h2 className="text-base font-semibold text-gray-900">Itinerary</h2>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -756,7 +950,7 @@ export default function ItineraryTimeline({
                 <option value="all">All categories ({categories.length})</option>
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>
-                    {categoryIcons[cat] ? `${categoryIcons[cat]} ${cat}` : cat}
+                    {cat}
                   </option>
                 ))}
               </select>
@@ -789,7 +983,7 @@ export default function ItineraryTimeline({
                     className={`text-sm ${
                       event.type === 'hotel_checkout' || event.type === 'hotel_checkin'
                         ? 'min-h-0'
-                        : event.type === 'flight'
+                        : event.type === 'flight' || event.type === 'transfer_inbound' || event.type === 'transfer_outbound'
                         ? 'min-h-0'
                         : 'bg-gray-50 text-gray-700 px-2 py-1.5 rounded'
                     } ${onEditService ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
@@ -808,15 +1002,21 @@ export default function ItineraryTimeline({
                           style={{ borderLeftColor: event.type === 'hotel_checkin' ? hotelColors.checkin : hotelColors.checkout }}
                         >
                           <div className="flex items-start gap-2">
-                            <span className="text-lg flex-shrink-0">{event.icon}</span>
+                            <span className="flex-shrink-0 mt-0.5" style={{ color: event.type === 'hotel_checkin' ? hotelColors.checkin : hotelColors.checkout }}><Hotel size={18} strokeWidth={1.6} /></span>
                             <div className="min-w-0 flex-1">
                               <div className="font-medium">{event.title}</div>
                               {event.hotelAddress && (
-                                <div className="text-xs text-gray-600 mt-1">📍 {event.hotelAddress}</div>
+                                <div className="text-xs text-gray-600 mt-1 flex items-center gap-1">
+                                  <MapPin size={12} strokeWidth={1.8} className="flex-shrink-0 text-gray-400" />
+                                  {event.hotelAddress}
+                                </div>
                               )}
                               {event.hotelPhone && (
                                 <div className="text-xs text-gray-600 mt-0.5">
-                                  <a href={`tel:${event.hotelPhone.replace(/\s/g, '')}`} className="hover:underline">📞 {event.hotelPhone}</a>
+                                  <a href={`tel:${event.hotelPhone.replace(/\s/g, '')}`} className="hover:underline flex items-center gap-1">
+                                    <Phone size={12} strokeWidth={1.8} className="flex-shrink-0 text-gray-400" />
+                                    {event.hotelPhone}
+                                  </a>
                                 </div>
                               )}
                             </div>
@@ -833,6 +1033,81 @@ export default function ItineraryTimeline({
                           ) : null}
                         </div>
                       </div>
+                    ) : event.type === 'transfer_inbound' || event.type === 'transfer_outbound' ? (
+                      // Transfer card — flight-like layout with route, arrow, car icon, duration
+                      (() => {
+                        const isInbound = event.type === 'transfer_inbound';
+                        const accent = isInbound ? '#3b82f6' : '#8b5cf6';
+                        const accentBg = isInbound ? 'bg-blue-50' : 'bg-purple-50';
+                        const accentBorder = isInbound ? 'border-l-blue-400' : 'border-l-purple-400';
+                        const airportCode = event.transferAirportCode || "";
+                        const airportCity = event.arrivalCity || "";
+                        const hotelName = event.transferHotelName || "Hotel";
+                        const hotelShort = hotelName.length > 12 ? hotelName.slice(0, 12) + "…" : hotelName;
+                        const distInfo = transferDistances[event.id] || event.transferInfo;
+                        const isApprox = distInfo?.startsWith("≈");
+                        const distParts = distInfo?.match(/~(\d+)\s*km.*?~(\d+)\s*min/);
+                        const hMatch = distInfo?.match(/~(\d+)\s*km.*?~(\d+)h\s*(\d*)\s*min/);
+                        const durationLabel = distParts ? `${isApprox ? "≈" : ""}${distParts[1]} km` : null;
+                        const durationTime = hMatch
+                          ? `~${hMatch[2]}h ${hMatch[3] ? hMatch[3] + " min" : ""}`
+                          : distParts ? `~${distParts[2]} min` : null;
+
+                        return (
+                          <div className="flex items-stretch gap-2 min-w-0">
+                            <div className={`w-2/3 flex-shrink-0 bg-white rounded-lg pl-3 pr-3 pt-2 pb-2 border border-gray-200 border-l-4 ${accentBorder}`}>
+                              <div className="flex items-start gap-2 text-sm">
+                                <span className="flex-shrink-0 mt-0.5" style={{ color: accent }}>{event.icon}</span>
+                                <div className="w-24 flex-shrink-0 flex flex-col items-center gap-1 text-center">
+                                  <span className="font-semibold" style={{ color: accent }}>{event.title}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${accentBg}`} style={{ color: accent }}>
+                                    {isInbound ? "Airport → Hotel" : "Hotel → Airport"}
+                                  </span>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    {/* FROM */}
+                                    <div className="text-center min-w-[70px]">
+                                      <div className="text-xs text-gray-400">{formatDateShort(event.date)}</div>
+                                      <div className="font-medium">{isInbound ? airportCode : hotelShort}</div>
+                                      <div className="text-[10px] text-gray-500">{isInbound ? airportCity : "Hotel"}</div>
+                                    </div>
+                                    {/* ARROW with car icon + distance + time */}
+                                    <div className="flex-1 flex flex-col items-center justify-center px-2 gap-0.5">
+                                      {durationLabel ? (
+                                        <>
+                                          <div className="text-xs font-medium text-gray-700">{durationLabel}</div>
+                                          {durationTime && <div className="text-[10px] text-gray-400">{durationTime}</div>}
+                                        </>
+                                      ) : distInfo ? (
+                                        <div className="text-[10px] text-gray-500">{distInfo}</div>
+                                      ) : (
+                                        <div className="text-[10px] text-gray-400">—</div>
+                                      )}
+                                      <div className="w-full h-px bg-gray-300 relative mt-2">
+                                        <span className="absolute left-1/2 -translate-x-1/2 -top-[7px]" style={{ color: accent }}>
+                                          <CarTaxiFront size={14} strokeWidth={1.5} />
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {/* TO */}
+                                    <div className="text-center min-w-[70px]">
+                                      <div className="text-xs text-gray-400">{formatDateShort(event.date)}</div>
+                                      <div className="font-medium">{isInbound ? hotelShort : airportCode}</div>
+                                      <div className="text-[10px] text-gray-500">{isInbound ? "Hotel" : airportCity}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0 flex flex-col items-end justify-center pl-4 pr-3 py-2 rounded-lg border border-gray-200 bg-white">
+                              {event.travellerSurnames && (
+                                <div className="text-xs font-medium text-gray-700 text-right">{event.travellerSurnames}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : event.type === 'flight' && event.flightNumber ? (
                       // Detailed flight display — flight block 2/3 (left border = map route colour), right panel 1/3
                       <div className="flex items-stretch gap-2 min-w-0">
@@ -960,7 +1235,7 @@ export default function ItineraryTimeline({
                     ) : (
                       // Simple display for hotel, transfer, other (with traveller surnames)
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span>{event.icon}</span>
+                        <span className="flex-shrink-0 text-gray-500">{event.icon}</span>
                         <span className="truncate">{event.title}</span>
                         {event.travellerSurnames && (
                           <span className="text-xs text-gray-500">({event.travellerSurnames})</span>

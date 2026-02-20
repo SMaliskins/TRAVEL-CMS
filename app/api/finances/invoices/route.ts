@@ -28,8 +28,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
-    // Get all invoices for this company with order codes
-    const { data: invoices, error: invoicesError } = await supabaseAdmin
+    const { searchParams } = new URL(request.url);
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
+
+    let query = supabaseAdmin
       .from("invoices")
       .select(`
         *,
@@ -45,6 +48,11 @@ export async function GET(request: NextRequest) {
       `)
       .eq("company_id", profile.company_id)
       .order("created_at", { ascending: false });
+
+    if (dateFrom) query = query.gte("invoice_date", dateFrom);
+    if (dateTo) query = query.lte("invoice_date", dateTo);
+
+    const { data: invoices, error: invoicesError } = await query;
 
     if (invoicesError) {
       console.error("Error fetching invoices:", invoicesError);

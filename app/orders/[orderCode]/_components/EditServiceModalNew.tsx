@@ -9,6 +9,7 @@ import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } fr
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
 import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
+import DateInput from '@/components/DateInput';
 import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
 import HotelSuggestInput from '@/components/HotelSuggestInput';
@@ -1524,6 +1525,8 @@ export default function EditServiceModalNew({
       // Add Tour-specific fields (Package Tour)
       if (categoryType === "tour") {
         payload.hotel_name = hotelName || null;
+        payload.hotel_address = hotelAddress || null;
+        payload.hotel_phone = hotelPhone || null;
         payload.hotel_star_rating = hotelStarRating || null;
         payload.hotel_room = hotelRoom || null;
         payload.hotel_board = hotelBoard || null;
@@ -1639,7 +1642,7 @@ export default function EditServiceModalNew({
           // Hotel / Tour: Service expects string | undefined, not null (use opt())
           hotelName: (showHotelFields || categoryType === "tour") ? opt(hotelName) : undefined,
           hotelAddress: (showHotelFields || categoryType === "tour") ? opt(hotelAddress) : undefined,
-          hotelPhone: showHotelFields ? opt(hotelPhone) : undefined,
+          hotelPhone: (showHotelFields || categoryType === "tour") ? opt(hotelPhone) : undefined,
           hotelEmail: showHotelFields ? opt(hotelEmail) : undefined,
           hotelRoom: (showHotelFields || categoryType === "tour") ? opt(hotelRoom) : undefined,
           hotelBoard: (showHotelFields || categoryType === "tour") ? (hotelBoard || undefined) : undefined,
@@ -2419,28 +2422,57 @@ export default function EditServiceModalNew({
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
-                  <div className="grid grid-cols-[1fr_4rem] gap-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel</label>
-                      <input
-                        type="text"
-                        value={hotelName}
-                        onChange={(e) => setHotelName(e.target.value)}
-                        placeholder="Hotel name"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
-                      />
+                  <>
+                    <div className="grid grid-cols-[1fr_4rem] gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel</label>
+                        <HotelSuggestInput
+                          value={hotelName}
+                          onChange={setHotelName}
+                          onHotelSelected={(d) => {
+                            setHotelName(d.name);
+                            if (d.address) setHotelAddress(d.address);
+                            if (d.phone) setHotelPhone(d.phone);
+                            if (d.email) setHotelEmail(d.email);
+                          }}
+                          placeholder="Search hotel..."
+                          className={parsedFields.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-green-300 [&_input]:border-green-400" : parseAttemptedButEmpty.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-red-300 [&_input]:border-red-400" : ""}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Stars</label>
+                        <input
+                          type="text"
+                          value={hotelStarRating}
+                          onChange={(e) => setHotelStarRating(e.target.value)}
+                          placeholder="5*"
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Stars</label>
-                      <input
-                        type="text"
-                        value={hotelStarRating}
-                        onChange={(e) => setHotelStarRating(e.target.value)}
-                        placeholder="5*"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
+                        <input
+                          type="text"
+                          value={hotelAddress}
+                          onChange={(e) => setHotelAddress(e.target.value)}
+                          placeholder="Hotel address"
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                        <input
+                          type="tel"
+                          value={hotelPhone}
+                          onChange={(e) => setHotelPhone(e.target.value)}
+                          placeholder="Hotel phone"
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
                 
                 {/* Tour: Room + Meal in one row */}
@@ -2590,9 +2622,9 @@ export default function EditServiceModalNew({
                 <RightWrapper {...rightWrapperProps}>
             <div className="space-y-3">
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">{categoryType === "hotel" ? "CLIENTS" : "CLIENT"}</h4>
+                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">{categoryType === "hotel" ? "CLIENTS" : categoryType === "flight" ? "CLIENT" : "PARTIES"}</h4>
                 
-                {/* Supplier: for Flight/Hotel in left column (PARTIES); for Tour/other here */}
+                {/* Supplier: for Flight/Hotel in left column; for Tour/other here */}
                 {categoryType !== "flight" && categoryType !== "hotel" && (
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
@@ -2606,6 +2638,9 @@ export default function EditServiceModalNew({
                 )}
                 
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
+                  {categoryType !== "flight" && categoryType !== "hotel" && (
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Client</label>
+                  )}
                   {categoryType === "hotel" ? (
                     /* Hotel: simple text pills + ClientMultiSelectDropdown for adding */
                     <div className="space-y-2">
@@ -3096,11 +3131,9 @@ export default function EditServiceModalNew({
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={freeCancellationUntil}
-                        onChange={(e) => setFreeCancellationUntil(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        onChange={setFreeCancellationUntil}
                       />
                     </div>
                     <div>
@@ -3137,11 +3170,10 @@ export default function EditServiceModalNew({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit Due</label>
-                        <input
-                          type="date"
+                        <DateInput
                           value={paymentDeadlineDeposit}
-                          onChange={(e) => setPaymentDeadlineDeposit(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          onChange={setPaymentDeadlineDeposit}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -3158,11 +3190,10 @@ export default function EditServiceModalNew({
                       </div>
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Final Due</label>
-                        <input
-                          type="date"
+                        <DateInput
                           value={paymentDeadlineFinal}
-                          onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          onChange={setPaymentDeadlineFinal}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -3182,10 +3213,9 @@ export default function EditServiceModalNew({
                     // Hotel: single Payment Deadline (auto-set based on refund policy)
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={paymentDeadlineFinal}
-                        onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
+                        onChange={setPaymentDeadlineFinal}
                         className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                       />
                       {refundPolicy === "non_ref" && (
@@ -3199,10 +3229,9 @@ export default function EditServiceModalNew({
                     // Other categories: single deadline
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={paymentDeadlineFinal}
-                        onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
+                        onChange={setPaymentDeadlineFinal}
                         className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
                       />
                     </div>

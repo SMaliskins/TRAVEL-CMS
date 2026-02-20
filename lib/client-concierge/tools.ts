@@ -50,4 +50,17 @@ export const conciergeTools: Anthropic.Messages.Tool[] = [
       required: ['order_code'],
     },
   },
+  {
+    name: 'select_hotel_for_booking',
+    description: 'When the client wants to book a hotel from search results, call this to save their selection and get a payment link. Use the hotel_index (1-based) from the most recent search_hotels results.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        hotel_index: { type: 'number', description: 'Hotel number from the search results (1 = first hotel, 2 = second, etc.)' },
+        guest_first_name: { type: 'string', description: 'Guest first name (ask client if not known)' },
+        guest_last_name: { type: 'string', description: 'Guest last name (ask client if not known)' },
+      },
+      required: ['hotel_index', 'guest_first_name', 'guest_last_name'],
+    },
+  },
 ]

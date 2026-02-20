@@ -114,7 +114,33 @@ export async function GET(
       }
     }
 
-    return Response.json({ data: documents, error: null })
+    // Fetch invoices for this order
+    const { data: invoices } = await supabaseAdmin
+      .from('invoices')
+      .select('id, invoice_number, invoice_date, due_date, total_amount, currency, status, created_at')
+      .eq('order_id', id)
+      .order('created_at', { ascending: false })
+
+    const invoiceDocs = (invoices ?? []).map((inv) => ({
+      id: `inv-${inv.id}`,
+      type: 'invoice' as const,
+      fileName: `${inv.invoice_number ?? 'Invoice'}.pdf`,
+      invoiceNumber: inv.invoice_number,
+      invoiceDate: inv.invoice_date,
+      dueDate: inv.due_date,
+      totalAmount: inv.total_amount,
+      currency: inv.currency ?? 'EUR',
+      invoiceStatus: inv.status,
+      downloadUrl: '',
+    }))
+
+    return Response.json({
+      data: {
+        boardingPasses: documents,
+        invoices: invoiceDocs,
+      },
+      error: null,
+    })
   } catch (err) {
     if (err instanceof Error && err.message === 'UNAUTHORIZED') {
       return unauthorizedResponse()

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import AddPaymentModal from "./_components/AddPaymentModal";
 
 interface Payment {
@@ -43,8 +44,25 @@ export default function PaymentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [filterMethod, setFilterMethod] = useState<string>("all");
-  const [filterDateFrom, setFilterDateFrom] = useState("");
-  const [filterDateTo, setFilterDateTo] = useState("");
+  const [period, setPeriod] = useState<PeriodType>("currentMonth");
+  const [filterDateFrom, setFilterDateFrom] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  const [filterDateTo, setFilterDateTo] = useState(() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 10);
+  });
+
+  const handlePeriodChange = (newPeriod: PeriodType, startDate?: string, endDate?: string) => {
+    setPeriod(newPeriod);
+    if (startDate && endDate) {
+      setFilterDateFrom(startDate);
+      setFilterDateTo(endDate);
+    }
+  };
 
   const loadPayments = useCallback(async () => {
     try {
@@ -129,49 +147,65 @@ export default function PaymentsPage() {
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700">Method:</span>
-          {["all", "bank", "cash", "card"].map((m) => (
-            <button
-              key={m}
-              onClick={() => setFilterMethod(m)}
-              className={`px-3 py-1 text-xs font-medium rounded ${
-                filterMethod === m
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {m === "all" ? "All" : METHOD_LABELS[m]}
-            </button>
-          ))}
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-gray-700 mr-1">Method:</span>
+          <button
+            onClick={() => setFilterMethod("all")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+              filterMethod === "all"
+                ? "bg-gray-100 text-gray-900 border-gray-400 shadow-sm"
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilterMethod("bank")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+              filterMethod === "bank"
+                ? "bg-blue-50 text-blue-700 border-blue-500 shadow-sm"
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" />
+            </svg>
+            Bank
+          </button>
+          <button
+            onClick={() => setFilterMethod("cash")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+              filterMethod === "cash"
+                ? "bg-green-50 text-green-700 border-green-500 shadow-sm"
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            Cash
+          </button>
+          <button
+            onClick={() => setFilterMethod("card")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+              filterMethod === "card"
+                ? "bg-purple-50 text-purple-700 border-purple-500 shadow-sm"
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            Card
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700">From:</span>
-          <input
-            type="date"
-            value={filterDateFrom}
-            onChange={(e) => setFilterDateFrom(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
-          />
-          <span className="text-sm text-gray-700">To:</span>
-          <input
-            type="date"
-            value={filterDateTo}
-            onChange={(e) => setFilterDateTo(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
-          />
-          {(filterDateFrom || filterDateTo) && (
-            <button
-              onClick={() => {
-                setFilterDateFrom("");
-                setFilterDateTo("");
-              }}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+        <PeriodSelector
+          value={period}
+          onChange={handlePeriodChange}
+          startDate={filterDateFrom}
+          endDate={filterDateTo}
+          dropdownAlign="left"
+        />
       </div>
 
       {/* Summary */}

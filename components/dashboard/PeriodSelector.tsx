@@ -11,6 +11,7 @@ interface PeriodSelectorProps {
   className?: string;
   startDate?: string;
   endDate?: string;
+  dropdownAlign?: "left" | "right";
 }
 
 export default function PeriodSelector({
@@ -19,6 +20,7 @@ export default function PeriodSelector({
   className = "",
   startDate: parentStartDate,
   endDate: parentEndDate,
+  dropdownAlign = "right",
 }: PeriodSelectorProps) {
   const [customStart, setCustomStart] = useState<string | undefined>(undefined);
   const [customEnd, setCustomEnd] = useState<string | undefined>(undefined);
@@ -286,7 +288,7 @@ export default function PeriodSelector({
 
       {/* Dropdown Menu - Shopify Style with Calendar */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 rounded-lg border border-gray-200 bg-white shadow-lg z-[999]">
+        <div className={`absolute ${dropdownAlign === "left" ? "left-0" : "right-0"} mt-2 rounded-lg border border-gray-200 bg-white shadow-lg z-[999]`}>
           <div className="flex">
             {/* Left Panel - Period Options */}
             <div className="w-48 border-r border-gray-200 py-2">

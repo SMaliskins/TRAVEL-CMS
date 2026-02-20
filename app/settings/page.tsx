@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useFontScale, SCALE_PRESETS, FONT_PRESETS } from "@/hooks/useFontScale";
+import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type } from "lucide-react";
 
 const SETTINGS_SECTIONS = [
-  { name: "Company", href: "/settings/company", icon: "🏢", description: "Company profile, licenses, banking, regional settings" },
-  { name: "Users", href: "/settings/users", icon: "👥", description: "User management and roles" },
-  { name: "Billing", href: "/settings/billing", icon: "💳", description: "Subscription, upgrade plan, manage billing" },
-  { name: "Profile", href: "/settings/profile", icon: "👤", description: "Your personal settings" },
-  { name: "Travel Services", href: "/settings/travel-services", icon: "✈️", description: "Manage travel service categories and VAT rates" },
-  { name: "Accessibility", href: "/settings/accessibility", icon: "🔤", description: "Customize font size and font family" },
+  { name: "Company", href: "/settings/company", icon: <Building2 size={24} strokeWidth={1.5} />, description: "Company profile, licenses, banking, regional settings" },
+  { name: "Users", href: "/settings/users", icon: <UsersRound size={24} strokeWidth={1.5} />, description: "User management and roles" },
+  { name: "Billing", href: "/settings/billing", icon: <CreditCard size={24} strokeWidth={1.5} />, description: "Subscription, upgrade plan, manage billing" },
+  { name: "Profile", href: "/settings/profile", icon: <UserCircle size={24} strokeWidth={1.5} />, description: "Your personal settings" },
+  { name: "Travel Services", href: "/settings/travel-services", icon: <Plane size={24} strokeWidth={1.5} />, description: "Manage travel service categories and VAT rates" },
+  { name: "Accessibility", href: "/settings/accessibility", icon: <Type size={24} strokeWidth={1.5} />, description: "Customize font size and font family" },
 ];
 
 export default function SettingsPage() {
@@ -29,7 +30,7 @@ export default function SettingsPage() {
               href={section.href}
               className="flex items-center gap-4 rounded-lg bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
             >
-              <span className="text-2xl">{section.icon}</span>
+              <span className="text-gray-600">{section.icon}</span>
               <div>
                 <h3 className="font-medium text-gray-900">{section.name}</h3>
                 <p className="text-sm text-gray-500">{section.description}</p>

@@ -29,6 +29,7 @@ import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import AddPaymentModal from "@/app/finances/payments/_components/AddPaymentModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
+import { Map as MapIcon, ClipboardList } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, getCityByIATA } from "@/lib/data/cities";
@@ -1603,7 +1604,7 @@ export default function OrderServicesBlock({
       `}</style>
       <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-base">📋</span>
+          <ClipboardList size={18} strokeWidth={1.6} className="text-gray-500" />
           <h2 className="text-base font-semibold text-gray-900">Services</h2>
         </div>
       </div>
@@ -1658,7 +1659,7 @@ export default function OrderServicesBlock({
         <div className="rounded-lg bg-white shadow-sm">
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-base">📋</span>
+            <ClipboardList size={18} strokeWidth={1.6} className="text-gray-500" />
             <h2 className="text-base font-semibold text-gray-900">Services</h2>
             <span className="text-xs text-gray-500">({visibleServices.length}{hideCancelled && services.length > visibleServices.length ? ` of ${services.length}` : ""})</span>
           </div>
@@ -2098,6 +2099,7 @@ export default function OrderServicesBlock({
                 ticketNumbers: s.ticketNumbers,
                 boardingPasses: s.boardingPasses,
                 baggage: s.baggage,
+                transferType: s.transferType,
                 splitGroupId: s.splitGroupId ?? null,
                 assignedTravellerIds: s.assignedTravellerIds ?? [],
               }))}
@@ -2133,7 +2135,7 @@ export default function OrderServicesBlock({
           <div className="rounded-lg bg-white shadow-sm lg:sticky lg:self-start" style={{ top: stickyTopOffset }}>
             <div className="border-b border-gray-200 px-3 py-2">
               <div className="flex items-center gap-2">
-                <span className="text-base">🗺️</span>
+                <MapIcon size={18} strokeWidth={1.6} className="text-gray-500" />
                 <h2 className="text-base font-semibold text-gray-900">Map</h2>
               </div>
             </div>

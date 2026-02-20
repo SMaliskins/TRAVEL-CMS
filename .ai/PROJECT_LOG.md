@@ -745,3 +745,120 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+## [2026-02-19 22:00] CW — Itinerary Deduplication + Client Names + Traveller Filter
+
+**Task:** Itinerary Dedup | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Добавил `mergeDuplicateServices()` — группировка по контенту (splitGroupId ИЛИ category+name+dates), объединение assignedTravellerIds, ticketNumbers, boardingPasses
+- Заменил все `splitGroupId`-проверки на content-based ключи (`seenHotelKeys`, `seenTransferKeys`, `seenOtherKeys`)
+- Упростил `getTravellerSurnames` → `getTravellerSurnamesFromIds` (работает с уже объединёнными IDs)
+- Добавил пост-обработку: все события получают `assignedTravellerIds` для фильтрации
+- Сделал рабочий фильтр по клиенту: `selectedTravellerId` теперь реально фильтрует timeline events
+- Имена клиентов (фамилии) уже отображаются на всех карточках через `travellerSurnames`
+
+**Результат:** Сервисы не дублируются, имена клиентов показаны, фильтр работает
+
+**Next Step:** APP задачи (itinerary sync, tab bar, documents, concierge UI)
+
+---
+
+## [2026-02-19 23:00] CW — APP: Tab bar + Itinerary dedup/names/filter + all services
+
+**Task:** APP Itinerary & Nav | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- **Tab bar fix:** Создал `HomeNavigator` (HomeStack) с HomeList + TripDetailFromHome внутри tab. Tab bar теперь видим при навигации Home → Trip Details.
+- **Backend:** В `/api/client/v1/bookings/[id]` добавил `split_group_id`, `traveller_ids`, `traveller_names` (из `order_service_travellers` + `party`).
+- **APP BookingService:** Добавил поля `split_group_id`, `traveller_ids`, `traveller_names`.
+- **Dedup:** Добавил `mergeDuplicateServices()` в APP TripDetailScreen — группировка по splitGroupId или content key, объединение имён и билетов.
+- **Client names:** Компонент `TravellerBadges` — фамилии на всех карточках (Flight, Hotel, Transfer, Other).
+- **Filter:** Горизонтальные chip-кнопки по фамилиям для фильтрации timeline.
+- **All services:** Insurance, Visa, Other — все показываются как GenericServiceCard с цветовой маркировкой по категории.
+
+**Результат:** APP Itinerary = CMS Itinerary. Tab bar виден. Фамилии на карточках. Фильтр работает.
+
+**Next Step:** APP Documents + Concierge UI
+
+---
+
+## [2026-02-20 03:00] CW — Concierge Booking Flow (RateHawk + Stripe)
+
+**Task:** Full booking pipeline | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🔴
+
+**Действия:**
+- **Concierge tools:** Добавлен `select_hotel_for_booking` — сохраняет выбор клиента в `concierge_booking_requests`, делает prebook через RateHawk, генерирует payment URL.
+- **search_hotels:** Обновлён — теперь сохраняет `SearchResultEntry[]` с `hid`, `matchHash`, `bookHash`, ценами. Передаёт AI note о возможности бронирования.
+- **Tool context:** Переделан `executeToolCall` — принимает `ToolContext` вместо отдельных параметров. Хранит `lastSearchResults` между вызовами в рамках одного запроса.
+- **Stripe Checkout:** `/api/client/v1/booking/checkout` — создаёт Stripe Checkout Session с деталями отеля, привязывает к booking request.
+- **Stripe Webhook:** `/api/client/v1/booking/webhook` — принимает `checkout.session.completed`, обновляет статус на `paid`, запускает RateHawk finalization в фоне.
+- **RateHawk Finalization:** `createBookingForm` → `startBooking` → `checkBookingStatus` (поллинг до 30с). При успехе → `booking_confirmed`, создаёт `order_service` в CMS.
+- **Order Service:** Автоматически создаёт запись в `order_services` с категорией `accommodation`, ценами покупки/продажи, ref_nr = confirmation number.
+- **Success/Cancel pages:** HTML-страницы для redirect после оплаты.
+- **ChatBubble:** Уже поддерживает markdown-ссылки (`[Pay Now](url)` → кликабельные).
+
+**Результат:** Полный pipeline: Concierge search → select → prebook → Stripe payment → RateHawk booking → CMS order.
+
+**Next Step:** QA — применить миграцию 004, протестировать flow end-to-end.
+
+---
+
+## [2026-02-20 02:00] CW — Concierge Expanded Hotel Data + Markdown Chat
+
+**Task:** Expand Concierge hotel data + rich text | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- **RateHawk interface:** Расширил `RateHawkHotelContent` — добавлены `amenity_groups`, full `room_groups` (с `room_amenities`, `bedding_type`, `bathroom`, `room_class`, фото номеров), `kind`, `hotel_chain`, `year_built`, `year_renovated`, `rooms_number`, `floors_number`, `distance_center`, `images` (фото отеля).
+- **getHotelContent:** Полностью переписана extraction — извлекаются amenity_groups, structured room_groups с фото и amenities, building facts, hotel images (с заменой `{size}` → `640x400`).
+- **Concierge tool result:** Обновлён `search_hotels` — AI получает: `kind`, `hotelChain`, `yearBuilt/Renovated`, `floorsAndRooms`, `distanceToCenter`, `amenities` (по группам), `roomTypes` (с bed type, room class, per-room amenities), `images` (до 3 фото отеля), `roomImages` (до 4 фото номеров).
+- **ChatBubble:** Заменён plain text на кастомный markdown-рендерер — поддержка **bold**, *italic*, заголовков (## / ###), списков (- • 1.), ссылок (`[text](url)` → Linking.openURL), изображений (`![alt](url)` → `<Image>`), автодетект URL в тексте.
+
+**Результат:** Concierge получает полную информацию об отелях. Чат умеет показывать картинки и кликабельные ссылки.
+
+**Next Step:** QA
+
+---
+
+## [2026-02-20 01:30] CW — Concierge Hotel Guest Ratings
+
+**Task:** Concierge hotel reviews | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Добавил `review_score` и `number_of_reviews` в `RateHawkHotelContent` — извлекаются из B2B hotel/info raw response (поля `rating`, `review_score`, `number_of_reviews`, `reviews_count`).
+- Создал `getHotelReviewsSummary()` — вызывает Content API `/api/content/v1/hotel_reviews_by_ids/`, вычисляет средний score из `detailed_review` sub-scores (cleanness, location, price, services, room, meal — шкала 0-10).
+- В Concierge `search_hotels` tool: `getHotelContentsBatch` и `getHotelReviewsSummary` вызываются параллельно через `Promise.all`.
+- В ответ AI добавлены поля `guestRating` (0-10 score) и `reviewCount` (количество отзывов).
+
+**Результат:** Concierge теперь показывает рейтинг гостей и количество отзывов для каждого отеля при поиске.
+
+**Next Step:** QA — проверить что Content API доступен с текущими ключами.
+
+---
+
+## [2026-02-20 00:00] CW — APP Documents + Concierge UI
+
+**Task:** Documents & Concierge | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- **Documents Backend:** Обновил `/api/client/v1/bookings/[id]/documents` — теперь возвращает boarding passes + invoices (из таблицы `invoices`).
+- **Documents Screen:** Переписал экран: при раскрытии поездки показываются секции "Invoices" (номер, дата, сумма, статус) и "Boarding Passes" (имя, рейс, скачивание).
+- **Concierge UI:** Заменил "AI Concierge" → "Travel Concierge". Добавил зелёный "Live" badge справа. Заменил ActivityIndicator на анимированные "typing···" точки. Обновил welcome message.
+
+**Результат:** Documents = boarding passes + invoices. Concierge = Travel Concierge + Live + typing dots.
+
+**Next Step:** QA
+
+---
+

@@ -15,8 +15,13 @@ import { DocumentsScreen } from '../screens/documents/DocumentsScreen'
 import { ProfileScreen } from '../screens/profile/ProfileScreen'
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
 
+export type HomeStackParamList = {
+  HomeList: undefined
+  TripDetailFromHome: { bookingId: string }
+}
+
 export type MainTabParamList = {
-  Home: undefined
+  HomeTab: undefined
   TripsTab: undefined
   Concierge: undefined
   Documents: undefined
@@ -31,10 +36,10 @@ export type TripsStackParamList = {
 export type RootStackParamList = {
   Tabs: undefined
   Notifications: undefined
-  TripDetailFromHome: { bookingId: string }
 }
 
 const Tab = createBottomTabNavigator<MainTabParamList>()
+const HomeStack = createNativeStackNavigator<HomeStackParamList>()
 const TripsStack = createNativeStackNavigator<TripsStackParamList>()
 const RootStack = createNativeStackNavigator<RootStackParamList>()
 
@@ -88,6 +93,23 @@ const bellStyles = StyleSheet.create({
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
 })
 
+function HomeNavigator() {
+  return (
+    <HomeStack.Navigator>
+      <HomeStack.Screen
+        name="HomeList"
+        component={HomeScreen}
+        options={{ title: 'Home', headerRight: () => <BellButton /> }}
+      />
+      <HomeStack.Screen
+        name="TripDetailFromHome"
+        component={TripDetailScreen}
+        options={{ title: 'Trip Details' }}
+      />
+    </HomeStack.Navigator>
+  )
+}
+
 function TripsNavigator() {
   return (
     <TripsStack.Navigator>
@@ -113,30 +135,31 @@ function TabNavigator() {
       screenOptions={{
         tabBarActiveTintColor: '#1a73e8',
         tabBarInactiveTintColor: '#9e9e9e',
-        headerShown: true,
+        headerShown: false,
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{
+      <Tab.Screen name="HomeTab" component={HomeNavigator} options={{
         title: 'Home',
         tabBarIcon: ({ color, size }) => <Feather name="home" size={size} color={color} />,
-        ...bellRight(),
       }} />
       <Tab.Screen name="TripsTab" component={TripsNavigator} options={{
         title: 'Trips',
-        headerShown: false,
         tabBarIcon: ({ color, size }) => <Feather name="map" size={size} color={color} />,
       }} />
       <Tab.Screen name="Concierge" component={ConciergeScreen} options={{
         title: 'Concierge',
+        headerShown: true,
         tabBarIcon: ({ color, size }) => <Feather name="message-circle" size={size} color={color} />,
       }} />
       <Tab.Screen name="Documents" component={DocumentsScreen} options={{
         title: 'Documents',
+        headerShown: true,
         tabBarIcon: ({ color, size }) => <Feather name="file-text" size={size} color={color} />,
         ...bellRight(),
       }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{
         title: 'Profile',
+        headerShown: true,
         tabBarIcon: ({ color, size }) => <Feather name="user" size={size} color={color} />,
       }} />
     </Tab.Navigator>
@@ -151,11 +174,6 @@ export function MainStack() {
         name="Notifications"
         component={NotificationsScreen}
         options={{ animation: 'slide_from_right', headerShown: true, title: 'Notifications' }}
-      />
-      <RootStack.Screen
-        name="TripDetailFromHome"
-        component={TripDetailScreen}
-        options={{ animation: 'slide_from_right', headerShown: true, title: 'Trip Details' }}
       />
     </RootStack.Navigator>
   )

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 
 interface CashPayment {
   id: string;
@@ -35,11 +36,22 @@ export default function CashFlowPage() {
   const [allPayments, setAllPayments] = useState<CashPayment[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const firstOfMonth = today.slice(0, 8) + "01";
+  const [period, setPeriod] = useState<PeriodType>("currentMonth");
+  const [dateFrom, setDateFrom] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const [dateFrom, setDateFrom] = useState(firstOfMonth);
-  const [dateTo, setDateTo] = useState(today);
+  const handlePeriodChange = (newPeriod: PeriodType, startDate?: string, endDate?: string) => {
+    setPeriod(newPeriod);
+    if (startDate && endDate) {
+      setDateFrom(startDate);
+      setDateTo(endDate);
+    }
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -119,19 +131,12 @@ export default function CashFlowPage() {
 
       {/* Date filters */}
       <div className="mb-4 flex items-center gap-3">
-        <span className="text-sm text-gray-700">Period:</span>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="border border-gray-300 rounded px-2 py-1 text-sm"
-        />
-        <span className="text-sm text-gray-400">&mdash;</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="border border-gray-300 rounded px-2 py-1 text-sm"
+        <PeriodSelector
+          value={period}
+          onChange={handlePeriodChange}
+          startDate={dateFrom}
+          endDate={dateTo}
+          dropdownAlign="left"
         />
       </div>
 

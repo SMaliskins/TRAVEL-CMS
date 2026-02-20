@@ -504,13 +504,12 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
-        <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 -mx-4 px-4 pt-2 pb-2 border-b border-gray-200">
-          {/* Main Row: Order Code | Client + Itinerary + Dates | Amount + Payment */}
-          <div className="flex items-start justify-between gap-6 flex-wrap">
-            {/* Left: Order Code + Status + Created/Agent */}
-            <div className="shrink-0">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-gray-900">
+        <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 -mx-4 px-4 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]">
+          <div className="flex items-stretch flex-wrap lg:flex-nowrap">
+            {/* Block 1: Order Code + Status + Type/Source */}
+            <div className="shrink-0 pr-3 flex flex-col justify-center">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
                   {orderCode}
                 </h1>
                 {order && (
@@ -529,7 +528,7 @@ export default function OrderPage({
               )}
               {/* Order Type & Source Radio Bars */}
               {order && (
-                <div className="mt-1.5 flex flex-col gap-1">
+                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                   <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
                     {[
                       { value: "leisure", label: "Leisure" },
@@ -564,7 +563,7 @@ export default function OrderPage({
                             }
                           })();
                         }}
-                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
                           order.order_type === type.value
                             ? "bg-gray-700 text-white shadow-sm"
                             : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
@@ -610,7 +609,7 @@ export default function OrderPage({
                               }
                             })();
                           }}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                          className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
                             order.order_source === source.value
                               ? "bg-blue-600 text-white shadow-sm"
                               : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
@@ -624,14 +623,19 @@ export default function OrderPage({
                 </div>
               )}
             </div>
+
+            {/* Groove divider */}
+            <div className="hidden lg:flex self-stretch items-center mx-3 my-1.5">
+              <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
+            </div>
             
-            {/* Center: Client Name + Itinerary + Dates (or Loading when order not yet loaded) */}
+            {/* Block 2: Client + Itinerary + Dates */}
             {!order ? (
-              <div className="flex-1 min-w-0 ml-4 flex items-center text-gray-500">
+              <div className="flex-1 min-w-0 flex items-center text-gray-500">
                 {orderLoading ? "Loading order..." : null}
               </div>
             ) : (
-              <div className="flex-1 min-w-0 ml-4">
+              <div className="flex-1 min-w-0">
                 {/* Row 1: Client Name */}
                 {editingHeaderField === "client" ? (
                   <div className="flex items-center gap-2 flex-wrap">
@@ -665,10 +669,10 @@ export default function OrderPage({
                   </div>
                 ) : (
                   <div>
-                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Lead Passenger</div>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">Lead Passenger</div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span 
-                        className={`text-xl font-bold cursor-pointer rounded px-1 -mx-1 transition-colors ${
+                        className={`text-base font-semibold cursor-pointer rounded px-1 -mx-1 transition-colors ${
                           isCtrlPressed && order.client_party_id 
                             ? "text-blue-600 underline" 
                             : "text-gray-900 hover:bg-gray-100"
@@ -812,7 +816,7 @@ export default function OrderPage({
                   >
                     {parsedItinerary.origin || parsedItinerary.destinations.length > 0 || autoDestinations.length > 0 ? (
                       <>
-                        <span className="text-xs text-gray-500 uppercase tracking-wide mr-1">Destination:</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wider mr-1">Destination:</span>
                         {/* Only show destinations (where main service is). NOT origin/departure point. */}
                         {(() => {
                           const manualDests = [
@@ -841,7 +845,7 @@ export default function OrderPage({
                           
                           return Object.entries(countryCities).map(([country, data], idx) => (
                             <span key={country} className="flex items-center">
-                              <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
+                                <span className="flex items-center gap-1 text-sm font-semibold text-gray-900">
                                 {data.countryCode && (
                                   <span>{countryCodeToFlag(data.countryCode)}</span>
                                 )}
@@ -890,7 +894,7 @@ export default function OrderPage({
                   </div>
                 ) : (
                   <div 
-                    className="flex items-center gap-2 mt-1 text-sm text-gray-600 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
+                    className="flex items-center gap-1.5 mt-0.5 text-xs text-gray-600 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
                     onClick={startEditingDates}
                     title="Click to edit dates"
                   >
@@ -913,18 +917,40 @@ export default function OrderPage({
               </div>
             )}
             
-            {/* Right: Total (active services) + Payment Status + Dates */}
-            {order && (
-              <div className="flex items-center gap-4 shrink-0 flex-wrap justify-end">
-                <div className="text-right">
-                  <div className="text-xl font-bold text-gray-900">
+            {/* Block 3: Total + Payment Status */}
+            {order && (<>
+              {/* Groove divider */}
+              <div className="hidden lg:flex self-stretch items-center mx-3 my-1.5">
+                <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 justify-end">
+                {/* Total amount with hover tooltip for payment plan */}
+                <div className="text-right relative group/total">
+                  <div className="text-xl font-bold text-gray-900 cursor-default">
                     €{(order.amount_total ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </div>
-                  <div className="text-xs text-gray-500">Total (active services)</div>
+                  <div className="text-[10px] text-gray-400">Total (active services)</div>
+
+                  {/* Payment plan tooltip — appears below the amount on hover */}
+                  {(order.payment_dates?.length ?? 0) > 0 && (
+                    <div className="absolute top-full right-0 mt-1 z-30 hidden group-hover/total:block">
+                      <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-3 py-2 min-w-[200px] text-xs text-gray-700">
+                        <div className="font-semibold text-gray-900 mb-1.5 text-[11px]">Payment Plan</div>
+                        <div className="space-y-1">
+                          {order.payment_dates!.map((p, i) => (
+                            <div key={i} className="flex justify-between gap-4">
+                              <span className="text-gray-500">{p.type === "deposit" ? "Deposit" : "Final"}</span>
+                              <span className="font-medium">{formatDateDDMMYYYY(p.date)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col items-end gap-0.5">
-                  <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                  <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                     order.amount_total > 0 && order.amount_paid >= order.amount_total
                       ? "bg-green-100 text-green-800"
                       : order.amount_paid > 0
@@ -953,28 +979,18 @@ export default function OrderPage({
                       €{(order.amount_debt ?? order.amount_total).toLocaleString("en-US", { minimumFractionDigits: 2 })} to pay
                     </span>
                   )}
-                  {(order.payment_dates?.length ?? 0) > 0 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {order.payment_dates!.map((p, i) => (
-                        <span key={i}>
-                          {p.type === "deposit" ? "Deposit" : "Final"}: {formatDateDDMMYYYY(p.date)}
-                          {i < order.payment_dates!.length - 1 ? "; " : ""}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                   {order.overdue_days != null && order.overdue_days > 0 && (
-                    <span className="text-xs text-red-600 font-medium">
+                    <span className="text-[10px] text-red-600 font-medium">
                       {order.overdue_days} {order.overdue_days === 1 ? "day" : "days"} overdue
                     </span>
                   )}
                 </div>
               </div>
-            )}
+            </>)}
           </div>
 
           {/* B) Tabs */}
-          <nav className="-mb-px flex space-x-6 border-t border-gray-200 mt-2">
+          <nav className="-mb-px flex space-x-5 border-t border-gray-200/60 mt-1">
             <button
               onClick={() => setActiveTab("client")}
               className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
@@ -1029,7 +1045,7 @@ export default function OrderPage({
         </div>
 
         {/* Tab Content */}
-        <div className="mb-6 relative z-0">
+        <div className="mb-6">
           {activeTab === "client" && (
             <div className="space-y-6">
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}

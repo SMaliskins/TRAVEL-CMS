@@ -6,10 +6,10 @@ import { bookingsApi, Booking } from '../../api/bookings'
 import { useAuthStore } from '../../store/authStore'
 import { parseDestination } from '../../utils/parseDestination'
 import { formatDateRange, calcDaysNights, calcDaysUntil } from '../../utils/dateFormat'
-import type { RootStackParamList } from '../../navigation/MainStack'
+import type { HomeStackParamList } from '../../navigation/MainStack'
 
 export function HomeScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>()
   const [upcoming, setUpcoming] = useState<Booking[]>([])
   const [profile, setProfile] = useState<{ displayName: string | null } | null>(null)
   const [loading, setLoading] = useState(true)

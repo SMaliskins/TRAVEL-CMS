@@ -11,6 +11,7 @@ import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airl
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
 import { formatDateDDMMYYYY, formatDateShort } from "@/utils/dateFormat";
+import DateInput from "@/components/DateInput";
 import type { SupplierCommission } from "@/lib/types/directory";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
@@ -1420,6 +1421,8 @@ export default function AddServiceModal({
       // Tour (Package Tour): hotel fields + commission + agent discount
       if (categoryType === "tour") {
         payload.hotelName = hotelName || null;
+        payload.hotelAddress = hotelAddress || null;
+        payload.hotelPhone = hotelPhone || null;
         payload.hotelStarRating = hotelStarRating || null;
         payload.hotelRoom = hotelRoom || null;
         payload.hotelBoard = hotelBoard || null;
@@ -2187,28 +2190,57 @@ export default function AddServiceModal({
                 
                 {/* Tour: Hotel + Stars in one row */}
                 {categoryType === "tour" && (
-                  <div className="grid grid-cols-[1fr_4rem] gap-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel</label>
-                      <input
-                        type="text"
-                        value={hotelName}
-                        onChange={(e) => setHotelName(e.target.value)}
-                        placeholder="Hotel name"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
-                      />
+                  <>
+                    <div className="grid grid-cols-[1fr_4rem] gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel</label>
+                        <HotelSuggestInput
+                          value={hotelName}
+                          onChange={setHotelName}
+                          onHotelSelected={(d) => {
+                            setHotelName(d.name);
+                            if (d.address) setHotelAddress(d.address);
+                            if (d.phone) setHotelPhone(d.phone);
+                            if (d.email) setHotelEmail(d.email);
+                          }}
+                          placeholder="Search hotel..."
+                          className={parsedFields.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-green-300 [&_input]:border-green-400" : parseAttemptedButEmpty.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-red-300 [&_input]:border-red-400" : ""}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Stars</label>
+                        <input
+                          type="text"
+                          value={hotelStarRating}
+                          onChange={(e) => setHotelStarRating(e.target.value)}
+                          placeholder="5*"
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Stars</label>
-                      <input
-                        type="text"
-                        value={hotelStarRating}
-                        onChange={(e) => setHotelStarRating(e.target.value)}
-                        placeholder="5*"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
+                        <input
+                          type="text"
+                          value={hotelAddress}
+                          onChange={(e) => setHotelAddress(e.target.value)}
+                          placeholder="Hotel address"
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                        <input
+                          type="tel"
+                          value={hotelPhone}
+                          onChange={(e) => setHotelPhone(e.target.value)}
+                          placeholder="Hotel phone"
+                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
                 
                 {/* Tour: Room + Meal in one row */}
@@ -2344,9 +2376,9 @@ export default function AddServiceModal({
             <RightWrapper {...rightWrapperProps}>
             <div className="space-y-3">
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">{categoryType === "hotel" ? "CLIENTS" : "CLIENT"}</h4>
+                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">{categoryType === "hotel" ? "CLIENTS" : categoryType === "flight" ? "CLIENT" : "PARTIES"}</h4>
 
-                {/* Supplier — only for non-hotel, non-flight (both have PARTIES in left column) */}
+                {/* Supplier — only for non-hotel, non-flight (both have their own section) */}
                 {categoryType !== "hotel" && categoryType !== "flight" && (
                   <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
@@ -2794,11 +2826,9 @@ export default function AddServiceModal({
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={freeCancellationUntil}
-                        onChange={(e) => setFreeCancellationUntil(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        onChange={setFreeCancellationUntil}
                       />
                     </div>
                     <div>
@@ -2834,11 +2864,10 @@ export default function AddServiceModal({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit Due</label>
-                        <input
-                          type="date"
+                        <DateInput
                           value={paymentDeadlineDeposit}
-                          onChange={(e) => setPaymentDeadlineDeposit(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          onChange={setPaymentDeadlineDeposit}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2855,11 +2884,10 @@ export default function AddServiceModal({
                       </div>
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Final Due</label>
-                        <input
-                          type="date"
+                        <DateInput
                           value={paymentDeadlineFinal}
-                          onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          onChange={setPaymentDeadlineFinal}
+                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                         />
                       </div>
                       <div className="min-w-0">
@@ -2878,11 +2906,9 @@ export default function AddServiceModal({
                   ) : (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={paymentDeadlineFinal}
-                        onChange={(e) => setPaymentDeadlineFinal(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        onChange={setPaymentDeadlineFinal}
                       />
                     </div>
                   )}

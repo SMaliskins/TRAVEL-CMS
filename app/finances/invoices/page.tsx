@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 
 interface Invoice {
   id: string;
@@ -35,12 +36,24 @@ export default function FinancesInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [period, setPeriod] = useState<PeriodType>("currentMonth");
+  const [dateFrom, setDateFrom] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
 
-  useEffect(() => {
-    loadInvoices();
-  }, [filterStatus]);
+  const handlePeriodChange = (newPeriod: PeriodType, startDate?: string, endDate?: string) => {
+    setPeriod(newPeriod);
+    if (startDate && endDate) {
+      setDateFrom(startDate);
+      setDateTo(endDate);
+    }
+  };
 
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -48,7 +61,11 @@ export default function FinancesInvoicesPage() {
         return;
       }
 
-      const response = await fetch('/api/finances/invoices', {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+
+      const response = await fetch(`/api/finances/invoices?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -69,7 +86,11 @@ export default function FinancesInvoicesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus, dateFrom, dateTo, router]);
+
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
   const handleMarkProcessed = async (invoiceId: string) => {
     try {
@@ -178,21 +199,30 @@ export default function FinancesInvoicesPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 flex items-center gap-2">
-        <span className="text-sm text-gray-700">Filter:</span>
-        {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilterStatus(status)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              filterStatus === status
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-700">Status:</span>
+          {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              className={`px-3 py-1 text-xs font-medium rounded ${
+                filterStatus === status
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </button>
+          ))}
+        </div>
+        <PeriodSelector
+          value={period}
+          onChange={handlePeriodChange}
+          startDate={dateFrom}
+          endDate={dateTo}
+          dropdownAlign="left"
+        />
       </div>
 
       {/* Invoices Table */}
