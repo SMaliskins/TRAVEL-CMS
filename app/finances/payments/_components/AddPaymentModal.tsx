@@ -58,7 +58,7 @@ export default function AddPaymentModal({
   const [paidAtDisplay, setPaidAtDisplay] = useState(() => {
     const d = new Date(); return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
   });
-  const datePickerRef = useRef<HTMLInputElement>(null);
+
   const [method, setMethod] = useState<"cash" | "bank" | "card">("bank");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("EUR");
@@ -158,7 +158,7 @@ export default function AddPaymentModal({
         const json = await res.json();
         const orders: OrderOption[] = (json.orders ?? json.data ?? []).map(
           (o: Record<string, unknown>) => ({
-            id: String(o.id ?? o.orderId ?? ""),
+            id: String(o.id || ""),
             order_code: String(o.order_code ?? o.orderId ?? ""),
             client_display_name: o.client_display_name ?? o.client ?? null,
             amount_total: Number(o.amount_total ?? o.amount ?? 0),
@@ -199,8 +199,8 @@ export default function AddPaymentModal({
         const raw = (json.orders ?? json.data ?? []).slice(0, 10);
         setOrderOptions(
           raw.map((o: Record<string, unknown>) => ({
-            id: o.id ?? o.orderId,
-            order_code: o.order_code ?? o.orderId,
+            id: String(o.id || ""),
+            order_code: String(o.order_code ?? o.orderId ?? ""),
             client_display_name: o.client_display_name ?? o.client ?? null,
             amount_total: Number(o.amount_total ?? o.amount ?? 0),
             amount_paid: Number(o.amount_paid ?? o.paid ?? 0),
@@ -489,35 +489,8 @@ export default function AddPaymentModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Payment Date <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-1">
+            <div>
               <input
-                type="text"
-                value={paidAtDisplay}
-                onChange={(e) => {
-                  let v = e.target.value.replace(/[^\d.]/g, "");
-                  const digits = v.replace(/\./g, "");
-                  if (digits.length <= 2) v = digits;
-                  else if (digits.length <= 4) v = digits.slice(0,2) + "." + digits.slice(2);
-                  else v = digits.slice(0,2) + "." + digits.slice(2,4) + "." + digits.slice(4,8);
-                  setPaidAtDisplay(v);
-                  const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-                  if (m) setPaidAt(`${m[3]}-${m[2]}-${m[1]}`);
-                }}
-                placeholder="dd.mm.yyyy"
-                maxLength={10}
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <button
-                type="button"
-                onClick={() => datePickerRef.current?.showPicker()}
-                className="px-2 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-500"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </button>
-              <input
-                ref={datePickerRef}
                 type="date"
                 value={paidAt}
                 onChange={(e) => {
@@ -528,8 +501,7 @@ export default function AddPaymentModal({
                     setPaidAtDisplay(`${d}.${m}.${y}`);
                   }
                 }}
-                className="sr-only"
-                tabIndex={-1}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
