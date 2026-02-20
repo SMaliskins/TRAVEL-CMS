@@ -484,12 +484,12 @@ export default function AddPaymentModal({
             </div>
           )}
 
-          {/* Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Payment Date <span className="text-red-500">*</span>
-            </label>
+          {/* Date + Method */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Payment Date <span className="text-red-500">*</span>
+              </label>
               <input
                 type="date"
                 value={paidAt}
@@ -504,31 +504,25 @@ export default function AddPaymentModal({
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-          </div>
-
-          {/* Method */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Payment Method <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2">
-              {(["bank", "cash", "card"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMethod(m)}
-                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-md border transition-colors ${
-                    method === m
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                  }`}
-                >
-                  {m === "bank"
-                    ? "Bank Transfer"
-                    : m === "cash"
-                      ? "Cash"
-                      : "Card"}
-                </button>
-              ))}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Payment Method <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-1">
+                {(["bank", "cash", "card"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMethod(m)}
+                    className={`flex-1 px-2 py-2 text-sm font-medium rounded-md border transition-colors ${
+                      method === m
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {m === "bank" ? "Bank" : m === "cash" ? "Cash" : "Card"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
