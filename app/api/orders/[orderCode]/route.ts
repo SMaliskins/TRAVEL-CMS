@@ -89,8 +89,28 @@ export async function GET(
       (sum: number, s: { client_price?: string | number }) => sum + (Number(s.client_price) || 0),
       0
     );
-    const amountPaid = Number(order.amount_paid) || 0;
+
+    // Recalculate amount_paid from actual non-cancelled payments
+    const { data: orderPayments } = await supabaseAdmin
+      .from("payments")
+      .select("amount, status")
+      .eq("order_id", order.id);
+
+    const amountPaid = (orderPayments ?? []).reduce(
+      (sum: number, p: { amount: number; status?: string }) =>
+        p.status === "cancelled" ? sum : sum + Number(p.amount),
+      0
+    );
     const amountDebt = Math.max(0, amountTotalFromServices - amountPaid);
+
+    // Sync stale amount_paid if needed
+    const storedPaid = Number(order.amount_paid) || 0;
+    if (Math.abs(storedPaid - amountPaid) > 0.01) {
+      await supabaseAdmin
+        .from("orders")
+        .update({ amount_paid: amountPaid, amount_debt: amountDebt })
+        .eq("id", order.id);
+    }
 
     // Payment dates and overdue from invoices (non-cancelled)
     const { data: invoices } = await supabaseAdmin

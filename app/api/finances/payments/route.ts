@@ -135,14 +135,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create payment" }, { status: 500 });
     }
 
-    // Recalculate order totals
+    // Recalculate order totals (exclude cancelled payments)
     const { data: allPayments } = await supabaseAdmin
       .from("payments")
-      .select("amount")
+      .select("amount, status")
       .eq("order_id", order_id);
 
     const totalPaid = (allPayments ?? []).reduce(
-      (sum: number, p: { amount: number }) => sum + Number(p.amount),
+      (sum: number, p: { amount: number; status?: string }) =>
+        p.status === "cancelled" ? sum : sum + Number(p.amount),
       0
     );
 

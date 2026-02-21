@@ -16,7 +16,6 @@ import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Plus } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
-import AddPaymentModal from "@/app/finances/payments/_components/AddPaymentModal";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
@@ -122,7 +121,6 @@ export default function OrderPage({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
-  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
   const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
   const [invoiceServicesByPayer, setInvoiceServicesByPayer] = useState<Map<string, any[]>>(new Map());
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
@@ -1019,40 +1017,58 @@ export default function OrderPage({
                 </div>
 
                 <div className="flex flex-col items-end gap-0.5">
-                  <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                    order.amount_total > 0 && order.amount_paid >= order.amount_total
-                      ? "bg-green-100 text-green-800"
-                      : order.amount_paid > 0
-                      ? "bg-yellow-100 text-yellow-800"
-                      : "bg-red-100 text-red-800"
-                  }`}>
-                    {order.amount_total > 0 && order.amount_paid >= order.amount_total
-                      ? "Paid"
-                      : order.amount_paid > 0
-                      ? "Partially paid"
-                      : "Unpaid"
-                    }
-                  </div>
-                  {order.amount_total > 0 && order.amount_paid >= order.amount_total && (
-                    <span className="text-xs text-green-700">
-                      €{(order.amount_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
-                    </span>
-                  )}
-                  {order.amount_paid > 0 && order.amount_total > 0 && order.amount_paid < order.amount_total && (
-                    <span className="text-xs text-gray-600">
-                      €{(order.amount_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} paid, €{(order.amount_debt ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining
-                    </span>
-                  )}
-                  {order.amount_total > 0 && order.amount_paid < order.amount_total && order.amount_paid === 0 && (
-                    <span className="text-xs text-gray-600">
-                      €{(order.amount_debt ?? order.amount_total).toLocaleString("en-US", { minimumFractionDigits: 2 })} to pay
-                    </span>
-                  )}
-                  {order.overdue_days != null && order.overdue_days > 0 && (
-                    <span className="text-[10px] text-red-600 font-medium">
-                      {order.overdue_days} {order.overdue_days === 1 ? "day" : "days"} overdue
-                    </span>
-                  )}
+                  {(() => {
+                    const paid = order.amount_paid ?? 0;
+                    const total = order.amount_total ?? 0;
+                    const overpayment = Math.max(0, Math.round((paid - total) * 100) / 100);
+                    const isOverpaid = total > 0 && paid > total + 0.01;
+                    const isPaid = total > 0 && paid >= total && !isOverpaid;
+                    const isPartial = paid > 0 && total > 0 && paid < total;
+                    const isUnpaid = total > 0 && paid === 0;
+
+                    return (
+                      <>
+                        <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          isOverpaid ? "bg-purple-100 text-purple-800"
+                          : isPaid ? "bg-green-100 text-green-800"
+                          : isPartial ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
+                        }`}>
+                          {isOverpaid ? "Overpaid" : isPaid ? "Paid" : isPartial ? "Partially paid" : "Unpaid"}
+                        </div>
+                        {isOverpaid && (
+                          <span className="text-xs text-purple-700">
+                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
+                          </span>
+                        )}
+                        {isOverpaid && (
+                          <span className="text-[10px] text-purple-600 font-medium">
+                            +€{overpayment.toLocaleString("en-US", { minimumFractionDigits: 2 })} overpayment
+                          </span>
+                        )}
+                        {isPaid && (
+                          <span className="text-xs text-green-700">
+                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
+                          </span>
+                        )}
+                        {isPartial && (
+                          <span className="text-xs text-gray-600">
+                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid, €{(order.amount_debt ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining
+                          </span>
+                        )}
+                        {isUnpaid && (
+                          <span className="text-xs text-gray-600">
+                            €{(order.amount_debt ?? total).toLocaleString("en-US", { minimumFractionDigits: 2 })} to pay
+                          </span>
+                        )}
+                        {order.overdue_days != null && order.overdue_days > 0 && (
+                          <span className="text-[10px] text-red-600 font-medium">
+                            {order.overdue_days} {order.overdue_days === 1 ? "day" : "days"} overdue
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </>)}
@@ -1113,16 +1129,6 @@ export default function OrderPage({
               </button>
             </div>
             <div className="ml-auto flex items-center gap-2 py-1">
-              <button
-                onClick={() => {
-                  setActiveTab("finance");
-                  setShowAddPaymentModal(true);
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100"
-              >
-                <Plus size={14} strokeWidth={2} />
-                Payment
-              </button>
               <button
                 onClick={() => {
                   if (activeTab === "client" && servicesBlockRef.current) {
@@ -1232,6 +1238,7 @@ export default function OrderPage({
                   <InvoiceList
                     orderCode={orderCode}
                     key={invoiceRefetchTrigger}
+                    orderAmountTotal={order?.amount_total ?? 0}
                     onCreateNew={() => {
                       setActiveTab("client");
                       showToast("error", "Please select services from the table and click 'Issue Invoice'");
@@ -1245,6 +1252,7 @@ export default function OrderPage({
                     key={`payments-${invoiceRefetchTrigger}`}
                     orderCode={orderCode}
                     orderId={order.id}
+                    orderAmountTotal={order.amount_total}
                     onChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
                   />
                 </div>
@@ -1280,16 +1288,6 @@ export default function OrderPage({
 
       </div>
 
-      <AddPaymentModal
-        open={showAddPaymentModal}
-        onClose={() => setShowAddPaymentModal(false)}
-        onCreated={() => {
-          setShowAddPaymentModal(false);
-          setInvoiceRefetchTrigger(prev => prev + 1);
-          router.refresh();
-        }}
-        preselectedOrderCode={orderCode}
-      />
     </div>
   );
 }

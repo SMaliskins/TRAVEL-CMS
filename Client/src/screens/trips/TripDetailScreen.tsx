@@ -8,8 +8,8 @@ type Props = { route: { params: { bookingId: string } } }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   confirmed: { bg: '#dcfce7', text: '#16a34a' },
-  booked: { bg: '#dbeafe', text: '#2563eb' },
-  active: { bg: '#dbeafe', text: '#2563eb' },
+  booked: { bg: '#e8edf2', text: '#1a3a5c' },
+  active: { bg: '#e8edf2', text: '#1a3a5c' },
   pending: { bg: '#fef3c7', text: '#d97706' },
   changed: { bg: '#fef3c7', text: '#d97706' },
   cancelled: { bg: '#fee2e2', text: '#dc2626' },
@@ -329,7 +329,7 @@ export function TripDetailScreen({ route }: Props) {
   }, [booking?.services, selectedTraveller])
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#1a73e8" /></View>
+    return <View style={styles.centered}><ActivityIndicator size="large" color="#1a3a5c" /></View>
   }
 
   if (!booking || !dest) {
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   error: { color: '#999', fontSize: 16 },
 
-  hero: { backgroundColor: '#1a73e8', padding: 24, paddingTop: 16 },
+  hero: { backgroundColor: '#1a3a5c', padding: 24, paddingTop: 16 },
   destination: { fontSize: 22, fontWeight: '700', color: '#fff' },
   routeText: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   code: { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
@@ -469,11 +469,11 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 14, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
   filterRow: { marginBottom: 10, flexGrow: 0 },
   filterChip: { backgroundColor: '#f0f0f0', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6, marginRight: 8 },
-  filterChipActive: { backgroundColor: '#1a73e8' },
+  filterChipActive: { backgroundColor: '#1a3a5c' },
   filterChipText: { fontSize: 13, fontWeight: '600', color: '#666' },
   filterChipTextActive: { color: '#fff' },
 
-  serviceCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#1a73e8' },
+  serviceCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#1a3a5c' },
   flightBorder: { borderLeftColor: '#3b82f6' },
   hotelBorder: { borderLeftColor: '#f59e0b' },
   transferBorder: { borderLeftColor: '#f59e0b' },
@@ -485,13 +485,13 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '600' },
 
   travellerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
-  travellerBadge: { backgroundColor: '#e8f0fe', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-  travellerBadgeText: { fontSize: 11, fontWeight: '600', color: '#1a73e8' },
+  travellerBadge: { backgroundColor: '#e8edf2', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  travellerBadgeText: { fontSize: 11, fontWeight: '600', color: '#1a3a5c' },
 
   flightHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  flightNumber: { fontSize: 16, fontWeight: '700', color: '#2563eb' },
+  flightNumber: { fontSize: 16, fontWeight: '700', color: '#1a3a5c' },
   airline: { fontSize: 12, color: '#888' },
-  cabinClass: { fontSize: 11, color: '#1a73e8', backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
+  cabinClass: { fontSize: 11, color: '#1a3a5c', backgroundColor: '#e8edf2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
 
   flightRoute: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   flightPoint: { flex: 1 },
@@ -510,5 +510,5 @@ const styles = StyleSheet.create({
   transferRoute: { marginTop: 6 },
   transferPoint: { fontSize: 13, color: '#555', marginTop: 2 },
 
-  dayHeader: { fontSize: 13, fontWeight: '700', color: '#1a73e8', marginTop: 12, marginBottom: 6 },
+  dayHeader: { fontSize: 13, fontWeight: '700', color: '#1a3a5c', marginTop: 12, marginBottom: 6 },
 })

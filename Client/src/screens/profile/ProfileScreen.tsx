@@ -102,7 +102,7 @@ export function ProfileScreen() {
   const comingSoon = () => Alert.alert('Coming Soon', 'This feature is under development.')
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#1a73e8" /></View>
+    return <View style={styles.centered}><ActivityIndicator size="large" color="#1a3a5c" /></View>
   }
 
   const initials = (profile?.displayName ?? 'U').charAt(0).toUpperCase()

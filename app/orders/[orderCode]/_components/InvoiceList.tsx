@@ -22,6 +22,10 @@ interface Invoice {
   created_at?: string;
   replaced_by_invoice_id?: string | null;
   paid_amount?: number;
+  deposit_amount?: number | null;
+  deposit_date?: string | null;
+  final_payment_amount?: number | null;
+  final_payment_date?: string | null;
   invoice_items: Array<{
     id: string;
     service_name: string;
@@ -37,6 +41,7 @@ interface Invoice {
 interface InvoiceListProps {
   orderCode: string;
   onCreateNew: () => void;
+  orderAmountTotal?: number;
 }
 
 interface PaymentSummary {
@@ -45,7 +50,7 @@ interface PaymentSummary {
   deposit: number;
 }
 
-export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps) {
+export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal = 0 }: InvoiceListProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
@@ -412,8 +417,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
               <col className="w-[80px]" />
               <col className="w-[40px]" />
               <col className="w-[80px]" />
-              <col className="w-[85px]" />
-              <col className="w-[70px]" />
+              <col className="w-[170px]" />
               <col className="w-[85px]" />
               <col className="w-[85px]" />
             </colgroup>
@@ -427,8 +431,7 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
                 <th className="text-right py-2 px-3 font-medium text-gray-700">Debt</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Cur</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Status</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Due</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Days</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">Payment Terms</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Invoice date</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
               </tr>
@@ -458,18 +461,60 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
                             {getStatusLabel(invoice.status)}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-center text-gray-600 text-xs">
-                          {invoice.due_date ? formatDate(invoice.due_date) : '—'}
-                        </td>
-                        <td className="py-2 px-3 text-center text-xs">
+                        <td className="py-2 px-3 text-xs">
                           {(() => {
-                            if (!invoice.due_date || invoiceDebt === 0 || invoice.status === 'paid' || invoice.status === 'cancelled') return <span className="text-gray-400">—</span>;
-                            const today = new Date(); today.setHours(0,0,0,0);
-                            const due = new Date(invoice.due_date); due.setHours(0,0,0,0);
-                            const diff = Math.ceil((due.getTime() - today.getTime()) / (1000*60*60*24));
-                            if (diff < 0) return <span className="text-red-600 font-semibold">{diff}</span>;
-                            if (diff === 0) return <span className="text-orange-600 font-semibold">today</span>;
-                            return <span className="text-gray-600">{diff}</span>;
+                            const isClosed = invoice.status === 'paid' || invoice.status === 'cancelled';
+                            const depAmt = invoice.deposit_amount ?? 0;
+                            const finalAmt = invoice.final_payment_amount ?? 0;
+                            const hasTerms = depAmt > 0 || finalAmt > 0;
+
+                            const daysTo = (dateStr: string | null | undefined) => {
+                              if (!dateStr) return null;
+                              const today = new Date(); today.setHours(0,0,0,0);
+                              const d = new Date(dateStr); d.setHours(0,0,0,0);
+                              return Math.ceil((d.getTime() - today.getTime()) / (1000*60*60*24));
+                            };
+                            const daysBadge = (diff: number | null, isPaid: boolean) => {
+                              if (isPaid) return <span className="text-green-600 font-medium">✓</span>;
+                              if (diff === null) return null;
+                              if (diff < 0) return <span className="text-red-600 font-semibold">{diff}d</span>;
+                              if (diff === 0) return <span className="text-orange-600 font-semibold">today</span>;
+                              return <span className="text-gray-500">{diff}d</span>;
+                            };
+
+                            if (hasTerms && !isClosed) {
+                              const depositPaid = depAmt > 0 && paid >= depAmt;
+                              const finalPaid = paid >= invoice.total;
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  {depAmt > 0 && (
+                                    <div className={`flex items-center gap-1 ${depositPaid ? 'text-green-700' : 'text-gray-700'}`}>
+                                      <span className="font-medium w-[42px]">Dep:</span>
+                                      <span>{formatCurrency(depAmt)}</span>
+                                      {invoice.deposit_date && <span className="text-gray-400">{formatDate(invoice.deposit_date)}</span>}
+                                      {daysBadge(daysTo(invoice.deposit_date), depositPaid)}
+                                    </div>
+                                  )}
+                                  {finalAmt > 0 && (
+                                    <div className={`flex items-center gap-1 ${finalPaid ? 'text-green-700' : 'text-gray-700'}`}>
+                                      <span className="font-medium w-[42px]">Final:</span>
+                                      <span>{formatCurrency(finalAmt)}</span>
+                                      {invoice.final_payment_date && <span className="text-gray-400">{formatDate(invoice.final_payment_date)}</span>}
+                                      {daysBadge(daysTo(invoice.final_payment_date), finalPaid)}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            if (!invoice.due_date || isClosed || invoiceDebt === 0) return <span className="text-gray-400">—</span>;
+                            const diff = daysTo(invoice.due_date);
+                            return (
+                              <span className="flex items-center gap-1.5">
+                                <span className="text-gray-600">{formatDate(invoice.due_date)}</span>
+                                {daysBadge(diff, false)}
+                              </span>
+                            );
                           })()}
                         </td>
                         <td className="py-2 px-3 text-center text-gray-600">{formatDate(invoice.invoice_date)}</td>
@@ -510,19 +555,27 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
         </div>
       )}
 
-      {paymentSummary && paymentSummary.totalPaid > 0 && (
-        <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
-          <span>Total paid: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.totalPaid)}</span></span>
-          {paymentSummary.linkedToInvoices > 0 && (
-            <span>Linked to invoices: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.linkedToInvoices)}</span></span>
-          )}
-          {paymentSummary.deposit > 0 && (
-            <span className="text-amber-600">
-              Deposit (not linked): <span className="font-medium">{formatCurrency(paymentSummary.deposit)}</span>
-            </span>
-          )}
-        </div>
-      )}
+      {paymentSummary && paymentSummary.totalPaid > 0 && (() => {
+        const overpayment = orderAmountTotal > 0 ? Math.max(0, Math.round((paymentSummary.totalPaid - orderAmountTotal) * 100) / 100) : 0;
+        return (
+          <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
+            <span>Total paid: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.totalPaid)}</span></span>
+            {paymentSummary.linkedToInvoices > 0 && (
+              <span>Linked to invoices: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.linkedToInvoices)}</span></span>
+            )}
+            {paymentSummary.deposit > 0 && overpayment <= 0 && (
+              <span className="text-amber-600">
+                Deposit (not linked): <span className="font-medium">{formatCurrency(paymentSummary.deposit)}</span>
+              </span>
+            )}
+            {overpayment > 0 && (
+              <span className="text-purple-600 font-medium">
+                Overpayment: +{formatCurrency(overpayment)}
+              </span>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

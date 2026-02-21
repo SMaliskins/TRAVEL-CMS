@@ -8,7 +8,7 @@ import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
-import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Clock, CircleAlert } from "lucide-react";
+import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Clock, CircleAlert, CirclePlus } from "lucide-react";
 import { getCityByName } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -613,7 +613,10 @@ export default function OrdersPage() {
   };
 
   const getPaymentIcon = (order: OrderRow): { icon: React.ReactNode; tooltip: string } | null => {
-    if (order.allInvoicesPaid && order.totalInvoices && order.totalInvoices > 0) {
+    if (order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01) {
+      const overpay = Math.round((order.paid - order.amount) * 100) / 100;
+      return { icon: <CirclePlus size={16} strokeWidth={1.8} className="text-purple-600" />, tooltip: `Overpaid by €${overpay.toFixed(2)}` };
+    } else if (order.allInvoicesPaid && order.totalInvoices && order.totalInvoices > 0) {
       return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: "All invoices paid in full" };
     } else if (order.paid > 0 && order.amount > 0 && order.paid >= order.amount) {
       return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: "Paid in full" };
@@ -974,7 +977,11 @@ export default function OrdersPage() {
                                       <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight text-gray-700">
                                         {formatCurrency(order.amount)}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight text-gray-700">
+                                      <td className={`whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight ${
+                                        order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01
+                                          ? "font-medium text-purple-700"
+                                          : "text-gray-700"
+                                      }`}>
                                         {formatCurrency(order.paid)}
                                       </td>
                                       <td

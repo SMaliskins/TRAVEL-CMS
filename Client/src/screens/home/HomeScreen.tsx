@@ -34,7 +34,7 @@ export function HomeScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a73e8" />
+        <ActivityIndicator size="large" color="#1a3a5c" />
       </View>
     )
   }
@@ -95,21 +95,53 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f5f6f8' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  greeting: { backgroundColor: '#1a73e8', padding: 20 },
-  greetingText: { fontSize: 22, fontWeight: '700', color: '#fff' },
-  greetingSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
+  greeting: {
+    backgroundColor: '#1a3a5c',
+    padding: 24,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  greetingText: { fontSize: 24, fontWeight: '300', color: '#fff', letterSpacing: 0.5 },
+  greetingSub: {
+    fontSize: 11,
+    color: '#c9a96e',
+    marginTop: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    fontWeight: '600',
+  },
   section: { margin: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
-  tripCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, elevation: 3, marginBottom: 12 },
-  tripDestination: { fontSize: 20, fontWeight: '700', color: '#222' },
-  tripRoute: { fontSize: 13, color: '#888', marginTop: 2 },
-  tripDates: { fontSize: 14, color: '#666', marginTop: 6 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  statusBadge: { backgroundColor: '#e8f0fe', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#1a73e8' },
-  daysUntil: { fontSize: 12, color: '#888' },
-  emptyCard: { backgroundColor: '#fff', borderRadius: 16, padding: 24, alignItems: 'center' },
-  emptyText: { color: '#aaa', fontSize: 15 },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8a8a9a',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  tripCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#1a3a5c',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#c9a96e',
+  },
+  tripDestination: { fontSize: 18, fontWeight: '700', color: '#1a1a2e', letterSpacing: 0.3 },
+  tripRoute: { fontSize: 12, color: '#8a8a9a', marginTop: 3 },
+  tripDates: { fontSize: 13, color: '#5a5a6a', marginTop: 8 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
+  statusBadge: { backgroundColor: '#e8edf2', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  statusText: { fontSize: 11, fontWeight: '600', color: '#1a3a5c', letterSpacing: 0.3 },
+  daysUntil: { fontSize: 11, color: '#8a8a9a', fontWeight: '500' },
+  emptyCard: { backgroundColor: '#fff', borderRadius: 16, padding: 32, alignItems: 'center' },
+  emptyText: { color: '#a0aab4', fontSize: 14, fontWeight: '300', letterSpacing: 0.5 },
 })

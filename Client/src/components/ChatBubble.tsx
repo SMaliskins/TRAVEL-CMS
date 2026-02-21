@@ -211,7 +211,7 @@ export function ChatBubble({ message, isUser, timestamp }: ChatBubbleProps) {
 const mdStyles = StyleSheet.create({
   h2: { fontSize: 16, fontWeight: '700', marginBottom: 4, marginTop: 6 },
   h3: { fontSize: 15, fontWeight: '700', marginBottom: 2, marginTop: 4 },
-  link: { color: '#1a73e8', textDecorationLine: 'underline' },
+  link: { color: '#1a3a5c', textDecorationLine: 'underline' },
   image: { width: '100%', height: 160, borderRadius: 10, marginVertical: 6 },
   listItem: { flexDirection: 'row', alignItems: 'flex-start', marginVertical: 1 },
   bullet: { width: 18 },
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#1a3a5c',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -253,9 +253,10 @@ const styles = StyleSheet.create({
   },
   aiLabel: {
     fontSize: 10,
-    color: '#999',
+    color: '#8a8a9a',
     marginBottom: 2,
     marginLeft: 2,
+    letterSpacing: 0.3,
   },
   bubble: {
     borderRadius: 18,
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   userBubble: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#1a3a5c',
     borderBottomRightRadius: 4,
   },
   aiBubble: {
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   aiText: {
-    color: '#222',
+    color: '#1a1a2e',
   },
   timestamp: {
     fontSize: 10,

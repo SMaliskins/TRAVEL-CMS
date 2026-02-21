@@ -98,7 +98,7 @@ export function NotificationsScreen({ navigation }: Props) {
         activeOpacity={0.7}
       >
         <View style={[styles.iconCircle, !item.read && styles.unreadIcon]}>
-          <Feather name={iconName} size={18} color={item.read ? '#999' : '#1a73e8'} />
+          <Feather name={iconName} size={18} color={item.read ? '#999' : '#1a3a5c'} />
         </View>
         <View style={styles.notifContent}>
           <Text style={[styles.notifTitle, !item.read && styles.unreadTitle]}>
@@ -119,7 +119,7 @@ export function NotificationsScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1a73e8" />
+        <ActivityIndicator size="large" color="#1a3a5c" />
       </View>
     )
   }
@@ -128,7 +128,7 @@ export function NotificationsScreen({ navigation }: Props) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={24} color="#333" />
+          <Feather name="arrow-left" size={24} color="#1a3a5c" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
         {unreadCount > 0 ? (
@@ -161,7 +161,7 @@ export function NotificationsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f5f6f8' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
@@ -170,13 +170,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#d0d8e0',
   },
   backBtn: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#222' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a2e', letterSpacing: 0.3 },
   markAllBtn: { padding: 4 },
-  markAllText: { fontSize: 13, color: '#1a73e8', fontWeight: '600' },
+  markAllText: { fontSize: 12, color: '#c9a96e', fontWeight: '700', letterSpacing: 0.3 },
   notifItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -184,31 +184,31 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#fff',
   },
-  unreadItem: { backgroundColor: '#f0f6ff' },
+  unreadItem: { backgroundColor: '#f0f4f8' },
   iconCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f0f2f5',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  unreadIcon: { backgroundColor: '#e8f0fe' },
+  unreadIcon: { backgroundColor: '#e8edf2' },
   notifContent: { flex: 1 },
-  notifTitle: { fontSize: 15, fontWeight: '500', color: '#333' },
-  unreadTitle: { fontWeight: '700', color: '#111' },
-  notifBody: { fontSize: 13, color: '#666', marginTop: 2 },
-  notifTime: { fontSize: 11, color: '#aaa', marginTop: 4 },
+  notifTitle: { fontSize: 14, fontWeight: '500', color: '#1a1a2e', letterSpacing: 0.1 },
+  unreadTitle: { fontWeight: '700', color: '#1a1a2e' },
+  notifBody: { fontSize: 13, color: '#5a5a6a', marginTop: 2 },
+  notifTime: { fontSize: 11, color: '#a0aab4', marginTop: 4 },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#c9a96e',
     marginLeft: 8,
   },
-  separator: { height: 1, backgroundColor: '#f0f0f0' },
+  separator: { height: 0.5, backgroundColor: '#e8edf2' },
   emptyContainer: { flex: 1 },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 60 },
-  emptyText: { fontSize: 16, color: '#aaa', marginTop: 12 },
+  emptyText: { fontSize: 15, color: '#a0aab4', marginTop: 12, fontWeight: '300', letterSpacing: 0.5 },
 })

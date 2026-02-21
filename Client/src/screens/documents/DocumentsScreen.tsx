@@ -35,22 +35,22 @@ function BoardingPassRow({ bp }: { bp: BoardingPass }) {
   }
   return (
     <TouchableOpacity style={styles.docRow} onPress={handleOpen} activeOpacity={0.7}>
-      <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-        <Feather name="file" size={16} color="#2563eb" />
+      <View style={[styles.iconCircle, { backgroundColor: '#e8edf2' }]}>
+        <Feather name="file" size={16} color="#1a3a5c" />
       </View>
       <View style={styles.docInfo}>
         <Text style={styles.docName} numberOfLines={1}>{bp.fileName}</Text>
         <Text style={styles.docMeta}>{bp.flightNumber} · {bp.clientName}</Text>
       </View>
-      <Feather name="download" size={16} color="#999" />
+      <Feather name="download" size={16} color="#c9a96e" />
     </TouchableOpacity>
   )
 }
 
 const INV_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   paid: { bg: '#dcfce7', text: '#16a34a' },
-  sent: { bg: '#dbeafe', text: '#2563eb' },
-  draft: { bg: '#f5f5f5', text: '#888' },
+  sent: { bg: '#e8edf2', text: '#1a3a5c' },
+  draft: { bg: '#f0f2f5', text: '#8a8a9a' },
   overdue: { bg: '#fee2e2', text: '#dc2626' },
   cancelled: { bg: '#fee2e2', text: '#dc2626' },
 }
@@ -117,12 +117,12 @@ function TripDocuments({ booking }: { booking: Booking }) {
             {loaded ? ` · ${totalDocs} doc${totalDocs !== 1 ? 's' : ''}` : ''}
           </Text>
         </View>
-        <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color="#999" />
+        <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color="#a0aab4" />
       </TouchableOpacity>
 
       {expanded && (
         <View style={styles.docsContainer}>
-          {loading && <ActivityIndicator size="small" color="#1a73e8" style={{ padding: 12 }} />}
+          {loading && <ActivityIndicator size="small" color="#1a3a5c" style={{ padding: 12 }} />}
           {!loading && totalDocs === 0 && (
             <Text style={styles.noDocs}>No documents available</Text>
           )}
@@ -162,7 +162,7 @@ export function DocumentsScreen() {
   useEffect(() => { loadData() }, [loadData])
 
   if (loading && bookings.length === 0) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#1a73e8" /></View>
+    return <View style={styles.centered}><ActivityIndicator size="large" color="#1a3a5c" /></View>
   }
 
   return (
@@ -180,27 +180,56 @@ export function DocumentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f5f6f8' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16 },
-  empty: { textAlign: 'center', color: '#aaa', marginTop: 48, fontSize: 15 },
+  empty: { textAlign: 'center', color: '#a0aab4', marginTop: 48, fontSize: 14, fontWeight: '300', letterSpacing: 0.5 },
 
-  tripSection: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, overflow: 'hidden' },
+  tripSection: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: '#1a3a5c',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: '#c9a96e',
+  },
   tripHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
   tripHeaderLeft: { flex: 1, marginRight: 8 },
-  tripName: { fontSize: 15, fontWeight: '600', color: '#333' },
-  tripDates: { fontSize: 12, color: '#888', marginTop: 2 },
+  tripName: { fontSize: 15, fontWeight: '700', color: '#1a1a2e', letterSpacing: 0.2 },
+  tripDates: { fontSize: 12, color: '#8a8a9a', marginTop: 3 },
 
-  docsContainer: { borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-  noDocs: { padding: 16, textAlign: 'center', color: '#aaa', fontSize: 13 },
-  groupLabel: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, textTransform: 'uppercase' },
+  docsContainer: { borderTopWidth: 0.5, borderTopColor: '#e8edf2' },
+  noDocs: { padding: 16, textAlign: 'center', color: '#a0aab4', fontSize: 13, fontWeight: '300' },
+  groupLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#8a8a9a',
+    letterSpacing: 1.5,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+    textTransform: 'uppercase',
+  },
 
-  docRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', gap: 10 },
-  iconCircle: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#f0f2f5',
+    gap: 10,
+  },
+  iconCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
   docInfo: { flex: 1 },
-  docName: { fontSize: 14, fontWeight: '500', color: '#333' },
-  docMeta: { fontSize: 11, color: '#888', marginTop: 1 },
+  docName: { fontSize: 14, fontWeight: '600', color: '#1a1a2e', letterSpacing: 0.2 },
+  docMeta: { fontSize: 11, color: '#8a8a9a', marginTop: 1 },
 
   statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 11, fontWeight: '600' },
+  statusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
 })

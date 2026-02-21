@@ -169,11 +169,11 @@ export async function GET(
       );
     }
 
-    // Fetch ALL payments for this order
+    // Fetch ALL active payments for this order (exclude cancelled)
     const invoiceIds = (invoices || []).map((inv: { id: string }) => inv.id);
     const { data: allOrderPayments } = await supabaseAdmin
       .from("payments")
-      .select("invoice_id, amount")
+      .select("invoice_id, amount, status")
       .eq("order_id", order.id);
 
     // Only count payments directly linked to each invoice (no auto-distribution)
@@ -184,6 +184,7 @@ export async function GET(
 
     if (allOrderPayments) {
       for (const p of allOrderPayments) {
+        if ((p as { status?: string }).status === "cancelled") continue;
         const amt = Number(p.amount) || 0;
         totalOrderPayments += amt;
         if (p.invoice_id && invoiceIds.includes(p.invoice_id)) {

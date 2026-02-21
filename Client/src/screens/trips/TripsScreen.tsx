@@ -81,7 +81,7 @@ export function TripsScreen({ navigation }: Props) {
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#1a73e8" />
+          <ActivityIndicator size="large" color="#1a3a5c" />
         </View>
       ) : (
         <FlatList
@@ -107,22 +107,42 @@ export function TripsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f5f6f8' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  tabs: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  tabs: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: '#d0d8e0' },
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#1a73e8' },
-  tabText: { fontSize: 14, color: '#888', fontWeight: '500' },
-  tabTextActive: { color: '#1a73e8', fontWeight: '700' },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: '#c9a96e' },
+  tabText: { fontSize: 13, color: '#8a8a9a', fontWeight: '500', letterSpacing: 0.5 },
+  tabTextActive: { color: '#1a3a5c', fontWeight: '700' },
   list: { padding: 16, gap: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 14, padding: 18, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    shadowColor: '#1a3a5c',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 10,
+    elevation: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: '#c9a96e',
+  },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  destination: { fontSize: 16, fontWeight: '700', color: '#222', flex: 1 },
-  code: { fontSize: 12, color: '#999', marginLeft: 8 },
-  route: { fontSize: 12, color: '#888', marginTop: 2 },
-  dates: { fontSize: 13, color: '#666', marginTop: 6 },
-  cardBottom: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  status: { fontSize: 12, color: '#1a73e8', fontWeight: '600', backgroundColor: '#e8f0fe', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  amount: { fontSize: 14, fontWeight: '700', color: '#333' },
-  empty: { textAlign: 'center', color: '#aaa', fontSize: 15, marginTop: 48 },
+  destination: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', flex: 1, letterSpacing: 0.2 },
+  code: { fontSize: 11, color: '#a0aab4', marginLeft: 8, fontWeight: '500', letterSpacing: 0.5 },
+  route: { fontSize: 12, color: '#8a8a9a', marginTop: 3 },
+  dates: { fontSize: 13, color: '#5a5a6a', marginTop: 6 },
+  cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+  status: {
+    fontSize: 11,
+    color: '#1a3a5c',
+    fontWeight: '600',
+    backgroundColor: '#e8edf2',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    letterSpacing: 0.3,
+  },
+  amount: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
+  empty: { textAlign: 'center', color: '#a0aab4', fontSize: 14, marginTop: 48, fontWeight: '300', letterSpacing: 0.5 },
 })

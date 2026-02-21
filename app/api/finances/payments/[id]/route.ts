@@ -85,7 +85,8 @@ export async function PATCH(
     if (body.currency !== undefined) updateData.currency = body.currency;
     if (body.account_id !== undefined) updateData.account_id = body.account_id || null;
     if ("invoice_id" in body) updateData.invoice_id = body.invoice_id || null;
-    updateData.updated_at = new Date().toISOString();
+    if (body.payer_party_id !== undefined) updateData.payer_party_id = body.payer_party_id || null;
+    if (body.status !== undefined) updateData.status = body.status;
 
     const { data: updated, error } = await supabaseAdmin
       .from("payments")
@@ -100,14 +101,16 @@ export async function PATCH(
       return NextResponse.json({ error: "Failed to update payment" }, { status: 500 });
     }
 
-    // Recalculate order totals
+    // Recalculate order totals (exclude cancelled payments)
     const { data: allPayments } = await supabaseAdmin
       .from("payments")
-      .select("amount")
+      .select("amount, status")
       .eq("order_id", existing.order_id);
 
     const totalPaid = (allPayments ?? []).reduce(
-      (sum: number, p: { amount: number }) => sum + Number(p.amount), 0
+      (sum: number, p: { amount: number; status?: string }) =>
+        (p.status === "cancelled" ? sum : sum + Number(p.amount)),
+      0
     );
 
     const { data: orderData } = await supabaseAdmin
@@ -122,6 +125,36 @@ export async function PATCH(
       .from("orders")
       .update({ amount_paid: totalPaid, amount_debt: amountTotal - totalPaid })
       .eq("id", existing.order_id);
+
+    // When cancelling, revert linked invoice status if needed
+    if (body.status === "cancelled" && existing.invoice_id) {
+      const { data: invoicePayments } = await supabaseAdmin
+        .from("payments")
+        .select("amount, status")
+        .eq("invoice_id", existing.invoice_id);
+
+      const invoicePaid = (invoicePayments ?? []).reduce(
+        (sum: number, p: { amount: number; status?: string }) =>
+          (p.status === "cancelled" ? sum : sum + Number(p.amount)),
+        0
+      );
+
+      const { data: invoice } = await supabaseAdmin
+        .from("invoices")
+        .select("total, status")
+        .eq("id", existing.invoice_id)
+        .single();
+
+      if (invoice && invoice.status === "paid") {
+        const invoiceTotal = Number(invoice.total) || 0;
+        if (invoicePaid < invoiceTotal - 0.01) {
+          await supabaseAdmin
+            .from("invoices")
+            .update({ status: "issued", updated_at: new Date().toISOString() })
+            .eq("id", existing.invoice_id);
+        }
+      }
+    }
 
     return NextResponse.json({ data: updated });
   } catch (err) {
@@ -164,14 +197,15 @@ export async function DELETE(
       return NextResponse.json({ error: "Failed to delete payment" }, { status: 500 });
     }
 
-    // Recalculate order totals
+    // Recalculate order totals (exclude cancelled payments)
     const { data: allPayments } = await supabaseAdmin
       .from("payments")
-      .select("amount")
+      .select("amount, status")
       .eq("order_id", payment.order_id);
 
     const totalPaid = (allPayments ?? []).reduce(
-      (sum: number, p: { amount: number }) => sum + Number(p.amount),
+      (sum: number, p: { amount: number; status?: string }) =>
+        p.status === "cancelled" ? sum : sum + Number(p.amount),
       0
     );
 

@@ -188,25 +188,25 @@ export function ConciergeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f5f6f8' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#d0d8e0',
     gap: 12,
   },
   headerIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#1a73e8',
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: '#1a3a5c',
     justifyContent: 'center', alignItems: 'center',
   },
   headerIconText: { fontSize: 18, color: '#fff' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#222' },
-  headerSub: { fontSize: 12, color: '#888', marginTop: 1 },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', letterSpacing: 0.3 },
+  headerSub: { fontSize: 11, color: '#8a8a9a', marginTop: 2, letterSpacing: 0.3 },
 
   liveBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#16a34a' },
-  liveText: { fontSize: 12, fontWeight: '600', color: '#16a34a' },
+  liveText: { fontSize: 11, fontWeight: '600', color: '#16a34a' },
 
   list: { paddingVertical: 12, paddingBottom: 8 },
 
@@ -222,25 +222,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingBottom: 6, gap: 2,
   },
-  typingLabel: { fontSize: 13, color: '#888' },
+  typingLabel: { fontSize: 12, color: '#8a8a9a', fontWeight: '500' },
   dotsRow: { flexDirection: 'row', gap: 1 },
-  dot: { fontSize: 24, color: '#888', fontWeight: '700', lineHeight: 20 },
+  dot: { fontSize: 24, color: '#8a8a9a', fontWeight: '700', lineHeight: 20 },
 
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end',
-    padding: 8, paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee', gap: 8,
+    padding: 10, paddingBottom: Platform.OS === 'ios' ? 26 : 14,
+    backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: '#d0d8e0', gap: 8,
   },
   input: {
-    flex: 1, backgroundColor: '#f5f5f5', borderRadius: 22,
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10,
-    fontSize: 15, color: '#333', maxHeight: 120, lineHeight: 20,
+    flex: 1, backgroundColor: '#f0f2f5', borderRadius: 22,
+    paddingHorizontal: 18, paddingTop: 11, paddingBottom: 11,
+    fontSize: 15, color: '#1a1a2e', maxHeight: 120, lineHeight: 20,
   },
   sendButton: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#c9a96e',
     justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#c9a96e',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 3,
   },
-  sendButtonDisabled: { backgroundColor: '#c5d9f9' },
+  sendButtonDisabled: { backgroundColor: '#d0d8e0', shadowOpacity: 0 },
   sendButtonText: { color: '#fff', fontSize: 20, fontWeight: '700' },
 })
