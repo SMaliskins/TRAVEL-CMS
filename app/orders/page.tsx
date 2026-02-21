@@ -8,6 +8,8 @@ import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
+import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Clock, CircleAlert } from "lucide-react";
+import { getCityByName } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -213,6 +215,7 @@ const countryToISO: Record<string, string> = {
   "Latvia": "LV",
   "Germany": "DE",
   "UAE": "AE",
+  "United Arab Emirates": "AE",
   "Greece": "GR",
   "Portugal": "PT",
   "Netherlands": "NL",
@@ -222,6 +225,62 @@ const countryToISO: Record<string, string> = {
   "Austria": "AT",
   "Czech Republic": "CZ",
   "Belgium": "BE",
+  "Thailand": "TH",
+  "Maldives": "MV",
+  "Croatia": "HR",
+  "Montenegro": "ME",
+  "Cyprus": "CY",
+  "Bulgaria": "BG",
+  "Morocco": "MA",
+  "Tunisia": "TN",
+  "Sri Lanka": "LK",
+  "Indonesia": "ID",
+  "Mexico": "MX",
+  "Dominican Republic": "DO",
+  "Cuba": "CU",
+  "USA": "US",
+  "United States": "US",
+  "India": "IN",
+  "Japan": "JP",
+  "China": "CN",
+  "South Korea": "KR",
+  "Australia": "AU",
+  "New Zealand": "NZ",
+  "Brazil": "BR",
+  "Argentina": "AR",
+  "Canada": "CA",
+  "Norway": "NO",
+  "Sweden": "SE",
+  "Finland": "FI",
+  "Denmark": "DK",
+  "Iceland": "IS",
+  "Ireland": "IE",
+  "Poland": "PL",
+  "Hungary": "HU",
+  "Romania": "RO",
+  "Georgia": "GE",
+  "Armenia": "AM",
+  "Azerbaijan": "AZ",
+  "Israel": "IL",
+  "Jordan": "JO",
+  "Oman": "OM",
+  "Qatar": "QA",
+  "Bahrain": "BH",
+  "Saudi Arabia": "SA",
+  "Kuwait": "KW",
+  "Tanzania": "TZ",
+  "Kenya": "KE",
+  "South Africa": "ZA",
+  "Mauritius": "MU",
+  "Seychelles": "SC",
+  "Malta": "MT",
+  "Estonia": "EE",
+  "Lithuania": "LT",
+  "Singapore": "SG",
+  "Malaysia": "MY",
+  "Vietnam": "VN",
+  "Philippines": "PH",
+  "Cambodia": "KH",
 };
 
 // Get country flag emoji from country name
@@ -246,38 +305,51 @@ function getCountryFlag(countryName: string): string | null {
   }
 }
 
-// Format countries/cities string with flags: "🇬🇷 Thessaloniki; 🇮🇹 Rome"
-function formatCountriesWithFlags(countriesCities: string): string {
-  if (!countriesCities) return countriesCities;
+function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
+  if (!countriesCities) return <span className="text-gray-400">—</span>;
 
-  // Remove "origin:" and "return:" prefixes, only show destinations
-  // Format: "origin:Riga, Latvia|Sharm El Sheikh, Egypt|return:Vilnius, Lithuania"
-  // We want only destinations: "Sharm El Sheikh, Egypt"
-  
   const parts = countriesCities.split('|').map(p => p.trim());
   const destinations = parts.filter(p => !p.startsWith('origin:') && !p.startsWith('return:'));
   
-  // If no explicit destinations, use all parts without prefixes
   const items = destinations.length > 0 
     ? destinations 
     : parts.map(p => p.replace(/^(origin|return):/i, '').trim()).filter(p => p.length > 0);
   
-  // Format: flag + city (without country name)
-  return items
-    .map(item => {
-      // Parse "City, Country" format
-      const countryMatch = item.match(/^(.+),\s*([^,]+)$/);
-      if (countryMatch) {
-        const city = countryMatch[1].trim();
-        const country = countryMatch[2].trim();
+  if (items.length === 0) return <span className="text-gray-400">—</span>;
+
+  const parsed = items.flatMap(item => {
+    return item.split(';').map(sub => {
+      const s = sub.trim();
+      if (!s) return null;
+      const match = s.match(/^(.+),\s*([^,]+)$/);
+      if (match) {
+        const city = match[1].trim();
+        const country = match[2].trim();
         const flag = getCountryFlag(country);
-        // Return flag + city only (no country name)
-        return flag ? `${flag} ${city}` : city;
+        return { city, flag };
       }
-      // No comma - just return as is
-      return item;
-    })
-    .join('; ');
+      const cityData = getCityByName(s);
+      if (cityData) {
+        const flag = getCountryFlag(cityData.country || "");
+        return { city: s, flag };
+      }
+      return { city: s, flag: null };
+    }).filter(Boolean);
+  }) as { city: string; flag: string | null }[];
+
+  if (parsed.length === 0) return <span className="text-gray-400">—</span>;
+
+  return (
+    <span className="inline-flex items-center gap-1 flex-wrap">
+      {parsed.map((item, i) => (
+        <span key={i} className="inline-flex items-center">
+          {item.flag && <span className="mr-0.5">{item.flag}</span>}
+          <span>{item.city}</span>
+          {i < parsed.length - 1 && <span className="text-gray-300 mx-1">,</span>}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; dot: string } => {
@@ -540,15 +612,13 @@ export default function OrdersPage() {
     return diffDays;
   };
 
-  // Helper to get payment status icon
-  const getPaymentIcon = (order: OrderRow): { icon: string; tooltip: string } | null => {
-    // Full checkmark only if all invoices are fully paid
+  const getPaymentIcon = (order: OrderRow): { icon: React.ReactNode; tooltip: string } | null => {
     if (order.allInvoicesPaid && order.totalInvoices && order.totalInvoices > 0) {
-      return { icon: "✅", tooltip: "All invoices paid in full" };
+      return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: "All invoices paid in full" };
     } else if (order.paid > 0 && order.amount > 0 && order.paid >= order.amount) {
-      return { icon: "✅", tooltip: "Paid in full" };
+      return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: "Paid in full" };
     } else if (order.paid > 0) {
-      return { icon: "💵", tooltip: "Partial payment" };
+      return { icon: <CircleDollarSign size={16} strokeWidth={1.8} className="text-amber-500" />, tooltip: "Partial payment" };
     }
     return null;
   };
@@ -613,9 +683,7 @@ export default function OrdersPage() {
                 onClick={() => router.push("/orders/new")}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus size={16} strokeWidth={2} />
                 New
               </button>
             </div>
@@ -645,9 +713,7 @@ export default function OrdersPage() {
               onClick={() => router.push("/orders/new")}
               className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus size={16} strokeWidth={2} />
               New
             </button>
             {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
@@ -662,9 +728,7 @@ export default function OrdersPage() {
         {orders.length === 0 && (
           <div className="rounded-lg bg-white shadow-sm p-12 text-center">
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              <FileText size={32} strokeWidth={1.5} className="text-gray-400" />
             </div>
             <p className="text-lg font-medium text-gray-900 mb-2">No orders yet</p>
             <p className="text-gray-500 mb-6">Get started by creating your first order</p>
@@ -672,9 +736,7 @@ export default function OrdersPage() {
               onClick={() => router.push("/orders/new")}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus size={20} strokeWidth={2} />
               Create your first order
             </button>
           </div>
@@ -690,13 +752,22 @@ export default function OrdersPage() {
                   Order ID
                 </th>
                 <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title="Invoice issued" className="cursor-help">Inv 📝</span>
+                  <span title="Invoice issued" className="cursor-help inline-flex flex-col items-center gap-0.5">
+                    <span>Inv</span>
+                    <FileCheck size={14} strokeWidth={1.8} className="text-gray-400" />
+                  </span>
                 </th>
                 <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title="Payment Status" className="cursor-help">Pay 💵</span>
+                  <span title="Payment Status" className="cursor-help inline-flex flex-col items-center gap-0.5">
+                    <span>Pay</span>
+                    <CircleDollarSign size={14} strokeWidth={1.8} className="text-gray-400" />
+                  </span>
                 </th>
                 <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title="Days to Due Date" className="cursor-help">Due ⏰</span>
+                  <span title="Days to Due Date" className="cursor-help inline-flex flex-col items-center gap-0.5">
+                    <span>Due</span>
+                    <Clock size={14} strokeWidth={1.8} className="text-gray-400" />
+                  </span>
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Client
@@ -854,13 +925,13 @@ export default function OrdersPage() {
                                       {/* Invoice icon column */}
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
                                         {order.hasInvoice && order.allServicesInvoiced && (
-                                          <span title="All services invoiced" className="cursor-help">
-                                            📝
+                                          <span title="All services invoiced" className="cursor-help inline-flex justify-center">
+                                            <FileCheck size={16} strokeWidth={1.8} className="text-green-600" />
                                           </span>
                                         )}
                                         {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && (
-                                          <span title={`${order.invoicedServices}/${order.totalServices} services invoiced`} className="cursor-help">
-                                            📋
+                                          <span title={`${order.invoicedServices}/${order.totalServices} services invoiced`} className="cursor-help inline-flex justify-center">
+                                            <FileMinus2 size={16} strokeWidth={1.8} className="text-amber-500" />
                                           </span>
                                         )}
                                       </td>
@@ -868,7 +939,7 @@ export default function OrdersPage() {
                                       {/* Payment status icon column */}
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
                                         {paymentIcon && (
-                                          <span title={paymentIcon.tooltip} className="cursor-help">
+                                          <span title={paymentIcon.tooltip} className="cursor-help inline-flex justify-center">
                                             {paymentIcon.icon}
                                           </span>
                                         )}
@@ -878,9 +949,10 @@ export default function OrdersPage() {
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
                                         {daysToDue !== null ? (
                                           <span
-                                            className={daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}
+                                            className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`}
                                             title={`Due date: ${order.dueDate}`}
                                           >
+                                            {daysToDue < 0 && <CircleAlert size={13} strokeWidth={2} />}
                                             {daysToDue}
                                           </span>
                                         ) : (

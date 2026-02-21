@@ -169,10 +169,46 @@ export async function GET(
       );
     }
 
+    // Fetch ALL payments for this order
+    const invoiceIds = (invoices || []).map((inv: { id: string }) => inv.id);
+    const { data: allOrderPayments } = await supabaseAdmin
+      .from("payments")
+      .select("invoice_id, amount")
+      .eq("order_id", order.id);
+
+    // Only count payments directly linked to each invoice (no auto-distribution)
+    let paidByInvoice: Record<string, number> = {};
+    let linkedTotal = 0;
+    let unlinkedTotal = 0;
+    let totalOrderPayments = 0;
+
+    if (allOrderPayments) {
+      for (const p of allOrderPayments) {
+        const amt = Number(p.amount) || 0;
+        totalOrderPayments += amt;
+        if (p.invoice_id && invoiceIds.includes(p.invoice_id)) {
+          paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] || 0) + amt;
+          linkedTotal += amt;
+        } else if (!p.invoice_id) {
+          unlinkedTotal += amt;
+        }
+      }
+    }
+
+    const invoicesWithPaid = (invoices || []).map((inv: { id: string }) => ({
+      ...inv,
+      paid_amount: paidByInvoice[inv.id] || 0,
+    }));
+
     return NextResponse.json({ 
-      invoices: invoices || [],
+      invoices: invoicesWithPaid,
       orderId: order.id,
-      orderCode: orderCode 
+      orderCode: orderCode,
+      paymentSummary: {
+        totalPaid: Math.round(totalOrderPayments * 100) / 100,
+        linkedToInvoices: Math.round(linkedTotal * 100) / 100,
+        deposit: Math.round(unlinkedTotal * 100) / 100,
+      },
     });
   } catch (error) {
     console.error("Error in GET /api/orders/[orderCode]/invoices:", error);
@@ -283,7 +319,7 @@ export async function POST(
       );
     }
 
-    // Allow reusing invoice number from a cancelled invoice; reject if number is already on an active invoice
+    // Check if invoice number is already in use
     const { data: existingWithNumber } = await supabaseAdmin
       .from("invoices")
       .select("id, status")
@@ -291,11 +327,17 @@ export async function POST(
       .eq("invoice_number", String(invoice_number).trim())
       .maybeSingle();
 
-    if (existingWithNumber && existingWithNumber.status !== "cancelled" && existingWithNumber.status !== "replaced") {
-      return NextResponse.json(
-        { error: "Invoice number already in use" },
-        { status: 400 }
-      );
+    if (existingWithNumber) {
+      if (existingWithNumber.status === "cancelled" || existingWithNumber.status === "replaced") {
+        // Remove old cancelled/replaced invoice + its items so the number can be reused
+        await supabaseAdmin.from("invoice_items").delete().eq("invoice_id", existingWithNumber.id);
+        await supabaseAdmin.from("invoices").delete().eq("id", existingWithNumber.id);
+      } else {
+        return NextResponse.json(
+          { error: "Invoice number already in use" },
+          { status: 400 }
+        );
+      }
     }
 
     // Create invoice - build insert object dynamically to handle missing columns

@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     // Get all services for these orders with their invoice status and pricing
     const { data: servicesData } = await supabaseAdmin
       .from("order_services")
-      .select("order_id, invoice_id, res_status, client_price, service_price")
+      .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value")
       .eq("company_id", companyId)
       .in("order_id", orderIds);
     
@@ -187,11 +187,16 @@ export async function GET(request: NextRequest) {
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
       
-      // Calculate amount (sum of client_price) and profit (client_price - service_price)
       const amount = activeServices.reduce((sum: number, s: any) => sum + (Number(s.client_price) || 0), 0);
       const profit = activeServices.reduce((sum: number, s: any) => {
         const clientPrice = Number(s.client_price) || 0;
         const servicePrice = Number(s.service_price) || 0;
+        const cat = (s.category || "").toLowerCase();
+        const isTour = cat.includes("tour") || cat.includes("package");
+        if (isTour && s.commission_amount != null) {
+          const commission = Number(s.commission_amount) || 0;
+          return sum + (clientPrice - (servicePrice - commission));
+        }
         return sum + (clientPrice - servicePrice);
       }, 0);
       

@@ -820,10 +820,14 @@ export default function ItineraryTimeline({
     return cats.sort((a, b) => a.localeCompare(b));
   }, [services]);
 
-  const servicesFilteredByCategory = selectedCategory
-    ? services.filter((s) => s.category === selectedCategory)
-    : services;
-  const allEvents = servicesToEvents(servicesFilteredByCategory, travellers);
+  const servicesFilteredByCategory = useMemo(() =>
+    selectedCategory ? services.filter((s) => s.category === selectedCategory) : services,
+    [services, selectedCategory]
+  );
+  const allEvents = useMemo(() =>
+    servicesToEvents(servicesFilteredByCategory, travellers),
+    [servicesFilteredByCategory, travellers]
+  );
 
   const events = useMemo(() => {
     if (!selectedTravellerId) return allEvents;
@@ -850,11 +854,19 @@ export default function ItineraryTimeline({
   const [transferDistances, setTransferDistances] = useState<Record<string, string>>({});
   const fetchedCacheRef = useRef<Record<string, string>>({});
 
+  const transferEventsKey = useMemo(() => {
+    return events
+      .filter((e) => (e.type === "transfer_inbound" || e.type === "transfer_outbound") && e.transferAirportCode)
+      .map((e) => `${e.id}:${e.transferAirportCode}:${e.transferHotelAddress || ""}:${e.transferHotelName || ""}`)
+      .join(";");
+  }, [events]);
+
   useEffect(() => {
+    if (!transferEventsKey) return;
+
     const transferEvents = events.filter(
       (e) => (e.type === "transfer_inbound" || e.type === "transfer_outbound") && e.transferAirportCode
     );
-    if (transferEvents.length === 0) return;
 
     let cancelled = false;
 
@@ -871,6 +883,13 @@ export default function ItineraryTimeline({
         const existing = uniqueQueries.get(cacheKey) || [];
         existing.push(ev.id);
         uniqueQueries.set(cacheKey, existing);
+      }
+
+      if (uniqueQueries.size === 0) {
+        if (!cancelled && Object.keys(results).length > 0) {
+          setTransferDistances((prev) => ({ ...prev, ...results }));
+        }
+        return;
       }
 
       for (const [cacheKey, eventIds] of uniqueQueries) {
@@ -900,7 +919,8 @@ export default function ItineraryTimeline({
 
     fetchDistances();
     return () => { cancelled = true; };
-  }, [events]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferEventsKey]);
 
   if (services.length === 0) {
     return (

@@ -5,15 +5,18 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
-import OrderServicesBlock from "./_components/OrderServicesBlock";
+import OrderServicesBlock, { OrderServicesBlockHandle } from "./_components/OrderServicesBlock";
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
+import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { Plus } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
+import AddPaymentModal from "@/app/finances/payments/_components/AddPaymentModal";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
@@ -84,7 +87,9 @@ export default function OrderPage({
   );
 
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
+  const servicesBlockRef = useRef<OrderServicesBlockHandle>(null);
   const [stickyHeaderBottom, setStickyHeaderBottom] = useState(280);
+  const [pendingAction, setPendingAction] = useState<"service" | null>(null);
 
   useEffect(() => {
     if (!stickyHeaderRef.current) return;
@@ -99,12 +104,25 @@ export default function OrderPage({
     return () => ro.disconnect();
   }, []);
 
+  // Fire pending action once Services tab mounts and ref becomes available
+  useEffect(() => {
+    if (!pendingAction || activeTab !== "client") return;
+    const timer = setTimeout(() => {
+      if (pendingAction === "service") {
+        servicesBlockRef.current?.triggerAddService();
+      }
+      setPendingAction(null);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [pendingAction, activeTab]);
+
   const [orderCode, setOrderCode] = useState<string>("");
   const [order, setOrder] = useState<OrderData | null>(null);
   const [orderLoading, setOrderLoading] = useState(false); // order fetch in progress (header shows "Loading...")
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
   const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
   const [invoiceServicesByPayer, setInvoiceServicesByPayer] = useState<Map<string, any[]>>(new Map());
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
@@ -124,8 +142,8 @@ export default function OrderPage({
   const [editReturnCity, setEditReturnCity] = useState<CityWithCountry | null>(null);
   const [isSavingField, setIsSavingField] = useState(false);
   const [draggedDestIdx, setDraggedDestIdx] = useState<number | null>(null);
-  // Auto-detected destinations from services (fallback when countries_cities is empty)
   const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
+  const autoDestSavedRef = useRef(false);
   
   // Track Ctrl key for Ctrl+click navigation
   useEffect(() => {
@@ -149,7 +167,7 @@ export default function OrderPage({
     
     const countriesCities = order.countries_cities;
     let originCity: { name: string; countryCode?: string } | null = null;
-    let destinations: { name: string; countryCode?: string }[] = [];
+    let destinations: { name: string; countryCode?: string; country?: string }[] = [];
     let returnCity: { name: string; countryCode?: string } | null = null;
     
     // Check for new format with origin:/return:
@@ -178,10 +196,26 @@ export default function OrderPage({
         }
       }
     } else {
-      // Legacy format
-      const cities = countriesCities.split(",").map((c) => c.trim());
-      originCity = cities.length > 0 ? getCityByName(cities[0]) || { name: cities[0] } : null;
-      destinations = cities.slice(1).map((c) => getCityByName(c) || { name: c });
+      // Legacy format: "City, Country" or "City1, Country1; City2, Country2"
+      const entries = countriesCities.split(";").map(e => e.trim()).filter(Boolean);
+      const parsedCities: { name: string; countryCode?: string; country?: string }[] = [];
+      for (const entry of entries) {
+        const match = entry.match(/^(.+),\s*([^,]+)$/);
+        if (match) {
+          const cityPart = match[1].trim();
+          const countryPart = match[2].trim();
+          const cityData = getCityByName(cityPart);
+          if (cityData) {
+            parsedCities.push(cityData);
+          } else {
+            parsedCities.push({ name: cityPart, country: countryPart });
+          }
+        } else {
+          const cityData = getCityByName(entry);
+          parsedCities.push(cityData || { name: entry });
+        }
+      }
+      destinations = parsedCities;
     }
     
     // Calculate days/nights
@@ -201,6 +235,39 @@ export default function OrderPage({
     
     return { origin: originCity, destinations, returnCity, daysNights, daysUntil };
   }, [order?.countries_cities, order?.date_from, order?.date_to]);
+
+  // Auto-save detected destinations to DB when countries_cities is empty
+  useEffect(() => {
+    if (!order || autoDestSavedRef.current) return;
+    if (order.countries_cities && order.countries_cities.trim()) return;
+    if (autoDestinations.length === 0) return;
+    autoDestSavedRef.current = true;
+
+    const unique = autoDestinations.filter((c, i, arr) =>
+      arr.findIndex(x => x.city.toLowerCase() === c.city.toLowerCase()) === i
+    );
+    if (unique.length === 0) return;
+    // Use pipe-delimited format: |destinations|return:
+    const destsStr = unique.map(c => `${c.city}, ${c.country}`).join("; ");
+    const formatted = `|${destsStr}|return:`;
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ countries_cities: formatted }),
+        });
+        setOrder(prev => prev ? { ...prev, countries_cities: formatted } : prev);
+      } catch (err) {
+        console.error("Error auto-saving destinations:", err);
+      }
+    })();
+  }, [order, autoDestinations, orderCode]);
 
   // Build destinations array for map (origin + destinations + returnCity if different)
   const itineraryDestinations: CityWithCountry[] = useMemo(() => {
@@ -504,7 +571,7 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
-        <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 -mx-4 px-4 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]">
+        <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]">
           <div className="flex items-stretch flex-wrap lg:flex-nowrap">
             {/* Block 1: Order Code + Status + Type/Source */}
             <div className="shrink-0 pr-3 flex flex-col justify-center">
@@ -831,15 +898,17 @@ export default function OrderPage({
                           // Group by country
                           const countryCities: Record<string, { countryCode?: string; cities: string[] }> = {};
                           for (const city of allCities) {
-                            const cityData = getCityByName(city.name);
-                            const countryName = cityData?.country || "Unknown";
+                            const cityName = (city as { name?: string }).name || (city as { city?: string }).city || "";
+                            if (!cityName) continue;
+                            const cityData = getCityByName(cityName);
+                            const countryName = cityData?.country || city.country || "Unknown";
                             const countryCode = city.countryCode || cityData?.countryCode;
                             
                             if (!countryCities[countryName]) {
                               countryCities[countryName] = { countryCode, cities: [] };
                             }
-                            if (!countryCities[countryName].cities.includes(city.name)) {
-                              countryCities[countryName].cities.push(city.name);
+                            if (!countryCities[countryName].cities.includes(cityName)) {
+                              countryCities[countryName].cities.push(cityName);
                             }
                           }
                           
@@ -989,58 +1058,86 @@ export default function OrderPage({
             </>)}
           </div>
 
-          {/* B) Tabs */}
-          <nav className="-mb-px flex space-x-5 border-t border-gray-200/60 mt-1">
-            <button
-              onClick={() => setActiveTab("client")}
-              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                activeTab === "client"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              Services
-            </button>
-            <button
-              onClick={() => setActiveTab("finance")}
-              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                activeTab === "finance"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              Finance
-            </button>
-            <button
-              onClick={() => setActiveTab("documents")}
-              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                activeTab === "documents"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              Documents
-            </button>
-            <button
-              onClick={() => setActiveTab("communication")}
-              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                activeTab === "communication"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              Communication
-            </button>
-            <button
-              onClick={() => setActiveTab("log")}
-              className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                activeTab === "log"
-                  ? "border-black text-black"
-                  : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-              }`}
-            >
-              Log
-            </button>
+          {/* B) Tabs + Action Buttons */}
+          <nav className="-mb-px flex items-center border-t border-gray-200/60 mt-1">
+            <div className="flex space-x-5">
+              <button
+                onClick={() => setActiveTab("client")}
+                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
+                  activeTab === "client"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                }`}
+              >
+                Services
+              </button>
+              <button
+                onClick={() => setActiveTab("finance")}
+                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
+                  activeTab === "finance"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                }`}
+              >
+                Finance
+              </button>
+              <button
+                onClick={() => setActiveTab("documents")}
+                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
+                  activeTab === "documents"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                }`}
+              >
+                Documents
+              </button>
+              <button
+                onClick={() => setActiveTab("communication")}
+                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
+                  activeTab === "communication"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                }`}
+              >
+                Communication
+              </button>
+              <button
+                onClick={() => setActiveTab("log")}
+                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
+                  activeTab === "log"
+                    ? "border-black text-black"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                }`}
+              >
+                Log
+              </button>
+            </div>
+            <div className="ml-auto flex items-center gap-2 py-1">
+              <button
+                onClick={() => {
+                  setActiveTab("finance");
+                  setShowAddPaymentModal(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100"
+              >
+                <Plus size={14} strokeWidth={2} />
+                Payment
+              </button>
+              <button
+                onClick={() => {
+                  if (activeTab === "client" && servicesBlockRef.current) {
+                    servicesBlockRef.current.triggerAddService();
+                  } else {
+                    setPendingAction("service");
+                    setActiveTab("client");
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+              >
+                <Plus size={14} strokeWidth={2} />
+                Service
+              </button>
+            </div>
           </nav>
         </div>
 
@@ -1049,7 +1146,8 @@ export default function OrderPage({
           {activeTab === "client" && (
             <div className="space-y-6">
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}
-              <OrderServicesBlock 
+              <OrderServicesBlock
+                ref={servicesBlockRef}
                 orderCode={orderCode}
                 defaultClientId={order?.client_party_id}
                 defaultClientName={order?.client_display_name || undefined}
@@ -1110,35 +1208,46 @@ export default function OrderPage({
           )}
 
           {activeTab === "finance" && (
-            <div className="rounded-lg bg-white p-6 shadow-sm">
-              {showInvoiceCreator ? (
-                <InvoiceCreator
-                  orderCode={orderCode}
-                  clientName={order?.client_display_name || null}
-                  selectedServices={invoiceServices}
-                  servicesByPayer={invoiceServicesByPayer.size > 0 ? invoiceServicesByPayer : undefined}
-                  onClose={() => {
-                    setShowInvoiceCreator(false);
-                    setInvoiceServices([]);
-                    setInvoiceServicesByPayer(new Map());
-                  }}
-                  onSuccess={() => {
-                    setShowInvoiceCreator(false);
-                    setInvoiceServices([]);
-                    setInvoiceServicesByPayer(new Map());
-                    setInvoiceRefetchTrigger(prev => prev + 1);
-                  }}
-                />
-              ) : (
-                <InvoiceList
-                  orderCode={orderCode}
-                  key={invoiceRefetchTrigger}
-                  onCreateNew={() => {
-                    // Switch to Client tab to select services
-                    setActiveTab("client");
-                    showToast("error", "Please select services from the table and click 'Issue Invoice'");
-                  }}
-                />
+            <div className="space-y-4">
+              <div className="rounded-lg bg-white p-6 shadow-sm">
+                {showInvoiceCreator ? (
+                  <InvoiceCreator
+                    orderCode={orderCode}
+                    clientName={order?.client_display_name || null}
+                    selectedServices={invoiceServices}
+                    servicesByPayer={invoiceServicesByPayer.size > 0 ? invoiceServicesByPayer : undefined}
+                    onClose={() => {
+                      setShowInvoiceCreator(false);
+                      setInvoiceServices([]);
+                      setInvoiceServicesByPayer(new Map());
+                    }}
+                    onSuccess={() => {
+                      setShowInvoiceCreator(false);
+                      setInvoiceServices([]);
+                      setInvoiceServicesByPayer(new Map());
+                      setInvoiceRefetchTrigger(prev => prev + 1);
+                    }}
+                  />
+                ) : (
+                  <InvoiceList
+                    orderCode={orderCode}
+                    key={invoiceRefetchTrigger}
+                    onCreateNew={() => {
+                      setActiveTab("client");
+                      showToast("error", "Please select services from the table and click 'Issue Invoice'");
+                    }}
+                  />
+                )}
+              </div>
+              {order && (
+                <div className="rounded-lg bg-white p-6 shadow-sm">
+                  <OrderPaymentsList
+                    key={`payments-${invoiceRefetchTrigger}`}
+                    orderCode={orderCode}
+                    orderId={order.id}
+                    onChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -1170,7 +1279,17 @@ export default function OrderPage({
         </div>
 
       </div>
-      
+
+      <AddPaymentModal
+        open={showAddPaymentModal}
+        onClose={() => setShowAddPaymentModal(false)}
+        onCreated={() => {
+          setShowAddPaymentModal(false);
+          setInvoiceRefetchTrigger(prev => prev + 1);
+          router.refresh();
+        }}
+        preselectedOrderCode={orderCode}
+      />
     </div>
   );
 }

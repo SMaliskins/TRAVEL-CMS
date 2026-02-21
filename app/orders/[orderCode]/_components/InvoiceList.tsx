@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
 import { useToast } from "@/contexts/ToastContext";
+import { FileDown, Mail, XCircle } from "lucide-react";
 
 interface Invoice {
   id: string;
@@ -20,6 +21,7 @@ interface Invoice {
   notes: string | null;
   created_at?: string;
   replaced_by_invoice_id?: string | null;
+  paid_amount?: number;
   invoice_items: Array<{
     id: string;
     service_name: string;
@@ -37,12 +39,19 @@ interface InvoiceListProps {
   onCreateNew: () => void;
 }
 
+interface PaymentSummary {
+  totalPaid: number;
+  linkedToInvoices: number;
+  deposit: number;
+}
+
 export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hideCancelled, setHideCancelled] = useState(false);
+  const [hideCancelled, setHideCancelled] = useState(true);
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const { showToast } = useToast();
   const [cancelConfirm, setCancelConfirm] = useState<{ invoiceId: string; message: string } | null>(null);
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
@@ -62,9 +71,9 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
       }
       const data = await response.json();
       setInvoices(data.invoices || []);
+      setPaymentSummary(data.paymentSummary || null);
     } catch (error: any) {
       console.error('Error loading invoices:', error);
-      // Show user-friendly error message
       alert(`Failed to load invoices: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
@@ -104,11 +113,10 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
     return grouped;
   }, [invoices, hideCancelled]);
 
-  // Calculate totals for a payer group
   const calculateGroupTotals = (groupInvoices: Invoice[]) => {
     return groupInvoices.reduce((acc, inv) => {
       acc.total += inv.total;
-      acc.paid += inv.status === 'paid' ? inv.total : 0;
+      acc.paid += inv.paid_amount ?? 0;
       return acc;
     }, { total: 0, paid: 0 });
   };
@@ -356,17 +364,22 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
         />
       )}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Invoices and payment paypapers</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setHideCancelled(!hideCancelled)}
-            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+            className={`p-1.5 rounded transition-colors ${
               hideCancelled 
-                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' 
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100' 
+                : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
             }`}
+            title={hideCancelled ? 'Show cancelled invoices' : 'Hide cancelled invoices'}
           >
-            {hideCancelled ? 'Show' : 'Hide'} Cancelled
+            {hideCancelled ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            )}
           </button>
           <button
             onClick={onCreateNew}
@@ -388,100 +401,126 @@ export default function InvoiceList({ orderCode, onCreateNew }: InvoiceListProps
           </button>
         </div>
       ) : (
-        <div className="max-w-6xl">
-          {Array.from(groupedInvoices.entries()).map(([payerName, payerInvoices]) => {
-            const totals = calculateGroupTotals(payerInvoices);
-            const debt = totals.total - totals.paid;
-            
-            return (
-              <div key={payerName} className="mb-4">
-                {/* Payer Header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                  <h3 className="font-semibold text-gray-900">{payerName}</h3>
-                </div>
-                
-                {/* Compact Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-300 bg-gray-50">
-                        <th className="text-left py-2 px-3 font-medium text-gray-700">Short nr.</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-700">Complete nr.</th>
-                        <th className="text-right py-2 px-3 font-medium text-gray-700">Total</th>
-                        <th className="text-right py-2 px-3 font-medium text-gray-700">Paid</th>
-                        <th className="text-right py-2 px-3 font-medium text-gray-700">Debt</th>
-                        <th className="text-center py-2 px-3 font-medium text-gray-700">Cur</th>
-                        <th className="text-center py-2 px-3 font-medium text-gray-700">Status</th>
-                        <th className="text-center py-2 px-3 font-medium text-gray-700">Invoice date</th>
-                        <th className="text-center py-2 px-3 font-medium text-gray-700">Created</th>
-                        <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse table-fixed">
+            <colgroup>
+              <col className="w-[60px]" />
+              <col className="w-[150px]" />
+              <col className="w-[120px]" />
+              <col className="w-[80px]" />
+              <col className="w-[70px]" />
+              <col className="w-[80px]" />
+              <col className="w-[40px]" />
+              <col className="w-[80px]" />
+              <col className="w-[85px]" />
+              <col className="w-[70px]" />
+              <col className="w-[85px]" />
+              <col className="w-[85px]" />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-gray-300 bg-gray-50">
+                <th className="text-left py-2 px-3 font-medium text-gray-700">Short nr.</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">Complete nr.</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">Payer</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-700">Total</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-700">Paid</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-700">Debt</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Cur</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Status</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Due</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Days</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Invoice date</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from(groupedInvoices.entries()).map(([payerName, payerInvoices]) => (
+                <React.Fragment key={payerName}>
+                  {payerInvoices.map((invoice) => {
+                    const paid = invoice.paid_amount ?? 0;
+                    const invoiceDebt = Math.max(0, invoice.total - paid);
+                    
+                    return (
+                      <tr key={invoice.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="py-2 px-3 text-gray-900">{getShortNumber(invoice.invoice_number)}</td>
+                        <td className="py-2 px-3 truncate">
+                          <span className={`${invoice.status === 'cancelled' ? 'text-red-600' : 'text-gray-900'}`}>
+                            {invoice.invoice_number}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-gray-700 truncate" title={payerName}>{payerName}</td>
+                        <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoice.total)}</td>
+                        <td className="py-2 px-3 text-right text-gray-600">{formatCurrency(paid)}</td>
+                        <td className={`py-2 px-3 text-right font-medium ${invoiceDebt > 0 ? 'text-red-600' : 'text-gray-900'}`}>{formatCurrency(invoiceDebt)}</td>
+                        <td className="py-2 px-3 text-center text-gray-500">EUR</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={getStatusColor(invoice.status)}>
+                            {getStatusLabel(invoice.status)}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center text-gray-600 text-xs">
+                          {invoice.due_date ? formatDate(invoice.due_date) : '—'}
+                        </td>
+                        <td className="py-2 px-3 text-center text-xs">
+                          {(() => {
+                            if (!invoice.due_date || invoiceDebt === 0 || invoice.status === 'paid' || invoice.status === 'cancelled') return <span className="text-gray-400">—</span>;
+                            const today = new Date(); today.setHours(0,0,0,0);
+                            const due = new Date(invoice.due_date); due.setHours(0,0,0,0);
+                            const diff = Math.ceil((due.getTime() - today.getTime()) / (1000*60*60*24));
+                            if (diff < 0) return <span className="text-red-600 font-semibold">{diff}</span>;
+                            if (diff === 0) return <span className="text-orange-600 font-semibold">today</span>;
+                            return <span className="text-gray-600">{diff}</span>;
+                          })()}
+                        </td>
+                        <td className="py-2 px-3 text-center text-gray-600">{formatDate(invoice.invoice_date)}</td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleExportPDF(invoice.id)}
+                              className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                              title="Export PDF"
+                            >
+                              <FileDown size={15} />
+                            </button>
+                            <button
+                              onClick={() => handleSendEmail(invoice.id)}
+                              className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
+                              title="Send Email"
+                            >
+                              <Mail size={15} />
+                            </button>
+                            {invoice.status !== 'cancelled' && (
+                              <button
+                                onClick={() => openCancelConfirm(invoice.id)}
+                                className="p-1 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Cancel invoice"
+                              >
+                                <XCircle size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {payerInvoices.map((invoice) => {
-                        const paid = invoice.status === 'paid' ? invoice.total : 0;
-                        const invoiceDebt = invoice.total - paid;
-                        
-                        return (
-                          <tr key={invoice.id} className="border-b border-gray-200 hover:bg-gray-50">
-                            <td className="py-2 px-3 text-gray-900">{getShortNumber(invoice.invoice_number)}</td>
-                            <td className="py-2 px-3">
-                              <span className={`${invoice.status === 'cancelled' ? 'text-red-600' : 'text-gray-900'}`}>
-                                {invoice.invoice_number}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoice.total)}</td>
-                            <td className="py-2 px-3 text-right text-gray-600">{formatCurrency(paid)}</td>
-                            <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoiceDebt)}</td>
-                            <td className="py-2 px-3 text-center text-gray-600">EUR</td>
-                            <td className="py-2 px-3 text-center">
-                              <span className={getStatusColor(invoice.status)}>
-                                {getStatusLabel(invoice.status)}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-center text-blue-600">{formatDate(invoice.invoice_date)}</td>
-                            <td className="py-2 px-3 text-center text-blue-600">
-                              {invoice.created_at ? formatDate(invoice.created_at) : formatDate(invoice.invoice_date)}
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center justify-center gap-1 flex-wrap">
-                                <button
-                                  onClick={() => handleExportPDF(invoice.id)}
-                                  className="px-2 py-1 text-xs text-blue-600 hover:text-blue-700"
-                                  title="Export PDF"
-                                >
-                                  📄
-                                </button>
-                                <button
-                                  onClick={() => handleSendEmail(invoice.id)}
-                                  className="px-2 py-1 text-xs text-green-600 hover:text-green-700"
-                                  title="Send Email"
-                                >
-                                  ✉️
-                                </button>
-                                {invoice.status !== 'cancelled' && (
-                                  <button
-                                    onClick={() => openCancelConfirm(invoice.id)}
-                                    className="px-2 py-1 text-xs text-red-600 hover:text-red-700 hover:underline"
-                                    title="Cancel invoice"
-                                  >
-                                    Cancel
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })}
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {paymentSummary && paymentSummary.totalPaid > 0 && (
+        <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
+          <span>Total paid: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.totalPaid)}</span></span>
+          {paymentSummary.linkedToInvoices > 0 && (
+            <span>Linked to invoices: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.linkedToInvoices)}</span></span>
+          )}
+          {paymentSummary.deposit > 0 && (
+            <span className="text-amber-600">
+              Deposit (not linked): <span className="font-medium">{formatCurrency(paymentSummary.deposit)}</span>
+            </span>
+          )}
         </div>
       )}
     </div>

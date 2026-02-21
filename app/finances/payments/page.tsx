@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import AddPaymentModal from "./_components/AddPaymentModal";
+import { Landmark, Banknote, CreditCard, Trash2 } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -167,9 +168,7 @@ export default function PaymentsPage() {
                 : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
             }`}
           >
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" />
-            </svg>
+            <Landmark size={16} className="shrink-0" />
             Bank
           </button>
           <button
@@ -180,9 +179,7 @@ export default function PaymentsPage() {
                 : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
             }`}
           >
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
+            <Banknote size={16} className="shrink-0" />
             Cash
           </button>
           <button
@@ -193,9 +190,7 @@ export default function PaymentsPage() {
                 : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
             }`}
           >
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
+            <CreditCard size={16} className="shrink-0" />
             Card
           </button>
         </div>
@@ -280,10 +275,10 @@ export default function PaymentsPage() {
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => handleDelete(p.id)}
-                      className="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100"
+                      className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                       title="Delete payment"
                     >
-                      Delete
+                      <Trash2 size={15} />
                     </button>
                   </td>
                 </tr>

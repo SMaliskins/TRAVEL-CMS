@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get("dateTo");
     const method = searchParams.get("method");
     const accountId = searchParams.get("accountId");
+    const orderId = searchParams.get("orderId");
 
     let query = supabaseAdmin
       .from("payments")
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
       .eq("company_id", companyId)
       .order("paid_at", { ascending: false });
 
+    if (orderId) query = query.eq("order_id", orderId);
     if (dateFrom) query = query.gte("paid_at", dateFrom);
     if (dateTo) query = query.lte("paid_at", dateTo + "T23:59:59Z");
     if (method) query = query.eq("method", method);
@@ -159,6 +161,35 @@ export async function POST(request: NextRequest) {
         amount_debt: amountTotal - totalPaid,
       })
       .eq("id", order_id);
+
+    // Auto-update invoice status when payment is linked to an invoice
+    const paymentInvoiceId = invoice_id || null;
+    if (paymentInvoiceId) {
+      const { data: invoicePayments } = await supabaseAdmin
+        .from("payments")
+        .select("amount")
+        .eq("invoice_id", paymentInvoiceId);
+
+      const invoicePaid = (invoicePayments ?? []).reduce(
+        (sum: number, p: { amount: number }) => sum + Number(p.amount), 0
+      );
+
+      const { data: invoice } = await supabaseAdmin
+        .from("invoices")
+        .select("total, status")
+        .eq("id", paymentInvoiceId)
+        .single();
+
+      if (invoice && invoice.status !== "cancelled" && invoice.status !== "replaced") {
+        const invoiceTotal = Number(invoice.total) || 0;
+        if (invoiceTotal > 0 && invoicePaid >= invoiceTotal - 0.01) {
+          await supabaseAdmin
+            .from("invoices")
+            .update({ status: "paid", updated_at: new Date().toISOString() })
+            .eq("id", paymentInvoiceId);
+        }
+      }
+    }
 
     return NextResponse.json({ data: payment });
   } catch (err) {

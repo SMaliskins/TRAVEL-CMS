@@ -363,6 +363,7 @@ export function getCityByIATA(iataCode: string): City | undefined {
 }
 
 export function getCityByName(name: string): City | undefined {
+  if (!name) return undefined;
   return CITIES.find(
     (city) => city.name.toLowerCase() === name.toLowerCase()
   );

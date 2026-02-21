@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 // Ensure components are actual functions (fix ESM/CJS interop "got: object" error)
@@ -27,7 +27,6 @@ import ConfirmModal from "@/components/ConfirmModal";
 import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
-import AddPaymentModal from "@/app/finances/payments/_components/AddPaymentModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
 import { Map as MapIcon, ClipboardList } from "lucide-react";
 import TripMap from "@/components/TripMap";
@@ -244,29 +243,26 @@ function formatHotelDisplayName(s: { hotelName?: string; hotelStarRating?: strin
   return parts.length > 0 ? parts.join(" · ").replace(/\* · /g, "*· ") : toTitleCase(fallback);
 }
 
+export interface OrderServicesBlockHandle {
+  triggerAddService: () => void;
+}
+
 interface OrderServicesBlockProps {
   orderCode: string;
-  // Default client from order for auto-fill in AddServiceModal
   defaultClientId?: string | null;
   defaultClientName?: string;
   orderDateFrom?: string | null;
   orderDateTo?: string | null;
   onIssueInvoice?: (services: any[]) => void;
-  // Itinerary destinations for map
   itineraryDestinations?: CityWithCountry[];
-  // Order source for smart hints
   orderSource?: 'TA' | 'TO' | 'CORP' | 'NON';
-  // Company currency from Regional Settings (e.g. EUR, USD) for Pricing display
   companyCurrencyCode?: string;
-  // Callback: emit auto-detected destinations from services (hotel cities, flight routes)
   onDestinationsFromServices?: (destinations: CityWithCountry[]) => void;
-  // Callback: emit recalculated totals when services change
   onTotalsChanged?: (totals: { amount_total: number; profit_estimated: number }) => void;
-  // Pixel offset for sticky sub-headers (bottom of the page's sticky header)
   stickyTopOffset?: number;
 }
 
-export default function OrderServicesBlock({ 
+const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlockProps>(function OrderServicesBlock({ 
   orderCode,
   defaultClientId,
   defaultClientName,
@@ -279,7 +275,7 @@ export default function OrderServicesBlock({
   onDestinationsFromServices,
   onTotalsChanged,
   stickyTopOffset = 0,
-}: OrderServicesBlockProps) {
+}, ref) {
   const router = useRouter();
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -296,7 +292,6 @@ export default function OrderServicesBlock({
   const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
   const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
-  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   
   // Cancelled filter with localStorage persistence
@@ -309,8 +304,17 @@ export default function OrderServicesBlock({
   
   // Traveller filter for itinerary tabs
   const [selectedTravellerId, setSelectedTravellerId] = useState<string | null>(null);
-  // In-app content modal (URL in iframe) instead of window.open
   const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    triggerAddService: () => {
+      if (serviceCategories.length > 0) {
+        setShowChooseCategoryModal(true);
+      } else {
+        setPendingOpenChooseModal(true);
+      }
+    },
+  }), [serviceCategories]);
   
   // Filter services based on cancelled filter and selected traveller
   const visibleServices = useMemo(() => {
@@ -718,6 +722,8 @@ export default function OrderServicesBlock({
   }, [services, itineraryDestinations, selectedTravellerId, geocodedCoords]);
 
   // Geocode hotel addresses via Nominatim when no flight route (so map shows hotel points)
+  const geocodedCacheRef = React.useRef<Record<string, { lat: number; lng: number }>>({});
+
   useEffect(() => {
     const activeServices = services.filter(s => {
       if (s.resStatus === "cancelled") return false;
@@ -730,6 +736,7 @@ export default function OrderServicesBlock({
     );
     let cancelled = false;
     (async () => {
+      const batch: Record<string, { lat: number; lng: number }> = {};
       for (const hotel of hotelServices) {
         if (cancelled) break;
         const rawName = (hotel as { hotelName?: unknown; hotel_name?: unknown }).hotelName
@@ -741,7 +748,10 @@ export default function OrderServicesBlock({
         const query = (hotelAddress || hotelName).trim();
         if (!query) continue;
         const key = `${hotel.id}|${query}`;
-        if (geocodedCoords[key]) continue;
+        if (geocodedCacheRef.current[key]) {
+          batch[key] = geocodedCacheRef.current[key];
+          continue;
+        }
         try {
           const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { credentials: "include" });
           if (cancelled) break;
@@ -750,16 +760,21 @@ export default function OrderServicesBlock({
           const lat = json?.data?.lat;
           const lng = json?.data?.lng;
           if (typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)) {
-            setGeocodedCoords(prev => (prev[key] ? prev : { ...prev, [key]: { lat, lng } }));
+            geocodedCacheRef.current[key] = { lat, lng };
+            batch[key] = { lat, lng };
           }
         } catch {
           // ignore
         }
         await new Promise(r => setTimeout(r, 1100));
       }
+      if (!cancelled && Object.keys(batch).length > 0) {
+        setGeocodedCoords(prev => ({ ...prev, ...batch }));
+      }
     })();
     return () => { cancelled = true; };
-  }, [services, selectedTravellerId, geocodedCoords]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services, selectedTravellerId]);
 
   // Colors for different travellers
   const ROUTE_COLORS = [
@@ -1231,7 +1246,16 @@ export default function OrderServicesBlock({
     if (!onTotalsChanged) return;
     const active = services.filter(s => s.resStatus !== "cancelled");
     const amount_total = active.reduce((sum, s) => sum + (Number(s.clientPrice) || 0), 0);
-    const profit_estimated = active.reduce((sum, s) => sum + ((Number(s.clientPrice) || 0) - (Number(s.servicePrice) || 0)), 0);
+    const profit_estimated = active.reduce((sum, s) => {
+      const sale = Number(s.clientPrice) || 0;
+      const cost = Number(s.servicePrice) || 0;
+      const isTour = s.categoryType === "tour";
+      if (isTour && s.commissionAmount != null) {
+        const commission = Number(s.commissionAmount) || 0;
+        return sum + (sale - (cost - commission));
+      }
+      return sum + (sale - cost);
+    }, 0);
     const prev = prevTotalsRef.current;
     if (prev && prev.amount_total === amount_total && prev.profit_estimated === profit_estimated) return;
     prevTotalsRef.current = { amount_total, profit_estimated };
@@ -1244,36 +1268,49 @@ export default function OrderServicesBlock({
     if (!onDestinationsFromServices || services.length === 0) return;
     const seenCities = new Set<string>();
     const destinations: CityWithCountry[] = [];
+
+    const addCity = (candidate: string) => {
+      if (!candidate || seenCities.has(candidate.toLowerCase())) return;
+      const cityData = getCityByName(candidate) || getCityByIATA(candidate);
+      if (cityData) {
+        seenCities.add(candidate.toLowerCase());
+        seenCities.add(cityData.name.toLowerCase());
+        destinations.push({ city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng });
+      }
+    };
+
     for (const service of services) {
       if (service.resStatus === "cancelled") continue;
-      const categoryType = (service as any).categoryType as string | undefined;
-      // Hotel: extract city from hotel name
-      if (categoryType === "hotel") {
-        const hotelName = (service as any).hotelName as string | undefined;
-        const cityCandidate = hotelName?.split(",")[0]?.trim() || service.name?.split(",")[0]?.trim();
-        if (cityCandidate && !seenCities.has(cityCandidate.toLowerCase())) {
-          const cityData = getCityByName(cityCandidate);
-          if (cityData) {
-            seenCities.add(cityCandidate.toLowerCase());
-            destinations.push({ city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng });
+      const categoryType = ((service as any).categoryType || service.category?.toLowerCase()) as string | undefined;
+
+      // Flight & Tour: extract arrival cities from segments
+      if (categoryType === "flight" || categoryType === "tour") {
+        const segments = (service as any).flightSegments as Array<{ arrival?: string; arrival_code?: string; arrivalCity?: string; arrival_city?: string }> | undefined;
+        if (segments) {
+          for (const seg of segments) {
+            addCity(String(seg.arrivalCity ?? seg.arrival_city ?? ""));
+            addCity(String(seg.arrival_code ?? seg.arrival ?? ""));
           }
         }
       }
-      // Flight: extract arrival cities from segments
-      if (categoryType === "flight") {
-        const segments = (service as any).flightSegments as Array<{ arrival?: string }> | undefined;
-        if (segments) {
-          for (const seg of segments) {
-            const arr = seg.arrival;
-            if (arr && !seenCities.has(arr.toLowerCase())) {
-              const cityData = getCityByName(arr);
-              if (cityData) {
-                seenCities.add(arr.toLowerCase());
-                destinations.push({ city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng });
-              }
-            }
+
+      // Hotel & Tour: extract city from hotel address or name
+      if (categoryType === "hotel" || categoryType === "tour") {
+        const hotelAddress = (service as any).hotelAddress as string | undefined;
+        const hotelName = (service as any).hotelName as string | undefined;
+        if (hotelAddress) {
+          const parts = hotelAddress.split(",").map((p: string) => p.trim());
+          for (const part of parts) {
+            addCity(part);
           }
         }
+        if (hotelName) {
+          const nameParts = hotelName.split(",").map((p: string) => p.trim());
+          for (const part of nameParts) {
+            addCity(part);
+          }
+        }
+        addCity(service.name?.split(",")[0]?.trim() || "");
       }
     }
     if (destinations.length > 0) {
@@ -1682,30 +1719,6 @@ export default function OrderServicesBlock({
                 )}
               </svg>
               {hideCancelled ? "Show" : "Hide"} Cancelled
-            </button>
-            <button
-              onClick={() => setShowAddPaymentModal(true)}
-              className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Payment
-            </button>
-            <button
-              onClick={() => {
-                if (serviceCategories.length > 0) {
-                  setShowChooseCategoryModal(true);
-                } else {
-                  setPendingOpenChooseModal(true);
-                }
-              }}
-              className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Service
             </button>
           </div>
         </div>
@@ -2205,16 +2218,6 @@ export default function OrderServicesBlock({
         />
       )}
 
-      {/* Add Payment Modal */}
-      <AddPaymentModal
-        open={showAddPaymentModal}
-        onClose={() => setShowAddPaymentModal(false)}
-        onCreated={() => {
-          setShowAddPaymentModal(false);
-          router.refresh();
-        }}
-        preselectedOrderCode={orderCode}
-      />
 
       {/* Edit Service Modal - simple inline editor */}
       {editServiceId && (
@@ -3018,5 +3021,6 @@ export default function OrderServicesBlock({
       )}
     </>
   );
-}
+});
 
+export default OrderServicesBlock;

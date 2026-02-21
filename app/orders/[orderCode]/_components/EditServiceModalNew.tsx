@@ -253,28 +253,35 @@ export default function EditServiceModalNew({
   const [payerName, setPayerName] = useState(service.payer || "");
   const [servicePrice, setServicePrice] = useState(String(service.servicePrice || 0));
   const [marge, setMarge] = useState(() => {
-    // Only use Tour commission formula when service is actually Tour; otherwise Marge = Sale - Cost
     const cat = (service as { categoryType?: string; category?: string }).categoryType;
     const catStr = String((service as { category?: string }).category || "").toLowerCase();
     const isTour = cat === "tour" || catStr.includes("tour") || catStr.includes("package");
-    if (isTour && (service as { commissionAmount?: number | null }).commissionAmount != null) {
-      const disc = Number((service as { agentDiscountValue?: number | null }).agentDiscountValue) || 0;
-      const comm = Number((service as { commissionAmount?: number | null }).commissionAmount) || 0;
-      return String(Math.round((comm - disc) * 100) / 100);
-    }
     const sale = Number(service.clientPrice ?? 0);
     const cost = Number(service.servicePrice ?? 0);
+    if (isTour && (service as { commissionAmount?: number | null }).commissionAmount != null) {
+      const comm = Number((service as { commissionAmount?: number | null }).commissionAmount) || 0;
+      return String(Math.round((sale - (cost - comm)) * 100) / 100);
+    }
     return String(Math.round((sale - cost) * 100) / 100);
   });
   const [clientPrice, setClientPrice] = useState(String(service.clientPrice || 0));
   // Tour (Package Tour) pricing
   const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>([]);
   const [selectedCommissionIndex, setSelectedCommissionIndex] = useState<number>(-1);
-  const [agentDiscountValue, setAgentDiscountValue] = useState(
-    service.agentDiscountValue != null ? String(service.agentDiscountValue) : ""
-  );
+  const [agentDiscountValue, setAgentDiscountValue] = useState(() => {
+    const cat = (service as { categoryType?: string; category?: string }).categoryType;
+    const catStr = String((service as { category?: string }).category || "").toLowerCase();
+    const isTour = cat === "tour" || catStr.includes("tour") || catStr.includes("package");
+    if (isTour) {
+      const cost = Number(service.servicePrice ?? 0);
+      const sale = Number(service.clientPrice ?? 0);
+      const disc = Math.max(0, Math.round((cost - sale) * 100) / 100);
+      return disc > 0 ? disc.toFixed(2) : "";
+    }
+    return service.agentDiscountValue != null ? String(service.agentDiscountValue) : "";
+  });
   const [agentDiscountType, setAgentDiscountType] = useState<"%" | "€">(
-    (service.agentDiscountType as "%" | "€") || "%"
+    (service.agentDiscountType as "%" | "€") || "€"
   );
   // Track which field was last edited to determine calculation direction
   const pricingLastEditedRef = useRef<'cost' | 'marge' | 'sale' | 'agent' | 'commission' | null>(null);
@@ -344,9 +351,7 @@ export default function EditServiceModalNew({
   const [roomListOpen, setRoomListOpen] = useState(false);
   const [boardListOpen, setBoardListOpen] = useState(false);
   const roomListRef = useRef<HTMLDivElement>(null);
-  const roomListRef2 = useRef<HTMLDivElement>(null);
   const boardListRef = useRef<HTMLDivElement>(null);
-  const boardListRef2 = useRef<HTMLDivElement>(null);
   const [customRooms, setCustomRooms] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try { return JSON.parse(localStorage.getItem(CUSTOM_ROOMS_KEY) || "[]"); } catch { return []; }
@@ -509,31 +514,26 @@ export default function EditServiceModalNew({
   };
 
   // Tour: recalc only when user edits Pricing; skip on open (ref === null) — same as Add
+  // Formulas: AgentDiscount = Cost - Sale, Sale = Cost - AgentDiscount, Margin = Sale - (Cost - Commission)
   useEffect(() => {
     if (categoryType !== "tour") return;
     if (!pricingLastEditedRef.current) return;
     const cost = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const commissionAmount = getCommissionAmount(cost);
+    const netCost = Math.round((cost - commissionAmount) * 100) / 100;
+
     if (pricingLastEditedRef.current === "sale") {
       const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
-      if (saleVal < cost) {
-        const agentDiscountAmount = Math.round((cost - saleVal) * 100) / 100;
-        setAgentDiscountType("€");
-        setAgentDiscountValue(agentDiscountAmount.toFixed(2));
-        const margeCalculated = Math.round(((cost - agentDiscountAmount) - (cost - commissionAmount)) * 100) / 100;
-        setMarge(margeCalculated.toFixed(2));
-        return;
-      }
+      const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
       setAgentDiscountType("€");
-      setAgentDiscountValue("0");
-      setMarge(commissionAmount.toFixed(2));
+      setAgentDiscountValue(discount.toFixed(2));
+      setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
       return;
     }
+    // User edited cost, commission, or agent discount → recalc Sale and Margin
     const discountAmount = getAgentDiscountAmount(cost);
-    const margeCalculated = Math.round(((cost - discountAmount) - (cost - commissionAmount)) * 100) / 100;
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
-    setMarge(margeCalculated.toFixed(2));
-    // At this point we already returned when lastEdited === "sale", so update clientPrice and clear ref (same as Add)
+    setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
   }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
@@ -722,7 +722,7 @@ export default function EditServiceModalNew({
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
-      if (roomListRef.current?.contains(target) || roomListRef2.current?.contains(target) || boardListRef.current?.contains(target) || boardListRef2.current?.contains(target)) return;
+      if (roomListRef.current?.contains(target) || boardListRef.current?.contains(target)) return;
       setRoomListOpen(false);
       setBoardListOpen(false);
     }
@@ -3244,266 +3244,6 @@ export default function EditServiceModalNew({
             );
             })()}
           </div>
-
-          {/* Category-specific fields - Hotel Details only for hotel category */}
-          {showHotelFields && (
-            <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
-              <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Hotel Details</h4>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel Name</label>
-                <HotelSuggestInput
-                  value={hotelName}
-                  onChange={setHotelName}
-                  onHotelSelected={(d) => {
-                    setHotelName(d.name);
-                    if (d.address) setHotelAddress(d.address);
-                    if (d.phone) setHotelPhone(d.phone);
-                    if (d.email) setHotelEmail(d.email);
-                    setHotelRoomOptions(d.roomOptions ?? []);
-                    if (d.hid) {
-                      setHotelHid(d.hid);
-                      mealFetchedForRef.current = null;
-                    }
-                  }}
-                  placeholder="Search hotel by name..."
-                />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div ref={roomListRef2} className="relative">
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Room</label>
-                  <input
-                    type="text"
-                    value={hotelRoom}
-                    onChange={(e) => setHotelRoom(e.target.value)}
-                    onFocus={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
-                    onClick={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
-                    onBlur={() => {
-                      const v = hotelRoom.trim();
-                      if (v && !roomOptionsForDropdown.includes(v)) {
-                        const next = [...customRooms, v];
-                        setCustomRooms(next);
-                        try { localStorage.setItem(CUSTOM_ROOMS_KEY, JSON.stringify(next)); } catch {}
-                      }
-                    }}
-                    placeholder="Room type (click to choose or type your own)"
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  />
-                  {roomListOpen && roomOptionsForDropdown.length > 0 && (
-                    <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
-                      {roomOptionsForDropdown.map((opt) => (
-                        <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { setHotelRoom(opt); setRoomListOpen(false); }}>{opt}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div ref={boardListRef2} className="relative">
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Board</label>
-                  <input
-                    type="text"
-                    value={mealPlanText || BOARD_LABELS[hotelBoard] || ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setMealPlanText(v);
-                      const mapped = (Object.entries(BOARD_LABELS).find(([, l]) => l === v)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(v);
-                      setHotelBoard(mapped);
-                    }}
-                    onFocus={() => boardOptionsForDropdown.length > 0 && setBoardListOpen(true)}
-                    onClick={() => boardOptionsForDropdown.length > 0 && setBoardListOpen(true)}
-                    onBlur={() => {
-                      const v = (mealPlanText || BOARD_LABELS[hotelBoard] || "").trim();
-                      if (v && !boardOptionsForDropdown.includes(v)) {
-                        const next = [...customBoards, v];
-                        setCustomBoards(next);
-                        try { localStorage.setItem(CUSTOM_BOARDS_KEY, JSON.stringify(next)); } catch {}
-                      }
-                    }}
-                    placeholder="Board (click to choose or type your own)"
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  />
-                  {boardListOpen && boardOptionsForDropdown.length > 0 && (
-                    <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
-                      {boardOptionsForDropdown.map((opt) => (
-                        <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { const bk = (Object.entries(BOARD_LABELS).find(([, l]) => l === opt)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(opt); setMealPlanText(BOARD_LABELS[bk] || opt); setHotelBoard(bk); setBoardListOpen(false); }}>{opt}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Bed Type</label>
-                  <select
-                    value={hotelBedType}
-                    onChange={(e) => setHotelBedType(e.target.value as typeof hotelBedType)}
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  >
-                    <option value="king_queen">King/Queen</option>
-                    <option value="twin">Twin</option>
-                    <option value="not_guaranteed">Not guaranteed</option>
-                  </select>
-                </div>
-              </div>
-              
-              {/* Hotel Contact Info */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Address</label>
-                  <input 
-                    type="text" 
-                    value={hotelAddress} 
-                    onChange={(e) => setHotelAddress(e.target.value)} 
-                    placeholder="Address" 
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
-                  <input 
-                    type="tel" 
-                    value={hotelPhone} 
-                    onChange={(e) => setHotelPhone(e.target.value)} 
-                    placeholder="Phone" 
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Email</label>
-                  <input 
-                    type="email" 
-                    value={hotelEmail} 
-                    onChange={(e) => setHotelEmail(e.target.value)} 
-                    placeholder="Email" 
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white" 
-                  />
-                </div>
-              </div>
-              
-              {/* Preferences */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Preferences</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.earlyCheckIn}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Early check-in
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.lateCheckIn}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Late check-in
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.higherFloor}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Higher floor
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.kingSizeBed}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    King size bed
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.honeymooners}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Honeymooners
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.silentRoom}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Silent room
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.repeatGuests}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, repeatGuests: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Repeat Guests
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={hotelPreferences.parking}
-                      onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))}
-                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    Parking
-                  </label>
-                </div>
-                <div className="mb-2">
-                  <input
-                    type="text"
-                    value={hotelPreferences.roomsNextTo}
-                    onChange={(e) => setHotelPreferences(prev => ({ ...prev, roomsNextTo: e.target.value }))}
-                    placeholder="Rooms next to..."
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  />
-                </div>
-                <div className="mb-2">
-                  <textarea
-                    value={hotelPreferences.freeText}
-                    onChange={(e) => setHotelPreferences(prev => ({ ...prev, freeText: e.target.value }))}
-                    placeholder="Additional preferences (free text)"
-                    rows={2}
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    // TODO: Implement sending message to hotel
-                    const preferencesList = Object.entries(hotelPreferences)
-                      .filter(([key, value]) => key !== 'roomsNextTo' && key !== 'freeText' && value === true)
-                      .map(([key]) => key.replace(/([A-Z])/g, ' $1').toLowerCase())
-                      .join(', ');
-                    
-                    const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:
-
-Room: ${hotelRoom || 'Not specified'}
-Board: ${hotelBoard}
-Bed Type: ${hotelBedType}
-Preferences: ${preferencesList || 'None'}${hotelPreferences.roomsNextTo ? `\nRooms next to: ${hotelPreferences.roomsNextTo}` : ''}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ''}`;
-                    
-                    // TODO: Send to Communication tab
-                    alert(`Message to hotel:
-
-${message}
-
-(Will be saved to Communication tab)`);
-                  }}
-                  className="w-[90%] max-w-md mx-auto px-4 py-3 text-base font-semibold text-white bg-[#FF8C00] hover:bg-[#E67E00] rounded-md transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                  Send to Hotel
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Flight Schedule rendered in left column (see flightScheduleBlock above) */}
 

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useDraggableModal } from "@/hooks/useDraggableModal";
 import { useDateFormat } from "@/contexts/CompanySettingsContext";
 import { formatDateDDMMYYYY, type DateFormatPattern } from "@/utils/dateFormat";
 import PartySelect from "@/components/PartySelect";
+import { Landmark, Banknote, CreditCard } from "lucide-react";
 
 interface BankAccount {
   id: string;
@@ -33,12 +34,28 @@ interface InvoiceOption {
   payer_name: string | null;
 }
 
+export interface EditPaymentData {
+  id: string;
+  order_id: string;
+  order_code?: string;
+  invoice_id?: string | null;
+  method: "cash" | "bank" | "card";
+  amount: number;
+  currency: string;
+  paid_at: string;
+  payer_name?: string | null;
+  payer_party_id?: string | null;
+  note?: string | null;
+  account_id?: string | null;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
   preselectedOrderId?: string;
   preselectedOrderCode?: string;
+  editPayment?: EditPaymentData | null;
 }
 
 export default function AddPaymentModal({
@@ -47,25 +64,12 @@ export default function AddPaymentModal({
   onCreated,
   preselectedOrderId,
   preselectedOrderCode,
+  editPayment,
 }: Props) {
   const dateFormat = useDateFormat();
 
   const isoToDisplay = useCallback((iso: string, fmt: DateFormatPattern) => formatDateDDMMYYYY(iso, fmt), []);
 
-  const separator = useMemo(() => dateFormat === "yyyy-mm-dd" ? "-" : ".", [dateFormat]);
-  const placeholder = dateFormat;
-
-  const parseDisplayToIso = useCallback((display: string): string | null => {
-    const sep = dateFormat === "yyyy-mm-dd" ? "-" : ".";
-    const parts = display.split(sep);
-    if (parts.length !== 3) return null;
-    let d: string, m: string, y: string;
-    if (dateFormat === "dd.mm.yyyy") { [d, m, y] = parts; }
-    else if (dateFormat === "mm.dd.yyyy") { [m, d, y] = parts; }
-    else { [y, m, d] = parts; }
-    if (d.length === 2 && m.length === 2 && y.length === 4) return `${y}-${m}-${d}`;
-    return null;
-  }, [dateFormat]);
 
   const [orderId, setOrderId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
@@ -92,6 +96,7 @@ export default function AddPaymentModal({
   const [invoiceOptions, setInvoiceOptions] = useState<InvoiceOption[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const orderSearchRef = useRef<HTMLInputElement>(null);
   const orderDropdownRef = useRef<HTMLDivElement>(null);
   const { modalStyle, onHeaderMouseDown, resetPosition } = useDraggableModal();
@@ -106,42 +111,74 @@ export default function AddPaymentModal({
 
   useEffect(() => {
     if (!open) return;
-    setOrderId(preselectedOrderId || "");
-    setInvoiceId("");
-    const now = new Date();
-    const iso = now.toISOString().slice(0, 10);
-    setPaidAt(iso);
-    setPaidAtDisplay(isoToDisplay(iso, dateFormat));
-    setMethod("bank");
-    setAmount("");
-    setCurrency("EUR");
-    setAccountId("");
-    setPayerName("");
-    setPayerPartyId(null);
-    setPayerSearch("");
-    setNote("");
-    setError("");
-    setOrderSearch(preselectedOrderCode || "");
-    setInvoiceOptions([]);
 
-    if (preselectedOrderCode) {
+    if (editPayment) {
+      const iso = editPayment.paid_at?.split("T")[0] || new Date().toISOString().slice(0, 10);
+      setOrderId(editPayment.order_id);
+      setInvoiceId(editPayment.invoice_id || "");
+      setPaidAt(iso);
+      setPaidAtDisplay(isoToDisplay(iso, dateFormat));
+      setMethod(editPayment.method || "bank");
+      setAmount(String(editPayment.amount));
+      setCurrency(editPayment.currency || "EUR");
+      setAccountId(editPayment.account_id || "");
+      setPayerName(editPayment.payer_name || "");
+      setPayerPartyId(editPayment.payer_party_id || null);
+      setPayerSearch(editPayment.payer_name || "");
+      setNote(editPayment.note || "");
+      setError("");
+      setOrderSearch(editPayment.order_code || "");
+      setInvoiceOptions([]);
       setSelectedOrder({
-        id: preselectedOrderId || "",
-        order_code: preselectedOrderCode,
-        client_display_name: null,
+        id: editPayment.order_id,
+        order_code: editPayment.order_code || "",
+        client_display_name: editPayment.payer_name || null,
         amount_total: 0,
         amount_paid: 0,
         amount_debt: 0,
       });
+      loadBankAccounts();
+      if (editPayment.order_code) {
+        loadOrderDetails(editPayment.order_id, editPayment.order_code);
+      }
     } else {
-      setSelectedOrder(null);
-    }
+      setOrderId(preselectedOrderId || "");
+      setInvoiceId("");
+      const now = new Date();
+      const iso = now.toISOString().slice(0, 10);
+      setPaidAt(iso);
+      setPaidAtDisplay(isoToDisplay(iso, dateFormat));
+      setMethod("bank");
+      setAmount("");
+      setCurrency("EUR");
+      setAccountId("");
+      setPayerName("");
+      setPayerPartyId(null);
+      setPayerSearch("");
+      setNote("");
+      setError("");
+      setOrderSearch(preselectedOrderCode || "");
+      setInvoiceOptions([]);
 
-    loadBankAccounts();
-    if (preselectedOrderCode) {
-      loadOrderDetails(preselectedOrderId || "", preselectedOrderCode);
+      if (preselectedOrderCode) {
+        setSelectedOrder({
+          id: preselectedOrderId || "",
+          order_code: preselectedOrderCode,
+          client_display_name: null,
+          amount_total: 0,
+          amount_paid: 0,
+          amount_debt: 0,
+        });
+      } else {
+        setSelectedOrder(null);
+      }
+
+      loadBankAccounts();
+      if (preselectedOrderCode) {
+        loadOrderDetails(preselectedOrderId || "", preselectedOrderCode);
+      }
     }
-  }, [open, preselectedOrderId, preselectedOrderCode]);
+  }, [open, preselectedOrderId, preselectedOrderCode, editPayment]);
 
   useEffect(() => {
     if (bankAccounts.length > 0 && !accountId) {
@@ -305,8 +342,11 @@ export default function AddPaymentModal({
         return;
       }
 
-      const res = await fetch("/api/finances/payments", {
-        method: "POST",
+      const url = editPayment
+        ? `/api/finances/payments/${editPayment.id}`
+        : "/api/finances/payments";
+      const res = await fetch(url, {
+        method: editPayment ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -348,7 +388,7 @@ export default function AddPaymentModal({
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md bg-white rounded-lg shadow-xl" style={modalStyle}>
         <div className="flex items-center justify-between border-b px-4 py-2.5 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
-          <h2 className="text-sm font-semibold text-gray-900">Add Payment</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{editPayment ? "Edit Payment" : "Add Payment"}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-lg leading-none"
@@ -451,7 +491,17 @@ export default function AddPaymentModal({
               </label>
               <select
                 value={invoiceId}
-                onChange={(e) => setInvoiceId(e.target.value)}
+                onChange={(e) => {
+                  setInvoiceId(e.target.value);
+                  if (e.target.value) {
+                    const inv = invoiceOptions.find((i) => i.id === e.target.value);
+                    if (inv?.total) setAmount(String(inv.total));
+                    if (inv?.payer_name) {
+                      setPayerName(inv.payer_name);
+                      setPayerSearch(inv.payer_name);
+                    }
+                  }
+                }}
                 className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">-- No invoice --</option>
@@ -471,30 +521,30 @@ export default function AddPaymentModal({
               <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Payment Date <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                value={paidAtDisplay}
-                onChange={(e) => {
-                  const sepChar = separator;
-                  const allowed = sepChar === "-" ? /[^\d-]/g : /[^\d.]/g;
-                  let v = e.target.value.replace(allowed, "");
-                  const digits = v.replace(/[.\-]/g, "");
-                  if (dateFormat === "yyyy-mm-dd") {
-                    if (digits.length <= 4) v = digits;
-                    else if (digits.length <= 6) v = digits.slice(0,4) + sepChar + digits.slice(4);
-                    else v = digits.slice(0,4) + sepChar + digits.slice(4,6) + sepChar + digits.slice(6,8);
-                  } else {
-                    if (digits.length <= 2) v = digits;
-                    else if (digits.length <= 4) v = digits.slice(0,2) + sepChar + digits.slice(2);
-                    else v = digits.slice(0,2) + sepChar + digits.slice(2,4) + sepChar + digits.slice(4,8);
-                  }
-                  setPaidAtDisplay(v);
-                  const iso = parseDisplayToIso(v);
-                  if (iso) setPaidAt(iso);
+              <div
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white cursor-pointer select-none flex items-center justify-between"
+                onClick={() => {
+                  try { dateInputRef.current?.showPicker(); } catch { dateInputRef.current?.click(); }
                 }}
-                placeholder={placeholder}
-                maxLength={10}
-                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <span>{paidAtDisplay}</span>
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={paidAt}
+                onChange={(e) => {
+                  const iso = e.target.value;
+                  if (iso) {
+                    setPaidAt(iso);
+                    setPaidAtDisplay(isoToDisplay(iso, dateFormat));
+                  }
+                }}
+                className="sr-only"
+                tabIndex={-1}
               />
             </div>
             <div>
@@ -511,9 +561,7 @@ export default function AddPaymentModal({
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" />
-                  </svg>
+                  <Landmark size={16} className="shrink-0" />
                   Bank
                 </button>
                 <button
@@ -525,9 +573,7 @@ export default function AddPaymentModal({
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
+                  <Banknote size={16} className="shrink-0" />
                   Cash
                 </button>
                 <button
@@ -539,9 +585,7 @@ export default function AddPaymentModal({
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
+                  <CreditCard size={16} className="shrink-0" />
                   Card
                 </button>
               </div>
@@ -619,7 +663,7 @@ export default function AddPaymentModal({
               Payer
             </label>
             <PartySelect
-              key={`payer-${payerPartyId || "empty"}`}
+              key={`payer-${payerPartyId || "empty"}-${payerName}`}
               value={payerPartyId}
               onChange={(id, name) => {
                 setPayerPartyId(id);
@@ -658,7 +702,7 @@ export default function AddPaymentModal({
             disabled={saving}
             className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Add Payment"}
+            {saving ? "Saving..." : editPayment ? "Save" : "Add Payment"}
           </button>
         </div>
       </div>

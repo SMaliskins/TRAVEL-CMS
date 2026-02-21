@@ -598,31 +598,26 @@ export default function AddServiceModal({
   };
 
   // Tour: recalc only when user edits Pricing; skip on open (ref === null)
+  // Formulas: AgentDiscount = Cost - Sale, Sale = Cost - AgentDiscount, Margin = Sale - (Cost - Commission)
   useEffect(() => {
     if (categoryType !== "tour") return;
     if (!pricingLastEditedRef.current) return;
     const cost = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const commissionAmount = getCommissionAmount(cost);
+    const netCost = Math.round((cost - commissionAmount) * 100) / 100;
+
     if (pricingLastEditedRef.current === "sale") {
       const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
-      if (saleVal < cost) {
-        const agentDiscountAmount = Math.round((cost - saleVal) * 100) / 100;
-        setAgentDiscountType("€");
-        setAgentDiscountValue(agentDiscountAmount.toFixed(2));
-        const margeCalculated = Math.round(((cost - agentDiscountAmount) - (cost - commissionAmount)) * 100) / 100;
-        setMarge(margeCalculated.toFixed(2));
-        return;
-      }
+      const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
       setAgentDiscountType("€");
-      setAgentDiscountValue("0");
-      setMarge(commissionAmount.toFixed(2));
+      setAgentDiscountValue(discount.toFixed(2));
+      setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
       return;
     }
+    // User edited cost, commission, or agent discount → recalc Sale and Margin
     const discountAmount = getAgentDiscountAmount(cost);
-    const margeCalculated = Math.round(((cost - discountAmount) - (cost - commissionAmount)) * 100) / 100;
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
-    setMarge(margeCalculated.toFixed(2));
-    // At this point we already returned when lastEdited === "sale", so update clientPrice and clear ref
+    setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
   }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);

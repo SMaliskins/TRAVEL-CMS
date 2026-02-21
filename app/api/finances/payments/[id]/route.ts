@@ -52,6 +52,84 @@ export async function GET(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const companyId = await getCompanyId(request);
+    if (!companyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+
+    const { data: existing } = await supabaseAdmin
+      .from("payments")
+      .select("id, order_id, invoice_id")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .single();
+
+    if (!existing) {
+      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (body.amount !== undefined) updateData.amount = Number(body.amount);
+    if (body.method !== undefined) updateData.method = body.method;
+    if (body.paid_at !== undefined) updateData.paid_at = body.paid_at;
+    if (body.payer_name !== undefined) updateData.payer_name = body.payer_name || null;
+    if (body.note !== undefined) updateData.note = body.note || null;
+    if (body.currency !== undefined) updateData.currency = body.currency;
+    if (body.account_id !== undefined) updateData.account_id = body.account_id || null;
+    if ("invoice_id" in body) updateData.invoice_id = body.invoice_id || null;
+    updateData.updated_at = new Date().toISOString();
+
+    const { data: updated, error } = await supabaseAdmin
+      .from("payments")
+      .update(updateData)
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[payments] PATCH error:", error);
+      return NextResponse.json({ error: "Failed to update payment" }, { status: 500 });
+    }
+
+    // Recalculate order totals
+    const { data: allPayments } = await supabaseAdmin
+      .from("payments")
+      .select("amount")
+      .eq("order_id", existing.order_id);
+
+    const totalPaid = (allPayments ?? []).reduce(
+      (sum: number, p: { amount: number }) => sum + Number(p.amount), 0
+    );
+
+    const { data: orderData } = await supabaseAdmin
+      .from("orders")
+      .select("amount_total")
+      .eq("id", existing.order_id)
+      .single();
+
+    const amountTotal = Number(orderData?.amount_total ?? 0);
+
+    await supabaseAdmin
+      .from("orders")
+      .update({ amount_paid: totalPaid, amount_debt: amountTotal - totalPaid })
+      .eq("id", existing.order_id);
+
+    return NextResponse.json({ data: updated });
+  } catch (err) {
+    console.error("[payments] PATCH:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -66,7 +144,7 @@ export async function DELETE(
 
     const { data: payment } = await supabaseAdmin
       .from("payments")
-      .select("order_id")
+      .select("order_id, invoice_id")
       .eq("id", id)
       .eq("company_id", companyId)
       .single();
@@ -112,6 +190,35 @@ export async function DELETE(
         amount_debt: amountTotal - totalPaid,
       })
       .eq("id", payment.order_id);
+
+    // Auto-revert invoice status if payment was linked to an invoice
+    const deletedInvoiceId = payment.invoice_id;
+    if (deletedInvoiceId) {
+      const { data: invoicePayments } = await supabaseAdmin
+        .from("payments")
+        .select("amount")
+        .eq("invoice_id", deletedInvoiceId);
+
+      const invoicePaid = (invoicePayments ?? []).reduce(
+        (sum: number, p: { amount: number }) => sum + Number(p.amount), 0
+      );
+
+      const { data: invoice } = await supabaseAdmin
+        .from("invoices")
+        .select("total, status")
+        .eq("id", deletedInvoiceId)
+        .single();
+
+      if (invoice && invoice.status !== "cancelled" && invoice.status !== "replaced") {
+        const invoiceTotal = Number(invoice.total) || 0;
+        if (invoice.status === "paid" && invoicePaid < invoiceTotal - 0.01) {
+          await supabaseAdmin
+            .from("invoices")
+            .update({ status: "issued", updated_at: new Date().toISOString() })
+            .eq("id", deletedInvoiceId);
+        }
+      }
+    }
 
     return NextResponse.json({ data: { deleted: true } });
   } catch (err) {

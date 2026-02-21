@@ -88,28 +88,23 @@ function getStatusColor(status: string): string {
 
 // Order Preview Tooltip
 function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect: DOMRect | null }) {
-  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OrderPreviewData | null>(null);
+  const fetchedRef = useRef(false);
   
-  // Convert slug to display format
   const displayCode = slugToOrderCode(orderSlug);
   
   useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  useEffect(() => {
-    if (!mounted) return;
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
     
-    // Fetch immediately
     fetchOrderPreview(orderSlug).then(preview => {
       setData(preview);
       setLoading(false);
     });
-  }, [mounted, orderSlug]);
+  }, [orderSlug]);
   
-  if (!mounted || !anchorRect) return null;
+  if (!anchorRect) return null;
   
   const content = (
     <div 

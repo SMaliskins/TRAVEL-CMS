@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
+import { FileDown, CheckCircle } from "lucide-react";
 
 interface Invoice {
   id: string;
@@ -272,18 +273,18 @@ export default function FinancesInvoicesPage() {
                     <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => handleExportPDF(invoice.id, invoice.order_code)}
-                        className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
+                        className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
                         title="Export PDF"
                       >
-                        PDF
+                        <FileDown size={15} />
                       </button>
                       {invoice.status !== 'processed' && (
                         <button
                           onClick={() => handleMarkProcessed(invoice.id)}
-                          className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100"
+                          className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
                           title="Mark as processed"
                         >
-                          ✓ Processed
+                          <CheckCircle size={15} />
                         </button>
                       )}
                     </div>
