@@ -962,54 +962,7 @@ export default function CompanySettingsPage() {
               </div>
             </div>
             
-            {/* Banking Details */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Banking Details</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
-                <input
-                  type="text"
-                  value={formData.bank_name || ""}
-                  onChange={(e) => updateField("bank_name", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account / IBAN</label>
-                <input
-                  type="text"
-                  value={formData.bank_account || ""}
-                  onChange={(e) => updateField("bank_account", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT / BIC</label>
-                <input
-                  type="text"
-                  value={formData.swift_code || ""}
-                  onChange={(e) => updateField("swift_code", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Beneficiary Name</label>
-                <input
-                  type="text"
-                  value={formData.beneficiary_name || ""}
-                  onChange={(e) => updateField("beneficiary_name", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-              </div>
-            </div>
-
-            {/* Payment Accounts (for Finances module) */}
+            {/* Banking Details = Payment Accounts */}
             <BankAccountsManager readonly={readonly} />
           </div>
 

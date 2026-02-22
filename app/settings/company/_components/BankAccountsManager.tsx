@@ -134,17 +134,17 @@ export default function BankAccountsManager({ readonly }: Props) {
 
   if (loading) {
     return (
-      <div className="mt-6 pt-6 border-t border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Payment Accounts</h3>
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Banking Details</h3>
         <p className="text-sm text-gray-500">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="mt-6 pt-6 border-t border-gray-200">
+    <div>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700">Payment Accounts</h3>
+        <h3 className="text-sm font-semibold text-gray-700">Banking Details</h3>
         {!readonly && !showForm && (
           <button
             onClick={() => { resetForm(); setShowForm(true); }}
