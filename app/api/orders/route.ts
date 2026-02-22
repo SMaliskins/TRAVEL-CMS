@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getSearchPatterns } from "@/lib/directory/searchNormalize";
 
 // Placeholder URLs for build-time
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
@@ -95,10 +96,14 @@ export async function GET(request: NextRequest) {
       query = query.eq("order_type", orderType);
     }
     if (search) {
-      const s = search.trim();
-      query = query.or(
-        `order_code.ilike.%${s}%,client_display_name.ilike.%${s}%`
-      );
+      const patterns = getSearchPatterns(search);
+      const orClauses = patterns
+        .slice(0, 10)
+        .flatMap((p) => [
+          `order_code.ilike.%${p}%`,
+          `client_display_name.ilike.%${p}%`,
+        ]);
+      query = query.or(orClauses.join(","));
     }
 
     const { data: orders, error } = await query;
