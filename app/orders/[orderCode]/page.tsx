@@ -899,7 +899,7 @@ export default function OrderPage({
                             const cityName = (city as { name?: string }).name || (city as { city?: string }).city || "";
                             if (!cityName) continue;
                             const cityData = getCityByName(cityName);
-                            const countryName = cityData?.country || city.country || "Unknown";
+                            const countryName = cityData?.country || (city as Record<string, unknown>).country as string || "Unknown";
                             const countryCode = city.countryCode || cityData?.countryCode;
                             
                             if (!countryCities[countryName]) {

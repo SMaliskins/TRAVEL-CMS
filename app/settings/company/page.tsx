@@ -148,6 +148,7 @@ interface Company {
   invoice_prefix?: string;
   default_payment_terms?: number;
   invoice_languages?: string[];
+  concierge_hotel_markup?: number;
 }
 
 export default function CompanySettingsPage() {
