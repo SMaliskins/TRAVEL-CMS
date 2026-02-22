@@ -618,7 +618,7 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
             const txTitle = isGroup ? "Group Transfer" : `Transfer: ${txType}`;
             const txIcon = isGroup ? <Bus size={16} strokeWidth={1.8} /> : <CarTaxiFront size={16} strokeWidth={1.8} />;
             const segments = service.flightSegments || [];
-            const firstSeg = segments.length > 0 ? segments[0] as Record<string, unknown> : null;
+            const firstSeg = segments.length > 0 ? segments[0] as unknown as Record<string, unknown> : null;
             const arrivalAirport = firstSeg
               ? toAirportCode(String(firstSeg.arrival_code ?? firstSeg.arrival ?? ""))
               : "";
@@ -642,7 +642,7 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
               transferHotelAddress: service.hotelAddress || hotelTitle,
             });
             if (service.dateTo !== service.dateFrom) {
-              const lastSeg = segments.length > 0 ? segments[segments.length - 1] as Record<string, unknown> : null;
+              const lastSeg = segments.length > 0 ? segments[segments.length - 1] as unknown as Record<string, unknown> : null;
               const departureAirport = lastSeg
                 ? toAirportCode(String(lastSeg.departure_code ?? lastSeg.departure ?? ""))
                 : arrivalAirport;
