@@ -51,15 +51,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch cashflow" }, { status: 500 });
     }
 
-    const payments = (data ?? []).map((p: Record<string, unknown>) => ({
-      ...p,
-      order_code: (p.orders as Record<string, unknown>)?.order_code ?? null,
-      order_client: (p.orders as Record<string, unknown>)?.client_display_name ?? null,
-      account_name: (p.company_bank_accounts as Record<string, unknown>)?.account_name ?? null,
-      bank_name: (p.company_bank_accounts as Record<string, unknown>)?.bank_name ?? null,
-      orders: undefined,
-      company_bank_accounts: undefined,
-    }));
+    const payments = (data ?? []).map((p: Record<string, unknown>) => {
+      const flat = {
+        ...p,
+        order_code: (p.orders as Record<string, unknown>)?.order_code ?? null,
+        order_client: (p.orders as Record<string, unknown>)?.client_display_name ?? null,
+        account_name: (p.company_bank_accounts as Record<string, unknown>)?.account_name ?? null,
+        bank_name: (p.company_bank_accounts as Record<string, unknown>)?.bank_name ?? null,
+        orders: undefined,
+        company_bank_accounts: undefined,
+      };
+      return flat as Record<string, unknown>;
+    });
 
     // Group by date for Z-report
     const byDate: Record<string, { payments: typeof payments; total: number }> = {};
