@@ -80,6 +80,7 @@ interface Service {
   hotelKingSizeBed?: boolean;
   hotelHoneymooners?: boolean;
   hotelSilentRoom?: boolean;
+  hotelRepeatGuests?: boolean;
   hotelRoomsNextTo?: string;
   hotelParking?: boolean;
   hotelPreferencesFreeText?: string;
