@@ -112,6 +112,11 @@ interface Service {
   agentDiscountType?: "%" | "€" | null;
 }
 
+interface ClientEntry {
+  id: string | null;
+  name: string;
+}
+
 interface EditServiceModalProps {
   service: Service;
   orderCode: string;
@@ -199,11 +204,6 @@ export default function EditServiceModalNew({
   const [supplierPartyId, setSupplierPartyId] = useState<string | null>(service.supplierPartyId || null);
   const [supplierName, setSupplierName] = useState(service.supplier || "");
   
-  // Client (multiple clients from order_service_travellers)
-  interface ClientEntry {
-    id: string | null;
-    name: string;
-  }
   // Use pre-resolved clients from parent if available (no extra API round-trip)
   const [clients, setClients] = useState<ClientEntry[]>(() => {
     if (initialClients && initialClients.length > 0) return initialClients;
