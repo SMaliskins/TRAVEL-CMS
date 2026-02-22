@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getSearchPatterns } from "@/lib/directory/searchNormalize";
+import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Placeholder URLs for build-time
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
@@ -95,18 +95,7 @@ export async function GET(request: NextRequest) {
     if (orderType) {
       query = query.eq("order_type", orderType);
     }
-    if (search) {
-      const patterns = getSearchPatterns(search);
-      const orClauses = patterns
-        .slice(0, 10)
-        .flatMap((p) => [
-          `order_code.ilike.%${p}%`,
-          `client_display_name.ilike.%${p}%`,
-        ]);
-      query = query.or(orClauses.join(","));
-    }
-
-    const { data: orders, error } = await query;
+    const { data: allOrders, error } = await query;
 
     if (error) {
       console.error("Orders fetch error:", error);
@@ -116,9 +105,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    
+    // In-memory search with diacritics/layout/typo normalization
+    let orders = allOrders || [];
+    if (search) {
+      const patterns = getSearchPatterns(search);
+      orders = orders.filter((o: any) =>
+        matchesSearch(o.order_code, patterns) ||
+        matchesSearch(o.client_display_name, patterns)
+      );
+    }
+
     // Get invoice statistics for all orders
-    const orderIds = (orders || []).map((o: any) => o.id);
+    const orderIds = orders.map((o: any) => o.id);
     
     // Get all services for these orders with their invoice status and pricing
     const { data: servicesData } = await supabaseAdmin
