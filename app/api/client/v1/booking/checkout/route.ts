@@ -3,9 +3,15 @@ import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-12-18.acacia' as Stripe.LatestApiVersion,
-})
+let _stripe: Stripe | null = null
+function getStripe() {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2025-12-18.acacia' as Stripe.LatestApiVersion,
+    })
+  }
+  return _stripe
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -44,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL || 'http://localhost:3000'
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [

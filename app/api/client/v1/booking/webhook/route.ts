@@ -7,11 +7,19 @@ import {
   checkBookingStatus,
 } from '@/lib/ratehawk/client'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-12-18.acacia' as Stripe.LatestApiVersion,
-})
+let _stripe: Stripe | null = null
+function getStripe() {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2025-12-18.acacia' as Stripe.LatestApiVersion,
+    })
+  }
+  return _stripe
+}
 
-const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET!
+function getWebhookSecret() {
+  return process.env.STRIPE_WEBHOOK_SECRET!
+}
 
 async function finalizeRateHawkBooking(bookingId: string) {
   const { data: booking } = await supabaseAdmin
@@ -198,7 +206,7 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(body, sig, WEBHOOK_SECRET)
+    event = getStripe().webhooks.constructEvent(body, sig, getWebhookSecret())
   } catch (err) {
     console.error('Webhook signature verification failed:', err)
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
