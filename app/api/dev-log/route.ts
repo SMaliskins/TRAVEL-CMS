@@ -29,7 +29,7 @@ async function getCurrentUser(request: NextRequest) {
 async function getUserProfile(userId: string) {
   const { data } = await supabaseAdmin
     .from("profiles")
-    .select("company_id, full_name")
+    .select("company_id, display_name")
     .eq("user_id", userId)
     .single();
   return data;
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       .insert({
         company_id: profile.company_id,
         reported_by: user.id,
-        reporter_name: profile.full_name || user.email || "Unknown",
+        reporter_name: profile.display_name || user.email || "Unknown",
         page_url: pageUrl,
         comment,
         screenshot_url: screenshotUrl,
