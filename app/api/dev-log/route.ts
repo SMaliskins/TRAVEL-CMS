@@ -28,9 +28,9 @@ async function getCurrentUser(request: NextRequest) {
 
 async function getUserProfile(userId: string) {
   const { data } = await supabaseAdmin
-    .from("user_profiles")
+    .from("profiles")
     .select("company_id, full_name")
-    .eq("id", userId)
+    .eq("user_id", userId)
     .single();
   return data;
 }
