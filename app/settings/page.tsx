@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFontScale, SCALE_PRESETS, FONT_PRESETS } from "@/hooks/useFontScale";
-import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Bug } from "lucide-react";
+import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type } from "lucide-react";
 
 const SETTINGS_SECTIONS = [
   { name: "Company", href: "/settings/company", icon: <Building2 size={24} strokeWidth={1.5} />, description: "Company profile, licenses, banking, regional settings" },
@@ -11,7 +11,6 @@ const SETTINGS_SECTIONS = [
   { name: "Profile", href: "/settings/profile", icon: <UserCircle size={24} strokeWidth={1.5} />, description: "Your personal settings" },
   { name: "Travel Services", href: "/settings/travel-services", icon: <Plane size={24} strokeWidth={1.5} />, description: "Manage travel service categories and VAT rates" },
   { name: "Accessibility", href: "/settings/accessibility", icon: <Type size={24} strokeWidth={1.5} />, description: "Customize font size and font family" },
-  { name: "Dev Log", href: "/settings/dev-log", icon: <Bug size={24} strokeWidth={1.5} />, description: "Bug reports from testers (Ctrl+Q)" },
 ];
 
 export default function SettingsPage() {
