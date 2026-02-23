@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, X, Send, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 type Phase = "idle" | "selecting" | "commenting";
 
@@ -152,8 +153,16 @@ export default function BugReportOverlay() {
         formData.append("screenshot", blob, "screenshot.png");
       }
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
       const response = await fetch("/api/dev-log", {
         method: "POST",
+        headers,
+        credentials: "include",
         body: formData,
       });
 
