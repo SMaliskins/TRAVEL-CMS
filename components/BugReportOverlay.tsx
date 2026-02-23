@@ -59,14 +59,37 @@ export default function BugReportOverlay() {
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(document.body, {
         useCORS: true,
-        allowTaint: true,
+        allowTaint: false,
         foreignObjectRendering: false,
         logging: false,
         scale: Math.min(window.devicePixelRatio, 2),
-        imageTimeout: 5000,
+        imageTimeout: 3000,
         removeContainer: true,
+        ignoreElements: (el: Element) => {
+          const tag = el.tagName?.toLowerCase();
+          if (tag === "iframe" || tag === "video" || tag === "canvas") return true;
+          if (el.classList?.contains("leaflet-container")) return true;
+          if (el.classList?.contains("mapboxgl-map")) return true;
+          return false;
+        },
+        onclone: (doc: Document) => {
+          doc.querySelectorAll("img").forEach((img) => {
+            try {
+              const src = img.src || "";
+              if (src && !src.startsWith(window.location.origin) && !src.startsWith("data:")) {
+                img.removeAttribute("src");
+                img.style.background = "#e5e7eb";
+                img.style.minHeight = "40px";
+              }
+            } catch { /* skip */ }
+          });
+        },
       });
-      fullScreenshotRef.current = canvas.toDataURL("image/png");
+      try {
+        fullScreenshotRef.current = canvas.toDataURL("image/png");
+      } catch {
+        fullScreenshotRef.current = null;
+      }
       setPhase("selecting");
     } catch {
       fullScreenshotRef.current = null;
