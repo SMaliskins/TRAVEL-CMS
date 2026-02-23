@@ -157,15 +157,20 @@ export default function BugReportOverlay() {
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Failed");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
 
       setToast({ type: "success", msg: "Bug report submitted!" });
       reset();
-    } catch {
-      setToast({ type: "error", msg: "Failed to submit bug report" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error("[BugReport] Submit failed:", msg);
+      setToast({ type: "error", msg: `Submit failed: ${msg}` });
       setSending(false);
     }
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 5000);
   }, [comment, croppedImage, sending, reset]);
 
   if (phase === "idle" && !toast) {

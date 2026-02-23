@@ -78,11 +78,13 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser(request);
     if (!user) {
+      console.error("[dev-log] POST: no authenticated user found");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const profile = await getUserProfile(user.id);
     if (!profile?.company_id) {
+      console.error("[dev-log] POST: no company_id for user", user.id);
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
@@ -131,7 +133,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("[dev-log] INSERT error:", error);
-      return NextResponse.json({ error: "Failed to create report" }, { status: 500 });
+      return NextResponse.json({ error: `Failed to create report: ${error.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ data });
