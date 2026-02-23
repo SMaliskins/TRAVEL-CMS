@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { getRoleDisplayName } from "@/lib/auth/roles";
@@ -16,8 +16,8 @@ const ROLE_DESCRIPTIONS: Record<string, { en: string; ru: string }> = {
     ru: "Внешний партнёр с доступом только к своим клиентам",
   },
   agent: {
-    en: "Travel consultant handling bookings and client service",
-    ru: "Консультант по бронированию и работе с клиентами",
+    en: "Travel expert handling bookings and client service",
+    ru: "Эксперт по бронированию и работе с клиентами",
   },
   finance: {
     en: "Accountant for payments and reports, no order editing",
@@ -318,9 +318,9 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
               </thead>
               <tbody>
                 {PERMISSION_GROUPS.map((group) => (
-                  <>
+                  <React.Fragment key={`group-${group.group.en}`}>
                     {/* Group header */}
-                    <tr key={`group-${group.group.en}`} className="bg-gray-100">
+                    <tr className="bg-gray-100">
                       <td
                         colSpan={ROLES.length + 1}
                         className="py-2 pr-4 text-xs font-semibold uppercase tracking-wide text-gray-600"
@@ -344,7 +344,7 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
                         ))}
                       </tr>
                     ))}
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

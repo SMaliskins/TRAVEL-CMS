@@ -26,21 +26,21 @@ export const ROLE_LEVELS: Record<RoleName, number> = {
 export const ROLE_DISPLAY_NAMES: Record<string, Record<RoleName, string>> = {
   en: {
     subagent: "Subagent",
-    agent: "Agent",
+    agent: "Travel Expert",
     finance: "Finance",
     manager: "Manager",
     supervisor: "Supervisor",
   },
   ru: {
     subagent: "Субагент",
-    agent: "Агент",
+    agent: "Travel Expert",
     finance: "Финансы",
     manager: "Менеджер",
     supervisor: "Супервайзер",
   },
   lv: {
     subagent: "Subagents",
-    agent: "Aģents",
+    agent: "Travel Expert",
     finance: "Finanses",
     manager: "Vadītājs",
     supervisor: "Supervizors",

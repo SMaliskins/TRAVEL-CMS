@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         created_at,
         last_login_at,
         role:roles(id, name, display_name, display_name_en, level, color),
-        company:companies(id, name)
+        company:companies(id, name, trading_name, legal_name)
       `)
       .eq("id", user.id)
       .single();
@@ -125,7 +125,7 @@ export async function PATCH(request: NextRequest) {
         created_at,
         updated_at,
         role:roles(id, name, display_name, level, color),
-        company:companies(id, name)
+        company:companies(id, name, trading_name, legal_name)
       `)
       .single();
 

@@ -25,6 +25,8 @@ interface Profile {
   company: {
     id: string;
     name: string;
+    trading_name?: string;
+    legal_name?: string;
   } | null;
 }
 
@@ -360,7 +362,7 @@ export default function ProfilePage() {
                 {profile.role && <RoleBadge role={profile.role.name} size="sm" />}
               </div>
               {profile.company && (
-                <p className="mt-2 text-sm text-gray-500">{profile.company.name}</p>
+                <p className="mt-2 text-sm text-gray-500">{profile.company.trading_name || profile.company.legal_name || profile.company.name}</p>
               )}
             </div>
           </div>

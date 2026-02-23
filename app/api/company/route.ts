@@ -141,6 +141,13 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Auto-sync `name` from trading_name or legal_name
+    const newTradingName = updateData.trading_name ?? body.trading_name;
+    const newLegalName = updateData.legal_name ?? body.legal_name;
+    if (newTradingName || newLegalName) {
+      updateData.name = newTradingName || newLegalName;
+    }
+
     const { data: company, error } = await supabaseAdmin
       .from("companies")
       .update(updateData)

@@ -236,15 +236,15 @@ export default function DashboardPage() {
 
       setEmail(data.user.email || null);
       
-      // Fetch username from profile
+      // Fetch user's first name from profile
       if (data.user.id) {
         const { data: profile } = await supabase
-          .from('profile')
-          .select('username')
+          .from('user_profiles')
+          .select('first_name, last_name')
           .eq('id', data.user.id)
           .single();
         
-        setUsername(profile?.username || null);
+        setUsername(profile?.first_name || null);
       }
       
       setLoading(false);
