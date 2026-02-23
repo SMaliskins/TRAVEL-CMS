@@ -236,15 +236,19 @@ export default function DashboardPage() {
 
       setEmail(data.user.email || null);
       
-      // Fetch user's first name from profile
-      if (data.user.id) {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('first_name, last_name')
-          .eq('id', data.user.id)
-          .single();
-        
-        setUsername(profile?.first_name || null);
+      // Fetch user's first name via API (bypasses RLS)
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (token) {
+        try {
+          const res = await fetch("/api/profile", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const profileData = await res.json();
+            setUsername(profileData?.first_name || null);
+          }
+        } catch { /* fallback to email */ }
       }
       
       setLoading(false);
