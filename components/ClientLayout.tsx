@@ -7,6 +7,7 @@ import TabBar from "./TabBar";
 import AuthGuard from "./AuthGuard";
 import UrlModalProvider from "./UrlModalProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
+import BugReportOverlay from "./BugReportOverlay";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,6 +38,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </>
       )}
     </AuthGuard>
+    <BugReportOverlay />
     </UrlModalProvider>
     </ToastProvider>
   );
