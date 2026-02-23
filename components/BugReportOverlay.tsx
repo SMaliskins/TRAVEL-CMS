@@ -58,16 +58,18 @@ export default function BugReportOverlay() {
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(document.body, {
         useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: false,
         logging: false,
-        scale: window.devicePixelRatio,
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight,
+        scale: Math.min(window.devicePixelRatio, 2),
+        imageTimeout: 5000,
+        removeContainer: true,
       });
       fullScreenshotRef.current = canvas.toDataURL("image/png");
       setPhase("selecting");
     } catch {
-      setToast({ type: "error", msg: "Failed to capture screenshot" });
-      setTimeout(() => setToast(null), 3000);
+      fullScreenshotRef.current = null;
+      setPhase("selecting");
     }
   }, []);
 
@@ -104,19 +106,31 @@ export default function BugReportOverlay() {
 
   const cropScreenshot = useCallback(
     (rect: SelectionRect) => {
-      if (!fullScreenshotRef.current) return;
+      if (!fullScreenshotRef.current) {
+        setCroppedImage(null);
+        setPhase("commenting");
+        return;
+      }
       const img = new Image();
       img.onload = () => {
-        const dpr = window.devicePixelRatio;
-        const canvas = document.createElement("canvas");
-        canvas.width = rect.w * dpr;
-        canvas.height = rect.h * dpr;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const sx = (rect.x + window.scrollX) * dpr;
-        const sy = (rect.y + window.scrollY) * dpr;
-        ctx.drawImage(img, sx, sy, rect.w * dpr, rect.h * dpr, 0, 0, rect.w * dpr, rect.h * dpr);
-        setCroppedImage(canvas.toDataURL("image/png"));
+        try {
+          const dpr = Math.min(window.devicePixelRatio, 2);
+          const canvas = document.createElement("canvas");
+          canvas.width = rect.w * dpr;
+          canvas.height = rect.h * dpr;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { setPhase("commenting"); return; }
+          const sx = (rect.x + window.scrollX) * dpr;
+          const sy = (rect.y + window.scrollY) * dpr;
+          ctx.drawImage(img, sx, sy, rect.w * dpr, rect.h * dpr, 0, 0, rect.w * dpr, rect.h * dpr);
+          setCroppedImage(canvas.toDataURL("image/png"));
+        } catch {
+          setCroppedImage(null);
+        }
+        setPhase("commenting");
+      };
+      img.onerror = () => {
+        setCroppedImage(null);
         setPhase("commenting");
       };
       img.src = fullScreenshotRef.current;
@@ -232,13 +246,17 @@ export default function BugReportOverlay() {
 
             <div className="p-5 space-y-4">
               {/* Screenshot preview */}
-              {croppedImage && (
+              {croppedImage ? (
                 <div className="border rounded-lg overflow-hidden bg-gray-100 max-h-64 flex items-center justify-center">
                   <img
                     src={croppedImage}
                     alt="Selected area"
                     className="max-w-full max-h-64 object-contain"
                   />
+                </div>
+              ) : (
+                <div className="border rounded-lg bg-gray-50 px-4 py-3 text-xs text-gray-400 text-center">
+                  Screenshot not available — your comment and page URL will be saved
                 </div>
               )}
 
