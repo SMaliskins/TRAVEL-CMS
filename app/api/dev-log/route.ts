@@ -27,12 +27,32 @@ async function getCurrentUser(request: NextRequest) {
 }
 
 async function getUserProfile(userId: string) {
-  const { data } = await supabaseAdmin
+  // Compatibility: some environments use `profiles(user_id)`,
+  // others use `user_profiles(id)`.
+  const { data: p1 } = await supabaseAdmin
     .from("profiles")
     .select("company_id, display_name")
     .eq("user_id", userId)
-    .single();
-  return data;
+    .maybeSingle();
+
+  if (p1?.company_id) {
+    return {
+      company_id: p1.company_id as string,
+      display_name: (p1.display_name as string | null) ?? null,
+    };
+  }
+
+  const { data: p2 } = await supabaseAdmin
+    .from("user_profiles")
+    .select("company_id, first_name, last_name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const fallbackName = [p2?.first_name, p2?.last_name].filter(Boolean).join(" ").trim();
+  return {
+    company_id: (p2?.company_id as string | null) ?? null,
+    display_name: fallbackName || null,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -93,9 +113,16 @@ export async function POST(request: NextRequest) {
     const comment = formData.get("comment") as string || "";
     const pageUrl = formData.get("page_url") as string || "";
 
+    if (!file || file.size <= 0) {
+      return NextResponse.json(
+        { error: "Screenshot is required" },
+        { status: 400 }
+      );
+    }
+
     let screenshotUrl: string | null = null;
 
-    if (file && file.size > 0) {
+    if (file.size > 0) {
       const ext = file.name.split(".").pop() || "png";
       const filename = `report-${randomUUID()}.${ext}`;
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -109,6 +136,10 @@ export async function POST(request: NextRequest) {
 
       if (uploadError) {
         console.error("[dev-log] Upload error:", uploadError);
+        return NextResponse.json(
+          { error: `Screenshot upload failed: ${uploadError.message}` },
+          { status: 500 }
+        );
       } else {
         const { data: urlData } = supabaseAdmin.storage
           .from("dev-log")

@@ -13,7 +13,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   
   // Pages that should not show sidebar/topbar (exact match for / to avoid matching all paths)
-  const hideLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login");
+  const hideLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login") || pathname?.startsWith("/devlog");
 
   return (
     <ToastProvider>
