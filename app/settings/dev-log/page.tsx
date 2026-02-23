@@ -142,7 +142,7 @@ export default function DevLogPage() {
           <div className="bg-white rounded-lg shadow-sm px-6 py-16 text-center text-gray-400">
             <Bug size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm">No reports found</p>
-            <p className="text-xs mt-1">Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[11px] font-mono">Ctrl+E</kbd> on any page to report a bug</p>
+            <p className="text-xs mt-1">Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[11px] font-mono">Ctrl+Q</kbd> on any page to report a bug</p>
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">

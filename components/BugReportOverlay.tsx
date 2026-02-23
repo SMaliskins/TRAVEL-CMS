@@ -35,10 +35,10 @@ export default function BugReportOverlay() {
     fullScreenshotRef.current = null;
   }, []);
 
-  // Ctrl+E / Cmd+E activates bug report mode
+  // Ctrl+Q / Cmd+Q activates bug report mode
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "e") {
+      if ((e.ctrlKey || e.metaKey) && e.key === "q") {
         e.preventDefault();
         if (phase !== "idle") {
           reset();
@@ -188,10 +188,10 @@ export default function BugReportOverlay() {
         <button
           onClick={captureAndStartSelection}
           className="flex items-center gap-1.5 bg-gray-800 text-white text-[11px] px-2.5 py-1.5 rounded-md shadow-lg"
-          title="Report a bug (Ctrl+E)"
+          title="Report a bug (Ctrl+Q)"
         >
           <Camera size={13} />
-          <span>Ctrl+E</span>
+          <span>Ctrl+Q</span>
         </button>
       </div>
     );

@@ -11,7 +11,7 @@ const SETTINGS_SECTIONS = [
   { name: "Profile", href: "/settings/profile", icon: <UserCircle size={24} strokeWidth={1.5} />, description: "Your personal settings" },
   { name: "Travel Services", href: "/settings/travel-services", icon: <Plane size={24} strokeWidth={1.5} />, description: "Manage travel service categories and VAT rates" },
   { name: "Accessibility", href: "/settings/accessibility", icon: <Type size={24} strokeWidth={1.5} />, description: "Customize font size and font family" },
-  { name: "Dev Log", href: "/settings/dev-log", icon: <Bug size={24} strokeWidth={1.5} />, description: "Bug reports from testers (Ctrl+E)" },
+  { name: "Dev Log", href: "/settings/dev-log", icon: <Bug size={24} strokeWidth={1.5} />, description: "Bug reports from testers (Ctrl+Q)" },
 ];
 
 export default function SettingsPage() {
