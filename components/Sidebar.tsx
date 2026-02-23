@@ -17,6 +17,7 @@ import {
   BarChart3,
   Users,
   Settings,
+  Hotel,
 } from "lucide-react";
 
 interface NavItem {
@@ -48,6 +49,7 @@ const navConfig: NavElement[] = [
   },
   { name: "Analytics", href: "/analytics/orders", icon: <BarChart3 size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
   { name: "Directory", href: "/directory", icon: <Users size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Hotels Booking", href: "/hotels-booking", icon: <Hotel size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
 ];
 
 const modeLabels: Record<SidebarMode, string> = {

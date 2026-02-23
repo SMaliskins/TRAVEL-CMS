@@ -19,6 +19,19 @@ export interface SubagentDetails {
   commissionCurrency?: string;
 }
 
+export interface CorporateAccount {
+  providerId?: string;
+  providerName: string;
+  accountCode: string;
+}
+
+export interface LoyaltyCard {
+  providerId?: string;
+  providerName: string;
+  programName?: string;
+  cardCode: string;
+}
+
 export interface DirectoryRecord {
   id: string;
   displayId?: number; // Sequential ID (00001, 00002, ...)
@@ -50,9 +63,15 @@ export interface DirectoryRecord {
   
   // Company fields
   companyName?: string;
+  companyAvatarUrl?: string;
   regNumber?: string;
+  vatNumber?: string;
   legalAddress?: string;
   actualAddress?: string;
+  bankName?: string;
+  iban?: string;
+  swift?: string;
+  contactPerson?: string;
   
   // Common fields
   phone?: string;
@@ -64,6 +83,10 @@ export interface DirectoryRecord {
   
   // Subagent-specific
   subagentExtras?: SubagentDetails;
+
+  // Corporate accounts (Company) / Loyalty cards (Person)
+  corporateAccounts?: CorporateAccount[];
+  loyaltyCards?: LoyaltyCard[];
 
   // Audit (who created / last updated)
   createdById?: string;

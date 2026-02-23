@@ -315,9 +315,12 @@ function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
     ? destinations 
     : parts.map(p => p.replace(/^(origin|return):/i, '').trim()).filter(p => p.length > 0);
   
-  if (items.length === 0) return <span className="text-gray-400">—</span>;
+  // Deduplicate (e.g. origin and return same city)
+  const uniqueItems = [...new Set(items)];
+  
+  if (uniqueItems.length === 0) return <span className="text-gray-400">—</span>;
 
-  const parsed = items.flatMap(item => {
+  const parsed = uniqueItems.flatMap(item => {
     return item.split(';').map(sub => {
       const s = sub.trim();
       if (!s) return null;

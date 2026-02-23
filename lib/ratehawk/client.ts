@@ -400,12 +400,19 @@ export interface RateHawkSerpHotel {
     room_name: string;
     match_hash?: string;
     book_hash?: string;
+    room_data_trans?: { main_name?: string; bedding_type?: string; bathroom?: string };
+    meal_data?: { value?: string; name?: string };
+    cancellation_info?: {
+      free_cancellation_before?: string;
+      penalties?: Record<string, { amount?: string; currency_code?: string }>;
+    };
     payment_options: {
       payment_types: {
         show_amount: number;
         show_currency_code: string;
         amount: number;
         currency_code: string;
+        tax_data?: { taxes?: { amount?: string; currency_code?: string; name?: string }[] };
       }[];
     };
   }[];
@@ -419,21 +426,17 @@ export async function searchHotelsByRegion(
   regionId: number,
   checkin: string,
   checkout: string,
-  guests: number,
+  adults: number,
   keyId: string,
   apiKey: string,
   currency = "EUR",
-  limit = 5
+  limit = 5,
+  childrenAges: number[] = []
 ): Promise<RateHawkSerpHotel[]> {
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/api/b2b/v3/search/serp/region/`;
 
-  const guestsArr = [];
-  for (let i = 0; i < Math.ceil(guests / 2); i++) {
-    const adults = Math.min(2, guests - i * 2);
-    guestsArr.push({ adults, children: [] });
-  }
-  if (guestsArr.length === 0) guestsArr.push({ adults: 2, children: [] });
+  const guestsArr = [{ adults: Math.max(1, adults), children: childrenAges }];
 
   const response = await fetch(url, {
     method: "POST",

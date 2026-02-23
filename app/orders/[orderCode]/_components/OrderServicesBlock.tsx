@@ -118,6 +118,9 @@ interface Service {
   pickupTime?: string;
   estimatedDuration?: string;
   linkedFlightId?: string;
+  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string }[];
+  transferMode?: string | null;
+  vehicleClass?: string | null;
   // Flight-specific
   flightSegments?: FlightSegment[];
   boardingPasses?: { id: string; fileName: string; fileUrl: string; clientId: string; clientName: string; uploadedAt: string }[];
@@ -1183,6 +1186,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           hotelBedType: (s.hotelBedType ?? s.hotel_bed_type ?? null) as Service["hotelBedType"],
           mealPlanText: (s.mealPlanText ?? s.meal_plan_text ?? null) as string | null,
           transferType: (s.transferType ?? s.transfer_type ?? null) as string | null,
+          transferRoutes: (Array.isArray(s.transferRoutes ?? s.transfer_routes) ? (s.transferRoutes ?? s.transfer_routes) : []) as Service["transferRoutes"],
+          transferMode: (s.transferMode ?? s.transfer_mode ?? null) as string | null,
+          vehicleClass: (s.vehicleClass ?? s.vehicle_class ?? null) as string | null,
           additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
           hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
           hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
@@ -2113,6 +2119,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 boardingPasses: s.boardingPasses,
                 baggage: s.baggage,
                 transferType: s.transferType,
+                transferRoutes: s.transferRoutes,
+                transferMode: s.transferMode,
+                vehicleClass: s.vehicleClass,
                 splitGroupId: s.splitGroupId ?? null,
                 assignedTravellerIds: s.assignedTravellerIds ?? [],
               }))}
@@ -2207,6 +2216,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           initialCategoryType={addServiceCategoryType ?? undefined}
           initialCategoryName={addServiceCategoryName ?? undefined}
           initialVatRate={addServiceCategoryVatRate ?? undefined}
+          flightServices={services.filter(s => (s.categoryType || "").toLowerCase() === "flight").map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
           onClose={() => {
             setShowAddModal(false);
             setAddServiceCategoryId(null);
@@ -2227,6 +2237,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
             orderCode={orderCode}
             companyCurrencyCode={companyCurrencyCode}
+            flightServices={services.filter(s => (s.categoryType || "").toLowerCase() === "flight" && s.id !== editServiceId).map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
             initialClients={(() => {
               const svc = services.find(s => s.id === editServiceId);
               if (!svc) return undefined;

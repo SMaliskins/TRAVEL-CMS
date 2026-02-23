@@ -150,6 +150,8 @@ export async function GET(request: NextRequest) {
   const airportCode = searchParams.get("airport");
   const hotelAddress = searchParams.get("address");
   const hotelName = searchParams.get("hotelName");
+  const destLat = searchParams.get("lat");
+  const destLon = searchParams.get("lon");
 
   if (!airportCode) {
     return NextResponse.json({ error: "airport param required" }, { status: 400 });
@@ -163,18 +165,34 @@ export async function GET(request: NextRequest) {
   const airportCity = airport.city || "";
   const airportCountry = airport.country || "";
 
-  // Multi-strategy geocoding: address + country first, then hotel name, then token extraction
-  const geocoded = await tryMultipleGeocoding(hotelName || null, hotelAddress || null, airportCity, airportCountry);
+  let hotelCoords: { lat: number; lon: number } | null = null;
+  let geocodeMethod = "none";
 
-  let hotelCoords = geocoded?.coords ?? null;
-  let geocodeMethod = geocoded?.method ?? "none";
+  // Priority 0: use explicit coordinates when provided (from location-suggest meta)
+  if (destLat && destLon) {
+    const lat = parseFloat(destLat);
+    const lon = parseFloat(destLon);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      const checkDist = haversineKm(airport.latitude, airport.longitude, lat, lon);
+      if (checkDist <= 500) {
+        hotelCoords = { lat, lon };
+        geocodeMethod = "explicit-coords";
+      }
+    }
+  }
 
-  // Sanity: reject geocoded point if > 500 km from airport (wrong country/continent)
-  if (hotelCoords) {
-    const checkDist = haversineKm(airport.latitude, airport.longitude, hotelCoords.lat, hotelCoords.lon);
-    if (checkDist > 500) {
-      hotelCoords = null;
-      geocodeMethod = "none";
+  // Fallback: multi-strategy Nominatim geocoding
+  if (!hotelCoords) {
+    const geocoded = await tryMultipleGeocoding(hotelName || null, hotelAddress || null, airportCity, airportCountry);
+    hotelCoords = geocoded?.coords ?? null;
+    geocodeMethod = geocoded?.method ?? "none";
+
+    if (hotelCoords) {
+      const checkDist = haversineKm(airport.latitude, airport.longitude, hotelCoords.lat, hotelCoords.lon);
+      if (checkDist > 500) {
+        hotelCoords = null;
+        geocodeMethod = "none";
+      }
     }
   }
 

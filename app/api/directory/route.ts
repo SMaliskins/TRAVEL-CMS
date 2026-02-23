@@ -60,16 +60,26 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
 
   // Company fields
   if (row.party_type === "company") {
-    record.companyName = row.company_name || undefined;
+    record.companyName = row.company_name || row.display_name || undefined;
+    record.companyAvatarUrl = row.logo_url || undefined;
     record.regNumber = row.reg_number || undefined;
+    record.vatNumber = row.vat_number || undefined;
     record.legalAddress = row.legal_address || undefined;
     record.actualAddress = row.actual_address || undefined;
+    record.bankName = row.bank_name || undefined;
+    record.iban = row.iban || undefined;
+    record.swift = row.swift || undefined;
+    record.contactPerson = row.contact_person || undefined;
   }
 
   // Common fields
   record.phone = row.phone || undefined;
   record.email = row.email || undefined;
   record.country = row.country || undefined;
+
+  // Corporate accounts / Loyalty cards
+  if (row.corporate_accounts) record.corporateAccounts = row.corporate_accounts;
+  if (row.loyalty_cards) record.loyaltyCards = row.loyalty_cards;
 
   // Supplier details
   if (row.is_supplier) {
@@ -291,7 +301,7 @@ export async function GET(request: NextRequest) {
         .in("party_id", partyIds),
       supabaseAdmin
         .from("party_company")
-        .select("party_id,company_name,reg_number,legal_address,actual_address")
+        .select("party_id,company_name,logo_url,reg_number,vat_number,legal_address,actual_address,bank_name,iban,swift,contact_person")
         .in("party_id", partyIds),
       supabaseAdmin
         .from("client_party")
@@ -382,8 +392,13 @@ export async function GET(request: NextRequest) {
         is_client: clientSet.has(party.id),
         is_supplier: !!supplier,
         is_subagent: !!subagent,
-        ...supplierData,  // Without id - prevents overwriting party.id
-        ...subagentData,  // Without id - prevents overwriting party.id
+        ...supplierData,
+        ...subagentData,
+        id: party.id,
+        created_by: party.created_by,
+        updated_by: party.updated_by,
+        created_at: party.created_at,
+        updated_at: party.updated_at,
       });
       return record;
     });

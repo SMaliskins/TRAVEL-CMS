@@ -13,6 +13,7 @@ import { useDraggableModal } from '@/hooks/useDraggableModal';
 import { formatDateDDMMYYYY, formatDateShort } from "@/utils/dateFormat";
 import DateInput from "@/components/DateInput";
 import type { SupplierCommission } from "@/lib/types/directory";
+import { Hotel } from "lucide-react";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -24,6 +25,26 @@ const BOARD_LABELS: Record<string, string> = {
   all_inclusive: "AI (All inclusive)",
   uai: "UAI (Ultra All Inclusive)",
 };
+
+interface TransferRouteData {
+  id: string;
+  pickup: string;
+  pickupType: "airport" | "hotel" | "address";
+  pickupMeta?: { iata?: string; hid?: number; lat?: number; lon?: number };
+  dropoff: string;
+  dropoffType: "airport" | "hotel" | "address";
+  dropoffMeta?: { iata?: string; hid?: number; lat?: number; lon?: number };
+  pickupTime?: string;
+  distanceKm?: number;
+  durationMin?: number;
+  linkedFlightId?: string;
+}
+
+interface LocationSuggestionAdd {
+  type: "airport" | "hotel" | "region";
+  label: string;
+  meta: { iata?: string; hid?: number; regionId?: number; lat?: number; lon?: number; country?: string };
+}
 
 interface AddServiceModalProps {
   orderCode: string;
@@ -38,8 +59,8 @@ interface AddServiceModalProps {
   initialCategoryType?: string | null;
   initialCategoryName?: string | null;
   initialVatRate?: number | null;
-  /** Company currency from Regional Settings (e.g. EUR, USD) for Pricing labels */
   companyCurrencyCode?: string;
+  flightServices?: { id: string; name: string; flightSegments: FlightSegment[] }[];
   onClose: () => void;
   onServiceAdded: (service: ServiceData) => void;
 }
@@ -95,12 +116,19 @@ export interface ServiceData {
   // Tour-specific
   transferType?: string | null;
   additionalServices?: string | null;
-  // Transfer-specific
+  // Transfer-specific (legacy flat)
   pickupLocation?: string;
   dropoffLocation?: string;
   pickupTime?: string;
   estimatedDuration?: string;
   linkedFlightId?: string;
+  // Transfer-specific (new structured)
+  transferRoutes?: TransferRouteData[];
+  transferMode?: string | null;
+  vehicleClass?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverNotes?: string | null;
   // Flight-specific
   flightSegments?: FlightSegment[];
   boardingPasses?: { id: string; fileName: string; fileUrl: string; clientId: string; clientName: string; uploadedAt: string }[];
@@ -176,6 +204,7 @@ export default function AddServiceModal({
   initialCategoryName,
   initialVatRate,
   companyCurrencyCode = "EUR",
+  flightServices = [],
   onClose, 
   onServiceAdded 
 }: AddServiceModalProps) {
@@ -296,13 +325,132 @@ export default function AddServiceModal({
   });
   const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct">("gds");
   
-  // Transfer-specific fields
+  // Transfer-specific fields (legacy)
   const [pickupLocation, setPickupLocation] = useState("");
   const [dropoffLocation, setDropoffLocation] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [estimatedDuration, setEstimatedDuration] = useState("");
   const [linkedFlightId, setLinkedFlightId] = useState<string | null>(null);
-  
+
+  // Transfer-specific fields (new structured)
+  const [transferRoutes, setTransferRoutes] = useState<TransferRouteData[]>([
+    { id: crypto.randomUUID(), pickup: "", pickupType: "address", dropoff: "", dropoffType: "address" },
+  ]);
+  const [transferMode, setTransferMode] = useState("individual");
+  const [transferBookingType, setTransferBookingType] = useState<"one_way" | "by_hour">("one_way");
+  const [transferHours, setTransferHours] = useState<number>(2);
+  const [chauffeurNotes, setChauffeurNotes] = useState("");
+  const [vehicleClass, setVehicleClass] = useState("");
+  const [vehicleClassCustom, setVehicleClassCustom] = useState("");
+  const [driverName, setDriverName] = useState("");
+  const [driverPhone, setDriverPhone] = useState("");
+  const [driverNotes, setDriverNotes] = useState("");
+  const [locationQueryAdd, setLocationQueryAdd] = useState<Record<string, string>>({});
+  const [locationResultsAdd, setLocationResultsAdd] = useState<Record<string, LocationSuggestionAdd[]>>({});
+  const [activeLocationFieldAdd, setActiveLocationFieldAdd] = useState<string | null>(null);
+  const locationDebounceRefAdd = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const searchLocationsAdd = useCallback(async (fieldKey: string, query: string) => {
+    if (query.length < 2) { setLocationResultsAdd(prev => ({ ...prev, [fieldKey]: [] })); return; }
+    try {
+      const res = await fetch(`/api/geo/location-suggest?q=${encodeURIComponent(query)}`);
+      const json = await res.json();
+      setLocationResultsAdd(prev => ({ ...prev, [fieldKey]: json.data || [] }));
+    } catch { setLocationResultsAdd(prev => ({ ...prev, [fieldKey]: [] })); }
+  }, []);
+
+  const handleLocationInputAdd = useCallback((fieldKey: string, value: string) => {
+    setLocationQueryAdd(prev => ({ ...prev, [fieldKey]: value }));
+    if (locationDebounceRefAdd.current[fieldKey]) clearTimeout(locationDebounceRefAdd.current[fieldKey]);
+    locationDebounceRefAdd.current[fieldKey] = setTimeout(() => searchLocationsAdd(fieldKey, value), 300);
+  }, [searchLocationsAdd]);
+
+  const selectLocationAdd = useCallback((routeId: string, field: "pickup" | "dropoff", suggestion: LocationSuggestionAdd) => {
+    setTransferRoutes(prev => prev.map(r => {
+      if (r.id !== routeId) return r;
+      return { ...r, [field]: suggestion.label, [`${field}Type`]: suggestion.type, [`${field}Meta`]: suggestion.meta };
+    }));
+    const fieldKey = `${routeId}-${field}`;
+    setLocationQueryAdd(prev => ({ ...prev, [fieldKey]: suggestion.label }));
+    setLocationResultsAdd(prev => ({ ...prev, [fieldKey]: [] }));
+    setActiveLocationFieldAdd(null);
+  }, []);
+
+  const addTransferRouteAdd = useCallback(() => {
+    setTransferRoutes(prev => [...prev, { id: crypto.randomUUID(), pickup: "", pickupType: "address", dropoff: "", dropoffType: "address" }]);
+  }, []);
+
+  const removeTransferRouteAdd = useCallback((routeId: string) => {
+    setTransferRoutes(prev => prev.length > 1 ? prev.filter(r => r.id !== routeId) : prev);
+  }, []);
+
+  const updateRouteFieldAdd = useCallback((routeId: string, field: string, value: unknown) => {
+    setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, [field]: value } : r));
+  }, []);
+
+  // Auto-calculate distance
+  useEffect(() => {
+    transferRoutes.forEach(async (route) => {
+      if (route.distanceKm != null) return;
+      const pMeta = route.pickupMeta;
+      const dMeta = route.dropoffMeta;
+      if (!pMeta || !dMeta) return;
+      if (pMeta.iata && (dMeta.lat != null || route.dropoff)) {
+        try {
+          const params = new URLSearchParams({ airport: pMeta.iata });
+          if (dMeta.lat != null && dMeta.lon != null) {
+            params.set("lat", String(dMeta.lat));
+            params.set("lon", String(dMeta.lon));
+          }
+          params.set("address", route.dropoff);
+          const res = await fetch(`/api/geo/transfer-distance?${params}`);
+          const json = await res.json();
+          if (json.data) setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, distanceKm: json.data.distanceKm, durationMin: json.data.durationMin } : r));
+        } catch {}
+      } else if (dMeta.iata && (pMeta.lat != null || route.pickup)) {
+        try {
+          const params = new URLSearchParams({ airport: dMeta.iata });
+          if (pMeta.lat != null && pMeta.lon != null) {
+            params.set("lat", String(pMeta.lat));
+            params.set("lon", String(pMeta.lon));
+          }
+          params.set("address", route.pickup);
+          const res = await fetch(`/api/geo/transfer-distance?${params}`);
+          const json = await res.json();
+          if (json.data) setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, distanceKm: json.data.distanceKm, durationMin: json.data.durationMin } : r));
+        } catch {}
+      }
+    });
+  }, [transferRoutes]);
+
+  const suggestPickupTimeAdd = useCallback((routeId: string, flightServiceId: string) => {
+    const fs = flightServices.find(f => f.id === flightServiceId);
+    if (!fs || !fs.flightSegments?.length) return;
+    const route = transferRoutes.find(r => r.id === routeId);
+    if (!route || route.pickupTime) return;
+    const isPickupAirport = route.pickupMeta?.iata || route.pickupType === "airport";
+    const isDropoffAirport = route.dropoffMeta?.iata || route.dropoffType === "airport";
+    for (const seg of fs.flightSegments) {
+      const s = seg as unknown as Record<string, string>;
+      if (isPickupAirport && s.arrivalTimeScheduled) {
+        const [h, m] = s.arrivalTimeScheduled.split(":").map(Number);
+        const totalMin = h * 60 + m + 45;
+        const suggestedTime = `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+        setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
+        return;
+      }
+      if (isDropoffAirport && s.departureTimeScheduled) {
+        const [h, m] = s.departureTimeScheduled.split(":").map(Number);
+        const durationBuffer = route.durationMin || 60;
+        const totalMin = h * 60 + m - 120 - durationBuffer;
+        const adj = totalMin < 0 ? totalMin + 1440 : totalMin;
+        const suggestedTime = `${String(Math.floor(adj / 60) % 24).padStart(2, "0")}:${String(adj % 60).padStart(2, "0")}`;
+        setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
+        return;
+      }
+    }
+  }, [flightServices, transferRoutes]);
+
   // Flight-specific fields
   const [flightSegments, setFlightSegments] = useState<FlightSegment[]>([]);
   const [showPasteInput, setShowPasteInput] = useState(false);
@@ -832,21 +980,30 @@ export default function AddServiceModal({
   
   // Apply parsed data to form
   const applyParsedData = (segments: FlightSegment[], booking: Record<string, unknown>) => {
-    // Fill form fields from booking info
-    if (booking.bookingRef) setRefNr(booking.bookingRef as string);
-    if (booking.airline) setSupplierName(booking.airline as string);
+    const parsed = new Set<string>();
+
+    if (booking.bookingRef) { setRefNr(booking.bookingRef as string); parsed.add("refNr"); }
+    if (booking.airline) { setSupplierName(booking.airline as string); parsed.add("supplierName"); }
     if (booking.totalPrice) {
-      setClientPrice(String(booking.totalPrice));
       setServicePrice(String(booking.totalPrice));
+      parsed.add("servicePrice");
+    }
+    if (booking.salePrice) {
+      setClientPrice(String(booking.salePrice));
+      parsed.add("clientPrice");
+    } else if (booking.totalPrice) {
+      setClientPrice(String(booking.totalPrice));
     }
     if (booking.cabinClass) {
       const validClasses = ["economy", "premium_economy", "business", "first"];
       if (validClasses.includes(booking.cabinClass as string)) {
         setCabinClass(booking.cabinClass as "economy" | "premium_economy" | "business" | "first");
+        parsed.add("cabinClass");
       }
     }
     if (booking.baggage) {
       setBaggage(booking.baggage as string);
+      parsed.add("baggage");
     }
     if (booking.refundPolicy) {
       const validPolicies = ["non_ref", "refundable", "fully_ref"];
@@ -858,7 +1015,6 @@ export default function AddServiceModal({
       setChangeFee(String(booking.changeFee));
     }
     
-    // Handle ticket numbers
     const ticketNumbers = booking.ticketNumbers as string[] | undefined;
     if (ticketNumbers && ticketNumbers.length > 0) {
       const firstTicket = ticketNumbers[0];
@@ -872,21 +1028,26 @@ export default function AddServiceModal({
     }
     
     setFlightSegments(segments);
+    if (segments.length > 0) {
+      parsed.add("flightSegments");
+      parsed.add("serviceName");
+    }
     
-    // Set dates
     if (segments[0]?.departureDate) {
       setDateFrom(segments[0].departureDate);
+      parsed.add("dateFrom");
     }
     if (segments.length > 0) {
       const lastSeg = segments[segments.length - 1];
       setDateTo(lastSeg.arrivalDate || lastSeg.departureDate);
+      parsed.add("dateTo");
     }
     
-    // Auto-confirm if we have ticket numbers
     if (ticketNumbers && ticketNumbers.length > 0) {
       setResStatus("confirmed");
     }
     
+    setParsedFields(parsed);
     setShowPasteInput(false);
     setPasteText("");
   };
@@ -1369,6 +1530,17 @@ export default function AddServiceModal({
         payload.pickupTime = pickupTime;
         payload.estimatedDuration = estimatedDuration;
         payload.linkedFlightId = linkedFlightId;
+        payload.transferRoutes = transferRoutes.map(r => ({
+          ...r,
+          bookingType: transferBookingType,
+          hours: transferBookingType === "by_hour" ? transferHours : undefined,
+          chauffeurNotes: chauffeurNotes || undefined,
+        }));
+        payload.transferMode = transferMode;
+        payload.vehicleClass = vehicleClass ? (vehicleClassCustom ? `${vehicleClass}: ${vehicleClassCustom}` : vehicleClass) : (vehicleClassCustom || null);
+        payload.driverName = driverName || null;
+        payload.driverPhone = driverPhone || null;
+        payload.driverNotes = driverNotes || null;
       }
       
       // Add flight-specific fields (Flight category and Package Tour can have flight schedule)
@@ -1517,7 +1689,7 @@ export default function AddServiceModal({
               )}
               {gapInfo.type === "stay" && (
                 <div className="flex items-center justify-center py-1 text-xs text-green-600">
-                  <span className="bg-green-100 px-2 py-0.5 rounded">🏨 Stay in {gapInfo.location}: {gapInfo.time}</span>
+                  <span className="bg-green-100 px-2 py-0.5 rounded inline-flex items-center gap-1"><Hotel size={12} /> Stay in {gapInfo.location}: {gapInfo.time}</span>
                 </div>
               )}
               <div className="bg-white rounded-lg px-3 py-2 border border-sky-100">
@@ -2140,7 +2312,7 @@ export default function AddServiceModal({
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
                     placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : "Description"}
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
 
@@ -2161,7 +2333,7 @@ export default function AddServiceModal({
                       <select
                         value={cabinClass}
                         onChange={(e) => setCabinClass(e.target.value as "economy" | "premium_economy" | "business" | "first")}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("cabinClass") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                       >
                         <option value="economy">Economy</option>
                         <option value="premium_economy">Premium Economy</option>
@@ -2305,7 +2477,7 @@ export default function AddServiceModal({
                         value={baggage}
                         onChange={(e) => setBaggage(e.target.value)}
                         placeholder="e.g., personal+cabin+1bag"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("baggage") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                       />
                     </div>
                   </>
@@ -2330,12 +2502,14 @@ export default function AddServiceModal({
             {categoryType === "flight" && (
               <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
                 <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">SUPPLIER</h4>
-                <PartySelect
-                  value={supplierPartyId}
-                  onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
-                  roleFilter="supplier"
-                  initialDisplayName={supplierName}
-                />
+                <div className={parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
+                  <PartySelect
+                    value={supplierPartyId}
+                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                    roleFilter="supplier"
+                    initialDisplayName={supplierName}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr</label>
@@ -2344,7 +2518,7 @@ export default function AddServiceModal({
                       value={refNr}
                       onChange={(e) => setRefNr(e.target.value)}
                       placeholder="Booking ref"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm ${parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                     />
                   </div>
                   <div>
@@ -2645,7 +2819,7 @@ export default function AddServiceModal({
                           setServicePrice(e.target.value);
                         }}
                         placeholder="0.00"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                       />
                     </div>
                     <div>
@@ -2674,7 +2848,7 @@ export default function AddServiceModal({
                           setClientPrice(e.target.value);
                         }}
                         placeholder="0.00"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parsedFields.has("clientPrice") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                       />
                     </div>
                   </div>
@@ -2984,7 +3158,7 @@ export default function AddServiceModal({
                       )}
                       {gapInfo.type === "stay" && (
                         <div className="flex items-center justify-center py-1 text-xs text-green-600">
-                          <span className="bg-green-100 px-2 py-0.5 rounded">🏨 Stay in {gapInfo.location}: {gapInfo.time}</span>
+                          <span className="bg-green-100 px-2 py-0.5 rounded inline-flex items-center gap-1"><Hotel size={12} /> Stay in {gapInfo.location}: {gapInfo.time}</span>
                         </div>
                       )}
                       
@@ -3224,25 +3398,162 @@ export default function AddServiceModal({
           )}
 
           {showTransferFields && (
-            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-              <h4 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">Transfer Details</h4>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+              <h4 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Transfer Details</h4>
+
+              {/* Row 1: Booking type */}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="transferBookingTypeAdd" value="one_way" checked={transferBookingType === "one_way"} onChange={() => setTransferBookingType("one_way")} className="accent-emerald-600" />
+                  <span className="text-sm">One way</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="transferBookingTypeAdd" value="by_hour" checked={transferBookingType === "by_hour"} onChange={() => setTransferBookingType("by_hour")} className="accent-emerald-600" />
+                  <span className="text-sm">By the hour</span>
+                </label>
+              </div>
+
+              {/* Row 2: Mode, Vehicle class, Details */}
+              <div className="grid grid-cols-4 gap-2">
                 <div>
-                  <input type="text" value={pickupLocation} onChange={(e) => setPickupLocation(e.target.value)} placeholder="Pickup" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <input type="text" value={dropoffLocation} onChange={(e) => setDropoffLocation(e.target.value)} placeholder="Dropoff" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <input type="text" value={estimatedDuration} onChange={(e) => setEstimatedDuration(e.target.value)} placeholder="Duration" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <select value={linkedFlightId || ""} onChange={(e) => setLinkedFlightId(e.target.value || null)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
-                    <option value="">No linked flight</option>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Mode</label>
+                  <select value={transferMode} onChange={e => setTransferMode(e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                    <option value="individual">Individual</option>
+                    <option value="group">Group</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Vehicle Class</label>
+                  <select value={vehicleClass} onChange={e => setVehicleClass(e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                    <option value="">—</option>
+                    <option value="economy">Economy</option>
+                    <option value="comfort">Comfort</option>
+                    <option value="business">Business</option>
+                    <option value="premium">Premium</option>
+                    <option value="first">First Class</option>
+                    <option value="minivan">Minivan</option>
+                    <option value="minibus">Minibus</option>
+                    <option value="bus">Bus</option>
+                    <option value="electric">Electric</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Details</label>
+                  <input type="text" value={vehicleClassCustom} onChange={e => setVehicleClassCustom(e.target.value)} placeholder="e.g. Mercedes V-Class" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                </div>
+              </div>
+
+              {/* Routes */}
+              {transferRoutes.map((route, idx) => (
+                <div key={route.id} className="p-2 bg-white rounded-lg border border-emerald-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-emerald-600 uppercase">Route {idx + 1}</span>
+                    {transferRoutes.length > 1 && (
+                      <button type="button" onClick={() => removeTransferRouteAdd(route.id)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">From</label>
+                    <input type="text" value={locationQueryAdd[`${route.id}-pickup`] ?? route.pickup} onChange={e => { handleLocationInputAdd(`${route.id}-pickup`, e.target.value); updateRouteFieldAdd(route.id, "pickup", e.target.value); }} onFocus={() => setActiveLocationFieldAdd(`${route.id}-pickup`)} onBlur={() => setTimeout(() => setActiveLocationFieldAdd(null), 200)} placeholder="Airport, hotel, address..." className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                    {activeLocationFieldAdd === `${route.id}-pickup` && (locationResultsAdd[`${route.id}-pickup`] || []).length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {(locationResultsAdd[`${route.id}-pickup`] || []).map((s, i) => (
+                          <button key={i} type="button" onMouseDown={() => selectLocationAdd(route.id, "pickup", s)} className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 flex items-center gap-2">
+                            <span className="text-[10px] font-medium text-gray-400 uppercase w-12 shrink-0">{s.type}</span>
+                            <span className="truncate">{s.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {transferBookingType === "one_way" ? (
+                    <div className="relative">
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">To</label>
+                      <input type="text" value={locationQueryAdd[`${route.id}-dropoff`] ?? route.dropoff} onChange={e => { handleLocationInputAdd(`${route.id}-dropoff`, e.target.value); updateRouteFieldAdd(route.id, "dropoff", e.target.value); }} onFocus={() => setActiveLocationFieldAdd(`${route.id}-dropoff`)} onBlur={() => setTimeout(() => setActiveLocationFieldAdd(null), 200)} placeholder="Airport, hotel, address..." className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                      {activeLocationFieldAdd === `${route.id}-dropoff` && (locationResultsAdd[`${route.id}-dropoff`] || []).length > 0 && (
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {(locationResultsAdd[`${route.id}-dropoff`] || []).map((s, i) => (
+                            <button key={i} type="button" onMouseDown={() => selectLocationAdd(route.id, "dropoff", s)} className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 flex items-center gap-2">
+                              <span className="text-[10px] font-medium text-gray-400 uppercase w-12 shrink-0">{s.type}</span>
+                              <span className="truncate">{s.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Duration</label>
+                      <select value={transferHours} onChange={e => setTransferHours(Number(e.target.value))} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                        {[1,2,3,4,5,6,7,8,10,12].map(h => <option key={h} value={h}>{h} {h === 1 ? "hour" : "hours"}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pickup Time</label>
+                      <input type="time" value={route.pickupTime || ""} onChange={e => updateRouteFieldAdd(route.id, "pickupTime", e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                    </div>
+                    {transferBookingType === "one_way" && (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Distance</label>
+                          <div className="px-2.5 py-1.5 text-sm text-gray-600 bg-gray-50 rounded-lg border border-gray-200">{route.distanceKm != null ? `~${route.distanceKm} km` : "—"}</div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Est. Duration</label>
+                          <div className="px-2.5 py-1.5 text-sm text-gray-600 bg-gray-50 rounded-lg border border-gray-200">{route.durationMin != null ? (route.durationMin >= 60 ? `~${Math.floor(route.durationMin / 60)}h ${route.durationMin % 60}min` : `~${route.durationMin} min`) : "—"}</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {flightServices.length > 0 && (
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Flight Number</label>
+                      <select value={route.linkedFlightId || ""} onChange={e => { const fid = e.target.value || undefined; updateRouteFieldAdd(route.id, "linkedFlightId", fid); if (fid) suggestPickupTimeAdd(route.id, fid); }} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                        <option value="">No linked flight</option>
+                        {flightServices.map(f => {
+                          const segs = f.flightSegments || [];
+                          const label = segs.length > 0
+                            ? segs.map(s => { const r = s as unknown as Record<string, string>; return `${r.flightNumber || ""} ${r.departureCity || ""}→${r.arrivalCity || ""}`; }).join(", ")
+                            : f.name;
+                          return <option key={f.id} value={f.id}>{label}</option>;
+                        })}
+                      </select>
+                      {route.linkedFlightId && route.pickupTime && (
+                        <p className="text-[10px] text-emerald-600 mt-0.5">
+                          {(route.pickupMeta?.iata || route.pickupType === "airport") ? "Pickup ~45 min after arrival" : `Be at airport 2h before departure (pickup ${route.pickupTime})`}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <button type="button" onClick={addTransferRouteAdd} className="text-sm text-emerald-600 hover:text-emerald-800 font-medium">
+                + Add route
+              </button>
+
+              {/* Chauffeur & Driver */}
+              <div className="border-t border-emerald-200 pt-2 space-y-2">
+                <h5 className="text-[10px] font-semibold text-emerald-600 uppercase">Chauffeur / Driver</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Name</label>
+                    <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Phone</label>
+                    <input type="tel" value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="+371..." className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Notes for the chauffeur</label>
+                  <textarea value={chauffeurNotes} onChange={e => setChauffeurNotes(e.target.value)} placeholder="Flight BT293, meet at arrivals with sign..." rows={2} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white resize-none" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Info visible to client</label>
+                  <textarea value={driverNotes} onChange={e => setDriverNotes(e.target.value)} placeholder="Driver will meet you at the exit gate..." rows={2} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white resize-none" />
                 </div>
               </div>
             </div>

@@ -28,6 +28,7 @@ export interface ParsedBooking {
   bookingRef: string;
   airline: string;
   totalPrice: number | null;
+  salePrice?: number | null;
   currency: string;
   ticketNumbers: string[];
   cabinClass: string;
@@ -1356,6 +1357,10 @@ function parseAirBaltic(text: string): ParseResult | null {
   if (!text.includes("airBaltic") && !text.match(/BT\s?\d{3,4}/i)) {
     return null;
   }
+  // Skip Amadeus PNR/GDS format — let parseAmadeus handle it
+  if (text.match(/RP\/[A-Z0-9]+\//) || text.match(/\d\s+[A-Z]{2}\s*\d{3,4}\s+[A-Z]\s+\d{1,2}[A-Z]{3}\s+\d\s+[A-Z]{6}\s+HK/)) {
+    return null;
+  }
   
   const bookingRefMatch = text.match(/(?:Booking\s+reference|Reservation)[\s:]+([A-Z0-9]{6})/i);
   const ticketMatch = text.match(/(?:Ticket|E-ticket)[\s:]+(\d{13})/i);
@@ -2288,9 +2293,10 @@ function parseAmadeus(text: string): ParseResult | null {
   // Example: 2  AF7303 I 28JAN 3 NCECDG HK1  1100 1235  28JAN  E  AF/XGGEFU
   // Format:  [line] [flight] [class] [date] [dow] [route6] [status] [depTime] [arrTime] [arrDate] [e] [ref]
   if (segments.length === 0) {
-    // Extract booking ref from header: RP/RIXLA2215/RIXLA2215 ... XGGEFU
-    const headerRefMatch = text.match(/[A-Z]{2}\/[A-Z0-9]+\/[A-Z0-9]+\s+[A-Z]{2}\/[A-Z]{2}\s+\d{2}[A-Z]{3}\d{2}\/\d{4}Z\s+([A-Z0-9]{6})/);
-    const pnrRef = headerRefMatch?.[1] || bookingRefMatch?.[1];
+    // Extract booking ref from header: RP/RIXLA2215/RIXLA2215 (PNR locator)
+    const headerRefMatch = text.match(/RP\/[A-Z0-9]+\/[A-Z0-9]+\s+[A-Z]{2}\/[A-Z]{2}\s+\d{2}[A-Z]{3}\d{2}\/\d{4}Z\s+([A-Z0-9]{6})/);
+    const segmentRefMatch = text.match(/[A-Z]{2}\/([A-Z0-9]{5,8})\s*$/m);
+    const pnrRef = headerRefMatch?.[1] || segmentRefMatch?.[1] || bookingRefMatch?.[1];
     
     // Extract ticket from FA line: FA PAX 074-2796062312/ETKL
     const faTicketMatch = text.match(/FA\s+PAX\s+(\d{3})-(\d{10})/);
@@ -2315,7 +2321,7 @@ function parseAmadeus(text: string): ParseResult | null {
     // Group 11: arrival time (1235)
     // Group 12: arrival date day (28)
     // Group 13: arrival date month (JAN)
-    const classicPattern = /^\s*\d+\s+([A-Z]{2})(\d{3,4})\s+([A-Z])\s+(\d{1,2})([A-Z]{3})\s+\d\s+([A-Z]{3})([A-Z]{3})\s+[A-Z]{2}\d?\s+(\d{4})\s+(\d{4})\s+(\d{1,2})([A-Z]{3})/gim;
+    const classicPattern = /^\s*\d+\s+([A-Z]{2})\s*(\d{3,4})\s+([A-Z])\s+(\d{1,2})([A-Z]{3})\s+\d\s+([A-Z]{3})([A-Z]{3})\s+[A-Z]{2}\d?\s+(\d{4})\s+(\d{4})\s+(\d{1,2})([A-Z]{3})/gim;
     let classicMatch;
     let idx = 0;
     
@@ -2354,9 +2360,7 @@ function parseAmadeus(text: string): ParseResult | null {
       const depTime = `${depTimeRaw.slice(0, 2)}:${depTimeRaw.slice(2)}`;
       const arrTime = `${arrTimeRaw.slice(0, 2)}:${arrTimeRaw.slice(2)}`;
       
-      // Don't guess cabin class from booking code - varies by airline
-      // GDS PNR format doesn't have explicit cabin class text, so leave as undefined
-      const cabinClass: "economy" | "premium_economy" | "business" | "first" | undefined = undefined;
+      const cabinClass = detectCabinClass(text);
       
       // Get airline name
       const airlineNames: Record<string, string> = {
@@ -2380,11 +2384,15 @@ function parseAmadeus(text: string): ParseResult | null {
       const depCity = getCityFromIATA(depAirport);
       const arrCity = getCityFromIATA(arrAirport);
       
-      // Calculate duration
+      // Calculate duration accounting for timezone differences
       const depMinutes = parseInt(depTimeRaw.slice(0, 2)) * 60 + parseInt(depTimeRaw.slice(2));
       const arrMinutes = parseInt(arrTimeRaw.slice(0, 2)) * 60 + parseInt(arrTimeRaw.slice(2));
-      let durationMinutes = arrMinutes - depMinutes;
-      if (durationMinutes < 0) durationMinutes += 24 * 60; // Next day arrival
+      const depTzOffset = getAirportTimezoneOffset(depAirport);
+      const arrTzOffset = getAirportTimezoneOffset(arrAirport);
+      const depUtc = depMinutes - depTzOffset * 60;
+      const arrUtc = arrMinutes - arrTzOffset * 60;
+      let durationMinutes = arrUtc - depUtc;
+      if (durationMinutes < 0) durationMinutes += 24 * 60;
       const durationHours = Math.floor(durationMinutes / 60);
       const durationMins = durationMinutes % 60;
       const duration = `${durationHours}h ${durationMins}m`;
@@ -2409,7 +2417,28 @@ function parseAmadeus(text: string): ParseResult | null {
       idx++;
     }
     
-    // Update passengerName if found
+    // Parse TQT format for price and baggage (when PNR + TQT pasted together)
+    let tqtTotalPrice: number | null = null;
+    let tqtCurrency = "EUR";
+    let tqtBaggage = "";
+    const totalMatch = text.match(/TOTAL\s+([A-Z]{3})\s+([\d.]+)/);
+    if (totalMatch) {
+      tqtTotalPrice = parseFloat(totalMatch[2]);
+      tqtCurrency = totalMatch[1];
+    }
+    const baggageMatch = text.match(/\s+(\d+PC)\s*$/m);
+    if (baggageMatch) {
+      tqtBaggage = baggageMatch[1];
+      segments.forEach((seg) => { seg.baggage = tqtBaggage; });
+    }
+
+    // Parse RIR remark for sale/client price: "RIR 865 EUR BUSINESS CLASS"
+    let rirSalePrice: number | null = null;
+    const rirMatch = text.match(/RIR\s+([\d.]+)\s+([A-Z]{3})/);
+    if (rirMatch) {
+      rirSalePrice = parseFloat(rirMatch[1]);
+    }
+    
     if (pnrPassengerName && segments.length > 0) {
       return {
         success: true,
@@ -2417,12 +2446,13 @@ function parseAmadeus(text: string): ParseResult | null {
         booking: {
           bookingRef: pnrRef || "",
           airline: segments[0]?.airline || "",
-          totalPrice: null,
-          currency: "EUR",
+          totalPrice: tqtTotalPrice,
+          salePrice: rirSalePrice,
+          currency: tqtCurrency,
           ticketNumbers: pnrTicketNumber ? [pnrTicketNumber] : [],
           cabinClass: segments[0]?.cabinClass || "economy",
           refundPolicy: "non_ref",
-          baggage: "",
+          baggage: tqtBaggage,
           passengerName: pnrPassengerName,
         },
         parser: "amadeus_pnr",
@@ -2437,6 +2467,26 @@ function parseAmadeus(text: string): ParseResult | null {
     arr.findIndex(s => s.flightNumber === seg.flightNumber && s.departureDate === seg.departureDate) === idx
   );
   
+  // Parse TQT for price and baggage (when PNR + TQT pasted together)
+  let tqtTotalPrice: number | null = null;
+  let tqtCurrency = "EUR";
+  const totalMatch = text.match(/TOTAL\s+([A-Z]{3})\s+([\d.]+)/);
+  if (totalMatch) {
+    tqtTotalPrice = parseFloat(totalMatch[2]);
+    tqtCurrency = totalMatch[1];
+  }
+  const baggageMatch = text.match(/\s+(\d+PC)\s*$/m);
+  if (baggageMatch) {
+    uniqueSegments.forEach((seg) => { seg.baggage = baggageMatch[1]; });
+  }
+
+  // Parse RIR remark for sale/client price
+  let rirSalePrice: number | null = null;
+  const rirMatch = text.match(/RIR\s+([\d.]+)\s+([A-Z]{3})/);
+  if (rirMatch) {
+    rirSalePrice = parseFloat(rirMatch[1]);
+  }
+  
   // Determine airline name
   const airlineNameMatch = text.match(/(?:AIR FRANCE|LUFTHANSA|KLM|BRITISH AIRWAYS|EMIRATES)/i);
   
@@ -2446,8 +2496,9 @@ function parseAmadeus(text: string): ParseResult | null {
     booking: {
       bookingRef: bookingRefMatch?.[1] || "",
       airline: airlineNameMatch?.[0] || uniqueSegments[0]?.airline || "",
-      totalPrice: null,
-      currency: "EUR",
+      totalPrice: tqtTotalPrice,
+      salePrice: rirSalePrice,
+      currency: tqtCurrency,
       ticketNumbers: ticketNumber ? [ticketNumber] : [],
       cabinClass: uniqueSegments[0]?.cabinClass || "economy",
       refundPolicy: "non_ref",

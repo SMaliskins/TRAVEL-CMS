@@ -9,6 +9,8 @@ import {
   SupplierCommission,
   SubagentDetails,
   SubagentCommissionType,
+  CorporateAccount,
+  LoyaltyCard,
 } from "@/lib/types/directory";
 import { useRipple } from "@/hooks/useRipple";
 import { ValidationIcon } from "@/components/ValidationIcon";
@@ -17,6 +19,7 @@ import SingleDatePicker from "@/components/SingleDatePicker";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 
 function getZodiacSign(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -231,9 +234,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Company fields
     const [companyName, setCompanyName] = useState(record?.companyName || "");
     const [regNo, setRegNo] = useState(record?.regNumber || "");
+    const [vatNo, setVatNo] = useState(record?.vatNumber || "");
     const [address, setAddress] = useState(record?.legalAddress || "");
     const [actualAddress, setActualAddress] = useState(record?.actualAddress || "");
-    const [contactPerson, setContactPerson] = useState("");
+    const [bankName, setBankName] = useState(record?.bankName || "");
+    const [iban, setIban] = useState(record?.iban || "");
+    const [swift, setSwift] = useState(record?.swift || "");
+    const [contactPerson, setContactPerson] = useState(record?.contactPerson || "");
 
     // Common fields
     const [phone, setPhone] = useState(record?.phone || "");
@@ -276,6 +283,52 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       ""
     );
 
+    // Corporate accounts (Company) / Loyalty cards (Person)
+    const [corporateAccounts, setCorporateAccounts] = useState<CorporateAccount[]>(
+      record?.corporateAccounts || []
+    );
+    const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>(
+      record?.loyaltyCards || []
+    );
+    // Provider autocomplete state
+    const [providerQuery, setProviderQuery] = useState("");
+    const [providerResults, setProviderResults] = useState<{id: string; name: string}[]>([]);
+    const [providerLoading, setProviderLoading] = useState(false);
+    const [activeProviderIdx, setActiveProviderIdx] = useState<number | null>(null);
+    const providerDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const searchProviders = React.useCallback(async (query: string) => {
+      if (!query.trim()) { setProviderResults([]); return; }
+      setProviderLoading(true);
+      try {
+        const res = await fetchWithAuth(`/api/directory?search=${encodeURIComponent(query)}&limit=8`);
+        if (res.ok) {
+          const json = await res.json();
+          setProviderResults((json.data || []).map((r: any) => ({
+            id: r.id,
+            name: r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || r.id,
+          })));
+        }
+      } catch { /* ignore */ }
+      setProviderLoading(false);
+    }, []);
+
+    const createProviderInline = React.useCallback(async (name: string): Promise<{id: string; name: string} | null> => {
+      try {
+        const res = await fetchWithAuth("/api/directory/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "company", roles: ["supplier"], companyName: name }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const rec = json.record;
+          return { id: rec.id, name: rec.companyName || name };
+        }
+      } catch { /* ignore */ }
+      return null;
+    }, []);
+
     // Update clientType when roles change (for Client role)
     // When Client role is added, set clientType to current baseType
     // This preserves the existing Type (Company/Person) when adding Client role
@@ -304,7 +357,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       loadCategories();
     }, []);
 
-    // Sync person fields from record when record changes (after save)
+    // Sync fields from record when record changes (after save)
     useEffect(() => {
       if (record) {
         setFirstName(record.firstName || "");
@@ -312,6 +365,18 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         setGender(record.gender || "");
         setPhone(record.phone ? formatPhoneForDisplay(record.phone) || record.phone : "");
         setEmail(record.email || "");
+        setCountry(record.country || "");
+        setContactPerson(record.contactPerson || "");
+        setCompanyName(record.companyName || "");
+        setBankName(record.bankName || "");
+        setIban(record.iban || "");
+        setSwift(record.swift || "");
+        setRegNo(record.regNumber || "");
+        setVatNo(record.vatNumber || "");
+        setAddress(record.legalAddress || "");
+        setActualAddress(record.actualAddress || "");
+        setCorporateAccounts(record.corporateAccounts || []);
+        setLoyaltyCards(record.loyaltyCards || []);
         setPassportData({
           passportNumber: record.passportNumber || undefined,
           passportIssueDate: record.passportIssueDate || undefined,
@@ -349,6 +414,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         lastName: record.lastName,
         gender: record.gender,
         companyName: record.companyName,
+        companyAvatarUrl: record.companyAvatarUrl,
         personalCode: record.personalCode,
         dob: record.dob,
         phone: record.phone,
@@ -356,6 +422,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         regNumber: record.regNumber,
         legalAddress: record.legalAddress,
         actualAddress: record.actualAddress,
+        bankName: record.bankName,
+        iban: record.iban,
+        swift: record.swift,
+        contactPerson: record.contactPerson,
+        country: record.country,
         supplierExtras: record.supplierExtras,
         subagentExtras: record.subagentExtras,
         passportNumber: record.passportNumber,
@@ -366,6 +437,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         nationality: record.nationality,
         avatarUrl: record.avatarUrl,
         isAlienPassport: record.isAlienPassport,
+        corporateAccounts: record.corporateAccounts,
+        loyaltyCards: record.loyaltyCards,
       };
     };
 
@@ -404,8 +477,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         phone.trim() !== (initialValues.phone || "").trim() ||
         email.trim() !== (initialValues.email || "").trim() ||
         regNo.trim() !== (initialValues.regNumber || "").trim() ||
+        vatNo.trim() !== (initialValues.vatNumber || "").trim() ||
         address.trim() !== (initialValues.legalAddress || "").trim() ||
         actualAddress.trim() !== (initialValues.actualAddress || "").trim() ||
+        bankName.trim() !== (initialValues.bankName || "").trim() ||
+        iban.trim() !== (initialValues.iban || "").trim() ||
+        swift.trim() !== (initialValues.swift || "").trim() ||
+        contactPerson.trim() !== (initialValues.contactPerson || "").trim() ||
+        (record?.companyAvatarUrl || "") !== (initialValues.companyAvatarUrl || "") ||
         (passportData.avatarUrl || "") !== (initialValues.avatarUrl || "") ||
         (passportData.isAlienPassport ?? false) !== (initialValues.isAlienPassport ?? false)
       ) {
@@ -437,6 +516,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       } else if (initialSubagent) {
         return true;
       }
+
+      // Check corporate accounts / loyalty cards
+      if (JSON.stringify(corporateAccounts) !== JSON.stringify(initialValues.corporateAccounts || [])) return true;
+      if (JSON.stringify(loyaltyCards) !== JSON.stringify(initialValues.loyaltyCards || [])) return true;
 
       return false;
     };
@@ -565,17 +648,23 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         }
       } else {
         formData.companyName = companyName;
+        formData.companyAvatarUrl = record?.companyAvatarUrl || undefined;
         formData.regNumber = regNo || undefined;
+        formData.vatNumber = vatNo || undefined;
         formData.legalAddress = address || undefined;
         formData.actualAddress = actualAddress || undefined;
+        formData.bankName = bankName || undefined;
+        formData.iban = iban || undefined;
+        formData.swift = swift || undefined;
+        formData.contactPerson = contactPerson || undefined;
         if (!record || !record.personalCode) {
           formData.personalCode = regNo || undefined;
         }
       }
 
-      // Country (for company)
-      if (displayType === "company" && country.trim()) {
-        formData.country = country.trim();
+      // Country
+      if (displayType === "company") {
+        formData.country = country.trim() || undefined;
       }
 
       // Supplier details
@@ -593,6 +682,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           commissionValue: subagentCommissionValue,
           commissionCurrency: subagentCommissionCurrency,
         };
+      }
+
+      // Corporate accounts / Loyalty cards
+      if (displayType === "company") {
+        formData.corporateAccounts = corporateAccounts.filter(a => a.providerName.trim() && a.accountCode.trim());
+      }
+      if (displayType === "person") {
+        formData.loyaltyCards = loyaltyCards.filter(c => c.providerName.trim() && c.cardCode.trim());
       }
 
       onSubmit(formData, closeAfterSave);
@@ -947,8 +1044,23 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Address
+                      VAT Nr.
                     </label>
+                    <input
+                      type="text"
+                      value={vatNo}
+                      onChange={(e) => {
+                        setVatNo(e.target.value);
+                        markFieldDirty("vatNo");
+                      }}
+                      onBlur={() => markFieldTouched("vatNo")}
+                      onFocus={() => markFieldTouched("vatNo")}
+                      className={getInputClasses("vatNo", false, vatNo)}
+                      aria-label="VAT number"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Legal address</label>
                     <input
                       type="text"
                       value={address}
@@ -959,30 +1071,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       onBlur={() => markFieldTouched("address")}
                       onFocus={() => markFieldTouched("address")}
                       className={getInputClasses("address", false, address)}
-                      aria-label="Address"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Actual address
-                    </label>
-                    <input
-                      type="text"
-                      value={actualAddress}
-                      onChange={(e) => {
-                        setActualAddress(e.target.value);
-                        markFieldDirty("actualAddress");
-                      }}
-                      onBlur={() => markFieldTouched("actualAddress")}
-                      onFocus={() => markFieldTouched("actualAddress")}
-                      className={getInputClasses("actualAddress", false, actualAddress)}
-                      aria-label="Actual address"
+                      aria-label="Legal address"
                     />
                   </div>
                   <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Country
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
                     <div className="relative">
                       <input
                         type="text"
@@ -1003,7 +1096,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             setCountryDropdownOpen(false);
                           }, 200);
                         }}
-                        className={`${getInputClasses("country", false, country)} ${touchedFields.has("country") || country.trim() ? 'pr-10' : ''}`}
+                        className={`${getInputClasses("country", false, country)} ${touchedFields.has("country") || country.trim() ? "pr-10" : ""}`}
                         aria-label="Country"
                         placeholder="Start typing country..."
                       />
@@ -1011,13 +1104,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         status={getValidationStatus("country", false, country, touchedFields.has("country"))}
                         show={touchedFields.has("country") || country.trim() !== ""}
                       />
-                      {countryDropdownOpen && (
+                      {countryDropdownOpen && (() => {
+                        const q = (countryDropdownOpen ? countrySearch : country).trim();
+                        const filtered = !q ? COUNTRIES : COUNTRIES.filter((c) => matchesSearch(c, getSearchPatterns(q)));
+                        return (
                         <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-                          {COUNTRIES.filter((c) =>
-                            c.toLowerCase().includes((countryDropdownOpen ? countrySearch : country).toLowerCase())
-                          )
-                            .slice(0, 12)
-                            .map((c) => (
+                          {filtered.slice(0, 12).map((c) => (
                               <button
                                 key={c}
                                 type="button"
@@ -1033,42 +1125,96 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                                 {c}
                               </button>
                             ))}
-                          {COUNTRIES.filter((c) =>
-                            c.toLowerCase().includes((countryDropdownOpen ? countrySearch : country).toLowerCase())
-                          ).length === 0 && (
+                          {filtered.length === 0 && (
                             <div className="px-3 py-2 text-sm text-gray-400">No countries found</div>
                           )}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                   <div>
-                    <label className="block mb-1 text-sm font-medium text-gray-700 transition-colors truncate">
-                      Contact person
-                    </label>
-                    <div className="relative min-h-[2.5rem]">
-                      <input
-                        type="text"
-                        value={contactPerson}
-                        onChange={(e) => {
-                          setContactPerson(e.target.value);
-                          markFieldDirty("contactPerson");
-                        }}
-                        onBlur={() => markFieldTouched("contactPerson")}
-                        onFocus={() => markFieldTouched("contactPerson")}
-                        className={`${getInputClasses("contactPerson", false, contactPerson)} ${touchedFields.has("contactPerson") || contactPerson.trim() ? 'pr-10' : ''}`}
-                        aria-label="Contact person"
-                      />
-                      <ValidationIcon
-                        status={getValidationStatus("contactPerson", false, contactPerson, touchedFields.has("contactPerson"))}
-                        show={touchedFields.has("contactPerson") || contactPerson.trim() !== ""}
-                      />
-                    </div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Actual address</label>
+                    <input
+                      type="text"
+                      value={actualAddress}
+                      onChange={(e) => {
+                        setActualAddress(e.target.value);
+                        markFieldDirty("actualAddress");
+                      }}
+                      onBlur={() => markFieldTouched("actualAddress")}
+                      onFocus={() => markFieldTouched("actualAddress")}
+                      className={getInputClasses("actualAddress", false, actualAddress)}
+                      aria-label="Actual address"
+                    />
                   </div>
                 </>
               )}
 
-              {/* Common fields - Phone and Email in one row */}
+              {/* Contact person + Phone + Email — company only section */}
+              {displayType === "company" && (
+                <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Contact person</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="block mb-1 text-sm font-medium text-gray-700">Name</label>
+                      <div className="relative min-h-[2.5rem]">
+                        <input
+                          type="text"
+                          value={contactPerson}
+                          onChange={(e) => {
+                            setContactPerson(e.target.value);
+                            markFieldDirty("contactPerson");
+                          }}
+                          onBlur={() => markFieldTouched("contactPerson")}
+                          onFocus={() => markFieldTouched("contactPerson")}
+                          className={`${getInputClasses("contactPerson", false, contactPerson)} ${touchedFields.has("contactPerson") || contactPerson.trim() ? 'pr-10' : ''}`}
+                          aria-label="Contact person"
+                        />
+                        <ValidationIcon
+                          status={getValidationStatus("contactPerson", false, contactPerson, touchedFields.has("contactPerson"))}
+                          show={touchedFields.has("contactPerson") || contactPerson.trim() !== ""}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => { setPhone(e.target.value); markFieldDirty("phone"); }}
+                        onBlur={() => {
+                          markFieldTouched("phone");
+                          if (phone.trim()) {
+                            const formatted = formatPhoneForDisplay(phone);
+                            if (formatted) setPhone(formatted);
+                          }
+                        }}
+                        onFocus={() => markFieldTouched("phone")}
+                        placeholder="(+371) 722727218"
+                        className={getInputClasses("phone", false, phone)}
+                        aria-label="Phone"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => { setEmail(e.target.value); markFieldDirty("email"); }}
+                        onBlur={() => markFieldTouched("email")}
+                        onFocus={() => markFieldTouched("email")}
+                        placeholder="client@email.com"
+                        className={getInputClasses("email", false, email)}
+                        aria-label="Email"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Common fields - Phone and Email in one row (person only, company has them in Contact person section) */}
+              {displayType !== "company" && (
               <div className="flex flex-wrap gap-4 md:col-span-2">
                 <div className="flex-1 min-w-[200px]">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1113,6 +1259,171 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   />
                 </div>
               </div>
+              )}
+
+              {/* Bank details - company only, after contact info */}
+              {displayType === "company" && (
+                <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Bank details</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Bank name</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => { setBankName(e.target.value); markFieldDirty("bankName"); }}
+                        onBlur={() => markFieldTouched("bankName")}
+                        onFocus={() => markFieldTouched("bankName")}
+                        className={getInputClasses("bankName", false, bankName)}
+                        aria-label="Bank name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">IBAN</label>
+                      <input
+                        type="text"
+                        value={iban}
+                        onChange={(e) => { setIban(e.target.value); markFieldDirty("iban"); }}
+                        onBlur={() => markFieldTouched("iban")}
+                        onFocus={() => markFieldTouched("iban")}
+                        className={getInputClasses("iban", false, iban)}
+                        placeholder="e.g. LV80BANK0000435195001"
+                        aria-label="IBAN"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT</label>
+                      <input
+                        type="text"
+                        value={swift}
+                        onChange={(e) => { setSwift(e.target.value); markFieldDirty("swift"); }}
+                        onBlur={() => markFieldTouched("swift")}
+                        onFocus={() => markFieldTouched("swift")}
+                        className={getInputClasses("swift", false, swift)}
+                        placeholder="e.g. HABALV22"
+                        aria-label="SWIFT/BIC"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Corporate accounts - company only */}
+              {displayType === "company" && (
+                <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-800">Corporate accounts</h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCorporateAccounts([...corporateAccounts, { providerName: "", accountCode: "" }]);
+                        markFieldDirty("corporateAccounts");
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      <span>+</span> Add
+                    </button>
+                  </div>
+                  {corporateAccounts.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No corporate accounts</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {corporateAccounts.map((account, idx) => (
+                        <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white rounded-lg p-3 border border-gray-100">
+                          <div className="relative flex-1 min-w-0">
+                            <input
+                              type="text"
+                              placeholder="Provider (type to search)"
+                              value={account.providerName}
+                              onChange={(e) => {
+                                const updated = [...corporateAccounts];
+                                updated[idx] = { ...updated[idx], providerName: e.target.value, providerId: undefined };
+                                setCorporateAccounts(updated);
+                                markFieldDirty("corporateAccounts");
+                                setActiveProviderIdx(idx);
+                                if (providerDebounceRef.current) clearTimeout(providerDebounceRef.current);
+                                providerDebounceRef.current = setTimeout(() => searchProviders(e.target.value), 300);
+                              }}
+                              onFocus={() => {
+                                setActiveProviderIdx(idx);
+                                if (account.providerName.trim()) searchProviders(account.providerName);
+                              }}
+                              onBlur={() => setTimeout(() => { if (activeProviderIdx === idx) setActiveProviderIdx(null); }, 200)}
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                            />
+                            {activeProviderIdx === idx && (providerResults.length > 0 || providerLoading || account.providerName.trim()) && (
+                              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                                {providerLoading && <div className="px-3 py-2 text-xs text-gray-400">Searching...</div>}
+                                {providerResults.map((p) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      const updated = [...corporateAccounts];
+                                      updated[idx] = { ...updated[idx], providerId: p.id, providerName: p.name };
+                                      setCorporateAccounts(updated);
+                                      markFieldDirty("corporateAccounts");
+                                      setActiveProviderIdx(null);
+                                      setProviderResults([]);
+                                    }}
+                                  >
+                                    {p.name}
+                                  </button>
+                                ))}
+                                {!providerLoading && account.providerName.trim() && (
+                                  <button
+                                    type="button"
+                                    className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium"
+                                    onMouseDown={async (e) => {
+                                      e.preventDefault();
+                                      const created = await createProviderInline(account.providerName.trim());
+                                      if (created) {
+                                        const updated = [...corporateAccounts];
+                                        updated[idx] = { ...updated[idx], providerId: created.id, providerName: created.name };
+                                        setCorporateAccounts(updated);
+                                        markFieldDirty("corporateAccounts");
+                                      }
+                                      setActiveProviderIdx(null);
+                                      setProviderResults([]);
+                                    }}
+                                  >
+                                    + Create &quot;{account.providerName.trim()}&quot; as supplier
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Account code"
+                            value={account.accountCode}
+                            onChange={(e) => {
+                              const updated = [...corporateAccounts];
+                              updated[idx] = { ...updated[idx], accountCode: e.target.value };
+                              setCorporateAccounts(updated);
+                              markFieldDirty("corporateAccounts");
+                            }}
+                            className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCorporateAccounts(corporateAccounts.filter((_, i) => i !== idx));
+                              markFieldDirty("corporateAccounts");
+                            }}
+                            className="text-red-500 hover:text-red-600 p-1 self-center"
+                            aria-label="Remove"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Passport Details - under Phone/Email, left-aligned (person only) */}
               {displayType === "person" && (
@@ -1142,6 +1453,135 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     }}
                     readonly={false}
                   />
+                </div>
+              )}
+
+              {/* Loyalty cards & programs - person only */}
+              {displayType === "person" && (
+                <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-800">Loyalty cards & programs</h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoyaltyCards([...loyaltyCards, { providerName: "", cardCode: "" }]);
+                        markFieldDirty("loyaltyCards");
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      <span>+</span> Add
+                    </button>
+                  </div>
+                  {loyaltyCards.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No loyalty cards</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {loyaltyCards.map((card, idx) => (
+                        <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white rounded-lg p-3 border border-gray-100">
+                          <div className="relative flex-1 min-w-0">
+                            <input
+                              type="text"
+                              placeholder="Provider (type to search)"
+                              value={card.providerName}
+                              onChange={(e) => {
+                                const updated = [...loyaltyCards];
+                                updated[idx] = { ...updated[idx], providerName: e.target.value, providerId: undefined };
+                                setLoyaltyCards(updated);
+                                markFieldDirty("loyaltyCards");
+                                setActiveProviderIdx(1000 + idx);
+                                if (providerDebounceRef.current) clearTimeout(providerDebounceRef.current);
+                                providerDebounceRef.current = setTimeout(() => searchProviders(e.target.value), 300);
+                              }}
+                              onFocus={() => {
+                                setActiveProviderIdx(1000 + idx);
+                                if (card.providerName.trim()) searchProviders(card.providerName);
+                              }}
+                              onBlur={() => setTimeout(() => { if (activeProviderIdx === 1000 + idx) setActiveProviderIdx(null); }, 200)}
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                            />
+                            {activeProviderIdx === 1000 + idx && (providerResults.length > 0 || providerLoading || card.providerName.trim()) && (
+                              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                                {providerLoading && <div className="px-3 py-2 text-xs text-gray-400">Searching...</div>}
+                                {providerResults.map((p) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      const updated = [...loyaltyCards];
+                                      updated[idx] = { ...updated[idx], providerId: p.id, providerName: p.name };
+                                      setLoyaltyCards(updated);
+                                      markFieldDirty("loyaltyCards");
+                                      setActiveProviderIdx(null);
+                                      setProviderResults([]);
+                                    }}
+                                  >
+                                    {p.name}
+                                  </button>
+                                ))}
+                                {!providerLoading && card.providerName.trim() && (
+                                  <button
+                                    type="button"
+                                    className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium"
+                                    onMouseDown={async (e) => {
+                                      e.preventDefault();
+                                      const created = await createProviderInline(card.providerName.trim());
+                                      if (created) {
+                                        const updated = [...loyaltyCards];
+                                        updated[idx] = { ...updated[idx], providerId: created.id, providerName: created.name };
+                                        setLoyaltyCards(updated);
+                                        markFieldDirty("loyaltyCards");
+                                      }
+                                      setActiveProviderIdx(null);
+                                      setProviderResults([]);
+                                    }}
+                                  >
+                                    + Create &quot;{card.providerName.trim()}&quot; as supplier
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Program name"
+                            value={card.programName || ""}
+                            onChange={(e) => {
+                              const updated = [...loyaltyCards];
+                              updated[idx] = { ...updated[idx], programName: e.target.value || undefined };
+                              setLoyaltyCards(updated);
+                              markFieldDirty("loyaltyCards");
+                            }}
+                            className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Card / member code"
+                            value={card.cardCode}
+                            onChange={(e) => {
+                              const updated = [...loyaltyCards];
+                              updated[idx] = { ...updated[idx], cardCode: e.target.value };
+                              setLoyaltyCards(updated);
+                              markFieldDirty("loyaltyCards");
+                            }}
+                            className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLoyaltyCards(loyaltyCards.filter((_, i) => i !== idx));
+                              markFieldDirty("loyaltyCards");
+                            }}
+                            className="text-red-500 hover:text-red-600 p-1 self-center"
+                            aria-label="Remove"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

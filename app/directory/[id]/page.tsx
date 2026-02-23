@@ -297,11 +297,23 @@ export default function DirectoryDetailPage() {
                   avatarUrl={record.avatarUrl}
                   placeholder={record.firstName?.[0] || record.lastName?.[0] || "?"}
                   onAvatarChange={(url) => setRecord((prev) => (prev ? { ...prev, avatarUrl: url } : null))}
+                  onDirty={() => setIsDirty(true)}
                   size="lg"
                 />
               ) : (
-                <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl text-gray-500 font-medium flex-shrink-0">
-                  {record.companyName?.[0] || "?"}
+                <div className="relative group">
+                  <AvatarUpload
+                    avatarUrl={record.companyAvatarUrl}
+                    placeholder={record.companyName?.[0] || "?"}
+                    onAvatarChange={(url) => setRecord((prev) => (prev ? { ...prev, companyAvatarUrl: url } : null))}
+                    onDirty={() => setIsDirty(true)}
+                    size="lg"
+                  />
+                  {!record.companyAvatarUrl && (
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 group-hover:bg-black/20 transition-colors pointer-events-none text-xs text-white font-medium opacity-0 group-hover:opacity-100">
+                      Ctrl+V
+                    </span>
+                  )}
                 </div>
               )}
               <div>

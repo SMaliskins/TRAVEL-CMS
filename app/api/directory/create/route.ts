@@ -114,6 +114,9 @@ export async function POST(request: NextRequest) {
       service_areas: data.supplierExtras?.serviceAreas || null,
       // Supplier commissions
       supplier_commissions: data.supplierExtras?.commissions || null,
+      // Corporate accounts / Loyalty cards
+      corporate_accounts: data.corporateAccounts && data.corporateAccounts.length > 0 ? data.corporateAccounts : null,
+      loyalty_cards: data.loyaltyCards && data.loyaltyCards.length > 0 ? data.loyaltyCards : null,
     };
 
     const { data: party, error: partyError } = await supabaseAdmin
@@ -175,10 +178,15 @@ export async function POST(request: NextRequest) {
       const companyData: any = {
         party_id: partyId,
         company_name: data.companyName,
+        logo_url: data.companyAvatarUrl || null,
         reg_number: data.regNumber || null,
+        vat_number: data.vatNumber || null,
         legal_address: data.legalAddress || null,
         actual_address: data.actualAddress || null,
-        bank_details: null, // Not in current DirectoryRecord type
+        bank_name: data.bankName || null,
+        iban: data.iban || null,
+        swift: data.swift || null,
+        contact_person: data.contactPerson || null,
       };
 
       const { error: companyError } = await supabaseAdmin

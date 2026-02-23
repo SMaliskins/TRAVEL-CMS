@@ -535,7 +535,7 @@ export default function DirectoryPage() {
                   const displayName = record.type === "person" 
                     ? `${record.firstName || ""} ${record.lastName || ""}`.trim() || "N/A"
                     : record.companyName || "N/A";
-                  const recordWithExtras = record as DirectoryRecord & { displayId?: string; avatarUrl?: string };
+                  const recordWithExtras = record as DirectoryRecord & { displayId?: string; avatarUrl?: string; companyAvatarUrl?: string };
                   
                   return (
                     <tr 
@@ -553,6 +553,12 @@ export default function DirectoryPage() {
                           {record.type === "person" && recordWithExtras.avatarUrl ? (
                             <img
                               src={recordWithExtras.avatarUrl}
+                              alt=""
+                              className="h-8 w-8 rounded-full object-cover border border-gray-200"
+                            />
+                          ) : record.type === "company" && recordWithExtras.companyAvatarUrl ? (
+                            <img
+                              src={recordWithExtras.companyAvatarUrl}
                               alt=""
                               className="h-8 w-8 rounded-full object-cover border border-gray-200"
                             />

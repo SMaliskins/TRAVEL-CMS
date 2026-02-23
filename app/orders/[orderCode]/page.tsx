@@ -231,6 +231,23 @@ export default function OrderPage({
       daysUntil = Math.ceil((tripDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     }
     
+    // If no explicit destinations but origin/return exist, use them as destinations
+    if (destinations.length === 0) {
+      const fallback: { name: string; countryCode?: string; country?: string }[] = [];
+      const seen = new Set<string>();
+      for (const c of [originCity, returnCity]) {
+        if (c && !seen.has(c.name.toLowerCase())) {
+          seen.add(c.name.toLowerCase());
+          fallback.push(c);
+        }
+      }
+      if (fallback.length > 0) {
+        destinations = fallback;
+        originCity = null;
+        returnCity = null;
+      }
+    }
+
     return { origin: originCity, destinations, returnCity, daysNights, daysUntil };
   }, [order?.countries_cities, order?.date_from, order?.date_to]);
 

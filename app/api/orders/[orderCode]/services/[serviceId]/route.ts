@@ -109,6 +109,12 @@ export async function PATCH(
     if (body.pickup_time !== undefined) updates.pickup_time = body.pickup_time;
     if (body.estimated_duration !== undefined) updates.estimated_duration = body.estimated_duration;
     if (body.linked_flight_id !== undefined) updates.linked_flight_id = body.linked_flight_id;
+    if (body.transfer_routes !== undefined) updates.transfer_routes = Array.isArray(body.transfer_routes) ? body.transfer_routes : null;
+    if (body.transfer_mode !== undefined) updates.transfer_mode = body.transfer_mode;
+    if (body.vehicle_class !== undefined) updates.vehicle_class = body.vehicle_class;
+    if (body.driver_name !== undefined) updates.driver_name = body.driver_name;
+    if (body.driver_phone !== undefined) updates.driver_phone = body.driver_phone;
+    if (body.driver_notes !== undefined) updates.driver_notes = body.driver_notes;
     if (body.cabin_class !== undefined) updates.cabin_class = body.cabin_class;
     if (body.baggage !== undefined) updates.baggage = body.baggage;
     if (body.flight_segments !== undefined) updates.flight_segments = body.flight_segments;

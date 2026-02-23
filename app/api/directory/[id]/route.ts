@@ -61,15 +61,30 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
 
   // Company fields
   if (row.party_type === "company") {
-    record.companyName = row.company_name || undefined;
+    record.companyName = row.company_name || row.display_name || undefined;
+    record.companyAvatarUrl = row.logo_url || undefined;
     record.regNumber = row.reg_number || undefined;
+    record.vatNumber = row.vat_number || undefined;
     record.legalAddress = row.legal_address || undefined;
     record.actualAddress = row.actual_address || undefined;
+    record.bankName = row.bank_name || undefined;
+    record.iban = row.iban || undefined;
+    record.swift = row.swift || undefined;
   }
 
   // Common fields
   record.phone = row.phone || undefined;
   record.email = row.email || undefined;
+  record.country = row.country || undefined;
+
+  // Company: contact person
+  if (row.party_type === "company") {
+    record.contactPerson = row.contact_person || undefined;
+  }
+
+  // Corporate accounts / Loyalty cards
+  if (row.corporate_accounts) record.corporateAccounts = row.corporate_accounts;
+  if (row.loyalty_cards) record.loyaltyCards = row.loyalty_cards;
 
   // Audit
   if (row.created_by) record.createdById = row.created_by;
@@ -272,13 +287,19 @@ export async function GET(
       is_subagent: !!subagentData.data,
       ...supplierData.data,
       ...subagentData.data,
+      id: party.id,
+      created_by: party.created_by,
+      updated_by: party.updated_by,
+      created_at: party.created_at,
+      updated_at: party.updated_at,
     });
 
-    // Resolve created_by / updated_by to display names (user_profiles first, then profiles)
+    // Resolve created_by / updated_by to display names (имя и фамилия из user_profiles, fallback — profiles)
     const auditUserIds = [record.createdById, record.updatedById].filter(Boolean) as string[];
     const byId = new Map<string, string>();
     if (auditUserIds.length > 0) {
       const uniq = [...new Set(auditUserIds)];
+      // user_profiles first — first_name + last_name (полное имя)
       const { data: userProfiles } = await supabaseAdmin
         .from("user_profiles")
         .select("id, first_name, last_name")
@@ -420,6 +441,13 @@ export async function PUT(
     // Country
     if (updates.country !== undefined) {
       partyUpdates.country = updates.country || null;
+    }
+    // Corporate accounts / Loyalty cards
+    if (updates.corporateAccounts !== undefined) {
+      partyUpdates.corporate_accounts = updates.corporateAccounts && updates.corporateAccounts.length > 0 ? updates.corporateAccounts : null;
+    }
+    if (updates.loyaltyCards !== undefined) {
+      partyUpdates.loyalty_cards = updates.loyaltyCards && updates.loyaltyCards.length > 0 ? updates.loyaltyCards : null;
     }
     // Supplier service areas
     if (updates.supplierExtras?.serviceAreas !== undefined) {
@@ -563,11 +591,15 @@ export async function PUT(
                               updates.passportFullName !== undefined || updates.nationality !== undefined ||
                               updates.avatarUrl !== undefined || updates.isAlienPassport !== undefined;
     
-    if (partyType === "person" || hasPersonFields || hasPassportFields) {
-      const personUpdates: any = {};
+    if (partyType !== "company" && (partyType === "person" || hasPersonFields || hasPassportFields)) {
+      const personUpdates: Record<string, unknown> = {};
       if (updates.title !== undefined) personUpdates.title = updates.title;
-      if (updates.firstName !== undefined) personUpdates.first_name = updates.firstName;
-      if (updates.lastName !== undefined) personUpdates.last_name = updates.lastName;
+      if (updates.firstName !== undefined && updates.firstName !== null && String(updates.firstName).trim() !== "") {
+        personUpdates.first_name = updates.firstName;
+      }
+      if (updates.lastName !== undefined && updates.lastName !== null && String(updates.lastName).trim() !== "") {
+        personUpdates.last_name = updates.lastName;
+      }
       if (updates.gender !== undefined) personUpdates.gender = updates.gender || null;
       if (updates.dob !== undefined) personUpdates.dob = updates.dob;
       if (updates.personalCode !== undefined) personUpdates.personal_code = updates.personalCode;
@@ -590,6 +622,22 @@ export async function PUT(
 
       // Only update if there are fields to update
       if (Object.keys(personUpdates).length > 0) {
+        const { data: existingPerson } = await supabaseAdmin
+          .from("party_person")
+          .select("party_id")
+          .eq("party_id", id)
+          .maybeSingle();
+
+        const hasName = (personUpdates.first_name != null && String(personUpdates.first_name).trim() !== "") &&
+          (personUpdates.last_name != null && String(personUpdates.last_name).trim() !== "");
+
+        if (!existingPerson && !hasName) {
+          return NextResponse.json(
+            { error: "First name and last name are required when creating a person record", details: null },
+            { status: 400 }
+          );
+        }
+
         const { error: personError } = await supabaseAdmin
           .from("party_person")
           .upsert({
@@ -657,9 +705,15 @@ export async function PUT(
     if (partyType === "company" || updates.companyName) {
       const companyUpdates: any = {};
       if (updates.companyName !== undefined) companyUpdates.company_name = updates.companyName;
+      if (updates.companyAvatarUrl !== undefined) companyUpdates.logo_url = updates.companyAvatarUrl || null;
       if (updates.regNumber !== undefined) companyUpdates.reg_number = updates.regNumber;
+      if (updates.vatNumber !== undefined) companyUpdates.vat_number = updates.vatNumber;
       if (updates.legalAddress !== undefined) companyUpdates.legal_address = updates.legalAddress;
       if (updates.actualAddress !== undefined) companyUpdates.actual_address = updates.actualAddress;
+      if (updates.bankName !== undefined) companyUpdates.bank_name = updates.bankName || null;
+      if (updates.iban !== undefined) companyUpdates.iban = updates.iban || null;
+      if (updates.swift !== undefined) companyUpdates.swift = updates.swift || null;
+      if (updates.contactPerson !== undefined) companyUpdates.contact_person = updates.contactPerson || null;
 
       const { error: companyError } = await supabaseAdmin
         .from("party_company")
@@ -670,6 +724,10 @@ export async function PUT(
 
       if (companyError) {
         console.error("Error updating company:", companyError);
+        return NextResponse.json(
+          { error: `Failed to update company record: ${companyError.message}`, details: companyError.details },
+          { status: 500 }
+        );
       }
       
       // Update display_name in party table if companyName changed
@@ -819,6 +877,11 @@ export async function PUT(
       is_subagent: !!subagentData.data,
       ...supplierData.data,
       ...subagentData.data,
+      id: updatedParty.id,
+      created_by: updatedParty.created_by,
+      updated_by: updatedParty.updated_by,
+      created_at: updatedParty.created_at,
+      updated_at: updatedParty.updated_at,
     });
 
     // Upsert party embedding for semantic search (non-blocking)

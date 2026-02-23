@@ -86,8 +86,7 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from("partner_party")
         .select("id", { count: "exact", head: true })
-        .in("party_id", partyIds)
-        .eq("partner_role", "supplier"),
+        .in("party_id", partyIds),
       supabaseAdmin
         .from("subagents")
         .select("id", { count: "exact", head: true })
@@ -99,8 +98,7 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from("partner_party")
         .select("party_id")
-        .in("party_id", partyIds)
-        .eq("partner_role", "supplier"),
+        .in("party_id", partyIds),
     ]);
 
     if (clientsError) console.error("[Statistics] Error counting clients:", clientsError);
@@ -112,24 +110,32 @@ export async function GET(request: NextRequest) {
     const supplierPartyIds = (supplierParties || []).map((sp: { party_id: string }) => sp.party_id);
 
     // Fetch nationality from party_person (clients who are persons) and country from party (suppliers)
-    const [clientPartyRows, supplierPartyRows] = await Promise.all([
-      clientPartyIds.length > 0
-        ? supabaseAdmin
-            .from("party_person")
-            .select("nationality")
-            .in("party_id", clientPartyIds)
-            .not("nationality", "is", null)
-            .then(({ data }) => data || [])
-        : Promise.resolve([]),
-      supplierPartyIds.length > 0
-        ? supabaseAdmin
-            .from("party")
-            .select("country")
-            .in("id", supplierPartyIds)
-            .not("country", "is", null)
-            .then(({ data }) => data || [])
-        : Promise.resolve([]),
-    ]);
+    let clientPartyRows: { nationality: string | null }[] = [];
+    let supplierPartyRows: { country: string | null }[] = [];
+    try {
+      const [cRows, sRows] = await Promise.all([
+        clientPartyIds.length > 0
+          ? supabaseAdmin
+              .from("party_person")
+              .select("nationality")
+              .in("party_id", clientPartyIds)
+              .not("nationality", "is", null)
+              .then(({ data }) => data || [])
+          : Promise.resolve([]),
+        supplierPartyIds.length > 0
+          ? supabaseAdmin
+              .from("party")
+              .select("country")
+              .in("id", supplierPartyIds)
+              .not("country", "is", null)
+              .then(({ data, error }) => error ? [] : (data || []))
+          : Promise.resolve([]),
+      ]);
+      clientPartyRows = cRows;
+      supplierPartyRows = sRows;
+    } catch (e) {
+      console.warn("[Statistics] Error fetching nationality/country breakdown:", e);
+    }
 
     const nationalityCount: Record<string, number> = {};
     clientPartyRows.forEach((p: { nationality: string | null }) => {

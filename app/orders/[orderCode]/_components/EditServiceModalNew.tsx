@@ -14,6 +14,7 @@ import ChangeServiceModal from './ChangeServiceModal';
 import CancelServiceModal from './CancelServiceModal';
 import HotelSuggestInput from '@/components/HotelSuggestInput';
 import ClientMultiSelectDropdown from '@/components/ClientMultiSelectDropdown';
+import { Hotel } from "lucide-react";
 import type { SupplierCommission } from '@/lib/types/directory';
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
@@ -85,12 +86,19 @@ interface Service {
   hotelParking?: boolean;
   hotelPreferencesFreeText?: string;
   supplierBookingType?: "gds" | "direct";
-  // Transfer-specific
+  // Transfer-specific (legacy flat)
   pickupLocation?: string;
   dropoffLocation?: string;
   pickupTime?: string;
   estimatedDuration?: string;
   linkedFlightId?: string;
+  // Transfer-specific (new structured)
+  transferRoutes?: TransferRoute[];
+  transferMode?: string | null;
+  vehicleClass?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverNotes?: string | null;
   // Flight-specific
   flightSegments?: FlightSegment[];
   baggage?: string;
@@ -118,15 +126,40 @@ interface ClientEntry {
   name: string;
 }
 
+interface FlightServiceRef {
+  id: string;
+  name: string;
+  flightSegments: FlightSegment[];
+}
+
+interface TransferRoute {
+  id: string;
+  pickup: string;
+  pickupType: "airport" | "hotel" | "address";
+  pickupMeta?: { iata?: string; hid?: number; lat?: number; lon?: number };
+  dropoff: string;
+  dropoffType: "airport" | "hotel" | "address";
+  dropoffMeta?: { iata?: string; hid?: number; lat?: number; lon?: number };
+  pickupTime?: string;
+  distanceKm?: number;
+  durationMin?: number;
+  linkedFlightId?: string;
+}
+
+interface LocationSuggestion {
+  type: "airport" | "hotel" | "region";
+  label: string;
+  meta: { iata?: string; hid?: number; regionId?: number; lat?: number; lon?: number; country?: string };
+}
+
 interface EditServiceModalProps {
   service: Service;
   orderCode: string;
   onClose: () => void;
   onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
-  /** Company currency from Regional Settings (e.g. EUR, USD) for Pricing labels */
   companyCurrencyCode?: string;
-  /** Pre-resolved clients from parent (avoids extra API round-trip) */
   initialClients?: ClientEntry[];
+  flightServices?: FlightServiceRef[];
 }
 
 // Fallback categories used when API is not available
@@ -168,6 +201,7 @@ export default function EditServiceModalNew({
   onServiceUpdated,
   companyCurrencyCode = "EUR",
   initialClients,
+  flightServices = [],
 }: EditServiceModalProps) {
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -369,13 +403,181 @@ export default function EditServiceModalNew({
     } catch { return []; }
   });
 
-  // Transfer-specific fields
+  // Transfer-specific fields (legacy)
   const [pickupLocation, setPickupLocation] = useState(service.pickupLocation || "");
   const [dropoffLocation, setDropoffLocation] = useState(service.dropoffLocation || "");
   const [pickupTime, setPickupTime] = useState(service.pickupTime || "");
   const [estimatedDuration, setEstimatedDuration] = useState(service.estimatedDuration || "");
   const [linkedFlightId, setLinkedFlightId] = useState<string | null>(service.linkedFlightId || null);
-  
+
+  // Transfer-specific fields (new structured)
+  const initRoutes = (): TransferRoute[] => {
+    if (service.transferRoutes && service.transferRoutes.length > 0) return service.transferRoutes;
+    if (service.pickupLocation || service.dropoffLocation) {
+      return [{
+        id: crypto.randomUUID(),
+        pickup: service.pickupLocation || "",
+        pickupType: "address" as const,
+        dropoff: service.dropoffLocation || "",
+        dropoffType: "address" as const,
+        pickupTime: service.pickupTime || "",
+        linkedFlightId: service.linkedFlightId || undefined,
+      }];
+    }
+    return [{ id: crypto.randomUUID(), pickup: "", pickupType: "address" as const, dropoff: "", dropoffType: "address" as const }];
+  };
+  const [transferRoutes, setTransferRoutes] = useState<TransferRoute[]>(initRoutes);
+  const [transferMode, setTransferMode] = useState(service.transferMode || "individual");
+  const firstRoute = (service.transferRoutes && service.transferRoutes.length > 0 ? service.transferRoutes[0] : null) as (TransferRoute & { bookingType?: string; hours?: number; chauffeurNotes?: string }) | null;
+  const [transferBookingType, setTransferBookingType] = useState<"one_way" | "by_hour">(firstRoute?.bookingType === "by_hour" ? "by_hour" : "one_way");
+  const [transferHours, setTransferHours] = useState<number>(firstRoute?.hours || 2);
+  const [chauffeurNotes, setChauffeurNotes] = useState(firstRoute?.chauffeurNotes || "");
+  const knownClasses = ["economy","comfort","business","premium","minivan","minibus","bus","electric","first",""];
+  const rawVC = service.vehicleClass || "";
+  const vcParts = rawVC.includes(":") ? rawVC.split(":") : [rawVC, ""];
+  const vcBase = vcParts[0].trim();
+  const vcDetail = vcParts.slice(1).join(":").trim();
+  const [vehicleClass, setVehicleClass] = useState(knownClasses.includes(vcBase) ? vcBase : (vcBase ? "first" : ""));
+  const [vehicleClassCustom, setVehicleClassCustom] = useState(vcDetail || (knownClasses.includes(vcBase) ? "" : vcBase));
+  const [driverName, setDriverName] = useState(service.driverName || "");
+  const [driverPhone, setDriverPhone] = useState(service.driverPhone || "");
+  const [driverNotes, setDriverNotes] = useState(service.driverNotes || "");
+  const [locationQuery, setLocationQuery] = useState<Record<string, string>>({});
+  const [locationResults, setLocationResults] = useState<Record<string, LocationSuggestion[]>>({});
+  const [activeLocationField, setActiveLocationField] = useState<string | null>(null);
+  const locationDebounceRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const searchLocations = useCallback(async (fieldKey: string, query: string) => {
+    if (query.length < 2) { setLocationResults(prev => ({ ...prev, [fieldKey]: [] })); return; }
+    try {
+      const res = await fetch(`/api/geo/location-suggest?q=${encodeURIComponent(query)}`);
+      const json = await res.json();
+      setLocationResults(prev => ({ ...prev, [fieldKey]: json.data || [] }));
+    } catch { setLocationResults(prev => ({ ...prev, [fieldKey]: [] })); }
+  }, []);
+
+  const handleLocationInput = useCallback((fieldKey: string, value: string) => {
+    setLocationQuery(prev => ({ ...prev, [fieldKey]: value }));
+    if (locationDebounceRef.current[fieldKey]) clearTimeout(locationDebounceRef.current[fieldKey]);
+    locationDebounceRef.current[fieldKey] = setTimeout(() => searchLocations(fieldKey, value), 300);
+  }, [searchLocations]);
+
+  const selectLocation = useCallback((routeId: string, field: "pickup" | "dropoff", suggestion: LocationSuggestion) => {
+    setTransferRoutes(prev => prev.map(r => {
+      if (r.id !== routeId) return r;
+      return {
+        ...r,
+        [field]: suggestion.label,
+        [`${field}Type`]: suggestion.type,
+        [`${field}Meta`]: suggestion.meta,
+      };
+    }));
+    const fieldKey = `${routeId}-${field}`;
+    setLocationQuery(prev => ({ ...prev, [fieldKey]: suggestion.label }));
+    setLocationResults(prev => ({ ...prev, [fieldKey]: [] }));
+    setActiveLocationField(null);
+  }, []);
+
+  const addTransferRoute = useCallback(() => {
+    setTransferRoutes(prev => [...prev, {
+      id: crypto.randomUUID(),
+      pickup: "",
+      pickupType: "address",
+      dropoff: "",
+      dropoffType: "address",
+    }]);
+  }, []);
+
+  const removeTransferRoute = useCallback((routeId: string) => {
+    setTransferRoutes(prev => prev.length > 1 ? prev.filter(r => r.id !== routeId) : prev);
+  }, []);
+
+  const updateRouteField = useCallback((routeId: string, field: string, value: unknown) => {
+    setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, [field]: value } : r));
+  }, []);
+
+  useEffect(() => {
+    transferRoutes.forEach(route => {
+      const pickupKey = `${route.id}-pickup`;
+      const dropoffKey = `${route.id}-dropoff`;
+      if (!locationQuery[pickupKey] && route.pickup) setLocationQuery(prev => ({ ...prev, [pickupKey]: route.pickup }));
+      if (!locationQuery[dropoffKey] && route.dropoff) setLocationQuery(prev => ({ ...prev, [dropoffKey]: route.dropoff }));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-calculate distance when both pickup and dropoff have coordinates
+  useEffect(() => {
+    transferRoutes.forEach(async (route) => {
+      if (route.distanceKm != null) return;
+      const pMeta = route.pickupMeta;
+      const dMeta = route.dropoffMeta;
+      if (!pMeta || !dMeta) return;
+      if (pMeta.iata && (dMeta.lat != null || route.dropoff)) {
+        try {
+          const params = new URLSearchParams({ airport: pMeta.iata });
+          if (dMeta.lat != null && dMeta.lon != null) {
+            params.set("lat", String(dMeta.lat));
+            params.set("lon", String(dMeta.lon));
+          }
+          params.set("address", route.dropoff);
+          const res = await fetch(`/api/geo/transfer-distance?${params}`);
+          const json = await res.json();
+          if (json.data) {
+            setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, distanceKm: json.data.distanceKm, durationMin: json.data.durationMin } : r));
+          }
+        } catch {}
+      } else if (dMeta.iata && (pMeta.lat != null || route.pickup)) {
+        try {
+          const params = new URLSearchParams({ airport: dMeta.iata });
+          if (pMeta.lat != null && pMeta.lon != null) {
+            params.set("lat", String(pMeta.lat));
+            params.set("lon", String(pMeta.lon));
+          }
+          params.set("address", route.pickup);
+          const res = await fetch(`/api/geo/transfer-distance?${params}`);
+          const json = await res.json();
+          if (json.data) {
+            setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, distanceKm: json.data.distanceKm, durationMin: json.data.durationMin } : r));
+          }
+        } catch {}
+      }
+    });
+  }, [transferRoutes]);
+
+  // Auto-suggest pickup time from linked flights
+  const suggestPickupTime = useCallback((routeId: string, flightServiceId: string) => {
+    const fs = flightServices.find(f => f.id === flightServiceId);
+    if (!fs || !fs.flightSegments?.length) return;
+    const route = transferRoutes.find(r => r.id === routeId);
+    if (!route || route.pickupTime) return;
+
+    const isPickupAirport = route.pickupMeta?.iata || route.pickupType === "airport";
+    const isDropoffAirport = route.dropoffMeta?.iata || route.dropoffType === "airport";
+
+    for (const seg of fs.flightSegments) {
+      const s = seg as unknown as Record<string, string>;
+      if (isPickupAirport && s.arrivalTimeScheduled) {
+        // Arriving at airport → pickup ~45 min after arrival (luggage, customs)
+        const [h, m] = s.arrivalTimeScheduled.split(":").map(Number);
+        const totalMin = h * 60 + m + 45;
+        const suggestedTime = `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+        setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
+        return;
+      }
+      if (isDropoffAirport && s.departureTimeScheduled) {
+        // Going TO airport → need to be there 2h before departure, minus transfer duration
+        const [h, m] = s.departureTimeScheduled.split(":").map(Number);
+        const durationBuffer = route.durationMin || 60;
+        const totalMin = h * 60 + m - 120 - durationBuffer;
+        const adj = totalMin < 0 ? totalMin + 1440 : totalMin;
+        const suggestedTime = `${String(Math.floor(adj / 60) % 24).padStart(2, "0")}:${String(adj % 60).padStart(2, "0")}`;
+        setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
+        return;
+      }
+    }
+  }, [flightServices, transferRoutes]);
+
   // Flight-specific fields
   const [flightSegments, setFlightSegments] = useState<FlightSegment[]>(
     (service.flightSegments || []).map(seg => ({
@@ -1543,6 +1745,17 @@ export default function EditServiceModalNew({
         payload.pickup_time = pickupTime;
         payload.estimated_duration = estimatedDuration;
         payload.linked_flight_id = linkedFlightId;
+        payload.transfer_routes = transferRoutes.map(r => ({
+          ...r,
+          bookingType: transferBookingType,
+          hours: transferBookingType === "by_hour" ? transferHours : undefined,
+          chauffeurNotes: chauffeurNotes || undefined,
+        }));
+        payload.transfer_mode = transferMode;
+        payload.vehicle_class = vehicleClass ? (vehicleClassCustom ? `${vehicleClass}: ${vehicleClassCustom}` : vehicleClass) : (vehicleClassCustom || null);
+        payload.driver_name = driverName || null;
+        payload.driver_phone = driverPhone || null;
+        payload.driver_notes = driverNotes || null;
       }
 
       // Add flight-specific fields
@@ -1724,7 +1937,7 @@ export default function EditServiceModalNew({
               )}
               {gapInfo.type === "stay" && (
                 <div className="flex items-center justify-center py-1 text-xs text-green-600">
-                  <span className="bg-green-100 px-2 py-0.5 rounded">🏨 Stay in {gapInfo.location}: {gapInfo.time}</span>
+                  <span className="bg-green-100 px-2 py-0.5 rounded inline-flex items-center gap-1"><Hotel size={12} /> Stay in {gapInfo.location}: {gapInfo.time}</span>
                 </div>
               )}
               <div className="bg-white rounded-lg px-3 py-2 border border-sky-100">
@@ -3249,25 +3462,190 @@ export default function EditServiceModalNew({
           {/* Flight Schedule rendered in left column (see flightScheduleBlock above) */}
 
           {showTransferFields && (
-            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-              <h4 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">Transfer Details</h4>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+              <h4 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Transfer Details</h4>
+
+              {/* Row 1: Booking type (One Way / By the Hour) */}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="transferBookingType" value="one_way" checked={transferBookingType === "one_way"} onChange={() => setTransferBookingType("one_way")} className="accent-emerald-600" />
+                  <span className="text-sm">One way</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="transferBookingType" value="by_hour" checked={transferBookingType === "by_hour"} onChange={() => setTransferBookingType("by_hour")} className="accent-emerald-600" />
+                  <span className="text-sm">By the hour</span>
+                </label>
+              </div>
+
+              {/* Row 2: Mode, Vehicle class, Details */}
+              <div className="grid grid-cols-4 gap-2">
                 <div>
-                  <input type="text" value={pickupLocation} onChange={(e) => setPickupLocation(e.target.value)} placeholder="Pickup" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <input type="text" value={dropoffLocation} onChange={(e) => setDropoffLocation(e.target.value)} placeholder="Dropoff" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <input type="text" value={estimatedDuration} onChange={(e) => setEstimatedDuration(e.target.value)} placeholder="Duration" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
-                </div>
-                <div>
-                  <select value={linkedFlightId || ""} onChange={(e) => setLinkedFlightId(e.target.value || null)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
-                    <option value="">No linked flight</option>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Mode</label>
+                  <select value={transferMode} onChange={e => setTransferMode(e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                    <option value="individual">Individual</option>
+                    <option value="group">Group</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Vehicle Class</label>
+                  <select value={vehicleClass} onChange={e => setVehicleClass(e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                    <option value="">—</option>
+                    <option value="economy">Economy</option>
+                    <option value="comfort">Comfort</option>
+                    <option value="business">Business</option>
+                    <option value="premium">Premium</option>
+                    <option value="first">First Class</option>
+                    <option value="minivan">Minivan</option>
+                    <option value="minibus">Minibus</option>
+                    <option value="bus">Bus</option>
+                    <option value="electric">Electric</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Details</label>
+                  <input type="text" value={vehicleClassCustom} onChange={e => setVehicleClassCustom(e.target.value)} placeholder="e.g. Mercedes V-Class" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                </div>
+              </div>
+
+              {/* Routes */}
+              {transferRoutes.map((route, idx) => (
+                <div key={route.id} className="p-2 bg-white rounded-lg border border-emerald-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-emerald-600 uppercase">Route {idx + 1}</span>
+                    {transferRoutes.length > 1 && (
+                      <button type="button" onClick={() => removeTransferRoute(route.id)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                    )}
+                  </div>
+
+                  {/* From */}
+                  <div className="relative">
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">From</label>
+                    <input
+                      type="text"
+                      value={locationQuery[`${route.id}-pickup`] ?? route.pickup}
+                      onChange={e => { handleLocationInput(`${route.id}-pickup`, e.target.value); updateRouteField(route.id, "pickup", e.target.value); }}
+                      onFocus={() => setActiveLocationField(`${route.id}-pickup`)}
+                      onBlur={() => setTimeout(() => setActiveLocationField(null), 200)}
+                      placeholder="Airport, hotel, address..."
+                      className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                    />
+                    {activeLocationField === `${route.id}-pickup` && (locationResults[`${route.id}-pickup`] || []).length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {(locationResults[`${route.id}-pickup`] || []).map((s, i) => (
+                          <button key={i} type="button" onMouseDown={() => selectLocation(route.id, "pickup", s)} className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 flex items-center gap-2">
+                            <span className="text-[10px] font-medium text-gray-400 uppercase w-12 shrink-0">{s.type}</span>
+                            <span className="truncate">{s.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* To (One Way) or Duration (By the Hour) */}
+                  {transferBookingType === "one_way" ? (
+                    <div className="relative">
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">To</label>
+                      <input
+                        type="text"
+                        value={locationQuery[`${route.id}-dropoff`] ?? route.dropoff}
+                        onChange={e => { handleLocationInput(`${route.id}-dropoff`, e.target.value); updateRouteField(route.id, "dropoff", e.target.value); }}
+                        onFocus={() => setActiveLocationField(`${route.id}-dropoff`)}
+                        onBlur={() => setTimeout(() => setActiveLocationField(null), 200)}
+                        placeholder="Airport, hotel, address..."
+                        className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                      />
+                      {activeLocationField === `${route.id}-dropoff` && (locationResults[`${route.id}-dropoff`] || []).length > 0 && (
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {(locationResults[`${route.id}-dropoff`] || []).map((s, i) => (
+                            <button key={i} type="button" onMouseDown={() => selectLocation(route.id, "dropoff", s)} className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 flex items-center gap-2">
+                              <span className="text-[10px] font-medium text-gray-400 uppercase w-12 shrink-0">{s.type}</span>
+                              <span className="truncate">{s.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Duration</label>
+                      <select value={transferHours} onChange={e => setTransferHours(Number(e.target.value))} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                        {[1,2,3,4,5,6,7,8,10,12].map(h => <option key={h} value={h}>{h} {h === 1 ? "hour" : "hours"}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Time + Distance/Duration row */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pickup Time</label>
+                      <input type="time" value={route.pickupTime || ""} onChange={e => updateRouteField(route.id, "pickupTime", e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                    </div>
+                    {transferBookingType === "one_way" && (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Distance</label>
+                          <div className="px-2.5 py-1.5 text-sm text-gray-600 bg-gray-50 rounded-lg border border-gray-200">
+                            {route.distanceKm != null ? `~${route.distanceKm} km` : "—"}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Est. Duration</label>
+                          <div className="px-2.5 py-1.5 text-sm text-gray-600 bg-gray-50 rounded-lg border border-gray-200">
+                            {route.durationMin != null ? (route.durationMin >= 60 ? `~${Math.floor(route.durationMin / 60)}h ${route.durationMin % 60}min` : `~${route.durationMin} min`) : "—"}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Linked flight */}
+                  {flightServices.length > 0 && (
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Flight Number</label>
+                      <select value={route.linkedFlightId || ""} onChange={e => { const fid = e.target.value || undefined; updateRouteField(route.id, "linkedFlightId", fid); if (fid) suggestPickupTime(route.id, fid); }} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                        <option value="">No linked flight</option>
+                        {flightServices.map(f => {
+                          const segs = f.flightSegments || [];
+                          const label = segs.length > 0
+                            ? segs.map(s => { const r = s as unknown as Record<string, string>; return `${r.flightNumber || ""} ${r.departureCity || ""}→${r.arrivalCity || ""}`; }).join(", ")
+                            : f.name;
+                          return <option key={f.id} value={f.id}>{label}</option>;
+                        })}
+                      </select>
+                      {route.linkedFlightId && route.pickupTime && (
+                        <p className="text-[10px] text-emerald-600 mt-0.5">
+                          {(route.pickupMeta?.iata || route.pickupType === "airport") ? "Pickup ~45 min after arrival" : `Be at airport 2h before departure (pickup ${route.pickupTime})`}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <button type="button" onClick={addTransferRoute} className="text-sm text-emerald-600 hover:text-emerald-800 font-medium">
+                + Add route
+              </button>
+
+              {/* Chauffeur & Driver info */}
+              <div className="border-t border-emerald-200 pt-2 space-y-2">
+                <h5 className="text-[10px] font-semibold text-emerald-600 uppercase">Chauffeur / Driver</h5>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Name</label>
+                    <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="Driver name" className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Phone</label>
+                    <input type="tel" value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="+371..." className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Notes for the chauffeur</label>
+                  <textarea value={chauffeurNotes} onChange={e => setChauffeurNotes(e.target.value)} placeholder="Flight BT293, meet at arrivals with sign..." rows={2} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white resize-none" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Info visible to client</label>
+                  <textarea value={driverNotes} onChange={e => setDriverNotes(e.target.value)} placeholder="Driver will meet you at the exit gate..." rows={2} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white resize-none" />
                 </div>
               </div>
             </div>

@@ -159,6 +159,9 @@ interface TimelineService {
   boardingPasses?: BoardingPass[]; // Uploaded boarding passes
   baggage?: string; // Baggage info: "personal", "personal+cabin", "personal+cabin+1bag", etc.
   transferType?: string | null;
+  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string }[];
+  transferMode?: string | null;
+  vehicleClass?: string | null;
   splitGroupId?: string | null;
   assignedTravellerIds?: string[];
 }
@@ -276,6 +279,12 @@ interface TimelineEvent {
   transferHotelName?: string;
   transferHotelAddress?: string;
   transferInfo?: string;
+  /** Standalone transfer: routes from transfer_routes JSONB */
+  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string }[];
+  transferVehicleClass?: string;
+  transferMode?: string;
+  transferFlightNumber?: string;
+  transferPickupTime?: string;
 }
 
 // Ensure airport is shown as IATA code (3 letters). If value is a city name, resolve via cities DB.
@@ -456,7 +465,20 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
   const seenHotelKeys = new Set<string>();
   const seenTransferKeys = new Set<string>();
   const seenOtherKeys = new Set<string>();
-  
+
+  const flightNumberById = new Map<string, string>();
+  for (const s of services) {
+    if (s.flightSegments && s.flightSegments.length > 0) {
+      const allNums = s.flightSegments.map(seg => seg.flightNumber).filter(Boolean);
+      if (allNums.length > 0) {
+        flightNumberById.set(s.id, allNums.join(", "));
+      }
+      for (const seg of s.flightSegments) {
+        if (seg.id && seg.flightNumber) flightNumberById.set(seg.id, seg.flightNumber);
+      }
+    }
+  }
+
   for (const service of services) {
     const icon = categoryIcons[service.category] || categoryIcons.Other;
     const travellerSurnames = getTravellerSurnamesFromIds(service.assignedTravellerIds || [], travellers);
@@ -672,16 +694,52 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
       const txKey = `transfer|${service.name}|${service.dateFrom}`;
       if (seenTransferKeys.has(txKey)) continue;
       seenTransferKeys.add(txKey);
-      events.push({
-        id: service.id,
-        date: service.dateFrom,
-        type: 'transfer',
-        icon,
-        title: service.name,
-        sortOrder: 40,
-        serviceId: service.id,
-        travellerSurnames: travellerSurnames || undefined,
-      });
+
+      const routes = Array.isArray(service.transferRoutes) ? service.transferRoutes : [];
+      if (routes.length > 0) {
+        for (const route of routes) {
+          const isFromAirport = route.pickupType === "airport";
+          const isToAirport = route.dropoffType === "airport";
+          const isInbound = isFromAirport;
+          const airportCode = isFromAirport
+            ? (route.pickupMeta?.iata || "")
+            : (route.dropoffMeta?.iata || "");
+          const hotelOrPlace = isFromAirport ? (route.dropoff || "") : (route.pickup || "");
+          const linkedFlight = route.linkedFlightId ? flightNumberById.get(route.linkedFlightId) : undefined;
+
+          events.push({
+            id: `${service.id}-route-${routes.indexOf(route)}`,
+            date: service.dateFrom,
+            type: isInbound ? 'transfer_inbound' : 'transfer_outbound',
+            icon,
+            title: service.name,
+            subtitle: isInbound ? "Airport → Hotel" : "Hotel → Airport",
+            sortOrder: isInbound ? 25 : 15,
+            serviceId: service.id,
+            travellerSurnames: travellerSurnames || undefined,
+            transferAirportCode: airportCode,
+            transferHotelName: hotelOrPlace,
+            transferHotelAddress: hotelOrPlace,
+            transferRoutes: routes,
+            transferVehicleClass: service.vehicleClass || undefined,
+            transferMode: service.transferMode || undefined,
+            transferFlightNumber: linkedFlight || undefined,
+            transferPickupTime: route.pickupTime || undefined,
+          });
+        }
+      } else {
+        events.push({
+          id: service.id,
+          date: service.dateFrom,
+          type: 'transfer_inbound',
+          icon,
+          title: service.name,
+          subtitle: "Transfer",
+          sortOrder: 25,
+          serviceId: service.id,
+          travellerSurnames: travellerSurnames || undefined,
+        });
+      }
     } else {
       // Tour Package without flight segments: hotel check-in 13:00-14:00, check-out 11:00-12:00 only (deduplicate)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
@@ -1054,7 +1112,7 @@ export default function ItineraryTimeline({
                         </div>
                       </div>
                     ) : event.type === 'transfer_inbound' || event.type === 'transfer_outbound' ? (
-                      // Transfer card — flight-like layout with route, arrow, car icon, duration
+                      // Transfer card — flight-like layout with route, arrow, car icon, duration + flight number
                       (() => {
                         const isInbound = event.type === 'transfer_inbound';
                         const accent = isInbound ? '#3b82f6' : '#8b5cf6';
@@ -1063,15 +1121,25 @@ export default function ItineraryTimeline({
                         const airportCode = event.transferAirportCode || "";
                         const airportCity = event.arrivalCity || "";
                         const hotelName = event.transferHotelName || "Hotel";
-                        const hotelShort = hotelName.length > 12 ? hotelName.slice(0, 12) + "…" : hotelName;
-                        const distInfo = transferDistances[event.id] || event.transferInfo;
+                        const hotelShort = hotelName.length > 14 ? hotelName.slice(0, 14) + "…" : hotelName;
+                        const routeData = event.transferRoutes?.[0];
+                        const hasRouteDistance = routeData?.distanceKm != null;
+                        const distInfo = hasRouteDistance ? null : (transferDistances[event.id] || event.transferInfo);
                         const isApprox = distInfo?.startsWith("≈");
                         const distParts = distInfo?.match(/~(\d+)\s*km.*?~(\d+)\s*min/);
                         const hMatch = distInfo?.match(/~(\d+)\s*km.*?~(\d+)h\s*(\d*)\s*min/);
-                        const durationLabel = distParts ? `${isApprox ? "≈" : ""}${distParts[1]} km` : null;
-                        const durationTime = hMatch
+                        const durationLabel = hasRouteDistance
+                          ? `${routeData.distanceKm} km`
+                          : distParts ? `${isApprox ? "≈" : ""}${distParts[1]} km` : null;
+                        const durationTime = hasRouteDistance
+                          ? (routeData.durationMin != null
+                              ? (routeData.durationMin >= 60 ? `~${Math.floor(routeData.durationMin / 60)}h ${routeData.durationMin % 60 ? routeData.durationMin % 60 + " min" : ""}` : `~${routeData.durationMin} min`)
+                              : null)
+                          : hMatch
                           ? `~${hMatch[2]}h ${hMatch[3] ? hMatch[3] + " min" : ""}`
                           : distParts ? `~${distParts[2]} min` : null;
+                        const flightNr = event.transferFlightNumber;
+                        const pickupTime = event.transferPickupTime;
 
                         return (
                           <div className="flex items-stretch gap-2 min-w-0">
@@ -1083,12 +1151,18 @@ export default function ItineraryTimeline({
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${accentBg}`} style={{ color: accent }}>
                                     {isInbound ? "Airport → Hotel" : "Hotel → Airport"}
                                   </span>
+                                  {flightNr && (
+                                    <span className="text-[10px] font-mono text-gray-600 flex items-center gap-0.5">
+                                      <Plane size={10} strokeWidth={1.5} className="text-gray-400" />
+                                      {flightNr}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
                                     {/* FROM */}
                                     <div className="text-center min-w-[70px]">
-                                      <div className="text-xs text-gray-400">{formatDateShort(event.date)}</div>
+                                      <div className="text-xs text-gray-400">{pickupTime || formatDateShort(event.date)}</div>
                                       <div className="font-medium">{isInbound ? airportCode : hotelShort}</div>
                                       <div className="text-[10px] text-gray-500">{isInbound ? airportCity : "Hotel"}</div>
                                     </div>
@@ -1253,7 +1327,7 @@ export default function ItineraryTimeline({
                         ) : null}
                       </div>
                     ) : (
-                      // Simple display for hotel, transfer, other (with traveller surnames)
+                      // Simple display for other events (with traveller surnames)
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="flex-shrink-0 text-gray-500">{event.icon}</span>
                         <span className="truncate">{event.title}</span>

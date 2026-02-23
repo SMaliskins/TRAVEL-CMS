@@ -176,6 +176,18 @@ export async function GET(
         commission_amount?: number | null;
         agent_discount_value?: number | null;
         agent_discount_type?: string | null;
+        // Transfer fields
+        pickup_location?: string | null;
+        dropoff_location?: string | null;
+        pickup_time?: string | null;
+        estimated_duration?: string | null;
+        linked_flight_id?: string | null;
+        transfer_routes?: unknown;
+        transfer_mode?: string | null;
+        vehicle_class?: string | null;
+        driver_name?: string | null;
+        driver_phone?: string | null;
+        driver_notes?: string | null;
       };
       return {
         id: s.id,
@@ -238,6 +250,18 @@ export async function GET(
         commissionAmount: row.commission_amount ?? null,
         agentDiscountValue: row.agent_discount_value ?? null,
         agentDiscountType: row.agent_discount_type ?? null,
+        // Transfer
+        pickupLocation: row.pickup_location ?? null,
+        dropoffLocation: row.dropoff_location ?? null,
+        pickupTime: row.pickup_time ?? null,
+        estimatedDuration: row.estimated_duration ?? null,
+        linkedFlightId: row.linked_flight_id ?? null,
+        transferRoutes: Array.isArray(row.transfer_routes) ? row.transfer_routes : [],
+        transferMode: row.transfer_mode ?? null,
+        vehicleClass: row.vehicle_class ?? null,
+        driverName: row.driver_name ?? null,
+        driverPhone: row.driver_phone ?? null,
+        driverNotes: row.driver_notes ?? null,
       };
     });
 
@@ -342,12 +366,19 @@ export async function POST(
     if (body.commissionAmount !== undefined) serviceData.commission_amount = body.commissionAmount != null ? parseFloat(body.commissionAmount) : null;
     if (body.agentDiscountValue !== undefined) serviceData.agent_discount_value = body.agentDiscountValue != null && body.agentDiscountValue !== "" ? parseFloat(body.agentDiscountValue) : null;
     if (body.agentDiscountType !== undefined) serviceData.agent_discount_type = body.agentDiscountType || null;
-    // Transfer
+    // Transfer (legacy flat fields)
     if (body.pickupLocation !== undefined) serviceData.pickup_location = body.pickupLocation || null;
     if (body.dropoffLocation !== undefined) serviceData.dropoff_location = body.dropoffLocation || null;
     if (body.pickupTime !== undefined) serviceData.pickup_time = body.pickupTime || null;
     if (body.estimatedDuration !== undefined) serviceData.estimated_duration = body.estimatedDuration || null;
     if (body.linkedFlightId !== undefined) serviceData.linked_flight_id = body.linkedFlightId || null;
+    // Transfer (new structured fields)
+    if (body.transferRoutes !== undefined) serviceData.transfer_routes = Array.isArray(body.transferRoutes) ? body.transferRoutes : null;
+    if (body.transferMode !== undefined) serviceData.transfer_mode = body.transferMode || null;
+    if (body.vehicleClass !== undefined) serviceData.vehicle_class = body.vehicleClass || null;
+    if (body.driverName !== undefined) serviceData.driver_name = body.driverName || null;
+    if (body.driverPhone !== undefined) serviceData.driver_phone = body.driverPhone || null;
+    if (body.driverNotes !== undefined) serviceData.driver_notes = body.driverNotes || null;
     // Flight
     if (body.cabinClass !== undefined) serviceData.cabin_class = body.cabinClass || "economy";
     if (body.baggage !== undefined) serviceData.baggage = body.baggage || null;
