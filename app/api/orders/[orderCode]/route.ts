@@ -11,12 +11,26 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 async function getCompanyId(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
+  const { data: profileData, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select("company_id")
     .eq("user_id", userId)
-    .single();
-  return data?.company_id || null;
+    .maybeSingle();
+
+  if (!profileError && profileData?.company_id) {
+    return profileData.company_id as string;
+  }
+
+  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
+    .from("user_profiles")
+    .select("company_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (userProfileError || !userProfileData?.company_id) {
+    return null;
+  }
+  return userProfileData.company_id as string;
 }
 
 export async function GET(

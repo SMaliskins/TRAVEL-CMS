@@ -32,16 +32,26 @@ interface CreateOrderRequest {
 
 // Get company_id from user's profile
 async function getCompanyId(userId: string): Promise<string | null> {
-  const { data, error } = await supabaseAdmin
+  const { data: profileData, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select("company_id")
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
-  if (error || !data?.company_id) {
+  if (!profileError && profileData?.company_id) {
+    return profileData.company_id as string;
+  }
+
+  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
+    .from("user_profiles")
+    .select("company_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (userProfileError || !userProfileData?.company_id) {
     return null;
   }
-  return data.company_id;
+  return userProfileData.company_id as string;
 }
 
 // Generate order_no for company+year, returns { order_no, order_code }
