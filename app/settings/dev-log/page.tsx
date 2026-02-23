@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Bug, ExternalLink, Check, XCircle, Eye, Clock, Loader2, ArrowLeft, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { supabase } from "@/lib/supabaseClient";
 
 interface DevLogEntry {
   id: string;
@@ -38,7 +39,13 @@ export default function DevLogPage() {
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/dev-log?status=${filter}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/dev-log?status=${filter}`, {
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {},
+        credentials: "include",
+      });
       const json = await res.json();
       setEntries(json.data || []);
     } catch {
@@ -54,9 +61,13 @@ export default function DevLogPage() {
   const updateStatus = async (id: string, status: string) => {
     setUpdating(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
       const res = await fetch(`/api/dev-log/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({ status, resolution_note: resolutionNote || undefined }),
       });
       if (res.ok) {
