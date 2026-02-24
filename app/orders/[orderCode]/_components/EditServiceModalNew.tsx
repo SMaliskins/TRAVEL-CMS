@@ -1635,7 +1635,7 @@ export default function EditServiceModalNew({
         ticketNr: passengersRaw[i]?.ticketNumber ?? ticketNumbersRaw?.[i] ?? "",
       }));
       setTicketNumbers(list);
-    } else if (ticketNumbersRaw?.length > 0) {
+    } else if (ticketNumbersRaw && ticketNumbersRaw.length > 0) {
       setTicketNr(ticketNumbersRaw[0]);
       if (ticketNumbers.length > 0) {
         const updated = [...ticketNumbers];
