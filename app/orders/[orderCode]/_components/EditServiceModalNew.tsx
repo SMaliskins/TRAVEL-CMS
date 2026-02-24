@@ -1623,7 +1623,7 @@ export default function EditServiceModalNew({
     }
     const passengersRaw = booking.passengers as { name: string; ticketNumber?: string }[] | undefined;
     const ticketNumbersRaw = booking.ticketNumbers as string[] | undefined;
-    if (passengersRaw?.length > 0) {
+    if (passengersRaw && passengersRaw.length > 0) {
       const titleCased = passengersRaw.map((p) => ({
         id: null as string | null,
         name: toTitleCaseForDisplay(p.name || ""),
