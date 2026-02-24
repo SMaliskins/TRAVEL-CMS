@@ -1108,12 +1108,20 @@ export default function InvoiceCreator({
             }
             
             // Map services for this group (service name = Name from service)
-            const groupServices = group.services.map(s => ({
-              ...s,
-              editableName: s.name,
-              editablePrice: Number(s.clientPrice) || 0,
-              editableClient: s.client || "",
-            }));
+            const groupServices = group.services.map(s => {
+              const dateFrom = s.dateFrom;
+              const dateTo = s.dateTo;
+              const editableDateText = dateFrom
+                ? formatDateDDMMYYYY(dateFrom) + (dateTo && dateTo !== dateFrom ? " - " + formatDateDDMMYYYY(dateTo) : "")
+                : "";
+              return {
+                ...s,
+                editableName: s.name,
+                editablePrice: Number(s.clientPrice) || 0,
+                editableClient: s.client || "",
+                editableDateText,
+              };
+            });
             
             await createInvoiceForServices(groupServices, groupPayerInfo, invNum, termsForBulk[i], invoiceLanguageByPayerIndex[i] ?? "en");
             successCount++;
