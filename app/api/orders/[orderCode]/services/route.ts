@@ -203,6 +203,7 @@ export async function GET(
         payerName: s.payer_name || "",
         servicePrice: parseFloat(s.service_price || "0"),
         clientPrice: parseFloat(s.client_price || "0"),
+        quantity: (s as { quantity?: number | null }).quantity ?? 1,
         resStatus: s.res_status || "booked",
         refNr: s.ref_nr || "",
         ticketNr: s.ticket_nr || "",
@@ -262,6 +263,7 @@ export async function GET(
         driverName: row.driver_name ?? null,
         driverPhone: row.driver_phone ?? null,
         driverNotes: row.driver_notes ?? null,
+        pricingPerClient: Array.isArray((s as { pricing_per_client?: unknown }).pricing_per_client) ? (s as { pricing_per_client: unknown[] }).pricing_per_client : null,
       };
     });
 
@@ -322,6 +324,7 @@ export async function POST(
       payer_name: body.payerName || null,
       service_price: body.servicePrice || 0,
       client_price: body.clientPrice || 0,
+      quantity: body.quantity ?? body.priceUnits ?? 1,
       res_status: body.resStatus || "booked",
       ref_nr: body.refNr || null,
       ticket_nr: body.ticketNr || null,
@@ -384,6 +387,7 @@ export async function POST(
     if (body.baggage !== undefined) serviceData.baggage = body.baggage || null;
     if (body.flightSegments !== undefined && Array.isArray(body.flightSegments)) serviceData.flight_segments = body.flightSegments;
     if (body.ticketNumbers !== undefined && Array.isArray(body.ticketNumbers)) serviceData.ticket_numbers = body.ticketNumbers;
+    if (body.pricingPerClient !== undefined && Array.isArray(body.pricingPerClient)) serviceData.pricing_per_client = body.pricingPerClient;
 
     const { data: service, error } = await supabaseAdmin
       .from("order_services")
@@ -495,6 +499,7 @@ export async function POST(
         payerName: service.payer_name,
         servicePrice: parseFloat(service.service_price || "0"),
         clientPrice: parseFloat(service.client_price || "0"),
+        quantity: (service as { quantity?: number | null }).quantity ?? 1,
         resStatus: service.res_status,
         refNr: service.ref_nr,
         ticketNr: service.ticket_nr,

@@ -77,9 +77,17 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   record.email = row.email || undefined;
   record.country = row.country || undefined;
 
-  // Company: contact person
+  // Company: contact person, languages
   if (row.party_type === "company") {
     record.contactPerson = row.contact_person || undefined;
+    if (Array.isArray(row.correspondence_languages)) {
+      record.correspondenceLanguages = row.correspondence_languages;
+    } else if (row.correspondence_language) {
+      record.correspondenceLanguages = [row.correspondence_language];
+    } else {
+      record.correspondenceLanguages = ["en"];
+    }
+    record.invoiceLanguage = row.invoice_language || undefined;
   }
 
   // Corporate accounts / Loyalty cards
@@ -106,6 +114,64 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   }
 
   return record;
+}
+
+/** Resolve created_by / updated_by to display names (user_profiles, profiles, auth) — used by GET and PUT so Audit "by" is never empty after save */
+async function resolveAuditDisplayNames(record: DirectoryRecord): Promise<void> {
+  const auditUserIds = [record.createdById, record.updatedById].filter(Boolean) as string[];
+  if (auditUserIds.length === 0) return;
+  const uniq = [...new Set(auditUserIds)];
+  const byId = new Map<string, string>();
+  const { data: userProfilesById } = await supabaseAdmin
+    .from("user_profiles")
+    .select("id, first_name, last_name")
+    .in("id", uniq);
+  (userProfilesById || []).forEach((p: { id: string; first_name: string | null; last_name: string | null }) => {
+    const name = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+    if (name) byId.set(p.id, name);
+  });
+  let missing = uniq.filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    const { data: userProfilesByUserId } = await supabaseAdmin
+      .from("user_profiles")
+      .select("user_id, first_name, last_name")
+      .in("user_id", missing);
+    (userProfilesByUserId || []).forEach((p: { user_id: string; first_name: string | null; last_name: string | null }) => {
+      const name = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+      if (name) byId.set(p.user_id, name);
+    });
+    missing = uniq.filter((id) => !byId.has(id));
+  }
+  if (missing.length > 0) {
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id, display_name")
+      .in("user_id", missing);
+    (profiles || []).forEach((p: { user_id: string; display_name: string | null }) => {
+      const name = (p.display_name || "").trim();
+      if (name) byId.set(p.user_id, name);
+    });
+    missing = uniq.filter((id) => !byId.has(id));
+  }
+  for (const uid of missing) {
+    try {
+      const { data: authData } = await supabaseAdmin.auth.admin.getUserById(uid);
+      if (authData?.user) {
+        const meta = authData.user.user_metadata;
+        const name =
+          (meta?.full_name as string) ||
+          (meta?.name as string) ||
+          [meta?.first_name, meta?.last_name].filter(Boolean).join(" ").trim() ||
+          authData.user.email?.trim() ||
+          null;
+        if (name) byId.set(uid, name);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (record.createdById) record.createdByDisplayName = byId.get(record.createdById) ?? "Unknown";
+  if (record.updatedById) record.updatedByDisplayName = byId.get(record.updatedById) ?? "Unknown";
 }
 
 export async function GET(
@@ -294,49 +360,7 @@ export async function GET(
       updated_at: party.updated_at,
     });
 
-    // Resolve created_by / updated_by to display names (имя и фамилия из user_profiles, fallback — profiles)
-    const auditUserIds = [record.createdById, record.updatedById].filter(Boolean) as string[];
-    const byId = new Map<string, string>();
-    if (auditUserIds.length > 0) {
-      const uniq = [...new Set(auditUserIds)];
-      // user_profiles first — first_name + last_name (полное имя)
-      const { data: userProfiles } = await supabaseAdmin
-        .from("user_profiles")
-        .select("id, first_name, last_name")
-        .in("id", uniq);
-      (userProfiles || []).forEach((p: { id: string; first_name: string | null; last_name: string | null }) => {
-        const name = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
-        if (name) byId.set(p.id, name);
-      });
-      const missing = uniq.filter((id) => !byId.has(id));
-      if (missing.length > 0) {
-        const { data: profiles } = await supabaseAdmin
-          .from("profiles")
-          .select("user_id, display_name")
-          .in("user_id", missing);
-        (profiles || []).forEach((p: { user_id: string; display_name: string | null }) => {
-          const name = (p.display_name || "").trim();
-          if (name) byId.set(p.user_id, name);
-        });
-      }
-      // Fallback: resolve name from auth (user_metadata or email) so "by" never shows as "by —"
-      const stillMissing = uniq.filter((id) => !byId.has(id));
-      for (const uid of stillMissing) {
-        const { data: authData } = await supabaseAdmin.auth.admin.getUserById(uid);
-        if (authData?.user) {
-          const meta = authData.user.user_metadata;
-          const name =
-            meta?.full_name ||
-            meta?.name ||
-            [meta?.first_name, meta?.last_name].filter(Boolean).join(" ").trim() ||
-            authData.user.email?.trim() ||
-            null;
-          if (name) byId.set(uid, name);
-        }
-      }
-      if (record.createdById) record.createdByDisplayName = byId.get(record.createdById) || undefined;
-      if (record.updatedById) record.updatedByDisplayName = byId.get(record.updatedById) || undefined;
-    }
+    await resolveAuditDisplayNames(record);
 
     console.log("[Directory GET] Built record:", {
       id: record.id,
@@ -396,10 +420,10 @@ export async function PUT(
       }
     }
 
-    // Diagnostic: Check if party exists before update
+    // Diagnostic: Check if party exists before update (include created_by for audit backfill)
     const { data: existingParty, error: checkError } = await supabaseAdmin
       .from("party")
-      .select("id, company_id")
+      .select("id, company_id, created_by")
       .eq("id", id)
       .maybeSingle();
 
@@ -459,7 +483,13 @@ export async function PUT(
     }
     partyUpdates.updated_at = new Date().toISOString();
     const user = await getCurrentUser(request);
-    if (user) partyUpdates.updated_by = user.id;
+    if (user) {
+      partyUpdates.updated_by = user.id;
+      // Backfill created_by if missing (old records) so "Created at by" shows a name
+      if (existingParty && (existingParty as { created_by?: string | null }).created_by == null) {
+        partyUpdates.created_by = user.id;
+      }
+    }
 
     console.log("[Directory PUT] Updating party:", {
       id,
@@ -714,6 +744,8 @@ export async function PUT(
       if (updates.iban !== undefined) companyUpdates.iban = updates.iban || null;
       if (updates.swift !== undefined) companyUpdates.swift = updates.swift || null;
       if (updates.contactPerson !== undefined) companyUpdates.contact_person = updates.contactPerson || null;
+      if (updates.correspondenceLanguages !== undefined) companyUpdates.correspondence_languages = Array.isArray(updates.correspondenceLanguages) && updates.correspondenceLanguages.length > 0 ? updates.correspondenceLanguages : null;
+      if (updates.invoiceLanguage !== undefined) companyUpdates.invoice_language = updates.invoiceLanguage || null;
 
       const { error: companyError } = await supabaseAdmin
         .from("party_company")
@@ -883,6 +915,8 @@ export async function PUT(
       created_at: updatedParty.created_at,
       updated_at: updatedParty.updated_at,
     });
+
+    await resolveAuditDisplayNames(record);
 
     // Upsert party embedding for semantic search (non-blocking)
     upsertPartyEmbedding(id).catch((e) => console.warn("[PUT] upsertPartyEmbedding:", e));

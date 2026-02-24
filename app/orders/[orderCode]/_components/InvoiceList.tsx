@@ -3,8 +3,9 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
+import DateInput from "@/components/DateInput";
 import { useToast } from "@/contexts/ToastContext";
-import { FileDown, Mail, XCircle } from "lucide-react";
+import { Eye, FileDown, Mail, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 
 interface Invoice {
   id: string;
@@ -28,19 +29,24 @@ interface Invoice {
   final_payment_date?: string | null;
   invoice_items: Array<{
     id: string;
+    service_id?: string | null;
     service_name: string;
-    service_category: string;
+    service_client?: string | null;
+    service_category?: string | null;
     service_date_from: string | null;
     service_date_to: string | null;
+    service_dates_text?: string | null;
     quantity: number;
     unit_price: number;
     line_total: number;
   }>;
+  language?: string | null;
 }
 
 interface InvoiceListProps {
   orderCode: string;
   onCreateNew: () => void;
+  onInvoiceChanged?: () => void;
   orderAmountTotal?: number;
 }
 
@@ -50,10 +56,9 @@ interface PaymentSummary {
   deposit: number;
 }
 
-export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal = 0 }: InvoiceListProps) {
+export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, orderAmountTotal = 0 }: InvoiceListProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
-  const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
+  const [openActionsInvoiceId, setOpenActionsInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hideCancelled, setHideCancelled] = useState(true);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
@@ -61,8 +66,31 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
   const [cancelConfirm, setCancelConfirm] = useState<{ invoiceId: string; message: string } | null>(null);
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
   const [printPreviewTitle, setPrintPreviewTitle] = useState<string | null>(null);
+  const [editingLinesInvoice, setEditingLinesInvoice] = useState<Invoice | null>(null);
+  const [editingLinesItems, setEditingLinesItems] = useState<Array<{
+    id: string;
+    service_name: string;
+    service_client?: string | null;
+    service_category?: string | null;
+    service_date_from: string | null;
+    service_date_to: string | null;
+    service_dates_text?: string | null;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+  }>>([]);
+  const [saveLinesSaving, setSaveLinesSaving] = useState(false);
+  const [addLineSaving, setAddLineSaving] = useState(false);
+  const [addLineForm, setAddLineForm] = useState({
+    service_name: "",
+    service_client: "",
+    service_date_from: "",
+    service_date_to: "",
+    quantity: 1,
+    unit_price: "",
+  });
 
-  const loadInvoices = async () => {
+  const loadInvoices = async (): Promise<Invoice[]> => {
     try {
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`);
       if (!response.ok) {
@@ -75,11 +103,14 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
         throw new Error(errorData.error || `Failed to load invoices: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
-      setInvoices(data.invoices || []);
+      const list = data.invoices || [];
+      setInvoices(list);
       setPaymentSummary(data.paymentSummary || null);
+      return list;
     } catch (error: any) {
       console.error('Error loading invoices:', error);
       alert(`Failed to load invoices: ${error.message || 'Unknown error'}`);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -88,6 +119,18 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
   useEffect(() => {
     loadInvoices();
   }, [orderCode]);
+
+  const closeActionsModal = () => setOpenActionsInvoiceId(null);
+
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (editingLinesInvoice) closeEditLines();
+      else if (openActionsInvoiceId) closeActionsModal();
+    }
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [editingLinesInvoice, openActionsInvoiceId]);
 
   const formatCurrency = (amount: number) => {
     return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -158,17 +201,37 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
     );
   };
 
+  const [editDatesForm, setEditDatesForm] = useState<{
+    invoice_date: string;
+    deposit_date: string;
+    final_payment_date: string;
+  }>({ invoice_date: "", deposit_date: "", final_payment_date: "" });
 
-  const handleViewInvoice = (invoiceId: string) => {
-    setViewingInvoiceId(invoiceId);
-    // TODO: Open view-only modal
-    showToast("error", "View invoice modal — implementation in progress");
+  const openEditInvoice = (invoice: Invoice) => {
+    setEditingLinesInvoice(invoice);
+    setEditingLinesItems((invoice.invoice_items || []).map((i) => ({
+      id: i.id,
+      service_name: i.service_name ?? "",
+      service_client: i.service_client ?? "",
+      service_category: i.service_category ?? "",
+      service_date_from: i.service_date_from ?? null,
+      service_date_to: i.service_date_to ?? null,
+      service_dates_text: i.service_dates_text ?? null,
+      quantity: i.quantity ?? 1,
+      unit_price: i.unit_price ?? 0,
+      line_total: i.line_total ?? 0,
+    })));
+    setEditDatesForm({
+      invoice_date: invoice.invoice_date || "",
+      deposit_date: invoice.deposit_date ?? "",
+      final_payment_date: invoice.final_payment_date ?? "",
+    });
+    setOpenActionsInvoiceId(null);
   };
 
-  const handleEditInvoice = (invoiceId: string) => {
-    setEditingInvoiceId(invoiceId);
-    // TODO: Open edit modal
-    showToast("error", "Edit invoice modal — implementation in progress");
+  const closeEditInvoice = () => {
+    setEditingLinesInvoice(null);
+    setEditingLinesItems([]);
   };
 
   const handleExportPDF = async (invoiceId: string) => {
@@ -207,6 +270,40 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
     } catch (error: any) {
       console.error('Error exporting PDF:', error);
       showToast("error", `Failed to export PDF: ${error.message || "Unknown error"}`);
+    }
+  };
+
+  const handleViewInvoice = async (invoiceId: string) => {
+    try {
+      const invoice = invoices.find((inv) => inv.id === invoiceId);
+      if (!invoice) return;
+
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`
+      );
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: "Failed to load invoice" }));
+        showToast("error", error.error || "Failed to load invoice");
+        return;
+      }
+
+      const contentType = response.headers.get("Content-Type") || "";
+      const isPdf = contentType.includes("application/pdf");
+
+      if (isPdf) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+      } else {
+        const html = await response.text();
+        setPrintPreviewTitle(invoice.invoice_number);
+        setPrintPreviewHtml(html);
+      }
+    } catch (error: any) {
+      console.error("Error viewing invoice:", error);
+      showToast("error", error.message || "Failed to view invoice");
     }
   };
 
@@ -287,9 +384,205 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
         : 'Invoice cancelled. Services unlocked.';
       showToast("success", successMsg);
       loadInvoices();
+      onInvoiceChanged?.();
     } catch (error) {
       console.error('Error cancelling invoice:', error);
       showToast("error", "Failed to cancel invoice");
+    }
+  };
+
+  const parseDateToYYYYMMDD = (s: string | null | undefined): string | null => {
+    if (!s || typeof s !== "string") return null;
+    const t = s.trim();
+    if (!t) return null;
+    const dmy = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dmy) {
+      const [, d, m, y] = dmy;
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    return null;
+  };
+
+  const closeEditLines = () => {
+    closeEditInvoice();
+    setAddLineForm({ service_name: "", service_client: "", service_date_from: "", service_date_to: "", quantity: 1, unit_price: "" });
+  };
+
+  const updateEditingItem = (itemId: string, updates: Partial<typeof editingLinesItems[0]>) => {
+    setEditingLinesItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, ...updates } : it)));
+  };
+
+  const handleSaveEditInvoice = async () => {
+    if (!editingLinesInvoice) return;
+    setSaveLinesSaving(true);
+    try {
+      const invId = editingLinesInvoice.id;
+      const resInv = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoice_date: editDatesForm.invoice_date || null,
+          deposit_date: editDatesForm.deposit_date || null,
+          final_payment_date: editDatesForm.final_payment_date || null,
+        }),
+      });
+      if (!resInv.ok) {
+        const err = await resInv.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to update invoice dates");
+      }
+      for (const item of editingLinesItems) {
+        const res = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invId}/items/${item.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              service_name: item.service_name,
+              service_client: item.service_client || "",
+              service_date_from: parseDateToYYYYMMDD(item.service_date_from) ?? item.service_date_from,
+              service_date_to: parseDateToYYYYMMDD(item.service_date_to) ?? item.service_date_to,
+              service_dates_text: item.service_dates_text ?? "",
+              ...(editingLinesInvoice.status === "draft" ? { quantity: item.quantity, unit_price: item.unit_price } : {}),
+            }),
+          }
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to save line");
+        }
+      }
+      showToast("success", "Invoice updated");
+      const list = await loadInvoices();
+      const updated = list.find((i) => i.id === invId);
+      if (updated) {
+        setEditingLinesInvoice(updated);
+        setEditDatesForm({
+          invoice_date: updated.invoice_date || "",
+          deposit_date: updated.deposit_date ?? "",
+          final_payment_date: updated.final_payment_date ?? "",
+        });
+        setEditingLinesItems((updated.invoice_items || []).map((i) => ({
+          id: i.id,
+          service_name: i.service_name ?? "",
+          service_client: i.service_client ?? "",
+          service_category: i.service_category ?? "",
+          service_date_from: i.service_date_from ?? null,
+          service_date_to: i.service_date_to ?? null,
+          service_dates_text: i.service_dates_text ?? null,
+          quantity: i.quantity ?? 1,
+          unit_price: i.unit_price ?? 0,
+          line_total: i.line_total ?? 0,
+        })));
+      }
+    } catch (e: any) {
+      showToast("error", e.message || "Failed to save");
+    } finally {
+      setSaveLinesSaving(false);
+    }
+  };
+
+  const handleAddLine = async () => {
+    if (!editingLinesInvoice) return;
+    const name = addLineForm.service_name.trim();
+    if (!name) {
+      showToast("error", "Service name is required");
+      return;
+    }
+    const unitPrice = parseFloat(addLineForm.unit_price);
+    if (isNaN(unitPrice) || unitPrice < 0) {
+      showToast("error", "Valid unit price is required");
+      return;
+    }
+    setAddLineSaving(true);
+    try {
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${editingLinesInvoice.id}/items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_name: name,
+            service_client: addLineForm.service_client.trim() || null,
+            service_date_from: addLineForm.service_date_from || null,
+            service_date_to: addLineForm.service_date_to || null,
+            quantity: Number(addLineForm.quantity) || 1,
+            unit_price: unitPrice,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to add line");
+      }
+      showToast("success", "Line added");
+      setAddLineForm({ service_name: "", service_client: "", service_date_from: "", service_date_to: "", quantity: 1, unit_price: "" });
+      const list = await loadInvoices();
+      const updated = list.find((i) => i.id === editingLinesInvoice.id);
+      if (updated) {
+        setEditingLinesInvoice(updated);
+        setEditDatesForm({
+          invoice_date: updated.invoice_date || "",
+          deposit_date: updated.deposit_date ?? "",
+          final_payment_date: updated.final_payment_date ?? "",
+        });
+        setEditingLinesItems((updated.invoice_items || []).map((i) => ({
+          id: i.id,
+          service_name: i.service_name ?? "",
+          service_client: i.service_client ?? "",
+          service_category: i.service_category ?? "",
+          service_date_from: i.service_date_from ?? null,
+          service_date_to: i.service_date_to ?? null,
+          service_dates_text: i.service_dates_text ?? null,
+          quantity: i.quantity ?? 1,
+          unit_price: i.unit_price ?? 0,
+          line_total: i.line_total ?? 0,
+        })));
+      }
+    } catch (e: any) {
+      showToast("error", e.message || "Failed to add line");
+    } finally {
+      setAddLineSaving(false);
+    }
+  };
+
+  const handleDeleteLine = async (itemId: string) => {
+    if (!editingLinesInvoice) return;
+    if (!confirm("Remove this line from the invoice?")) return;
+    try {
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${editingLinesInvoice.id}/items/${itemId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to remove line");
+      }
+      showToast("success", "Line removed");
+      const list = await loadInvoices();
+      const updated = list.find((i) => i.id === editingLinesInvoice.id);
+      if (updated) {
+        setEditingLinesInvoice(updated);
+        setEditDatesForm({
+          invoice_date: updated.invoice_date || "",
+          deposit_date: updated.deposit_date ?? "",
+          final_payment_date: updated.final_payment_date ?? "",
+        });
+        setEditingLinesItems((updated.invoice_items || []).map((i) => ({
+          id: i.id,
+          service_name: i.service_name ?? "",
+          service_client: i.service_client ?? "",
+          service_category: i.service_category ?? "",
+          service_date_from: i.service_date_from ?? null,
+          service_date_to: i.service_date_to ?? null,
+          service_dates_text: i.service_dates_text ?? null,
+          quantity: i.quantity ?? 1,
+          unit_price: i.unit_price ?? 0,
+          line_total: i.line_total ?? 0,
+        })));
+      }
+    } catch (e: any) {
+      showToast("error", e.message || "Failed to remove line");
     }
   };
 
@@ -356,6 +649,211 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
           </div>
         </div>
       )}
+      {editingLinesInvoice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-invoice-title"
+          onClick={closeEditLines}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 id="edit-invoice-title" className="text-lg font-semibold text-gray-900">
+                Edit invoice — {editingLinesInvoice.invoice_number}
+              </h2>
+              <button type="button" onClick={closeEditLines} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex-1 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Invoice date</label>
+                  <DateInput
+                    value={editDatesForm.invoice_date}
+                    onChange={(iso) => setEditDatesForm((prev) => ({ ...prev, invoice_date: iso }))}
+                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Deposit / prepayment date</label>
+                  <DateInput
+                    value={editDatesForm.deposit_date}
+                    onChange={(iso) => setEditDatesForm((prev) => ({ ...prev, deposit_date: iso }))}
+                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Final payment date</label>
+                  <DateInput
+                    value={editDatesForm.final_payment_date}
+                    onChange={(iso) => setEditDatesForm((prev) => ({ ...prev, final_payment_date: iso }))}
+                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+              <table className="w-full text-sm border-collapse mb-4">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left py-2 px-3 font-medium text-gray-700">Dates</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-700">Service</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-700">Client</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-700">Amount</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editingLinesItems.map((item) => (
+                      <tr key={item.id} className="border-b border-gray-100">
+                        <td className="py-2 px-3 text-gray-600 align-top">
+                          <input
+                            type="text"
+                            value={item.service_dates_text != null && item.service_dates_text !== ""
+                              ? item.service_dates_text
+                              : (item.service_date_from ? formatDate(item.service_date_from) + (item.service_date_to && item.service_date_to !== item.service_date_from ? " – " + formatDate(item.service_date_to) : "") : "")}
+                            onChange={(e) => updateEditingItem(item.id, { service_dates_text: e.target.value })}
+                            placeholder="Dates or any text"
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          />
+                        </td>
+                        <td className="py-2 px-3 align-top">
+                          <input
+                            type="text"
+                            value={item.service_name}
+                            onChange={(e) => updateEditingItem(item.id, { service_name: e.target.value })}
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                            placeholder="Напр. Flight: Riga - Zurich - Riga или свой текст"
+                          />
+                        </td>
+                        <td className="py-2 px-3 align-top">
+                          <input
+                            type="text"
+                            value={item.service_client ?? ""}
+                            onChange={(e) => updateEditingItem(item.id, { service_client: e.target.value })}
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                            placeholder="Client"
+                          />
+                        </td>
+                        <td className="py-2 px-3 text-right align-top">
+                          {editingLinesInvoice.status === "draft" ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={item.unit_price}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value) || 0;
+                                updateEditingItem(item.id, { unit_price: v, line_total: Math.round(item.quantity * v * 100) / 100 });
+                              }}
+                              className="w-20 text-right rounded border border-gray-300 px-2 py-1 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                          ) : (
+                            <span className="text-gray-900">{formatCurrency(item.line_total)}</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-1 align-top">
+                          {editingLinesInvoice.status === "draft" && (
+                            <button type="button" onClick={() => handleDeleteLine(item.id)} className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded" title="Remove line">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                  ))}
+                </tbody>
+              </table>
+              {editingLinesInvoice.status === "draft" ? (
+                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+                  <p className="text-xs font-medium text-gray-700 mb-2">Add line</p>
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Service name *"
+                      value={addLineForm.service_name}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, service_name: e.target.value }))}
+                      className="col-span-2 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Client"
+                      value={addLineForm.service_client}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, service_client: e.target.value }))}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Date from (dd.mm.yyyy)"
+                      value={addLineForm.service_date_from}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, service_date_from: e.target.value }))}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Date to"
+                      value={addLineForm.service_date_to}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, service_date_to: e.target.value }))}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Unit price"
+                      value={addLineForm.unit_price}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, unit_price: e.target.value }))}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={addLineForm.quantity}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, quantity: parseInt(e.target.value, 10) || 1 }))}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddLine}
+                      disabled={addLineSaving || !addLineForm.service_name.trim()}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <Plus size={14} />
+                      {addLineSaving ? "Adding…" : "Add line"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                  Issued invoice: you can edit Dates, Service, and Client and save. To change the total amount, cancel and re-issue a new invoice.
+                </p>
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                Subtotal: {formatCurrency(editingLinesInvoice.subtotal)} · VAT: {formatCurrency(editingLinesInvoice.tax_amount)} · Total: {formatCurrency(editingLinesInvoice.total)}
+              </p>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleSaveEditInvoice}
+                disabled={saveLinesSaving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saveLinesSaving ? "Saving…" : "Save"}
+              </button>
+              <button type="button" onClick={closeEditLines} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {printPreviewHtml && (
         <ContentModal
           isOpen={true}
@@ -415,10 +913,8 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
               <col className="w-[80px]" />
               <col className="w-[70px]" />
               <col className="w-[80px]" />
-              <col className="w-[40px]" />
               <col className="w-[80px]" />
               <col className="w-[170px]" />
-              <col className="w-[85px]" />
               <col className="w-[85px]" />
             </colgroup>
             <thead>
@@ -429,11 +925,9 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
                 <th className="text-right py-2 px-3 font-medium text-gray-700">Total</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-700">Paid</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-700">Debt</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Cur</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Status</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Payment Terms</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">Due (schedule)</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Invoice date</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -444,7 +938,11 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
                     const invoiceDebt = Math.max(0, invoice.total - paid);
                     
                     return (
-                      <tr key={invoice.id} className="border-b border-gray-200 hover:bg-gray-50">
+                      <tr
+                        key={invoice.id}
+                        className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
+                        onClick={() => setOpenActionsInvoiceId((id) => (id === invoice.id ? null : invoice.id))}
+                      >
                         <td className="py-2 px-3 text-gray-900">{getShortNumber(invoice.invoice_number)}</td>
                         <td className="py-2 px-3 truncate">
                           <span className={`${invoice.status === 'cancelled' ? 'text-red-600' : 'text-gray-900'}`}>
@@ -455,7 +953,6 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
                         <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoice.total)}</td>
                         <td className="py-2 px-3 text-right text-gray-600">{formatCurrency(paid)}</td>
                         <td className={`py-2 px-3 text-right font-medium ${invoiceDebt > 0 ? 'text-red-600' : 'text-gray-900'}`}>{formatCurrency(invoiceDebt)}</td>
-                        <td className="py-2 px-3 text-center text-gray-500">EUR</td>
                         <td className="py-2 px-3 text-center">
                           <span className={getStatusColor(invoice.status)}>
                             {getStatusLabel(invoice.status)}
@@ -487,19 +984,17 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
                               const finalPaid = paid >= invoice.total;
                               return (
                                 <div className="flex flex-col gap-0.5">
-                                  {depAmt > 0 && (
+                                  {depAmt > 0 && invoice.deposit_date && (
                                     <div className={`flex items-center gap-1 ${depositPaid ? 'text-green-700' : 'text-gray-700'}`}>
-                                      <span className="font-medium w-[42px]">Dep:</span>
-                                      <span>{formatCurrency(depAmt)}</span>
-                                      {invoice.deposit_date && <span className="text-gray-400">{formatDate(invoice.deposit_date)}</span>}
+                                      <span className="font-medium w-[38px]">Dep:</span>
+                                      <span className="text-gray-600">{formatDate(invoice.deposit_date)}</span>
                                       {daysBadge(daysTo(invoice.deposit_date), depositPaid)}
                                     </div>
                                   )}
-                                  {finalAmt > 0 && (
+                                  {finalAmt > 0 && invoice.final_payment_date && (
                                     <div className={`flex items-center gap-1 ${finalPaid ? 'text-green-700' : 'text-gray-700'}`}>
-                                      <span className="font-medium w-[42px]">Final:</span>
-                                      <span>{formatCurrency(finalAmt)}</span>
-                                      {invoice.final_payment_date && <span className="text-gray-400">{formatDate(invoice.final_payment_date)}</span>}
+                                      <span className="font-medium w-[38px]">Final:</span>
+                                      <span className="text-gray-600">{formatDate(invoice.final_payment_date)}</span>
                                       {daysBadge(daysTo(invoice.final_payment_date), finalPaid)}
                                     </div>
                                   )}
@@ -518,33 +1013,6 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
                           })()}
                         </td>
                         <td className="py-2 px-3 text-center text-gray-600">{formatDate(invoice.invoice_date)}</td>
-                        <td className="py-2 px-3">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleExportPDF(invoice.id)}
-                              className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                              title="Export PDF"
-                            >
-                              <FileDown size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleSendEmail(invoice.id)}
-                              className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
-                              title="Send Email"
-                            >
-                              <Mail size={15} />
-                            </button>
-                            {invoice.status !== 'cancelled' && (
-                              <button
-                                onClick={() => openCancelConfirm(invoice.id)}
-                                className="p-1 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Cancel invoice"
-                              >
-                                <XCircle size={15} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
@@ -555,8 +1023,88 @@ export default function InvoiceList({ orderCode, onCreateNew, orderAmountTotal =
         </div>
       )}
 
+      {openActionsInvoiceId && (() => {
+        const invoice = invoices.find((inv) => inv.id === openActionsInvoiceId);
+        if (!invoice) return null;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invoice-actions-title"
+            onClick={closeActionsModal}
+          >
+            <div
+              className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 id="invoice-actions-title" className="text-lg font-semibold text-gray-900">
+                  {invoice.invoice_number}
+                </h2>
+                <button
+                  type="button"
+                  onClick={closeActionsModal}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                  aria-label="Close"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => { closeActionsModal(); handleViewInvoice(invoice.id); }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                >
+                  <Eye size={16} />
+                  View Invoice
+                </button>
+                {invoice.status !== "cancelled" && (
+                  <button
+                    type="button"
+                    onClick={() => { closeActionsModal(); openEditInvoice(invoice); }}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                  >
+                    <Pencil size={16} />
+                    Edit invoice
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { closeActionsModal(); handleExportPDF(invoice.id); }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                >
+                  <FileDown size={16} />
+                  Export PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { closeActionsModal(); handleSendEmail(invoice.id); }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                >
+                  <Mail size={16} />
+                  Send email
+                </button>
+                {invoice.status !== "cancelled" && (
+                  <button
+                    type="button"
+                    onClick={() => { closeActionsModal(); openCancelConfirm(invoice.id); }}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                  >
+                    <XCircle size={16} />
+                    Cancel invoice
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {paymentSummary && paymentSummary.totalPaid > 0 && (() => {
-        const overpayment = orderAmountTotal > 0 ? Math.max(0, Math.round((paymentSummary.totalPaid - orderAmountTotal) * 100) / 100) : 0;
+        // Overpayment = amount paid not linked to any active (non-cancelled) invoice
+        const overpayment = Math.max(0, Math.round((paymentSummary.totalPaid - paymentSummary.linkedToInvoices) * 100) / 100);
         return (
           <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
             <span>Total paid: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.totalPaid)}</span></span>

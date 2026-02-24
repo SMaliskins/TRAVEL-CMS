@@ -30,6 +30,8 @@ interface PassportData {
   dob?: string; // YYYY-MM-DD
   nationality?: string;
   personalCode?: string; // Personal ID / national ID (e.g. "123456-12345", "Запис N")
+  /** male | female — from Sex/Gender field (e.g. M/F, Male/Female, Dzimums, Vīrietis/Sieviete) */
+  gender?: string;
   /** Estonia/Latvia Alien's passport – document explicitly says "Alien's passport" / "Välismaalase pass" / "Ārzemnieka pase" */
   isAlienPassport?: boolean;
 }
@@ -45,30 +47,37 @@ Return a JSON object with this structure:
     "passportNumber": "AB123456",
     "passportIssueDate": "2020-01-15",
     "passportExpiryDate": "2030-01-14",
-    "passportIssuingCountry": "US",
-    "passportFullName": "SMITH JOHN MICHAEL",
-    "firstName": "JOHN MICHAEL",
-    "lastName": "SMITH",
+    "passportIssuingCountry": "Latvia",
+    "passportFullName": "Ravis Guntis",
+    "firstName": "Ravis",
+    "lastName": "Guntis",
     "dob": "1985-05-20",
-    "nationality": "US",
+    "nationality": "LV",
     "personalCode": "123456-12345",
+    "gender": "male",
     "isAlienPassport": false
   }
 }
 
 Rules:
-- Dates in YYYY-MM-DD format
-- passportIssuingCountry should be 2-letter ISO country code (e.g., "US", "GB", "DE", "UA" for Ukraine)
-- passportFullName: full name exactly as shown in passport
-- Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), Estonian, etc. Parse Cyrillic names correctly.
-- firstName: given name(s) - from MRZ line 2 or visual "First name" / "Given names"
-- lastName: surname/family name - from MRZ line 1 (before <<) or visual "Surname" / "Last name"
-- dob is the date of birth from the passport
-- nationality should be 2-letter ISO country code
-- personalCode: ALWAYS extract if present. National personal ID / personal code. Look for: "Personal No.", "Personal code", "Isikukood" (Estonia), "Personas kods" (Latvia), "Asmens kodas" (Lithuania), "Идентификационный код", "Record No.", "Запис N", or any numeric ID field (e.g. 11 digits, or XXXXXX-XXXXX). Copy exactly as shown (with or without hyphen). Omit only if truly not on the document.
-- isAlienPassport: You MUST always include this field. Set to true when the document is an Alien's passport (Estonia: "Välismaalase pass" / "Alien's passport"; Latvia: "Ārzemnieka pase" / "Alien's passport"). For Estonian or Latvian documents, look at the document type or title on the cover/page – if it says "Alien's passport", "Välismaalase pass", "Ārzemnieka pase", or "non-citizen passport", set isAlienPassport: true. For regular (citizen) passports set false.
-- If you cannot determine a value, omit it or use empty string
-- Only return valid JSON, no other text`;
+- Dates in YYYY-MM-DD format. You MUST extract passportIssueDate and passportExpiryDate when they appear on the document (e.g. "Date of issue", "Date of expiry", "Izdošanas datums", "Derīgums līdz").
+- passportIssuingCountry: full country name in English (e.g. "Latvia", "United States", "Ukraine", "United Kingdom"), NOT a 2-letter code. This is used for statistics.
+- passportFullName: full name in Title Case (first letter of each word uppercase, rest lowercase). Preserve diacritics exactly as on the document (e.g. "Rāvis", "Žaklīna", not "Ravis", "Zaklina").
+- firstName: given name(s) in Title Case. Preserve diacritics as on the document (e.g. Rihards, Žaklīna).
+- lastName: surname/family name in Title Case. Preserve diacritics as on the document (e.g. Rāvis, not Ravis).
+- Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), Estonian, Latvian, etc. Parse Cyrillic names correctly and output in Latin with Title Case.
+- dob is the date of birth from the passport.
+- nationality: 2-letter ISO country code is acceptable.
+- personalCode: ALWAYS extract if present. National personal ID / personal code. Look for: "Personal No.", "Personal code", "Isikukood" (Estonia), "Personas kods" (Latvia), "Asmens kodas" (Lithuania), "Record No.", "Запис N", or any numeric ID field. Copy exactly as shown (with or without hyphen). Omit only if truly not on the document.
+- gender: Extract when present. Output "male" or "female" only. Look for: "Sex", "Gender", "Dzimums" (Latvian), "Стать" (Ukrainian), M/F, Male/Female, Vīrietis/Sieviete (LV), Чол./Жін. (UA). Omit if not on the document.
+- isAlienPassport: You MUST always include this field. Set to true when the document is an Alien's passport (Estonia: "Välismaalase pass"; Latvia: "Ārzemnieka pase"). For regular (citizen) passports set false.
+- If you cannot determine a value, omit it or use empty string.
+- Only return valid JSON, no other text.`;
+
+const COUNTRY_CODE_TO_NAME: Record<string, string> = {
+  UA: "Ukraine", LV: "Latvia", RU: "Russia", DE: "Germany", FR: "France",
+  US: "United States", GB: "United Kingdom", PL: "Poland", LT: "Lithuania", EE: "Estonia",
+};
 
 function formatDate(dateStr: string | undefined): string | undefined {
   if (!dateStr) return undefined;
@@ -78,18 +87,39 @@ function formatDate(dateStr: string | undefined): string | undefined {
   return undefined;
 }
 
+/** Title case preserving diacritics (Rāvis, Žaklīna). */
+function toTitleCase(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
+}
+
 function normalizePassport(passport: PassportData): PassportData {
+  let issuingCountry = passport.passportIssuingCountry?.trim() || undefined;
+  if (issuingCountry && issuingCountry.length === 2) {
+    issuingCountry = COUNTRY_CODE_TO_NAME[issuingCountry.toUpperCase()] || issuingCountry;
+  }
+  let nationality = passport.nationality?.trim() || undefined;
+  if (nationality && nationality.length === 2) {
+    nationality = COUNTRY_CODE_TO_NAME[nationality.toUpperCase()] || nationality;
+  }
+  let fullName = passport.passportFullName?.trim() || undefined;
+  if (fullName && fullName === fullName.toUpperCase()) fullName = toTitleCase(fullName);
+  const g = passport.gender?.trim()?.toLowerCase();
+  const gender = g === "male" || g === "female" ? g : (g === "m" ? "male" : g === "f" ? "female" : undefined);
+
   return {
     passportNumber: passport.passportNumber || undefined,
     passportIssueDate: formatDate(passport.passportIssueDate),
     passportExpiryDate: formatDate(passport.passportExpiryDate),
-    passportIssuingCountry: passport.passportIssuingCountry || undefined,
-    passportFullName: passport.passportFullName || undefined,
-    firstName: passport.firstName || undefined,
-    lastName: passport.lastName || undefined,
+    passportIssuingCountry: issuingCountry,
+    passportFullName: fullName,
+    firstName: passport.firstName ? toTitleCase(passport.firstName.trim()) : undefined,
+    lastName: passport.lastName ? toTitleCase(passport.lastName.trim()) : undefined,
     dob: formatDate(passport.dob),
-    nationality: passport.nationality || undefined,
+    nationality,
     personalCode: passport.personalCode ? String(passport.personalCode).trim() || undefined : undefined,
+    gender: gender === "male" || gender === "female" ? gender : undefined,
     isAlienPassport: passport.isAlienPassport === true,
   };
 }

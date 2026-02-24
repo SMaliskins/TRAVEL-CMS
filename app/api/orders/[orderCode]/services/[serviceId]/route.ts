@@ -118,6 +118,9 @@ export async function PATCH(
     if (body.cabin_class !== undefined) updates.cabin_class = body.cabin_class;
     if (body.baggage !== undefined) updates.baggage = body.baggage;
     if (body.flight_segments !== undefined) updates.flight_segments = body.flight_segments;
+    if (body.quantity !== undefined) updates.quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
+    if (body.priceUnits !== undefined) updates.quantity = Math.max(1, Math.floor(Number(body.priceUnits) || 1));
+    if (body.pricingPerClient !== undefined && Array.isArray(body.pricingPerClient)) updates.pricing_per_client = body.pricingPerClient;
 
     // Fetch old service for notification diff
     const { data: oldSvc } = await supabaseAdmin

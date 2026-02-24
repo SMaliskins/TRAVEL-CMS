@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { account_name, bank_name, iban, swift, currency, is_default } = body;
+    const { account_name, bank_name, iban, swift, currency, is_default, use_in_invoices } = body;
 
     if (!account_name) {
       return NextResponse.json({ error: "account_name is required" }, { status: 400 });
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
         swift: swift || null,
         currency: currency || "EUR",
         is_default: is_default ?? false,
+        use_in_invoices: use_in_invoices !== false,
       })
       .select()
       .single();

@@ -44,6 +44,7 @@ const METHOD_STYLE: Record<string, string> = {
 
 export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }: OrderPaymentsListProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editPayment, setEditPayment] = useState<EditPaymentData | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -66,7 +67,25 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
     }
   }, [orderId]);
 
-  useEffect(() => { loadPayments(); }, [loadPayments]);
+  const loadPaymentSummary = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const linked = Number(data?.paymentSummary?.linkedToInvoices) || 0;
+      setLinkedToInvoices(linked);
+    } catch {
+      // ignore
+    }
+  }, [orderCode]);
+
+  useEffect(() => {
+    loadPayments();
+    loadPaymentSummary();
+  }, [loadPayments, loadPaymentSummary]);
 
   const formatCurrency = (amount: number, currency = "EUR") =>
     `€${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -102,6 +121,7 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
       });
       if (!res.ok) throw new Error("Failed to cancel");
       loadPayments();
+      loadPaymentSummary();
       onChanged?.();
     } catch (err) {
       console.error("Error cancelling payment:", err);
@@ -228,11 +248,11 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
             <td className="py-1.5 px-2 text-right font-semibold text-gray-900 text-sm">{formatCurrency(total)}</td>
             <td colSpan={3} />
           </tr>
-          {orderAmountTotal > 0 && total > orderAmountTotal + 0.01 && (
+          {total > linkedToInvoices + 0.01 && (
             <tr>
               <td colSpan={3} className="py-1 px-2 text-xs font-medium text-purple-600 text-right">Overpayment:</td>
               <td className="py-1 px-2 text-right font-semibold text-purple-700 text-sm">
-                +{formatCurrency(Math.round((total - orderAmountTotal) * 100) / 100)}
+                +{formatCurrency(Math.round((total - linkedToInvoices) * 100) / 100)}
               </td>
               <td colSpan={3} />
             </tr>
@@ -247,6 +267,7 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
           setShowAddModal(false);
           setEditPayment(null);
           loadPayments();
+          loadPaymentSummary();
           onChanged?.();
         }}
         preselectedOrderId={orderId}

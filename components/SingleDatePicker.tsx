@@ -3,6 +3,22 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
+/** Parse dd.mm.yyyy or d.m.yyyy to YYYY-MM-DD */
+function parseDDMMYYYY(s: string): string | null {
+  const t = s.trim().replace(/\//g, ".");
+  const parts = t.split(".");
+  if (parts.length !== 3) return null;
+  const [d, m, y] = parts.map((p) => p.trim());
+  if (y.length !== 4 || !/^\d+$/.test(d) || !/^\d+$/.test(m) || !/^\d+$/.test(y)) return null;
+  const dd = d.padStart(2, "0");
+  const mm = m.padStart(2, "0");
+  const yy = y;
+  const iso = `${yy}-${mm}-${dd}`;
+  const date = new Date(iso + "T00:00:00");
+  if (isNaN(date.getTime())) return null;
+  return iso;
+}
+
 export type ShortcutPreset = "today" | "tomorrow" | "dayAfter";
 
 interface SingleDatePickerProps {
@@ -209,6 +225,37 @@ export default function SingleDatePicker({
   }, [relativeToDate]);
 
   const displayValue = (value ? formatDateDDMMYYYY(value) : placeholder).replace(/\//g, ".");
+  const [inputText, setInputText] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) setInputText(displayValue);
+  }, [displayValue, isEditing]);
+
+  const handleInputFocus = () => {
+    setIsEditing(true);
+    setInputText(displayValue);
+  };
+  const handleInputBlur = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed) {
+      onChange(undefined);
+      setIsEditing(false);
+      return;
+    }
+    const iso = parseDDMMYYYY(trimmed);
+    if (iso) {
+      onChange(iso);
+      const d = new Date(iso + "T00:00:00");
+      setCurrentMonth({ year: d.getFullYear(), month: d.getMonth() });
+    }
+    setIsEditing(false);
+  };
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      (e.target as HTMLInputElement).blur();
+    }
+  };
 
   return (
     <div ref={containerRef} className="relative">
@@ -216,22 +263,40 @@ export default function SingleDatePicker({
         <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
       )}
       
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full rounded border px-3 py-2 text-left text-sm flex items-center justify-between focus:outline-none focus:ring-1 ${
+      <div
+        className={`rounded border px-3 py-2 text-sm flex items-center gap-2 ${
           parsed
-            ? "border-green-500 ring-1 ring-green-500 focus:border-green-500 focus:ring-green-500"
+            ? "border-green-500 ring-1 ring-green-500"
             : error
-              ? "border-red-300 focus:border-red-500 focus:ring-red-500"
-              : "border-gray-300 focus:border-black focus:ring-black"
-        } ${!value ? "text-gray-400" : "text-gray-900"}`}
+              ? "border-red-300"
+              : "border-gray-300"
+        } ${!value && !isEditing ? "text-gray-400" : "text-gray-900"}`}
       >
-        <span>{displayValue}</span>
-        <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      </button>
+        <input
+          type="text"
+          value={isEditing ? inputText : displayValue}
+          onChange={(e) => {
+            setIsEditing(true);
+            setInputText(e.target.value);
+          }}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          onKeyDown={handleInputKeyDown}
+          placeholder={placeholder}
+          className="flex-1 min-w-0 bg-transparent border-none p-0 text-sm focus:outline-none focus:ring-0"
+          aria-label={label || "Date"}
+        />
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="shrink-0 p-0.5 rounded hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-400"
+          aria-label="Open calendar"
+        >
+          <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </button>
+      </div>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
 

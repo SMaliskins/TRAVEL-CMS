@@ -16,9 +16,11 @@ export interface PassportData {
   nationality?: string;
   personalCode?: string; // Record No / РНОКПП (Ukrainian tax ID)
   avatarUrl?: string; // Photo extracted from passport
+  /** male | female — from passport Sex/Gender field or MRZ */
+  gender?: string;
 }
 
-// Country code mapping
+// Country name <-> code mapping (for parsing and returning full name)
 const COUNTRY_CODES: Record<string, string> = {
   ukraine: "UA", україна: "UA", ukr: "UA", ua: "UA",
   latvia: "LV", latvija: "LV", lva: "LV", lv: "LV",
@@ -30,6 +32,11 @@ const COUNTRY_CODES: Record<string, string> = {
   poland: "PL", polska: "PL", pol: "PL", pl: "PL",
   lithuania: "LT", lietuva: "LT", ltu: "LT", lt: "LT",
   estonia: "EE", eesti: "EE", est: "EE", ee: "EE",
+};
+
+const CODE_TO_NAME: Record<string, string> = {
+  UA: "Ukraine", LV: "Latvia", RU: "Russia", DE: "Germany", FR: "France",
+  US: "United States", GB: "United Kingdom", PL: "Poland", LT: "Lithuania", EE: "Estonia",
 };
 
 const MONTHS: Record<string, string> = {
@@ -125,12 +132,12 @@ function extractLatinPart(value: string): string {
   return value.trim();
 }
 
-/** First letter uppercase, rest lowercase (IANCHENKO → Ianchenko, MARY-JANE → Mary-Jane) */
+/** First letter of each word uppercase, rest lowercase; preserves diacritics (Rāvis, Žaklīna). */
 function toTitleCase(name: string): string {
   if (!name) return "";
   return name
     .toLowerCase()
-    .replace(/(^|[\s\-'])([a-z])/g, (_, sep, letter) => sep + letter.toUpperCase());
+    .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
 }
 
 /**
@@ -140,18 +147,19 @@ function extractNames(text: string): { firstName?: string; lastName?: string; fu
   let firstName: string | undefined;
   let lastName: string | undefined;
 
-  const surnameMatch = text.match(/Surname[^A-ZА-Я]*([A-ZА-ЯІЇЄЁa-zа-яіїєё'-]+(?:\/[A-Za-z'-]+)?)/i);
+  const surnameMatch = text.match(/Surname[^\p{L}]*([\p{L}'\-]+(?:\/[\p{L}'\-]+)?)/u);
   if (surnameMatch) {
     lastName = extractLatinPart(surnameMatch[1]);
   }
 
-  const givenMatch = text.match(/Given\s*names?[^A-ZА-Я]*([A-ZА-ЯІЇЄЁa-zа-яіїєё'-]+(?:\/[A-Za-z'-]+)?)/i);
+  const givenMatch = text.match(/Given\s*names?[^\p{L}]*([\p{L}'\-]+(?:\/[\p{L}'\-]+)?)/u);
   if (givenMatch) {
     firstName = extractLatinPart(givenMatch[1]);
   }
 
-  firstName = firstName?.replace(/[^A-Za-z'-\s]/g, "").trim() || undefined;
-  lastName = lastName?.replace(/[^A-Za-z'-\s]/g, "").trim() || undefined;
+  /** Keep Unicode letters (e.g. ā, ž, ī) — do not strip diacritics */
+  firstName = firstName?.replace(/[^\p{L}'\s-]/gu, "").trim() || undefined;
+  lastName = lastName?.replace(/[^\p{L}'\s-]/gu, "").trim() || undefined;
 
   if (!lastName || !firstName) {
     const mrzMatch = text.match(/([A-Z]+)<<([A-Z]+)/);
@@ -193,11 +201,16 @@ function extractDates(text: string): { dob?: string; issueDate?: string; expiryD
     }
   }
 
+  const datePatternDot = "(\\d{1,2}[.\\/]\\d{1,2}[.\\/]\\d{4})";
   const issuePatterns = [
     new RegExp(`Date\\s*of\\s*issue[^\\d]*${datePattern}`, "i"),
     new RegExp(`[Дд]ата\\s*видач[іi][^\\d]*${datePattern}`, "i"),
     new RegExp(`Issue\\s*date[^\\d]*${datePattern}`, "i"),
     new RegExp(`Issued[^\\d]*${datePattern}`, "i"),
+    new RegExp(`Izdošanas\\s*datums[^\\d]*${datePatternDot}`, "i"),
+    new RegExp(`(?:Date of issue|Issue date)[^\\d]*${datePatternDot}`, "i"),
+    new RegExp(`${datePatternDot}[^\\d]*(?:Date of issue|Issue date)`, "i"),
+    new RegExp(`${datePatternDot}[^\\d]{0,30}(?:issue|izdošanas)`, "i"),
   ];
   for (const p of issuePatterns) {
     const m = text.match(p);
@@ -213,6 +226,10 @@ function extractDates(text: string): { dob?: string; issueDate?: string; expiryD
     new RegExp(`Expiry\\s*date[^\\d]*${datePattern}`, "i"),
     new RegExp(`Expires[^\\d]*${datePattern}`, "i"),
     new RegExp(`Valid\\s*until[^\\d]*${datePattern}`, "i"),
+    new RegExp(`Derīgums\\s*līdz[^\\d]*${datePatternDot}`, "i"),
+    new RegExp(`(?:Date of expiry|Expiry date)[^\\d]*${datePatternDot}`, "i"),
+    new RegExp(`${datePatternDot}[^\\d]*(?:Date of expiry|Expiry date)`, "i"),
+    new RegExp(`${datePatternDot}[^\\d]{0,30}(?:expiry|derīgums)`, "i"),
   ];
   for (const p of expiryPatterns) {
     const m = text.match(p);
@@ -252,17 +269,17 @@ function extractPersonalCode(text: string): string | undefined {
 }
 
 /**
- * Extract country/nationality
+ * Extract country/nationality. Returns full country name (for statistics), not code.
  */
 function extractCountry(text: string): { country?: string; nationality?: string } {
-  let country: string | undefined;
+  let code: string | undefined;
   let nationality: string | undefined;
 
   const lowerText = text.toLowerCase();
 
-  for (const [name, code] of Object.entries(COUNTRY_CODES)) {
+  for (const [name, c] of Object.entries(COUNTRY_CODES)) {
     if (lowerText.includes(name)) {
-      country = code;
+      code = c;
       break;
     }
   }
@@ -270,16 +287,35 @@ function extractCountry(text: string): { country?: string; nationality?: string 
   const natMatch = text.match(/(?:nationality|громадянство|гражданство|pilsonība)[:\s]+([A-Za-zА-Яа-яІіЇїЄє]+)/i);
   if (natMatch) {
     const natLower = natMatch[1].toLowerCase();
-    nationality = COUNTRY_CODES[natLower] || natMatch[1].toUpperCase().slice(0, 3);
+    const natCode = COUNTRY_CODES[natLower] || natMatch[1].toUpperCase().slice(0, 2);
+    nationality = CODE_TO_NAME[natCode] || natMatch[1].trim();
   }
 
   const codeMatch = text.match(/\b(UKR|LVA|RUS|DEU|FRA|USA|GBR|POL|LTU|EST)\b/);
-  if (codeMatch && !country) {
+  if (codeMatch && !code) {
     const map: Record<string, string> = { UKR: "UA", LVA: "LV", RUS: "RU", DEU: "DE", FRA: "FR", USA: "US", GBR: "GB", POL: "PL", LTU: "LT", EST: "EE" };
-    country = map[codeMatch[1]] || codeMatch[1];
+    code = map[codeMatch[1]] || codeMatch[1];
   }
-
+  const country = code ? (CODE_TO_NAME[code] || code) : undefined;
   return { country, nationality: nationality || country };
+}
+
+/**
+ * Extract gender from passport text. Returns "male" | "female" or undefined.
+ * Labels: Sex, Gender, Dzimums (LV), Стать (UA), etc.
+ */
+function extractGender(text: string): string | undefined {
+  const t = text.replace(/\s+/g, " ").trim();
+  // After Sex/Gender/Dzimums/Стать: M or F
+  const mfAfterLabel = t.match(/(?:Sex|Gender|Dzimums|Стать|Пол)[:\s]*([MF])\b/i);
+  if (mfAfterLabel) return mfAfterLabel[1].toUpperCase() === "M" ? "male" : "female";
+  // Male/Female or Latvian Vīrietis/Sieviete or Ukrainian
+  if (/\b(Female|Sieviete|Жін\.?|Жінка)\b/i.test(t)) return "female";
+  if (/\b(Male|Vīrietis|Чол\.?|Чоловік)\b/i.test(t)) return "male";
+  // Standalone M or F (e.g. in a table)
+  const mf = t.match(/\b([MF])\s*(?:\/|\.|,|\s|$)/);
+  if (mf) return mf[1].toUpperCase() === "M" ? "male" : "female";
+  return undefined;
 }
 
 /**
@@ -289,10 +325,25 @@ export function parsePassportFromText(text: string): PassportData | null {
   if (!text || text.trim().length < 20) return null;
 
   const passportNumber = extractPassportNumber(text);
-  const { firstName, lastName, fullName } = extractNames(text);
+  let { firstName, lastName, fullName } = extractNames(text);
   let { dob, issueDate, expiryDate } = extractDates(text);
   const { country, nationality } = extractCountry(text);
   const personalCode = extractPersonalCode(text);
+  const gender = extractGender(text);
+
+  // When we only have fullName (e.g. "RAVIS GUNTIS"), split into firstName and lastName with title case
+  if (fullName && (!firstName || !lastName)) {
+    const parts = fullName.trim().split(/\s+/).map((p) => toTitleCase(p));
+    if (parts.length >= 2) {
+      firstName = parts[0];
+      lastName = parts.slice(1).join(" ");
+      fullName = [firstName, lastName].join(" ");
+    } else {
+      fullName = toTitleCase(fullName);
+    }
+  } else if (fullName) {
+    fullName = toTitleCase(fullName);
+  }
 
   // Fallback: DOB from personalCode 19800108-00720
   if (!dob && personalCode && /^\d{8}-\d{5}$/.test(personalCode)) {
@@ -317,5 +368,6 @@ export function parsePassportFromText(text: string): PassportData | null {
     dob,
     nationality,
     personalCode,
+    gender,
   };
 }

@@ -90,7 +90,9 @@ interface FlightSegment {
   arrivalStatus: "scheduled" | "on_time" | "delayed" | "cancelled" | "landed";
 }
 
-const SYSTEM_PROMPT = `You are a flight itinerary parser for a travel agency CRM. Extract ALL flight and booking information from images of tickets, boarding passes, booking confirmations, emails, or PDFs.
+function getSystemPrompt(): string {
+  const currentYear = new Date().getFullYear();
+  return `You are a flight itinerary parser for a travel agency CRM. Extract ALL flight and booking information from images of tickets, boarding passes, booking confirmations, emails, or PDFs.
 
 Return a JSON object with this structure:
 {
@@ -99,9 +101,10 @@ Return a JSON object with this structure:
     "airline": "British Airways",
     "totalPrice": 420.76,
     "currency": "EUR",
-    "ticketNumbers": ["125-2227796422"],
+    "ticketNumbers": ["125-2227796422", "125-2227796423"],
     "passengers": [
-      { "name": "Frederic Piano", "ticketNumber": "125-2227796422" }
+      { "name": "Frederic Piano", "ticketNumber": "125-2227796422" },
+      { "name": "Marie Piano", "ticketNumber": "125-2227796423" }
     ],
     "cabinClass": "economy",
     "refundPolicy": "non_ref",
@@ -118,9 +121,9 @@ Return a JSON object with this structure:
       "arrival": "LHR",
       "arrivalCity": "London",
       "arrivalCountry": "GB",
-      "departureDate": "2026-01-25",
+      "departureDate": "${currentYear}-01-25",
       "departureTimeScheduled": "07:35",
-      "arrivalDate": "2026-01-25",
+      "arrivalDate": "${currentYear}-01-25",
       "arrivalTimeScheduled": "08:55",
       "duration": "2h 20m",
       "departureTerminal": "1",
@@ -133,6 +136,9 @@ Return a JSON object with this structure:
 }
 
 Rules:
+- CRITICAL — Year for dates: Use ONLY the year explicitly shown on the document. If the document shows only day and month (e.g. "23 MAR", "23.03", "25 Jan") and no year is visible, use the current calendar year ${currentYear}. NEVER use 2024 or any past year unless that exact year is clearly printed on the document.
+- CRITICAL — Route: You MUST extract the full route. Return at least one segment per flight leg. Each segment MUST have: departure (IATA 3-letter code, e.g. RIX, NCE), arrival (IATA code), departureCity, arrivalCity, departureDate (YYYY-MM-DD), departureTimeScheduled (HH:mm), arrivalDate, arrivalTimeScheduled. Without segments the route cannot be displayed.
+- CRITICAL — Passengers: Extract ALL passengers. If the ticket shows 2 or more passengers, return ALL of them in booking.passengers (each with name and optional ticketNumber). Do not return only one passenger when multiple are on the document.
 - Extract EVERYTHING: booking reference, ticket numbers, prices, passenger names, baggage allowance
 - Use IATA airport codes (3 letters) for departure/arrival
 - Use ISO country codes (2 letters) for countries
@@ -144,8 +150,9 @@ Rules:
 - refundPolicy: "non_ref" (non-refundable), "refundable" (with conditions), "fully_ref" (fully refundable)
 - Look for keywords: "Nonref", "Non-refundable", "Refundable", "Free cancellation"
 - Extract total price with taxes
-- Match ticket numbers to passenger names if possible
+- Match ticket numbers to passenger names when possible
 - Only return valid JSON, no other text`;
+}
 
 export async function POST(request: NextRequest) {
   // Get auth info for usage logging and module check
@@ -242,7 +249,7 @@ export async function POST(request: NextRequest) {
         messages = [
           {
             role: "system",
-            content: SYSTEM_PROMPT,
+            content: getSystemPrompt(),
           },
           {
             role: "user",
@@ -255,7 +262,7 @@ export async function POST(request: NextRequest) {
         messages = [
           {
             role: "system",
-            content: SYSTEM_PROMPT,
+            content: getSystemPrompt(),
           },
           {
             role: "user",
@@ -278,7 +285,7 @@ export async function POST(request: NextRequest) {
         messages = [
           {
             role: "system",
-            content: SYSTEM_PROMPT,
+            content: getSystemPrompt(),
           },
           {
             role: "user",
@@ -349,10 +356,21 @@ export async function POST(request: NextRequest) {
           
           // Extract booking-level info
           const booking = parsed.booking || {};
+          const currentYear = new Date().getFullYear();
+          // If AI returned 2024 but we're past that, fix dates (model bias)
+          const fixYear = (d: string) => {
+            if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+            const y = parseInt(d.slice(0, 4), 10);
+            if (y === 2024 && currentYear > 2024) return `${currentYear}-${d.slice(5)}`;
+            return d;
+          };
           
           const segments: FlightSegment[] = (parsed.segments || []).map(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (seg: any, index: number) => ({
+            (seg: any, index: number) => {
+              const depDate = fixYear(seg.departureDate || "");
+              const arrDate = fixYear(seg.arrivalDate || seg.departureDate || "");
+              return {
               id: `seg-${Date.now()}-${index}`,
               flightNumber: seg.flightNumber || "",
               airline: seg.airline || booking.airline || "",
@@ -362,10 +380,10 @@ export async function POST(request: NextRequest) {
               arrival: seg.arrival || "",
               arrivalCity: seg.arrivalCity || "",
               arrivalCountry: seg.arrivalCountry || "",
-              departureDate: seg.departureDate || "",
+              departureDate: depDate,
               departureTimeScheduled: seg.departureTimeScheduled || seg.departureTime || "",
               departureTimeActual: seg.departureTimeActual || "",
-              arrivalDate: seg.arrivalDate || seg.departureDate || "",
+              arrivalDate: arrDate,
               arrivalTimeScheduled: seg.arrivalTimeScheduled || seg.arrivalTime || "",
               arrivalTimeActual: seg.arrivalTimeActual || "",
               duration: seg.duration || "",
@@ -381,7 +399,8 @@ export async function POST(request: NextRequest) {
               aircraft: seg.aircraft || "",
               departureStatus: "scheduled",
               arrivalStatus: "scheduled",
-            })
+            };
+            }
           );
 
           return NextResponse.json({ 

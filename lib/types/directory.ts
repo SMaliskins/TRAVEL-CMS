@@ -72,6 +72,10 @@ export interface DirectoryRecord {
   iban?: string;
   swift?: string;
   contactPerson?: string;
+  /** Languages of correspondence (e.g. ["en", "lv", "ru"]) */
+  correspondenceLanguages?: string[];
+  /** Language of invoice documents (e.g. en, lv, ru) */
+  invoiceLanguage?: string;
   
   // Common fields
   phone?: string;

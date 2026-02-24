@@ -38,6 +38,7 @@ export async function PATCH(
     if (body.swift !== undefined) updates.swift = body.swift;
     if (body.currency !== undefined) updates.currency = body.currency;
     if (body.is_active !== undefined) updates.is_active = body.is_active;
+    if (body.use_in_invoices !== undefined) updates.use_in_invoices = body.use_in_invoices;
 
     if (body.is_default === true) {
       await supabaseAdmin
@@ -59,7 +60,8 @@ export async function PATCH(
 
     if (error) {
       console.error("[bank-accounts] PATCH error:", error);
-      return NextResponse.json({ error: "Failed to update account" }, { status: 500 });
+      const message = error.message || "Failed to update account";
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     return NextResponse.json({ data });

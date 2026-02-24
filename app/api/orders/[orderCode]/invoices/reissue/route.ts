@@ -49,6 +49,7 @@ export async function POST(
           service_category,
           service_date_from,
           service_date_to,
+          service_dates_text,
           quantity,
           unit_price,
           line_total
@@ -212,6 +213,7 @@ export async function POST(
       service_category: item.service_category ?? "",
       service_date_from: item.service_date_from ?? null,
       service_date_to: item.service_date_to ?? null,
+      service_dates_text: item.service_dates_text ?? null,
       quantity: item.quantity ?? 1,
       unit_price: item.unit_price ?? 0,
       line_total: item.line_total ?? (item.unit_price ?? 0) * (item.quantity ?? 1),

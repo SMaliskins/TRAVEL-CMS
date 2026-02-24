@@ -7,6 +7,9 @@ export type InvoiceCompanyInfo = {
   bankName?: string | null;
   bankAccount?: string | null;
   bankSwift?: string | null;
+  bankAccounts?: { account_name?: string; bank_name?: string; iban?: string; swift?: string; currency?: string }[];
+  /** Company registration country (e.g. "Latvia"). Used to choose invoice totals template. */
+  country?: string | null;
 };
 
 /** Invoice UI labels by language (for PDF/HTML output) */
@@ -41,6 +44,17 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     referenceNr: "Reference Nr.",
     personalCode: "Personal Code",
     fullPayment: "Full Payment",
+    by: "by",
+    electronicDisclaimer: "This invoice was prepared electronically and is valid without signature and stamp.",
+    summa: "Summa",
+    nonTaxableAmount: "Amount not subject to VAT",
+    taxable0: "Amount taxable at 0% VAT",
+    taxable21: "Amount taxable at 21% VAT",
+    vat21: "VAT 21%",
+    legalNote0: "VAT 0%, VAT Act §46 Part 3, 4",
+    legalNote21: "VAT 21% VAT Act §136, profit margin scheme for travel agencies",
+    summaApmaksai: "Amount to pay",
+    summaVardiem: "Amount in words",
   },
   lv: {
     invoice: "RĒKINS",
@@ -60,8 +74,8 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     vat: "PVN",
     total: "Kopā",
     paymentTerms: "Apmaksas noteikumi",
-    deposit: "Īres nauda",
-    finalPayment: "Galīgais maksājums",
+    deposit: "Rēķina priekšapmaksa",
+    finalPayment: "Rēķina galīgā apmaksa",
     bankingDetails: "Bankas dati",
     beneficiaryName: "Saņēmēja nosaukums",
     bank: "Banka",
@@ -72,6 +86,17 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     referenceNr: "Ref. nr.",
     personalCode: "Personas kods",
     fullPayment: "Pilna apmaksa",
+    by: "līdz",
+    electronicDisclaimer: "Rēķins ir sagatavots elektroniski un ir derīgs bez paraksta un zīmoga.",
+    summa: "Summa",
+    nonTaxableAmount: "Neapliekama ar PVN summa",
+    taxable0: "Ar PVN 0% apliekamā summa",
+    taxable21: "Ar PVN 21% apliekamā summa",
+    vat21: "PVN 21%",
+    legalNote0: "PVN 0%, PVN likuma 46.pants 3.,4. daļa",
+    legalNote21: "PVN 21% PVN likuma 136.pants, peļņas daļas režīms ceļojumu aģentūrām",
+    summaApmaksai: "Summa apmaksai",
+    summaVardiem: "Summa vārdiem",
   },
   ru: {
     invoice: "СЧЁТ",
@@ -103,6 +128,17 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     referenceNr: "Реф. №",
     personalCode: "Персональный код",
     fullPayment: "Полная оплата",
+    by: "до",
+    electronicDisclaimer: "Счёт подготовлен в электронном виде и действителен без подписи и печати.",
+    summa: "Сумма",
+    nonTaxableAmount: "Сумма, не облагаемая НДС",
+    taxable0: "Сумма, облагаемая НДС 0%",
+    taxable21: "Сумма, облагаемая НДС 21%",
+    vat21: "НДС 21%",
+    legalNote0: "НДС 0%",
+    legalNote21: "НДС 21%",
+    summaApmaksai: "Сумма к оплате",
+    summaVardiem: "Сумма прописью",
   },
   de: {
     invoice: "RECHNUNG",
@@ -134,6 +170,17 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     referenceNr: "Ref.-Nr.",
     personalCode: "Personalausweisnummer",
     fullPayment: "Restzahlung",
+    by: "bis",
+    electronicDisclaimer: "Diese Rechnung wurde elektronisch erstellt und ist ohne Unterschrift und Stempel gültig.",
+    summa: "Summe",
+    nonTaxableAmount: "Nicht steuerpflichtiger Betrag",
+    taxable0: "Betrag mit 0% MwSt.",
+    taxable21: "Betrag mit 21% MwSt.",
+    vat21: "MwSt. 21%",
+    legalNote0: "MwSt. 0%",
+    legalNote21: "MwSt. 21%",
+    summaApmaksai: "Zu zahlender Betrag",
+    summaVardiem: "Betrag in Worten",
   },
   fr: {
     invoice: "FACTURE",
@@ -165,6 +212,17 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     referenceNr: "Réf. n°",
     personalCode: "Code personnel",
     fullPayment: "Solde total",
+    by: "au",
+    electronicDisclaimer: "Cette facture a été établie électroniquement et est valable sans signature ni cachet.",
+    summa: "Montant",
+    nonTaxableAmount: "Montant non assujetti à la TVA",
+    taxable0: "Montant soumis à 0% TVA",
+    taxable21: "Montant soumis à 21% TVA",
+    vat21: "TVA 21%",
+    legalNote0: "TVA 0%",
+    legalNote21: "TVA 21%",
+    summaApmaksai: "Montant à payer",
+    summaVardiem: "Montant en lettres",
   },
   es: {
     invoice: "FACTURA",
@@ -196,13 +254,289 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     referenceNr: "Ref. n.º",
     personalCode: "Código personal",
     fullPayment: "Pago total",
+    by: "antes del",
+    electronicDisclaimer: "Esta factura se ha preparado electrónicamente y es válida sin firma ni sello.",
+    summa: "Importe",
+    nonTaxableAmount: "Importe no sujeto a IVA",
+    taxable0: "Importe sujeto a IVA 0%",
+    taxable21: "Importe sujeto a IVA 21%",
+    vat21: "IVA 21%",
+    legalNote0: "IVA 0%",
+    legalNote21: "IVA 21%",
+    summaApmaksai: "Importe a pagar",
+    summaVardiem: "Importe en letras",
+  },
+  lt: {
+    invoice: "SĄSKAITA FAKTŪRA",
+    creditNote: "KREDITO PAŽYMA",
+    refundCredit: "Grąžinimas / Kreditas",
+    date: "Data",
+    beneficiary: "Gavėjas",
+    regNr: "Įm. kodas",
+    pvn: "PVM",
+    payer: "Mokėtojas",
+    dates: "Datos",
+    service: "Paslauga",
+    client: "Klientas",
+    amount: "Suma",
+    noItems: "Nėra pozicijų",
+    subtotal: "Tarpinė suma",
+    vat: "PVM",
+    total: "Iš viso",
+    paymentTerms: "Mokėjimo sąlygos",
+    deposit: "Avansas",
+    finalPayment: "Galutinis mokėjimas",
+    bankingDetails: "Banko duomenys",
+    beneficiaryName: "Gavėjo pavadinimas",
+    bank: "Bankas",
+    account: "IBAN",
+    dueDate: "Mokėjimo terminas",
+    thankYou: "Dėkojame už bendradarbiavimą!",
+    invoiceNo: "Sąskaita nr.",
+    referenceNr: "Ref. nr.",
+    personalCode: "Asmens kodas",
+    fullPayment: "Pilna apmoka",
+    by: "iki",
+    electronicDisclaimer: "Ši sąskaita sukurta elektroniniu būdu ir galioja be parašo ir antspaudų.",
+    summa: "Suma",
+    nonTaxableAmount: "Suma neapmokestinama PVM",
+    taxable0: "Suma apmokestinama 0% PVM",
+    taxable21: "Suma apmokestinama 21% PVM",
+    vat21: "PVM 21%",
+    legalNote0: "PVM 0%",
+    legalNote21: "PVM 21%",
+    summaApmaksai: "Suma mokėti",
+    summaVardiem: "Suma žodžiais",
+  },
+  pl: {
+    invoice: "FAKTURA",
+    creditNote: "NOTA KREDYTOWA",
+    refundCredit: "Zwrot / Kredyt",
+    date: "Data",
+    beneficiary: "Odbiorca",
+    regNr: "Regon",
+    pvn: "NIP",
+    payer: "Płatnik",
+    dates: "Daty",
+    service: "Usługa",
+    client: "Klient",
+    amount: "Kwota",
+    noItems: "Brak pozycji",
+    subtotal: "Suma częściowa",
+    vat: "VAT",
+    total: "Razem",
+    paymentTerms: "Warunki płatności",
+    deposit: "Zadatek",
+    finalPayment: "Płatność końcowa",
+    bankingDetails: "Dane bankowe",
+    beneficiaryName: "Odbiorca",
+    bank: "Bank",
+    account: "IBAN",
+    dueDate: "Termin płatności",
+    thankYou: "Dziękujemy za współpracę!",
+    invoiceNo: "Faktura nr",
+    referenceNr: "Ref. nr",
+    personalCode: "PESEL",
+    fullPayment: "Płatność pełna",
+    by: "do",
+    electronicDisclaimer: "Faktura została wystawiona elektronicznie i jest ważna bez podpisu i pieczęci.",
+    summa: "Kwota",
+    nonTaxableAmount: "Kwota niepodlegająca VAT",
+    taxable0: "Kwota objęta 0% VAT",
+    taxable21: "Kwota objęta 21% VAT",
+    vat21: "VAT 21%",
+    legalNote0: "VAT 0%",
+    legalNote21: "VAT 21%",
+    summaApmaksai: "Kwota do zapłaty",
+    summaVardiem: "Kwota słownie",
+  },
+  et: {
+    invoice: "ARVE",
+    creditNote: "KREEDITMÄRK",
+    refundCredit: "Tagastus / Kreedit",
+    date: "Kuupäev",
+    beneficiary: "Saaja",
+    regNr: "Reg. nr",
+    pvn: "KM kood",
+    payer: "Maksja",
+    dates: "Kuupäevad",
+    service: "Teenus",
+    client: "Klient",
+    amount: "Summa",
+    noItems: "Pole kirjeid",
+    subtotal: "Vahesumma",
+    vat: "KM",
+    total: "Kokku",
+    paymentTerms: "Maksetingimused",
+    deposit: "Sissemakse",
+    finalPayment: "Lõppmakse",
+    bankingDetails: "Pangandusandmed",
+    beneficiaryName: "Saaja nimi",
+    bank: "Pank",
+    account: "IBAN",
+    dueDate: "Tähtpäev",
+    thankYou: "Tänan äriühingut!",
+    invoiceNo: "Arve nr.",
+    referenceNr: "Ref. nr.",
+    personalCode: "Isikukood",
+    fullPayment: "Täismakse",
+    by: "kuni",
+    electronicDisclaimer: "See arve on koostatud elektrooniliselt ja on kehtiv ilma allkirjata ja templita.",
+    summa: "Summa",
+    nonTaxableAmount: "Käibemaksuga mittekuuluv summa",
+    taxable0: "0% käibemaksuga summa",
+    taxable21: "21% käibemaksuga summa",
+    vat21: "Käibemaks 21%",
+    legalNote0: "Käibemaks 0%",
+    legalNote21: "Käibemaks 21%",
+    summaApmaksai: "Tasumisele kuuluv summa",
+    summaVardiem: "Summa sõnadega",
+  },
+  hu: {
+    invoice: "SZÁMLA",
+    creditNote: "JÓVÁÍRÁS",
+    refundCredit: "Visszatérítés / Jóváírás",
+    date: "Dátum",
+    beneficiary: "Kedvezményezett",
+    regNr: "Cégj. sz.",
+    pvn: "Adószám",
+    payer: "Fizető",
+    dates: "Dátumok",
+    service: "Szolgáltatás",
+    client: "Ügyfél",
+    amount: "Összeg",
+    noItems: "Nincs tétel",
+    subtotal: "Részösszeg",
+    vat: "ÁFA",
+    total: "Összesen",
+    paymentTerms: "Fizetési feltételek",
+    deposit: "Előleg",
+    finalPayment: "Végső fizetés",
+    bankingDetails: "Banki adatok",
+    beneficiaryName: "Kedvezményezett neve",
+    bank: "Bank",
+    account: "IBAN",
+    dueDate: "Fizetési határidő",
+    thankYou: "Köszönjük együttműködését!",
+    invoiceNo: "Számla nr.",
+    referenceNr: "Ref. nr.",
+    personalCode: "Személyi ig. szám",
+    fullPayment: "Teljes fizetés",
+    by: "-ig",
+    electronicDisclaimer: "A számla elektronikusan készült és aláírás és pecsét nélkül is érvényes.",
+    summa: "Összeg",
+    nonTaxableAmount: "ÁFÁ-val nem terhelt összeg",
+    taxable0: "0% ÁFÁ-val terhelt összeg",
+    taxable21: "21% ÁFÁ-val terhelt összeg",
+    vat21: "ÁFA 21%",
+    legalNote0: "ÁFA 0%",
+    legalNote21: "ÁFA 21%",
+    summaApmaksai: "Fizetendő összeg",
+    summaVardiem: "Összeg betűvel",
   },
 };
+
+/** Service category type labels for "Pakalpojums" column: Aviobiļete, Viesnīca, Transfers, etc. */
+const CATEGORY_TYPE_LABELS: Record<string, Record<string, string>> = {
+  en: { flight: "Flight", hotel: "Hotel", transfer: "Transfers", tour: "Tour", insurance: "Insurance", visa: "Visa", rent_a_car: "Rent a car", cruise: "Cruise", other: "Other" },
+  lv: { flight: "Aviobiļete", hotel: "Viesnīca", transfer: "Transfers", tour: "Tūre", insurance: "Apdrošināšana", visa: "Vīza", rent_a_car: "Auto noma", cruise: "Kruīzs", other: "Cits" },
+  ru: { flight: "Авиабилет", hotel: "Отель", transfer: "Трансферы", tour: "Тур", insurance: "Страховка", visa: "Виза", rent_a_car: "Аренда авто", cruise: "Круиз", other: "Другое" },
+  de: { flight: "Flug", hotel: "Hotel", transfer: "Transfers", tour: "Reise", insurance: "Versicherung", visa: "Visum", rent_a_car: "Mietwagen", cruise: "Kreuzfahrt", other: "Sonstiges" },
+  fr: { flight: "Vol", hotel: "Hôtel", transfer: "Transferts", tour: "Tour", insurance: "Assurance", visa: "Visa", rent_a_car: "Location voiture", cruise: "Croisière", other: "Autre" },
+  es: { flight: "Vuelo", hotel: "Hotel", transfer: "Traslados", tour: "Tour", insurance: "Seguro", visa: "Visado", rent_a_car: "Alquiler coche", cruise: "Crucero", other: "Otro" },
+};
+
+/** Derive category type from service_category name (e.g. "Flight" -> "flight"). Exported for invoice preview. */
+export function getCategoryTypeFromName(categoryStr: string | null | undefined): string | null {
+  if (!categoryStr || typeof categoryStr !== "string") return null;
+  const c = categoryStr.trim().toLowerCase();
+  if (!c) return null;
+  if (c.includes("flight") || c.includes("aviob") || c.includes("air ticket")) return "flight";
+  if (c.includes("hotel") || c.includes("viesn")) return "hotel";
+  if (c.includes("transfer")) return "transfer";
+  if (c.includes("tour") && !c.includes("transfer")) return "tour";
+  if (c.includes("insurance") || c.includes("apdroš")) return "insurance";
+  if (c.includes("visa") || c.includes("vīza")) return "visa";
+  if (c.includes("rent") || c.includes("car") || c.includes("noma")) return "rent_a_car";
+  if (c.includes("cruise") || c.includes("kruīz")) return "cruise";
+  return "other";
+}
+
+/** Get service category label by type and language (e.g. flight + lv -> "Aviobiļete"). Exported for invoice preview. */
+export function getCategoryLabel(type: string | null | undefined, lang: string): string {
+  if (!type) return "";
+  const code = (lang && String(lang).trim().toLowerCase()) || "en";
+  const labels = CATEGORY_TYPE_LABELS[code] || CATEGORY_TYPE_LABELS.en;
+  return labels[type] || labels.other || type;
+}
 
 /** Labels for invoice preview/UI by language (same keys as INVOICE_LABELS). */
 export function getInvoiceLabels(lang: string): Record<string, string> {
   const code = (lang && String(lang).trim().toLowerCase()) || "en";
   return INVOICE_LABELS[code] || INVOICE_LABELS.en;
+}
+
+const EN_ONES = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const EN_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+const LV_ONES = ["", "viens", "divi", "trīs", "četri", "pieci", "seši", "septiņi", "astoņi", "deviņi", "desmit", "vienpadsmit", "divpadsmit", "trīspadsmit", "četrpadsmit", "piecpadsmit", "sešpadsmit", "septiņpadsmit", "astoņpadsmit", "deviņpadsmit"];
+const LV_TENS = ["", "", "divdesmit", "trīsdesmit", "četrdesmit", "piecdesmit", "sešdesmit", "septiņdesmit", "astoņdesmit", "deviņdesmit"];
+
+function numberToWordsEn(n: number): string {
+  if (n === 0) return "zero";
+  if (n < 0) n = Math.abs(n);
+  const int = Math.floor(n);
+  if (int >= 1000) {
+    const th = Math.floor(int / 1000);
+    const rest = int % 1000;
+    const thStr = th === 1 ? "one thousand" : numberToWordsEn(th) + " thousand";
+    return rest === 0 ? thStr : thStr + " " + numberToWordsEn(rest);
+  }
+  if (int >= 100) {
+    const h = Math.floor(int / 100);
+    const rest = int % 100;
+    const hStr = EN_ONES[h] + " hundred";
+    return rest === 0 ? hStr : hStr + " " + numberToWordsEn(rest);
+  }
+  if (int >= 20) {
+    const t = Math.floor(int / 10);
+    const o = int % 10;
+    return o === 0 ? EN_TENS[t] : EN_TENS[t] + " " + EN_ONES[o];
+  }
+  return EN_ONES[int];
+}
+
+function numberToWordsLv(n: number): string {
+  if (n === 0) return "nulle";
+  if (n < 0) n = Math.abs(n);
+  const int = Math.floor(n);
+  if (int >= 1000) {
+    const th = Math.floor(int / 1000);
+    const rest = int % 1000;
+    const thStr = th === 1 ? "viens tūkstotis" : numberToWordsLv(th) + " tūkstoši";
+    return rest === 0 ? thStr : thStr + " " + numberToWordsLv(rest);
+  }
+  if (int >= 100) {
+    const h = Math.floor(int / 100);
+    const rest = int % 100;
+    const hStr = h === 1 ? "viens simts" : LV_ONES[h] + " simti";
+    return rest === 0 ? hStr : hStr + " " + numberToWordsLv(rest);
+  }
+  if (int >= 20) {
+    const t = Math.floor(int / 10);
+    const o = int % 10;
+    return o === 0 ? LV_TENS[t] : LV_TENS[t] + " " + LV_ONES[o];
+  }
+  return LV_ONES[int];
+}
+
+/** Exported for invoice preview (e.g. Latvia block "Summa vārdiem"). Uses € for EUR. */
+export function numberToWords(amount: number, lang: string): string {
+  const int = Math.floor(Math.abs(amount));
+  const dec = Math.round((Math.abs(amount) - int) * 100);
+  const decStr = String(dec).padStart(2, "0");
+  const word = (lang === "lv" ? numberToWordsLv(int) : numberToWordsEn(int));
+  const currency = "€";
+  return lang === "lv" ? `${word}, ${decStr} ${currency}` : `${word} and ${decStr}/100 ${currency}`;
 }
 
 /**
@@ -218,31 +552,54 @@ export function generateInvoiceHTML(
 ): string {
   const lang = (invoice?.language && typeof invoice.language === "string") ? invoice.language.trim().toLowerCase() : "en";
   const t = INVOICE_LABELS[lang] || INVOICE_LABELS.en;
+  /** Use company country to decide totals template (e.g. Latvia = detailed VAT block). Language is only for labels. */
+  const companyCountry = (company?.country && String(company.country).trim()) || "";
+  const isLatviaCompany = /latvia|latvija|lettland/i.test(companyCountry);
 
+  const currencySymbol = "€";
   const formatCurrency = (amount: number) => {
-    return `€${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol}${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatCurrencyWithCode = (amount: number, code = "EUR") => {
+    const sym = code === "EUR" ? "€" : code;
+    return `${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
   };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return dateString;
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const year = date.getFullYear();
     return `${day}.${month}.${year}`;
+  };
+  const isIsoDate = (s: string | null) => s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+  const formatDatesCell = (from: string | null, to: string | null) => {
+    if (!from) return "-";
+    if (isIsoDate(from)) {
+      const fromFmt = formatDate(from);
+      const toFmt = to && to !== from && isIsoDate(to) ? " - " + formatDate(to) : "";
+      return fromFmt + toFmt;
+    }
+    return from;
   };
 
   const beneficiaryName = company ? (company.name || "Company Name") : (invoice.client_name || "Company Name");
   const beneficiaryReg = company ? company.regNr ?? null : (invoice.payer_reg_nr ?? null);
   const beneficiaryVat = company ? company.vatNr ?? null : (invoice.payer_vat_nr ?? null);
   const beneficiaryAddress = company ? (company.address ?? null) : (invoice.client_address ?? null);
-  const beneficiaryRegVatLine = (beneficiaryReg || beneficiaryVat)
-    ? `${beneficiaryReg ? t.regNr + ": " + beneficiaryReg : ""}${beneficiaryReg && beneficiaryVat ? " • " : ""}${beneficiaryVat ? t.pvn + ": " + beneficiaryVat : ""}<br>`
-    : "";
+  const beneficiaryRegVatLine =
+    (beneficiaryReg ? `${t.regNr}: ${beneficiaryReg}<br>` : "") +
+    (beneficiaryVat ? `${t.pvn}: ${beneficiaryVat}<br>` : "");
 
   const bankName = company?.bankName ?? invoice.bank_name;
   const bankAccount = company?.bankAccount ?? invoice.bank_account;
   const bankSwift = company?.bankSwift ?? invoice.bank_swift;
+  const bankAccounts = company?.bankAccounts && company.bankAccounts.length > 0
+    ? company.bankAccounts
+    : (bankName || bankAccount || bankSwift) ? [{ bank_name: bankName, iban: bankAccount, swift: bankSwift }] : [];
 
   return `
 <!DOCTYPE html>
@@ -258,9 +615,23 @@ export function generateInvoiceHTML(
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
     .invoice-title { font-size: 32px; font-weight: bold; }
     .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
-    .section { background: #f5f5f5; padding: 12px 15px; border-radius: 5px; font-size: 12px; }
+    .section { border: 1px solid #ddd; background: #fafafa; padding: 12px 15px; border-radius: 5px; font-size: 12px; }
     .section-title { font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 8px; }
     .section-content { font-size: 12px; }
+    .section-content .company-name { font-size: 13px; font-weight: bold; }
+    .bank-table { width: 100%; max-width: 560px; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    .bank-table th, .bank-table td { padding: 6px 10px; text-align: left; border: 1px solid #ddd; }
+    .bank-table th { background: #f5f5f5; font-weight: 600; }
+    .bank-table td.num { text-align: right; }
+    .totals-table { width: 100%; max-width: 400px; border-collapse: collapse; font-size: 12px; }
+    .totals-table td { padding: 6px 10px; border: 1px solid #eee; }
+    .totals-table td:first-child { background: #fafafa; }
+    .totals-table td.num { text-align: right; }
+    .totals-table tr.total-row td { font-weight: bold; border-top: 2px solid #333; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
+    .items-table th, .items-table td { padding: 8px 10px; border: 1px solid #ddd; font-size: 12px; }
+    .items-table th { text-align: left; background: #f5f5f5; font-weight: 600; text-transform: uppercase; color: #444; }
+    .items-table td.amount { text-align: right; }
     table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
     th { text-align: left; padding: 8px 10px; background: #f5f5f5; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; }
     td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
@@ -296,7 +667,7 @@ export function generateInvoiceHTML(
       <div class="section">
         <div class="section-title">${t.beneficiary}</div>
         <div class="section-content">
-          <strong>${beneficiaryName}</strong><br>
+          <span class="company-name">${beneficiaryName}</span><br>
           ${beneficiaryRegVatLine}
           ${beneficiaryAddress ? beneficiaryAddress + "<br>" : ""}
         </div>
@@ -304,15 +675,15 @@ export function generateInvoiceHTML(
       <div class="section">
         <div class="section-title">${t.payer}</div>
         <div class="section-content">
-          <strong>${invoice.payer_name || "-"}</strong><br>
+          <span class="company-name">${invoice.payer_name || "-"}</span><br>
+          ${invoice.payer_reg_nr ? `${t.regNr}: ${invoice.payer_reg_nr}<br>` : ""}
+          ${invoice.payer_vat_nr ? `${t.pvn}: ${invoice.payer_vat_nr}<br>` : ""}
           ${invoice.payer_address ? invoice.payer_address + "<br>" : ""}
-          ${invoice.payer_email ? invoice.payer_email + "<br>" : ""}
-          ${invoice.payer_phone ? invoice.payer_phone : ""}
         </div>
       </div>
     </div>
 
-  <table>
+  <table class="items-table">
     <thead>
       <tr>
         <th>${t.dates}</th>
@@ -322,15 +693,20 @@ export function generateInvoiceHTML(
       </tr>
     </thead>
     <tbody>
-      ${invoice.invoice_items?.map((item: any) => `
+      ${invoice.invoice_items?.map((item: any) => {
+        const serviceText = item.service_name?.trim() || "-";
+        const serviceCell = `${t.service}: ${serviceText}`;
+        return `
         <tr>
-          <td>${item.service_date_from ? formatDate(item.service_date_from) : "-"}${item.service_date_to && item.service_date_to !== item.service_date_from ? " - " + formatDate(item.service_date_to) : ""}</td>
-          <td style="word-wrap: break-word; white-space: normal;">${item.service_name || "-"}</td>
+          <td>${(item.service_dates_text && String(item.service_dates_text).trim()) ? String(item.service_dates_text).trim() : formatDatesCell(item.service_date_from, item.service_date_to)}</td>
+          <td style="word-wrap: break-word; white-space: normal;">${serviceCell}</td>
           <td>${item.service_client || "-"}</td>
-          <td style="text-align: right;">${formatCurrency(item.line_total)}</td>
+          <td class="amount">${formatCurrency(item.line_total)}</td>
         </tr>
-      `).join("") || `<tr><td colspan="4">${t.noItems}</td></tr>`}
+      `;
+      }).join("") || `<tr><td colspan="4">${t.noItems}</td></tr>`}
     </tbody>
+    ${!isLatviaCompany ? `
     <tfoot class="totals-foot">
       <tr>
         <td colspan="3"></td>
@@ -345,38 +721,71 @@ export function generateInvoiceHTML(
         <td>${t.total}: ${formatCurrency(invoice.total || 0)}</td>
       </tr>
     </tfoot>
+    ` : ""}
   </table>
+  ${isLatviaCompany ? `
+  <table class="totals-table" style="margin-top: 12px;">
+    ${(() => {
+      const subtotal = invoice.subtotal ?? 0;
+      const taxRate = invoice.tax_rate ?? 0;
+      const taxAmount = invoice.tax_amount ?? 0;
+      const total = invoice.total ?? 0;
+      const nonTaxable = 0;
+      const taxable0 = taxRate === 0 ? subtotal : 0;
+      const taxable21 = taxRate === 21 ? subtotal : 0;
+      const vat21Amount = taxRate === 21 ? taxAmount : 0;
+      const curr = "EUR";
+      return `
+    <tr><td>${t.summa}</td><td class="num">${formatCurrencyWithCode(subtotal, curr)}</td></tr>
+    <tr><td>${t.nonTaxableAmount}</td><td class="num">${formatCurrencyWithCode(nonTaxable, curr)}</td></tr>
+    <tr><td>${t.taxable0}</td><td class="num">${formatCurrencyWithCode(taxable0, curr)}</td></tr>
+    <tr><td>${t.taxable21}</td><td class="num">${formatCurrencyWithCode(taxable21, curr)}</td></tr>
+    <tr><td>${t.vat21}</td><td class="num">${formatCurrencyWithCode(vat21Amount, curr)}</td></tr>
+    <tr class="total-row"><td>${t.summaApmaksai}</td><td class="num">${formatCurrencyWithCode(total, curr)}</td></tr>
+    <tr><td colspan="2" style="font-style: italic; border: none; padding-top: 4px;">${t.summaVardiem}: ${numberToWords(total, lang)}</td></tr>
+    <tr><td colspan="2" style="font-size: 11px; color: #666; border: none; padding-top: 8px;">${t.legalNote0}</td></tr>
+    <tr><td colspan="2" style="font-size: 11px; color: #666; border: none;">${t.legalNote21}</td></tr>
+      `;
+    })()}
+  </table>
+  ` : ""}
 
   ${(invoice.deposit_amount || invoice.final_payment_amount) ? `
     <div class="payment-terms">
       <strong>${t.paymentTerms}</strong><br>
-      ${invoice.deposit_amount && invoice.deposit_date ? `${t.deposit}: ${formatCurrency(invoice.deposit_amount)} by ${formatDate(invoice.deposit_date)}<br>` : ""}
-      ${invoice.final_payment_amount && invoice.final_payment_date ? `${t.finalPayment}: ${formatCurrency(invoice.final_payment_amount)} by ${formatDate(invoice.final_payment_date)}<br>` : ""}
-      ${(bankName || bankAccount || bankSwift) ? `
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
-          <strong>${t.bankingDetails}</strong><br>
-          ${t.beneficiaryName}: ${beneficiaryName}<br>
-          ${bankName ? `${t.bank}: ${bankName}<br>` : ""}
-          ${bankAccount ? `${t.account}: ${bankAccount}<br>` : ""}
-          ${bankSwift ? `SWIFT: ${bankSwift}` : ""}
-        </div>
+      ${invoice.deposit_amount && invoice.deposit_date ? `${t.deposit}: ${formatCurrency(invoice.deposit_amount)} ${t.by || "by"} ${formatDate(invoice.deposit_date)}<br>` : ""}
+      ${invoice.final_payment_amount && invoice.final_payment_date ? `${t.finalPayment}: ${formatCurrency(invoice.final_payment_amount)} ${t.by || "by"} ${formatDate(invoice.final_payment_date)}<br>` : ""}
+      ${bankAccounts.length > 0 ? `
+        <table class="bank-table">
+          <tr><th colspan="4">${t.bankingDetails}</th></tr>
+          <tr><td colspan="4"><strong>${t.beneficiaryName}:</strong> ${beneficiaryName}</td></tr>
+          <tr><th>${t.bank}</th><th>${t.account}</th><th>SWIFT</th><th></th></tr>
+          ${bankAccounts.map((acc: { account_name?: string; bank_name?: string; iban?: string; swift?: string; currency?: string }) => {
+            const curr = (acc.currency === "MULTI" || acc.currency === "Multi-currency") ? "Multi" : (acc.currency === "EUR" || !acc.currency ? "€" : (acc.currency || ""));
+            return `<tr><td>${acc.bank_name || ""}</td><td style="word-break: break-all;">${acc.iban || ""}</td><td>${acc.swift ? acc.swift : ""}</td><td>${curr}</td></tr>`;
+          }).join("")}
+        </table>
       ` : ""}
     </div>
   ` : (invoice.due_date ? `
     <div class="payment-terms">
       <strong>${t.dueDate}</strong><br>
       ${formatDate(invoice.due_date)}
-      ${(bankName || bankAccount || bankSwift) ? `
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
-          <strong>${t.bankingDetails}</strong><br>
-          ${t.beneficiaryName}: ${beneficiaryName}<br>
-          ${bankName ? `${t.bank}: ${bankName}<br>` : ""}
-          ${bankAccount ? `${t.account}: ${bankAccount}<br>` : ""}
-          ${bankSwift ? `SWIFT: ${bankSwift}` : ""}
-        </div>
+      ${bankAccounts.length > 0 ? `
+        <table class="bank-table">
+          <tr><th colspan="4">${t.bankingDetails}</th></tr>
+          <tr><td colspan="4"><strong>${t.beneficiaryName}:</strong> ${beneficiaryName}</td></tr>
+          <tr><th>${t.bank}</th><th>${t.account}</th><th>SWIFT</th><th></th></tr>
+          ${bankAccounts.map((acc: { account_name?: string; bank_name?: string; iban?: string; swift?: string; currency?: string }) => {
+            const curr = (acc.currency === "MULTI" || acc.currency === "Multi-currency") ? "Multi" : (acc.currency === "EUR" || !acc.currency ? "€" : (acc.currency || ""));
+            return `<tr><td>${acc.bank_name || ""}</td><td style="word-break: break-all;">${acc.iban || ""}</td><td>${acc.swift ? acc.swift : ""}</td><td>${curr}</td></tr>`;
+          }).join("")}
+        </table>
       ` : ""}
     </div>
   ` : "")}
+
+  <p style="margin-top: 20px; font-size: 11px; color: #666; font-style: italic;">${t.electronicDisclaimer || "This invoice was prepared electronically and is valid without signature and stamp."}</p>
 
   <div class="thank-you">
     ${t.thankYou}

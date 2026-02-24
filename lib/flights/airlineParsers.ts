@@ -24,6 +24,11 @@ export interface ParsedSegment {
   ticketNumber?: string;
 }
 
+export interface ParsedPassenger {
+  name: string;
+  ticketNumber?: string;
+}
+
 export interface ParsedBooking {
   bookingRef: string;
   airline: string;
@@ -31,6 +36,8 @@ export interface ParsedBooking {
   salePrice?: number | null;
   currency: string;
   ticketNumbers: string[];
+  /** All passengers when 2+ on the ticket; otherwise passengerName used for single */
+  passengers?: ParsedPassenger[];
   cabinClass: string;
   refundPolicy: "non_ref" | "refundable" | "fully_ref";
   baggage: string;
@@ -2167,15 +2174,47 @@ function parseAmadeus(text: string): ParseResult | null {
                           text.match(/^([A-Z0-9]{6})\s*$/m) || 
                           text.match(/PNR[\s:]+([A-Z0-9]{6})/i);
   
-  // Extract ticket number: TICKET: KL/ETKT 074 2796062312 FOR VELINSKI/KATERINA
-  const ticketMatch = text.match(/TICKET:\s*[A-Z]{2}\/ETKT\s*(\d{3})\s*(\d{10})/i) ||
-                      text.match(/ETKT\s*(\d{3})\s*(\d{10})/i);
-  const ticketNumber = ticketMatch ? `${ticketMatch[1]}-${ticketMatch[2]}` : undefined;
-  
-  // Extract passenger name: VELINSKI/KATERINA MRS
-  const passengerMatch = text.match(/([A-Z]+)\/([A-Z]+)\s+(?:MRS?|MS|MISS|DR)/i);
-  const passengerName = passengerMatch ? `${passengerMatch[2]} ${passengerMatch[1]}` : undefined;
-  
+  // Extract ALL passengers: FOR SURNAME/FIRSTNAME [MRS|MR|MS|...] or TICKET ... FOR SURNAME/FIRST
+  const forNameRe = /(?:TICKET:\s*[A-Z]{2}\/ETKT\s*\d{3}\s*\d{10}\s+)?FOR\s+([A-Z\s\u00C0-\u024F]+)\/([A-Z\s\u00C0-\u024F]+)(?:\s+(?:MRS?|MS|MISS|MSTR|DR|MR))?/gi;
+  const passengers: ParsedPassenger[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = forNameRe.exec(text)) !== null) {
+    const surname = (m[1] || "").trim().replace(/\s+/g, " ");
+    const first = (m[2] || "").trim().replace(/\s+/g, " ");
+    const name = first && surname ? `${first} ${surname}` : (first || surname);
+    if (name && !passengers.some((p) => p.name === name)) {
+      passengers.push({ name });
+    }
+  }
+  // Also each TICKET line with FOR: TICKET: XX/ETKT 074 1234567890 FOR SURNAME/FIRST
+  const ticketForAll = [...text.matchAll(/TICKET:\s*[A-Z]{2}\/ETKT\s*(\d{3})\s*(\d{10})\s+FOR\s+([A-Z\s\u00C0-\u024F]+)\/([A-Z\s\u00C0-\u024F]+)/gi)];
+  for (const tm of ticketForAll) {
+    const first = (tm[4] || "").trim().replace(/\s+/g, " ");
+    const surname = (tm[3] || "").trim().replace(/\s+/g, " ");
+    const name = first && surname ? `${first} ${surname}` : (first || surname);
+    if (name && !passengers.some((p) => p.name === name)) {
+      passengers.push({ name, ticketNumber: `${tm[1]}-${tm[2]}` });
+    }
+  }
+  // Fallback: single ticket+name when no FOR block matched
+  const ticketForMatch = text.match(/TICKET:\s*[A-Z]{2}\/ETKT\s*(\d{3})\s*(\d{10})\s+FOR\s+([A-Z]+)\/([A-Z]+)/i);
+  if (ticketForMatch && passengers.length === 0) {
+    passengers.push({
+      name: `${ticketForMatch[4]} ${ticketForMatch[3]}`,
+      ticketNumber: `${ticketForMatch[1]}-${ticketForMatch[2]}`,
+    });
+  }
+  const ticketMatches = [...text.matchAll(/TICKET:\s*[A-Z]{2}\/ETKT\s*(\d{3})\s*(\d{10})/gi)];
+  const ticketNumbers = ticketMatches.map((tm) => `${tm[1]}-${tm[2]}`);
+  if (ticketNumbers.length > 0 && passengers.length > 0 && passengers.length <= ticketNumbers.length) {
+    ticketNumbers.forEach((tn, i) => {
+      if (passengers[i] && !passengers[i].ticketNumber) {
+        passengers[i] = { ...passengers[i], ticketNumber: tn };
+      }
+    });
+  }
+  const passengerName = passengers.length === 1 ? passengers[0].name : (passengers[0]?.name);
+
   const segments: ParsedSegment[] = [];
   
   // Split text into flight sections
@@ -2285,7 +2324,7 @@ function parseAmadeus(text: string): ParseResult | null {
       cabinClass,
       baggage,
       bookingRef: bookingRefMatch?.[1],
-      ticketNumber,
+      ticketNumber: ticketNumbers[0],
     });
   }
   
@@ -2300,11 +2339,14 @@ function parseAmadeus(text: string): ParseResult | null {
     
     // Extract ticket from FA line: FA PAX 074-2796062312/ETKL
     const faTicketMatch = text.match(/FA\s+PAX\s+(\d{3})-(\d{10})/);
-    const pnrTicketNumber = faTicketMatch ? `${faTicketMatch[1]}${faTicketMatch[2]}` : ticketNumber;
+    const pnrTicketNumber = faTicketMatch ? `${faTicketMatch[1]}-${faTicketMatch[2]}` : ticketNumbers[0];
     
-    // Extract passenger: 1.VELINSKI/KATERINA MRS
-    const pnrPassengerMatch = text.match(/\d\.\s*([A-Z]+)\/([A-Z]+)\s+(?:MRS?|MS|MISS|DR|MR)/i);
-    const pnrPassengerName = pnrPassengerMatch ? `${pnrPassengerMatch[2]} ${pnrPassengerMatch[1]}` : passengerName;
+    // Extract passenger: 1.VELINSKI/KATERINA MRS (all lines)
+    const pnrPassengerMatches = [...text.matchAll(/\d\.\s*([A-Z]+)\/([A-Z]+)\s+(?:MRS?|MS|MISS|DR|MR)/gi)];
+    const pnrPassengers: ParsedPassenger[] = pnrPassengerMatches.length > 0
+      ? pnrPassengerMatches.map((pm) => ({ name: `${pm[2]} ${pm[1]}`.trim() }))
+      : passengers;
+    const pnrPassengerName = pnrPassengers.length === 1 ? pnrPassengers[0].name : (pnrPassengers[0]?.name ?? passengerName);
     
     // Classic PNR flight pattern:
     // 2  AF7303 I 28JAN 3 NCECDG HK1  1100 1235  28JAN  E  AF/XGGEFU
@@ -2440,16 +2482,18 @@ function parseAmadeus(text: string): ParseResult | null {
     }
     
     if (pnrPassengerName && segments.length > 0) {
+      const pnrTicketArr = pnrTicketNumber ? [pnrTicketNumber] : ticketNumbers;
       return {
         success: true,
         segments,
         booking: {
           bookingRef: pnrRef || "",
-          airline: segments[0]?.airline || "",
+          airline: "BSP", // Amadeus = BSP (Billing and Settlement Plan)
           totalPrice: tqtTotalPrice,
           salePrice: rirSalePrice,
           currency: tqtCurrency,
-          ticketNumbers: pnrTicketNumber ? [pnrTicketNumber] : [],
+          ticketNumbers: pnrTicketArr,
+          passengers: pnrPassengers.length > 0 ? pnrPassengers : undefined,
           cabinClass: segments[0]?.cabinClass || "economy",
           refundPolicy: "non_ref",
           baggage: tqtBaggage,
@@ -2487,19 +2531,18 @@ function parseAmadeus(text: string): ParseResult | null {
     rirSalePrice = parseFloat(rirMatch[1]);
   }
   
-  // Determine airline name
-  const airlineNameMatch = text.match(/(?:AIR FRANCE|LUFTHANSA|KLM|BRITISH AIRWAYS|EMIRATES)/i);
-  
+  // Amadeus = BSP (Billing and Settlement Plan) as supplier
   return {
     success: true,
     segments: uniqueSegments,
     booking: {
       bookingRef: bookingRefMatch?.[1] || "",
-      airline: airlineNameMatch?.[0] || uniqueSegments[0]?.airline || "",
+      airline: "BSP",
       totalPrice: tqtTotalPrice,
       salePrice: rirSalePrice,
       currency: tqtCurrency,
-      ticketNumbers: ticketNumber ? [ticketNumber] : [],
+      ticketNumbers,
+      passengers: passengers.length > 0 ? passengers : undefined,
       cabinClass: uniqueSegments[0]?.cabinClass || "economy",
       refundPolicy: "non_ref",
       baggage: uniqueSegments[0]?.baggage || "",

@@ -14,6 +14,13 @@ const DIACRITIC_MAP: Record<string, string> = {
   ß: "ss", ñ: "n", ç: "c",
 };
 
+// ASCII → diacritic (for query: user types "sva", we also search "šva" to match "Švanka")
+const ASCII_TO_DIACRITIC: Record<string, string> = {
+  s: "š", S: "Š", c: "č", C: "Č", z: "ž", Z: "Ž",
+  a: "ā", A: "Ā", e: "ē", E: "Ē", i: "ī", I: "Ī", u: "ū", U: "Ū", o: "ō", O: "Ō",
+  n: "ņ", N: "Ņ", l: "ļ", L: "Ļ", k: "ķ", K: "Ķ", g: "ģ", G: "Ģ",
+};
+
 // Cyrillic → Latin (transliteration by sound, for display/embedding)
 const CYRILLIC_TO_LATIN: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
@@ -173,6 +180,21 @@ function addDiacriticVariantForIlike(s: string): string {
   return out;
 }
 
+/** Generate diacritic variants so "sva" also matches "Švanka" (s→š, c→č, etc.). Returns variants with first occurrence replaced. */
+function getDiacriticQueryVariants(s: string, maxVariants: number = 5): string[] {
+  const out = new Set<string>();
+  const lower = s.toLowerCase();
+  for (let i = 0; i < lower.length && out.size < maxVariants; i++) {
+    const c = lower[i];
+    const diacritic = ASCII_TO_DIACRITIC[c];
+    if (diacritic) {
+      const variant = lower.slice(0, i) + diacritic + lower.slice(i + 1);
+      out.add(variant);
+    }
+  }
+  return Array.from(out);
+}
+
 /** Remove diacritics for search matching */
 export function normalizeForSearch(s: string): string {
   if (!s || typeof s !== "string") return "";
@@ -220,7 +242,7 @@ function hasCyrillic(s: string): boolean {
   return /[\u0400-\u04FF]/.test(s);
 }
 
-/** Get search patterns: original, diacritic-normalized, keyboard-layout (wrong layout), transliteration */
+/** Get search patterns: original, diacritic-normalized, diacritic variants (sva→šva for Švanka), keyboard-layout, transliteration */
 export function getSearchPatterns(query: string): string[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -228,6 +250,9 @@ export function getSearchPatterns(query: string): string[] {
   const patterns = new Set<string>();
   patterns.add(trimmed);
   patterns.add(normalizeForSearch(trimmed));
+  // So "sva" also matches "Švanka": add šva, etc.
+  getDiacriticQueryVariants(trimmed, 6).forEach((v) => patterns.add(v));
+  getDiacriticQueryVariants(normalizeForSearch(trimmed), 6).forEach((v) => patterns.add(v));
 
   if (hasCyrillic(trimmed)) {
     patterns.add(transliterateCyrillicToLatin(trimmed));

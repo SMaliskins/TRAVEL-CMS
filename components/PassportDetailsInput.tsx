@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import SingleDatePicker from "@/components/SingleDatePicker";
+import { COUNTRIES } from "@/lib/data/countries";
 
 export interface PassportData {
   passportNumber?: string;
@@ -16,6 +17,8 @@ export interface PassportData {
   nationality?: string;
   avatarUrl?: string; // Photo extracted from passport
   personalCode?: string; // Record No / Запис N (personal code)
+  /** male | female — from passport Sex/Gender or MRZ; applied to directory Gender field */
+  gender?: string;
   /** Estonia/Latvia Alien's passport – show red icon next to passport section */
   isAlienPassport?: boolean;
 }
@@ -131,7 +134,11 @@ export default function PassportDetailsInput({
     }
   };
 
-  // Update field
+  const toTitleCase = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
+
   const updateField = (field: keyof PassportData, value: string) => {
     onChange({ ...data, [field]: value });
   };
@@ -251,6 +258,12 @@ export default function PassportDetailsInput({
                 type="text"
                 value={data.passportFullName || ""}
                 onChange={(e) => updateField("passportFullName", e.target.value)}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && (v === v.toUpperCase() || v !== toTitleCase(v))) {
+                    updateField("passportFullName", toTitleCase(v));
+                  }
+                }}
                 disabled={readonly}
                 className={`w-full rounded border px-2 py-1.5 text-sm disabled:bg-gray-50 ${isParsed("passportFullName") ? "border-green-500 ring-1 ring-green-500" : "border-gray-300"}`}
               />
@@ -291,22 +304,35 @@ export default function PassportDetailsInput({
               <label className="block text-xs text-gray-500 mb-1">Issuing Country</label>
               <input
                 type="text"
+                list="passport-issuing-country-list"
                 value={data.passportIssuingCountry || ""}
                 onChange={(e) => updateField("passportIssuingCountry", e.target.value)}
                 disabled={readonly}
-                placeholder="US, GB, DE..."
+                placeholder="e.g. Latvia, United States"
                 className={`w-full rounded border px-2 py-1.5 text-sm disabled:bg-gray-50 ${isParsed("passportIssuingCountry") ? "border-green-500 ring-1 ring-green-500" : "border-gray-300"}`}
               />
+              <datalist id="passport-issuing-country-list">
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Nationality</label>
               <input
                 type="text"
+                list="passport-nationality-list"
                 value={data.nationality || ""}
                 onChange={(e) => updateField("nationality", e.target.value)}
                 disabled={readonly}
+                placeholder="e.g. Latvia, United States"
                 className={`w-full rounded border px-2 py-1.5 text-sm disabled:bg-gray-50 ${isParsed("nationality") ? "border-green-500 ring-1 ring-green-500" : "border-gray-300"}`}
               />
+              <datalist id="passport-nationality-list">
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div>
               {readonly ? (

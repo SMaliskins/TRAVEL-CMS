@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
 interface Party {
@@ -200,7 +201,15 @@ export default function ClientMultiSelectDropdown({
               <div className="px-3 py-4 text-sm text-gray-500 text-center">Type 2+ characters</div>
             )}
             {!loading && search.length >= 2 && parties.length === 0 && (
-              <div className="px-3 py-4 text-sm text-gray-500 text-center">No results</div>
+              <div className="px-3 py-4 text-sm text-center space-y-2">
+                <p className="text-gray-500">No results</p>
+                <Link
+                  href={`/directory/new?name=${encodeURIComponent(search.trim())}`}
+                  className="inline-block text-blue-600 hover:text-blue-800 text-xs font-medium"
+                >
+                  Add to directory
+                </Link>
+              </div>
             )}
             {!loading &&
               parties.map((party) => {

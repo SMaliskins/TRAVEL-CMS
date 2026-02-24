@@ -5,7 +5,10 @@
 export const INVOICE_LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },
   { value: "lv", label: "Latvian" },
-  { value: "ru", label: "Russian" },
+  { value: "lt", label: "Lithuanian" },
+  { value: "et", label: "Estonian" },
+  { value: "pl", label: "Polish" },
+  { value: "hu", label: "Hungarian" },
   { value: "de", label: "German" },
   { value: "fr", label: "French" },
   { value: "es", label: "Spanish" },

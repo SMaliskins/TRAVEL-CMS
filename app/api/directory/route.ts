@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
 
     // If search provided and no results from display_name, try person/company + semantic fallback
     if (search && (!parties || parties.length === 0)) {
-      const patterns = getSearchPatterns(search).slice(0, 10).map((p) => p.replace(/[%,]/g, ""));
+      const patterns = getSearchPatterns(search).slice(0, 20).map((p) => p.replace(/[%,]/g, ""));
       const searchTerms = patterns.length > 0 ? patterns : [search.replace(/[%,]/g, "")];
       const personOr = searchTerms.flatMap((p) => [`first_name.ilike.%${p}%`, `last_name.ilike.%${p}%`]).join(",");
       const companyOr = searchTerms.map((p) => `company_name.ilike.%${p}%`).join(",");
@@ -229,11 +229,42 @@ export async function GET(request: NextRequest) {
         .select("party_id")
         .or(companyOr)
         .limit(limit);
-      const matchedIds = [
+      let matchedIds = [
         ...(personMatches || []).map((p: { party_id: string }) => p.party_id),
         ...(companyMatches || []).map((c: { party_id: string }) => c.party_id),
         ...semanticPartyIds,
       ];
+
+      // Fallback: match by normalized name (e.g. "Zaklina Rave" → "Žaklīna Rāve") when SQL ilike fails
+      if (matchedIds.length === 0 && userCompanyId && search.trim().length >= 2) {
+        let companyPartyQuery = supabaseAdmin
+          .from("party")
+          .select("id")
+          .eq("company_id", userCompanyId)
+          .limit(500);
+        if (effectiveStatus === "active") {
+          companyPartyQuery = companyPartyQuery.eq("status", "active");
+        } else if (effectiveStatus === "inactive" || effectiveStatus === "blocked") {
+          companyPartyQuery = companyPartyQuery.eq("status", effectiveStatus);
+        } else if (effectiveStatus === "archived") {
+          companyPartyQuery = companyPartyQuery.in("status", ["inactive", "archived"]);
+        }
+        const { data: companyPartyIds } = await companyPartyQuery;
+        const ids = (companyPartyIds || []).map((p: { id: string }) => p.id);
+        if (ids.length > 0) {
+          const { data: persons } = await supabaseAdmin
+            .from("party_person")
+            .select("party_id, first_name, last_name")
+            .in("party_id", ids);
+          const fullPatterns = getSearchPatterns(search);
+          const normMatched = (persons || []).filter((row: { party_id: string; first_name: string | null; last_name: string | null }) => {
+            const full = [row.first_name, row.last_name].filter(Boolean).join(" ").trim();
+            return matchesSearch(row.first_name, fullPatterns) || matchesSearch(row.last_name, fullPatterns) || matchesSearch(full, fullPatterns);
+          });
+          matchedIds = normMatched.map((r: { party_id: string }) => r.party_id);
+        }
+      }
+
       const allIds = [...new Set(matchedIds)];
       if (allIds.length > 0) {
         let fallbackQuery = supabaseAdmin

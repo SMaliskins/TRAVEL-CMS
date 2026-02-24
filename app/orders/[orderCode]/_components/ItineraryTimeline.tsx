@@ -8,10 +8,9 @@
  * See .ai/specs/itinerary-flight-layout-approved.md
  */
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { formatDateDDMMYYYY, segmentDisplayArrivalDate } from "@/utils/dateFormat";
 import { getCheckinUrl, isCheckinAvailable } from "@/lib/flights/airlineCheckin";
 import CheckinCountdown from "@/components/CheckinCountdown";
-import BoardingPassUpload from "@/components/BoardingPassUpload";
 import { requestNotificationPermission } from "@/lib/notifications/checkinNotifications";
 import { getCityByName, getCityByIATA } from "@/lib/data/cities";
 
@@ -306,15 +305,18 @@ function normalizeSegment(seg: Record<string, unknown>): { id: string; flightNum
   const arrivalCityRaw = seg.arrivalCity ?? seg.arrival_city;
   const departureCity = departureCityRaw ? String(departureCityRaw) : (departure ? getCityByIATA(departure)?.name : undefined);
   const arrivalCity = arrivalCityRaw ? String(arrivalCityRaw) : (arrival ? getCityByIATA(arrival)?.name : undefined);
+  const departureDate = String(seg.departureDate ?? seg.departure_date ?? "");
+  const arrivalDateRaw = String(seg.arrivalDate ?? seg.arrival_date ?? seg.departureDate ?? seg.departure_date ?? "");
+  const arrivalDate = segmentDisplayArrivalDate({ departureDate, arrivalDate: arrivalDateRaw });
   return {
     id: String(seg.id ?? seg.flightNumber ?? Math.random().toString(36).slice(2)),
     flightNumber: String(seg.flightNumber ?? seg.flight_number ?? ""),
     airline: (seg.airline ?? seg.airline_name) != null ? String(seg.airline ?? seg.airline_name) : undefined,
     departure,
     arrival,
-    departureDate: String(seg.departureDate ?? seg.departure_date ?? ""),
+    departureDate,
     departureTimeScheduled: String(seg.departureTimeScheduled ?? seg.departure_time_scheduled ?? seg.departureTime ?? seg.departure_time ?? ""),
-    arrivalDate: String(seg.arrivalDate ?? seg.arrival_date ?? seg.departureDate ?? seg.departure_date ?? ""),
+    arrivalDate,
     arrivalTimeScheduled: String(seg.arrivalTimeScheduled ?? seg.arrival_time_scheduled ?? seg.arrivalTime ?? seg.arrival_time ?? ""),
     departureCity,
     arrivalCity,
@@ -394,7 +396,7 @@ function renderFlightCard(event: TimelineEvent, leftBorderColor?: string): React
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center py-1"><span className="text-xs text-gray-500">Укажите маршрут в Edit</span></div>
+              <div className="flex items-center justify-center py-1"><span className="text-xs text-gray-500">Set route in Edit</span></div>
             )}
           </div>
         </div>
@@ -870,6 +872,17 @@ export default function ItineraryTimeline({
   stickyTopOffset = 0,
 }: ItineraryTimelineProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null);
+  const [bpMenuServiceId, setBpMenuServiceId] = useState<string | null>(null);
+  const bpFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const bpMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bpMenuRef.current && !bpMenuRef.current.contains(e.target as Node)) setBpMenuServiceId(null);
+    };
+    if (bpMenuServiceId) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [bpMenuServiceId]);
 
   const hotelColors = useMemo(() => getHotelColors(routeColorsUsed), [routeColorsUsed]);
 
@@ -1242,62 +1255,102 @@ export default function ItineraryTimeline({
                                 </>
                               )}
                             </div>
-                            {/* Row 2: BP checkboxes + upload per passenger */}
-                            {event.ticketNumbers && event.ticketNumbers.map((ticket) => (
-                              <div key={ticket.clientId} className="flex items-center gap-2 justify-end">
-                                {event.serviceId && (() => {
-                                  const clientPasses = (event.boardingPasses || []).filter(
-                                    bp => bp.clientName === ticket.clientName && bp.flightNumber === event.flightNumber
-                                  );
-                                  const hasPass = clientPasses.length > 0;
-                                  return (
-                                    <div className="flex items-center gap-1.5">
-                                      {hasPass && onToggleBoardingPassSelection && (
-                                        <div className="flex flex-col gap-0.5">
-                                          {clientPasses.map(pass => {
-                                            const isSelected = selectedBoardingPasses.some(s => s.passId === pass.id);
-                                            return (
-                                              <label key={pass.id} className="flex items-center cursor-pointer" title={`Select ${pass.fileName}`}>
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isSelected}
-                                                  onChange={() => onToggleBoardingPassSelection({
-                                                    serviceId: event.serviceId!,
-                                                    passId: pass.id,
-                                                    clientName: pass.clientName,
-                                                    flightNumber: pass.flightNumber || event.flightNumber || "",
-                                                    fileName: pass.fileName,
-                                                    fileUrl: pass.fileUrl,
-                                                  })}
-                                                  className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                  aria-label={`Select boarding pass ${pass.fileName}`}
-                                                />
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                      <BoardingPassUpload
-                                        serviceId={event.serviceId}
-                                        flightNumber={event.flightNumber || ""}
-                                        clientId={ticket.clientId}
-                                        clientName={ticket.clientName}
-                                        existingPasses={event.boardingPasses}
-                                        onUpload={onUploadBoardingPass
-                                          ? (file, clientId, flightNumber) => onUploadBoardingPass(event.serviceId!, file, clientId, flightNumber)
-                                          : undefined
-                                        }
-                                        onView={onViewBoardingPass}
-                                        onDelete={onDeleteBoardingPass
-                                          ? (passId) => onDeleteBoardingPass(event.serviceId!, passId)
-                                          : undefined
-                                        }
-                                      />
-                                    </div>
-                                  );
-                                })()}
+                            {/* Row 2: BP checkboxes (all passes) + one +BP button for multiple files */}
+                            {event.serviceId && event.ticketNumbers && event.ticketNumbers.length > 0 && (
+                              <div className="flex items-center gap-2 justify-end flex-wrap">
+                                {event.boardingPasses && event.boardingPasses.length > 0 && onToggleBoardingPassSelection && (
+                                  <div className="flex flex-col gap-0.5">
+                                    {event.boardingPasses
+                                      .filter(bp => bp.flightNumber === event.flightNumber)
+                                      .map(pass => {
+                                        const isSelected = selectedBoardingPasses.some(s => s.passId === pass.id);
+                                        return (
+                                          <label key={pass.id} className="flex items-center cursor-pointer" title={`Select ${pass.fileName}`}>
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() => onToggleBoardingPassSelection({
+                                                serviceId: event.serviceId!,
+                                                passId: pass.id,
+                                                clientName: pass.clientName,
+                                                flightNumber: pass.flightNumber || event.flightNumber || "",
+                                                fileName: pass.fileName,
+                                                fileUrl: pass.fileUrl,
+                                              })}
+                                              className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                              aria-label={`Select boarding pass ${pass.fileName}`}
+                                            />
+                                          </label>
+                                        );
+                                      })}
+                                  </div>
+                                )}
+                                <input
+                                  ref={el => { if (event.serviceId) bpFileInputRefs.current[event.serviceId] = el; }}
+                                  type="file"
+                                  multiple
+                                  accept=".pdf,.png,.jpg,.jpeg,.gif,.pkpass"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    e.target.value = "";
+                                    if (!onUploadBoardingPass || !event.serviceId || files.length === 0) return;
+                                    const tickets = event.ticketNumbers || [];
+                                    if (tickets.length === 0) return;
+                                    setUploadingServiceId(event.serviceId);
+                                    try {
+                                      for (let i = 0; i < files.length; i++) {
+                                        const ticket = tickets[i % tickets.length];
+                                        await onUploadBoardingPass(event.serviceId, files[i], ticket.clientId, event.flightNumber || "");
+                                      }
+                                    } finally {
+                                      setUploadingServiceId(null);
+                                    }
+                                  }}
+                                />
+                                <div
+                                  onClick={() => bpFileInputRefs.current[event.serviceId!]?.click()}
+                                  className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-all border-2 ${
+                                    uploadingServiceId === event.serviceId
+                                      ? "bg-gray-200 text-gray-400 border-gray-300"
+                                      : "bg-orange-50 text-orange-600 border-orange-200 border-dashed hover:bg-orange-100 hover:border-orange-300"
+                                  }`}
+                                  title="Add boarding pass(es) — select one or several files (PDF, image, .pkpass)"
+                                >
+                                  {uploadingServiceId === event.serviceId ? "⏳ Uploading..." : "📋 +BP"}
+                                </div>
+                                {event.boardingPasses && event.boardingPasses.filter(bp => bp.flightNumber === event.flightNumber).length > 0 && (
+                                  <div className="relative" ref={bpMenuServiceId === event.serviceId ? bpMenuRef : undefined}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setBpMenuServiceId(prev => prev === event.serviceId ? null : event.serviceId!)}
+                                      className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                                      title="View / delete boarding passes"
+                                      aria-label="Menu"
+                                    >
+                                      ⋮
+                                    </button>
+                                    {bpMenuServiceId === event.serviceId && (
+                                      <div className="absolute right-0 top-full mt-1 py-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
+                                        {event.boardingPasses!
+                                          .filter(bp => bp.flightNumber === event.flightNumber)
+                                          .map(pass => (
+                                            <div key={pass.id} className="flex items-center justify-between gap-2 px-2 py-1.5 hover:bg-gray-50">
+                                              <span className="text-xs truncate flex-1" title={pass.fileName}>{pass.clientName} — {pass.fileName}</span>
+                                              <div className="flex gap-0.5 shrink-0">
+                                                <button type="button" onClick={() => { onViewBoardingPass?.(pass); setBpMenuServiceId(null); }} className="text-xs text-blue-600 hover:underline">View</button>
+                                                {onDeleteBoardingPass && (
+                                                  <button type="button" onClick={() => { if (confirm("Delete this boarding pass?")) onDeleteBoardingPass(event.serviceId!, pass.id); setBpMenuServiceId(null); }} className="text-xs text-red-600 hover:underline">Delete</button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            ))}
+                            )}
                             {/* Row 3: status */}
                             {event.flightNumber && event.departureDateTime && (() => {
                               const depTime = new Date(event.departureDateTime).getTime();

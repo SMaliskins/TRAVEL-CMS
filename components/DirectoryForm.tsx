@@ -20,6 +20,7 @@ import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
+import { Check, X, Plus } from "lucide-react";
 
 function getZodiacSign(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -36,6 +37,15 @@ function getZodiacSign(dateStr: string): string | null {
   const p = periods.find(([m]) => m === month);
   return p ? (day <= p[1] ? p[2] : p[3]) : null;
 }
+
+const LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "lv", label: "Latvian" },
+  { value: "ru", label: "Russian" },
+  { value: "de", label: "German" },
+  { value: "fr", label: "French" },
+  { value: "es", label: "Spanish" },
+];
 
 const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia", "Australia",
@@ -99,6 +109,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       debt: number;
       lastTrip: string | null;
       nextTrip: string | null;
+      invoicesCount?: number;
+      invoicesTotal?: number;
+      paymentsTotal?: number;
+      paymentStatus?: "paid" | "partial" | "overdue" | "overpaid";
+      balance?: number;
+      overdueInvoices?: Array<{ invoice_number: string | null; due_date: string; total: number }>;
     } | null>(null);
     const [statsLoading, setStatsLoading] = useState(false);
     
@@ -241,6 +257,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [iban, setIban] = useState(record?.iban || "");
     const [swift, setSwift] = useState(record?.swift || "");
     const [contactPerson, setContactPerson] = useState(record?.contactPerson || "");
+    const [correspondenceLanguages, setCorrespondenceLanguages] = useState<string[]>(
+      Array.isArray(record?.correspondenceLanguages) && record.correspondenceLanguages.length > 0
+        ? record.correspondenceLanguages
+        : ["en"]
+    );
+    const [invoiceLanguage, setInvoiceLanguage] = useState(record?.invoiceLanguage || "en");
+    const [showAddCorrespondenceLang, setShowAddCorrespondenceLang] = useState(false);
+    const [showInvoiceLangSelect, setShowInvoiceLangSelect] = useState(false);
 
     // Common fields
     const [phone, setPhone] = useState(record?.phone || "");
@@ -296,6 +320,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [providerLoading, setProviderLoading] = useState(false);
     const [activeProviderIdx, setActiveProviderIdx] = useState<number | null>(null);
     const providerDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const addCorrespondenceLangRef = React.useRef<HTMLDivElement>(null);
+    const invoiceLangSelectRef = React.useRef<HTMLDivElement>(null);
 
     const searchProviders = React.useCallback(async (query: string) => {
       if (!query.trim()) { setProviderResults([]); return; }
@@ -367,6 +393,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         setEmail(record.email || "");
         setCountry(record.country || "");
         setContactPerson(record.contactPerson || "");
+        setCorrespondenceLanguages(
+          Array.isArray(record.correspondenceLanguages) && record.correspondenceLanguages.length > 0
+            ? record.correspondenceLanguages
+            : ["en"]
+        );
+        setInvoiceLanguage(record.invoiceLanguage || "en");
         setCompanyName(record.companyName || "");
         setBankName(record.bankName || "");
         setIban(record.iban || "");
@@ -404,6 +436,29 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       }
     }, [record, mode]);
 
+    // Close correspondence/invoice lang popovers on click outside or Escape
+    useEffect(() => {
+      if (!showAddCorrespondenceLang && !showInvoiceLangSelect) return;
+      const handleClickOutside = (e: MouseEvent) => {
+        const el1 = addCorrespondenceLangRef.current;
+        const el2 = invoiceLangSelectRef.current;
+        if (el1 && !el1.contains(e.target as Node)) setShowAddCorrespondenceLang(false);
+        if (el2 && !el2.contains(e.target as Node)) setShowInvoiceLangSelect(false);
+      };
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          setShowAddCorrespondenceLang(false);
+          setShowInvoiceLangSelect(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+        document.removeEventListener("keydown", handleEscape);
+      };
+    }, [showAddCorrespondenceLang, showInvoiceLangSelect]);
+
     // Track initial values for dirty state
     const getInitialValues = (): Partial<DirectoryRecord> => {
       if (!record) return {};
@@ -426,6 +481,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         iban: record.iban,
         swift: record.swift,
         contactPerson: record.contactPerson,
+        correspondenceLanguages: record.correspondenceLanguages,
+        invoiceLanguage: record.invoiceLanguage,
         country: record.country,
         supplierExtras: record.supplierExtras,
         subagentExtras: record.subagentExtras,
@@ -484,6 +541,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         iban.trim() !== (initialValues.iban || "").trim() ||
         swift.trim() !== (initialValues.swift || "").trim() ||
         contactPerson.trim() !== (initialValues.contactPerson || "").trim() ||
+        (() => {
+          const a = correspondenceLanguages.slice().sort();
+          const b = ((initialValues.correspondenceLanguages as string[]) || ["en"]).slice().sort();
+          return a.length !== b.length || a.some((v, i) => v !== b[i]);
+        })() ||
+        invoiceLanguage !== (initialValues.invoiceLanguage || "en") ||
         (record?.companyAvatarUrl || "") !== (initialValues.companyAvatarUrl || "") ||
         (passportData.avatarUrl || "") !== (initialValues.avatarUrl || "") ||
         (passportData.isAlienPassport ?? false) !== (initialValues.isAlienPassport ?? false)
@@ -665,6 +728,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       // Country
       if (displayType === "company") {
         formData.country = country.trim() || undefined;
+        formData.correspondenceLanguages = correspondenceLanguages.length > 0 ? correspondenceLanguages : undefined;
+        formData.invoiceLanguage = invoiceLanguage || undefined;
       }
 
       // Supplier details
@@ -1261,6 +1326,113 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               </div>
               )}
 
+              {/* Language of correspondence & invoice - company only: show only selected, edit via + / dropdown */}
+              {displayType === "company" && (
+                <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Languages</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Correspondence language</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {correspondenceLanguages.map((code) => {
+                          const opt = LANGUAGES.find((o) => o.value === code);
+                          const label = opt?.label ?? code;
+                          return (
+                            <span
+                              key={code}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500 bg-blue-50 px-2.5 py-1.5 text-sm text-blue-800"
+                            >
+                              <Check size={14} className="shrink-0 text-blue-600" strokeWidth={2.5} />
+                              {label}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (correspondenceLanguages.length <= 1) return;
+                                  setCorrespondenceLanguages(correspondenceLanguages.filter((c) => c !== code));
+                                  markFieldDirty("correspondenceLanguages");
+                                  markFieldTouched("correspondenceLanguages");
+                                }}
+                                className="shrink-0 rounded p-0.5 hover:bg-blue-200/50 text-blue-700"
+                                aria-label={`Remove ${label}`}
+                              >
+                                <X size={14} strokeWidth={2} />
+                              </button>
+                            </span>
+                          );
+                        })}
+                        <div className="relative inline-block" ref={addCorrespondenceLangRef}>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddCorrespondenceLang((v) => !v)}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600"
+                            aria-label="Add language"
+                          >
+                            <Plus size={16} strokeWidth={2} />
+                          </button>
+                          {showAddCorrespondenceLang && (
+                            <div className="absolute left-0 top-full mt-1 z-20 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+                              {LANGUAGES.filter((o) => !correspondenceLanguages.includes(o.value)).map((opt) => (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 rounded-none"
+                                  onClick={() => {
+                                    setCorrespondenceLanguages([...correspondenceLanguages, opt.value]);
+                                    markFieldDirty("correspondenceLanguages");
+                                    markFieldTouched("correspondenceLanguages");
+                                    setShowAddCorrespondenceLang(false);
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                              {LANGUAGES.filter((o) => !correspondenceLanguages.includes(o.value)).length === 0 && (
+                                <div className="px-3 py-2 text-sm text-gray-500">All added</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Invoice language</label>
+                      <div className="flex flex-wrap items-center gap-2 relative" ref={invoiceLangSelectRef}>
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500 bg-blue-50 px-2.5 py-1.5 text-sm text-blue-800">
+                          <Check size={14} className="shrink-0 text-blue-600" strokeWidth={2.5} />
+                          {LANGUAGES.find((o) => o.value === invoiceLanguage)?.label ?? invoiceLanguage}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowInvoiceLangSelect((v) => !v)}
+                          className="text-sm text-gray-600 hover:text-blue-600 underline"
+                        >
+                          Edit
+                        </button>
+                        {showInvoiceLangSelect && (
+                          <div className="absolute left-0 top-full mt-1 z-20 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+                            {LANGUAGES.map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                className={`w-full text-left px-3 py-2 text-sm rounded-none ${invoiceLanguage === opt.value ? "bg-blue-50 text-blue-800 font-medium" : "hover:bg-gray-50"}`}
+                                onClick={() => {
+                                  setInvoiceLanguage(opt.value);
+                                  markFieldDirty("invoiceLanguage");
+                                  markFieldTouched("invoiceLanguage");
+                                  setShowInvoiceLangSelect(false);
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Bank details - company only, after contact info */}
               {displayType === "company" && (
                 <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
@@ -1448,6 +1620,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       if (data.personalCode) {
                         setPersonalCode(data.personalCode);
                         markFieldDirty("personalCode");
+                      }
+                      if (data.gender === "male" || data.gender === "female") {
+                        setGender(data.gender);
+                        markFieldDirty("gender");
                       }
                       markFieldDirty("passport");
                     }}
@@ -1910,42 +2086,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             <span className="text-sm text-gray-600 truncate">Orders</span>
                             <span className="text-sm font-medium text-gray-900 truncate ml-2">{stats.ordersCount}</span>
                           </div>
-                          <div className="flex justify-between items-center min-h-[1.5rem] group relative">
+                          <div className="flex justify-between items-center min-h-[1.5rem]">
                             <span className="text-sm text-gray-600 truncate">Turnover</span>
-                            <span className="text-sm font-medium text-gray-900 truncate ml-2 cursor-help">
+                            <span className="text-sm font-medium text-gray-900 truncate ml-2">
                               €{stats.totalSpent.toFixed(2)}
                             </span>
-                            
-                            {/* Tooltip with breakdown */}
-                            {stats.totalSpentBreakdown && stats.totalSpentBreakdown.length > 0 && (
-                              <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] max-w-[280px]">
-                                <div className="bg-gray-900 text-white text-xs rounded-lg shadow-lg p-3">
-                                  <div className="font-semibold mb-2 border-b border-gray-700 pb-2">Breakdown by Order:</div>
-                                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
-                                    {stats.totalSpentBreakdown.map((item) => (
-                                      <div key={item.orderCode} className="flex justify-between items-center gap-3">
-                                        <a 
-                                          href={`/orders/${item.orderCode}`}
-                                          className="text-blue-300 hover:text-blue-200 underline font-mono text-xs"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          {item.orderCode}
-                                        </a>
-                                        <span className="font-medium whitespace-nowrap">€{item.amount.toFixed(2)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="mt-2 pt-2 border-t border-gray-700 flex justify-between font-semibold">
-                                    <span>Total:</span>
-                                    <span>€{stats.totalSpent.toFixed(2)}</span>
-                                  </div>
-                                  {/* Arrow pointer */}
-                                  <div className="absolute left-1/2 top-full -translate-x-1/2 -mt-px">
-                                    <div className="border-8 border-transparent border-t-gray-900"></div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
                           </div>
                           <div className="flex justify-between items-center min-h-[1.5rem]">
                             <span className="text-sm text-gray-600 truncate">Debt</span>
@@ -1965,6 +2110,65 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                               {stats.nextTrip ? formatDateDDMMYYYY(stats.nextTrip) : "-"}
                             </span>
                           </div>
+                          {(stats.invoicesCount !== undefined || stats.invoicesTotal !== undefined || stats.paymentsTotal !== undefined) && (
+                            <>
+                              <div className="border-t border-gray-200/60 pt-3 mt-1 space-y-2">
+                                <div className="flex justify-between items-center min-h-[1.5rem]">
+                                  <span className="text-sm text-gray-600 truncate">Invoices</span>
+                                  <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                                    {stats.invoicesCount ?? 0}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center min-h-[1.5rem]">
+                                  <span className="text-sm text-gray-600 truncate">Invoices total</span>
+                                  <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                                    €{(stats.invoicesTotal ?? 0).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center min-h-[1.5rem]">
+                                  <span className="text-sm text-gray-600 truncate">Payments total</span>
+                                  <span className="text-sm font-medium text-gray-900 truncate ml-2">
+                                    €{(stats.paymentsTotal ?? 0).toFixed(2)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center min-h-[1.5rem]">
+                                  <span className="text-sm text-gray-600 truncate">Payment status</span>
+                                  <span className={`text-sm font-medium truncate ml-2 ${
+                                    stats.paymentStatus === "overdue" ? "text-amber-600" :
+                                    stats.paymentStatus === "overpaid" ? "text-green-600" :
+                                    stats.paymentStatus === "partial" ? "text-orange-600" : "text-gray-900"
+                                  }`}>
+                                    {stats.paymentStatus === "paid" ? "Paid" :
+                                     stats.paymentStatus === "partial" ? "Partial" :
+                                     stats.paymentStatus === "overdue" ? "Overdue" :
+                                     stats.paymentStatus === "overpaid" ? "Overpaid" : "-"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center min-h-[1.5rem]">
+                                  <span className="text-sm text-gray-600 truncate">Balance</span>
+                                  <span className={`text-sm font-medium truncate ml-2 ${
+                                    (stats.balance ?? 0) > 0.01 ? "text-red-600" : (stats.balance ?? 0) < -0.01 ? "text-green-600" : "text-gray-900"
+                                  }`}>
+                                    {(stats.balance ?? 0) > 0.01 ? `Debt €${(stats.balance ?? 0).toFixed(2)}` :
+                                     (stats.balance ?? 0) < -0.01 ? `Overpayment €${Math.abs(stats.balance ?? 0).toFixed(2)}` : "—"}
+                                  </span>
+                                </div>
+                                {stats.overdueInvoices && stats.overdueInvoices.length > 0 && (
+                                  <div className="pt-1">
+                                    <span className="text-sm text-gray-600 block mb-1">Overdue</span>
+                                    <div className="text-xs text-gray-700 space-y-0.5">
+                                      {stats.overdueInvoices.map((inv, i) => (
+                                        <div key={i} className="flex justify-between gap-2">
+                                          <span className="truncate">{inv.invoice_number || "—"}</span>
+                                          <span>{inv.due_date ? formatDateDDMMYYYY(inv.due_date) : ""} €{inv.total.toFixed(2)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div className="text-sm text-gray-500 italic min-h-[6rem] flex items-center">

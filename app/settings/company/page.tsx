@@ -147,7 +147,9 @@ interface Company {
   emergency_contact?: string;
   invoice_prefix?: string;
   default_payment_terms?: number;
+  invoice_email_from?: string;
   invoice_languages?: string[];
+  invoice_currencies?: string[];
   concierge_hotel_markup?: number;
 }
 
@@ -942,6 +944,46 @@ export default function CompanySettingsPage() {
               )}
             </div>
             
+            {/* Invoice Prefix & Default Payment Terms (Financial) */}
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Invoice &amp; Payment</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Prefix</label>
+                  <input
+                    type="text"
+                    value={formData.invoice_prefix || ""}
+                    onChange={(e) => updateField("invoice_prefix", e.target.value)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g., INV-"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Payment Terms (days)</label>
+                  <input
+                    type="number"
+                    value={formData.default_payment_terms || 14}
+                    onChange={(e) => updateField("default_payment_terms", parseInt(e.target.value))}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email for sending invoices (From address)</label>
+                  <input
+                    type="email"
+                    value={formData.invoice_email_from || ""}
+                    onChange={(e) => updateField("invoice_email_from", e.target.value)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g. invoices@yourcompany.com"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Invoices will be sent from this address (display name = company name). Leave empty to use the default. Domain must be verified in Resend.</p>
+                </div>
+              </div>
+            </div>
+
             {/* Tax Settings */}
             <div className="mb-6 pb-6 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Tax Settings</h3>
@@ -1174,27 +1216,6 @@ export default function CompanySettingsPage() {
                     disabled={readonly}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="+371..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Prefix</label>
-                  <input
-                    type="text"
-                    value={formData.invoice_prefix || ""}
-                    onChange={(e) => updateField("invoice_prefix", e.target.value)}
-                    disabled={readonly}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="e.g., INV-"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Payment Terms (days)</label>
-                  <input
-                    type="number"
-                    value={formData.default_payment_terms || 14}
-                    onChange={(e) => updateField("default_payment_terms", parseInt(e.target.value))}
-                    disabled={readonly}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>

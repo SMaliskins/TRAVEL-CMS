@@ -26,65 +26,9 @@ interface Service {
   assignedTravellerIds: string[];
 }
 
-// Mock data
-const initialOrderTravellers: Traveller[] = [
-  { id: "t1", firstName: "John", lastName: "Smith" },
-  { id: "t2", firstName: "Jane", lastName: "Smith" },
-  { id: "t3", firstName: "Bob", lastName: "Johnson" },
-];
-
-const initialServices: Service[] = [
-  {
-    id: "s1",
-    dateFrom: "2025-03-15",
-    dateTo: "2025-03-16",
-    category: "Flight",
-    name: "Rome - Barcelona",
-    supplier: "Airline Co",
-    client: "John Smith",
-    payer: "John Smith",
-    servicePrice: 450,
-    clientPrice: 600,
-    resStatus: "confirmed",
-    refNr: "REF-001",
-    ticketNr: "TK-12345",
-    assignedTravellerIds: ["t1"],
-  },
-  {
-    id: "s2",
-    dateFrom: "2025-03-16",
-    dateTo: "2025-03-20",
-    category: "Hotel",
-    name: "Grand Hotel Barcelona",
-    supplier: "Hotel Group",
-    client: "John Smith",
-    payer: "John Smith",
-    servicePrice: 800,
-    clientPrice: 1200,
-    resStatus: "booked",
-    refNr: "REF-002",
-    assignedTravellerIds: ["t1", "t2"],
-  },
-  {
-    id: "s3",
-    dateFrom: "2025-03-18",
-    dateTo: "2025-03-18",
-    category: "Transfer",
-    name: "Airport Transfer",
-    supplier: "Transfer Service",
-    client: "John Smith",
-    payer: "John Smith",
-    servicePrice: 60,
-    clientPrice: 90,
-    resStatus: "confirmed",
-    assignedTravellerIds: [],
-  },
-];
-
 export default function OrderServicesTab() {
-  const [orderTravellers, setOrderTravellers] =
-    useState<Traveller[]>(initialOrderTravellers);
-  const [services, setServices] = useState<Service[]>(initialServices);
+  const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(
     null
   );

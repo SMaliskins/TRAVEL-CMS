@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { parseFlightBooking, getAirportTimezoneOffset } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
-import { formatDateDDMMYYYY } from '@/utils/dateFormat';
+import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
 
 interface Service {
   id: string;
@@ -103,88 +103,105 @@ export default function ChangeServiceModal({
     }
   }, [changeFee, marge, clientPrice]);
   
-  // Parse flight booking data
-  const handleParse = useCallback(() => {
+  // Apply segments to form (shared by AI and regex) — route with full city names: "date city - city / date city - city"
+  const applySegments = useCallback((segments: FlightSegment[], booking: Record<string, unknown>) => {
+    setNewSegments(segments);
+    const groupedByDate: Record<string, FlightSegment[]> = {};
+    segments.forEach((seg) => {
+      const date = seg.departureDate || "unknown";
+      if (!groupedByDate[date]) groupedByDate[date] = [];
+      groupedByDate[date].push(seg);
+    });
+    const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
+      const dateStr = formatDateShort(segs[0]?.departureDate || "");
+      const cities = [
+        segs[0].departureCity?.trim() || segs[0].departure || "",
+        ...segs.map(s => (s.arrivalCity?.trim() || s.arrival || "")),
+      ].filter(Boolean);
+      const routeStr = cities.join(" - ");
+      return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
+    });
+    setNewServiceName(routeParts.join(" / "));
+    if (segments.length > 0) {
+      setNewDateFrom(segments[0].departureDate || '');
+      setNewDateTo(segments[segments.length - 1].arrivalDate || segments[segments.length - 1].departureDate || '');
+    }
+    if (booking.cabinClass) {
+      const validClasses = ["economy", "premium_economy", "business", "first"];
+      if (validClasses.includes(booking.cabinClass as string)) {
+        setNewCabinClass(booking.cabinClass as typeof newCabinClass);
+      }
+    }
+    if (booking.baggage) setNewBaggage(booking.baggage as string);
+    setParseSuccess(true);
+    setPasteInput('');
+  }, []);
+
+  // Parse flight booking data — try AI first, fallback to regex
+  const handleParse = useCallback(async () => {
     if (!pasteInput.trim()) return;
     
     setIsParsing(true);
     setParseError(null);
     setParseSuccess(false);
+    const text = pasteInput.trim();
     
     try {
-      const result = parseFlightBooking(pasteInput);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/ai/parse-flight-itinerary", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
       
-      if (!result || result.segments.length === 0) {
-        setParseError('Could not parse flight data. Please check the format.');
-        setIsParsing(false);
+      if (res.ok && data.segments?.length > 0) {
+        applySegments(data.segments, data.booking || {});
         return;
       }
-      
-      // Convert parsed segments to FlightSegment format
-      const segments: FlightSegment[] = result.segments.map(seg => ({
-        id: crypto.randomUUID(),
-        flightNumber: seg.flightNumber,
-        airline: seg.airline,
-        departure: seg.departure || "",
-        departureCity: seg.departureCity,
-        arrival: seg.arrival || "",
-        arrivalCity: seg.arrivalCity,
-        departureDate: seg.departureDate || "",
-        departureTimeScheduled: seg.departureTimeScheduled || "",
-        arrivalDate: seg.arrivalDate || "",
-        arrivalTimeScheduled: seg.arrivalTimeScheduled || "",
-        departureTerminal: seg.departureTerminal,
-        arrivalTerminal: seg.arrivalTerminal,
-        duration: seg.duration,
-        cabinClass: seg.cabinClass,
-        baggage: seg.baggage,
-        bookingRef: seg.bookingRef,
-        ticketNumber: seg.ticketNumber,
-        departureStatus: "scheduled",
-        arrivalStatus: "scheduled",
-      }));
-      
-      setNewSegments(segments);
-      
-      // Build service name from segments
-      const routeParts: string[] = [];
-      let currentDate = '';
-      
-      segments.forEach((seg) => {
-        const dateStr = seg.departureDate ? formatDateDDMMYYYY(seg.departureDate) : '';
-        if (dateStr && dateStr !== '-' && dateStr !== currentDate) {
-          if (routeParts.length > 0) routeParts.push('/');
-          routeParts.push(dateStr);
-          currentDate = dateStr;
-        }
-        routeParts.push(`${seg.departure || ""}-${seg.arrival || ""}`);
-      });
-      
-      setNewServiceName(routeParts.join(' '));
-      
-      // Set dates
-      if (segments.length > 0) {
-        setNewDateFrom(segments[0].departureDate || '');
-        setNewDateTo(segments[segments.length - 1].arrivalDate || segments[segments.length - 1].departureDate || '');
-      }
-      
-      // Set cabin class if parsed
-      if (result.booking.cabinClass) {
-        const validClasses = ["economy", "premium_economy", "business", "first"];
-        if (validClasses.includes(result.booking.cabinClass)) {
-          setNewCabinClass(result.booking.cabinClass as typeof newCabinClass);
-        }
-      }
-      
-      setParseSuccess(true);
-      setPasteInput('');
-    } catch (err) {
-      console.error('Parse error:', err);
-      setParseError('Failed to parse flight data');
+    } catch (e) {
+      console.error('AI flight parse error:', e);
     } finally {
       setIsParsing(false);
     }
-  }, [pasteInput]);
+    
+    const result = parseFlightBooking(text);
+    if (!result || result.segments.length === 0) {
+      setParseError('Could not parse flight data. Please check the format.');
+      return;
+    }
+    
+    const segments: FlightSegment[] = result.segments.map(seg => ({
+      id: crypto.randomUUID(),
+      flightNumber: seg.flightNumber,
+      airline: seg.airline,
+      departure: seg.departure || "",
+      departureCity: seg.departureCity,
+      arrival: seg.arrival || "",
+      arrivalCity: seg.arrivalCity,
+      departureDate: seg.departureDate || "",
+      departureTimeScheduled: seg.departureTimeScheduled || "",
+      arrivalDate: seg.arrivalDate || "",
+      arrivalTimeScheduled: seg.arrivalTimeScheduled || "",
+      departureTerminal: seg.departureTerminal,
+      arrivalTerminal: seg.arrivalTerminal,
+      duration: seg.duration,
+      cabinClass: seg.cabinClass,
+      baggage: seg.baggage,
+      bookingRef: seg.bookingRef,
+      ticketNumber: seg.ticketNumber,
+      departureStatus: "scheduled",
+      arrivalStatus: "scheduled",
+    }));
+    applySegments(segments, {
+      cabinClass: result.booking.cabinClass,
+      baggage: result.booking.baggage,
+    });
+    setIsParsing(false);
+  }, [pasteInput, applySegments]);
   
   // Handle file drop
   const handleFileDrop = useCallback(async (e: React.DragEvent) => {

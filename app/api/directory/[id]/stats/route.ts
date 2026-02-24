@@ -160,6 +160,42 @@ export async function GET(
     }
     console.log(`[Stats API] Next trip: ${nextTrip}`);
 
+    // 6. Invoices (where party is payer): count, total, overdue
+    const { data: invoicesRaw, error: invoicesError } = await supabaseAdmin
+      .from("invoices")
+      .select("id, invoice_number, total, due_date, status")
+      .eq("payer_party_id", partyId);
+
+    if (invoicesError) {
+      console.error("[Stats API] Invoices error:", invoicesError);
+    }
+
+    const invoicesList = (invoicesRaw ?? []).filter(
+      (inv) => !["cancelled", "replaced"].includes(String(inv.status))
+    );
+    const invoicesCount = invoicesList.length;
+    const invoicesTotal = invoicesList.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
+    const today = new Date().toISOString().split("T")[0];
+    const overdueInvoices = invoicesList.filter(
+      (inv) => inv.due_date && inv.due_date < today && !["paid", "cancelled", "replaced"].includes(String(inv.status))
+    );
+
+    // 7. Payments (where party is payer)
+    const { data: paymentsData, error: paymentsError } = await supabaseAdmin
+      .from("payments")
+      .select("amount")
+      .eq("payer_party_id", partyId)
+      .eq("status", "active");
+
+    if (paymentsError) {
+      console.error("[Stats API] Payments error:", paymentsError);
+    }
+
+    const paymentsTotal = (paymentsData ?? []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const balance = invoicesTotal - paymentsTotal;
+    const paymentStatus =
+      balance < -0.01 ? "overpaid" : overdueInvoices.length > 0 ? "overdue" : balance > 0.01 ? "partial" : "paid";
+
     const stats = {
       ordersCount,
       totalSpent,
@@ -167,6 +203,16 @@ export async function GET(
       debt,
       lastTrip,
       nextTrip,
+      invoicesCount,
+      invoicesTotal,
+      paymentsTotal,
+      paymentStatus,
+      balance,
+      overdueInvoices: overdueInvoices.map((inv) => ({
+        invoice_number: inv.invoice_number,
+        due_date: inv.due_date,
+        total: Number(inv.total) || 0,
+      })),
     };
     
     console.log(`[Stats API] Returning stats:`, stats);

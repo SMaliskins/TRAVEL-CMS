@@ -39,6 +39,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
+    // Fetch active bank accounts that are used in invoices
+    const { data: bankAccounts } = await supabaseAdmin
+      .from("company_bank_accounts")
+      .select("account_name, bank_name, iban, swift, currency")
+      .eq("company_id", profile.company_id)
+      .eq("is_active", true)
+      .eq("use_in_invoices", true)
+      .order("is_default", { ascending: false })
+      .order("account_name");
+
+    const defaultBank = bankAccounts?.[0];
+
     return NextResponse.json({
       id: company.id,
       name: company.name || "",
@@ -49,11 +61,12 @@ export async function GET(request: NextRequest) {
       country: company.country || "",
       email: company.email || "",
       phone: company.phone || "",
-      regNr: company.reg_nr || "",
-      vatNr: company.vat_nr || "",
-      bankName: company.bank_name || "",
-      bankAccount: company.bank_account || "",
-      bankSwift: company.bank_swift || "",
+      regNr: company.registration_number || company.reg_nr || "",
+      vatNr: company.vat_number || company.vat_nr || "",
+      bankName: defaultBank?.bank_name || company.bank_name || "",
+      bankAccount: defaultBank?.iban || company.bank_account || "",
+      bankSwift: defaultBank?.swift || company.bank_swift || "",
+      bankAccounts: bankAccounts ?? [],
       logoUrl: company.logo_url || null,
       defaultCurrency: company.default_currency || "EUR",
     });

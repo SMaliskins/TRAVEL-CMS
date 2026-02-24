@@ -23,6 +23,7 @@ export async function GET(
           service_category,
           service_date_from,
           service_date_to,
+          service_dates_text,
           quantity,
           unit_price,
           line_total
@@ -42,7 +43,7 @@ export async function GET(
     const companyId = orderRow?.company_id ?? null;
 
     let companyLogoUrl: string | null = null;
-    let companyInfo: { name: string; address?: string | null; regNr?: string | null; vatNr?: string | null; bankName?: string | null; bankAccount?: string | null; bankSwift?: string | null } | null = null;
+    let companyInfo: { name: string; address?: string | null; regNr?: string | null; vatNr?: string | null; bankName?: string | null; bankAccount?: string | null; bankSwift?: string | null; country?: string | null } | null = null;
     if (companyId) {
       const { data: company } = await supabaseAdmin
         .from("companies")
@@ -55,14 +56,27 @@ export async function GET(
         const legalName = (company as { legal_name?: string }).legal_name ?? "";
         const tradingName = (company as { trading_name?: string }).trading_name ?? "";
         const displayName = legalName || (rawName.trim() !== "Default Company" ? rawName : "") || tradingName || rawName || "";
+        // Fetch active bank accounts used in invoices
+        const { data: bankAccounts } = await supabaseAdmin
+          .from("company_bank_accounts")
+          .select("account_name, bank_name, iban, swift, currency")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .eq("use_in_invoices", true)
+          .order("is_default", { ascending: false })
+          .order("account_name");
+        const defaultBank = bankAccounts?.[0];
+
         companyInfo = {
           name: displayName,
           address: (company as { address?: string; legal_address?: string; operating_address?: string }).address || (company as { legal_address?: string }).legal_address || (company as { operating_address?: string }).operating_address || null,
           regNr: (company as { registration_number?: string; reg_nr?: string }).registration_number ?? (company as { reg_nr?: string }).reg_nr ?? null,
           vatNr: (company as { vat_number?: string; vat_nr?: string }).vat_number ?? (company as { vat_nr?: string }).vat_nr ?? null,
-          bankName: (company as { bank_name?: string }).bank_name ?? null,
-          bankAccount: (company as { bank_account?: string }).bank_account ?? null,
-          bankSwift: (company as { swift_code?: string; bank_swift?: string }).swift_code ?? (company as { bank_swift?: string }).bank_swift ?? null,
+          bankName: defaultBank?.bank_name || (company as { bank_name?: string }).bank_name || null,
+          bankAccount: defaultBank?.iban || (company as { bank_account?: string }).bank_account || null,
+          bankSwift: defaultBank?.swift || (company as { swift_code?: string; bank_swift?: string }).swift_code || (company as { bank_swift?: string }).bank_swift || null,
+          bankAccounts: bankAccounts ?? [],
+          country: (company as { country?: string }).country ?? null,
         };
       }
     }

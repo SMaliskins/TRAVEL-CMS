@@ -124,9 +124,12 @@ export async function PATCH(request: NextRequest) {
       "default_currency", "date_format", "document_language", "timezone", "city_label",
       "show_order_source",
       "invoice_languages",
+      "invoice_currencies",
       // Additional
-      "working_hours", "emergency_contact", "invoice_prefix",
+      "working_hours", "emergency_contact",
+      "invoice_prefix",
       "default_payment_terms",
+      "invoice_email_from",
       // Concierge
       "concierge_hotel_markup"
     ];

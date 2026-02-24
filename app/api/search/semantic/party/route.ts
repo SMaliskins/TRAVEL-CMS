@@ -60,9 +60,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const results = (data || []).map((r: { party_id: string; similarity: number }) => ({
+    const rows = data || [];
+    const partyIds = rows.map((r: { party_id: string }) => r.party_id);
+    let displayNameByPartyId: Record<string, string> = {};
+    if (partyIds.length > 0) {
+      const { data: parties } = await supabaseAdmin
+        .from("party")
+        .select("id, display_name")
+        .in("id", partyIds);
+      (parties || []).forEach((p: { id: string; display_name: string | null }) => {
+        if (p.display_name) displayNameByPartyId[p.id] = p.display_name;
+      });
+    }
+
+    const results = rows.map((r: { party_id: string; similarity: number }) => ({
       partyId: r.party_id,
       similarity: r.similarity,
+      displayName: displayNameByPartyId[r.party_id] || undefined,
     }));
 
     return NextResponse.json({ results });

@@ -15,6 +15,27 @@ export interface PassportDataFromMrz {
   lastName?: string;
   dob?: string; // YYYY-MM-DD
   nationality?: string;
+  /** male | female — from MRZ line 2 position 15 (M/F) */
+  gender?: string;
+}
+
+/** First letter of each word uppercase, rest lowercase; preserves diacritics (Rāvis, Žaklīna). */
+function toTitleCase(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
+}
+
+/** MRZ uses 3-letter ISO codes; map to full country name (same as Issuing Country / Nationality list) */
+const MRZ_COUNTRY_TO_NAME: Record<string, string> = {
+  LVA: "Latvia", EST: "Estonia", LTU: "Lithuania", USA: "United States", GBR: "United Kingdom",
+  UKR: "Ukraine", RUS: "Russia", DEU: "Germany", FRA: "France", POL: "Poland", LV: "Latvia", EE: "Estonia", LT: "Lithuania", US: "United States", GB: "United Kingdom", UA: "Ukraine", RU: "Russia", DE: "Germany", FR: "France", PL: "Poland",
+};
+
+function codeToCountryName(code: string | undefined): string | undefined {
+  if (!code || !code.trim()) return undefined;
+  const c = code.trim().toUpperCase();
+  return MRZ_COUNTRY_TO_NAME[c] || code;
 }
 
 /**
@@ -107,10 +128,10 @@ function tryParseMrz(lines: string[]): PassportDataFromMrz | null {
     const result = parse(lines, { autocorrect: true }) as unknown as Record<string, unknown>;
     const fields = (result.fields ?? result) as Record<string, string | null | undefined>;
     const documentNumber = (fields.documentNumber ?? result.documentNumber) as string | undefined;
-    const lastName = ((fields.lastName ?? fields.surname ?? result.lastName) as string | undefined)
+    let lastName = ((fields.lastName ?? fields.surname ?? result.lastName) as string | undefined)
       ?.replace(/<+/g, " ")
       .trim();
-    const firstName = ((fields.firstName ?? fields.names ?? result.firstName) as string | undefined)
+    let firstName = ((fields.firstName ?? fields.names ?? result.firstName) as string | undefined)
       ?.replace(/<+/g, " ")
       .trim();
     const birthDate = (fields.birthDate ?? result.birthDate) as string | undefined;
@@ -120,17 +141,29 @@ function tryParseMrz(lines: string[]): PassportDataFromMrz | null {
 
     if (!documentNumber && !lastName && !firstName) return null;
 
+    if (firstName) firstName = toTitleCase(firstName);
+    if (lastName) lastName = toTitleCase(lastName);
     const passportFullName = [lastName, firstName].filter(Boolean).join(" ") || undefined;
+
+    // MRZ TD3 line 2: position 15 (0-based) is sex: M, F or <
+    let gender: string | undefined;
+    const line2 = lines[1];
+    if (line2 && line2.length > 15) {
+      const sexChar = line2.charAt(15).toUpperCase();
+      if (sexChar === "M") gender = "male";
+      else if (sexChar === "F") gender = "female";
+    }
 
     return {
       passportNumber: documentNumber || undefined,
       passportExpiryDate: mrzDateToIso(expirationDate),
-      passportIssuingCountry: issuingState || undefined,
+      passportIssuingCountry: codeToCountryName(issuingState) || undefined,
       passportFullName: passportFullName || undefined,
       firstName: firstName || undefined,
       lastName: lastName || undefined,
       dob: mrzDateToIso(birthDate),
-      nationality: nationality || undefined,
+      nationality: codeToCountryName(nationality) || undefined,
+      gender,
     };
   } catch {
     return null;

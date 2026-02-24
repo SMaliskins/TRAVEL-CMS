@@ -8,12 +8,15 @@ export type SendEmailResult =
 
 export type EmailAttachment = { filename: string; content: Buffer };
 
+export type SendEmailOptions = { from?: string };
+
 export async function sendEmail(
   to: string,
   subject: string,
   html: string,
   text?: string,
-  attachments?: EmailAttachment[]
+  attachments?: EmailAttachment[],
+  options?: SendEmailOptions
 ): Promise<SendEmailResult> {
   const resendApiKey = process.env.RESEND_API_KEY;
 
@@ -22,8 +25,9 @@ export async function sendEmail(
     return { success: false, reason: "no_api_key" };
   }
 
+  const from = options?.from?.trim() || process.env.EMAIL_FROM || "Travel CMS <noreply@travel-cms.com>";
   const body: Record<string, unknown> = {
-    from: process.env.EMAIL_FROM || "Travel CMS <noreply@travel-cms.com>",
+    from,
     to: [to],
     subject,
     html,
