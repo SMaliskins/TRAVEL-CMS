@@ -2948,7 +2948,7 @@ export default function AddServiceModal({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "hotel" ? "Nights" : "Units"}</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Units</label>
                         <input
                           type="number"
                           min="1"
