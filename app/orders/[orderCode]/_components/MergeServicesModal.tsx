@@ -129,14 +129,32 @@ export default function MergeServicesModal({ services, orderCode, onClose, onSuc
         throw new Error("Failed to create merged service");
       }
 
-      // Delete original services
+      const created = await response.json();
+      const mergedServiceId = created.service?.id;
+      if (!mergedServiceId) {
+        throw new Error("Merged service created but no ID returned");
+      }
+
+      // Delete original services, reassigning invoice_items and travellers to the merged service
+      const deleteErrors: string[] = [];
       for (const service of services) {
-        await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`, {
-          method: 'DELETE',
-          headers: {
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        const delRes = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}?mergeIntoServiceId=${mergedServiceId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
           },
-        });
+        );
+        if (!delRes.ok) {
+          const errData = await delRes.json().catch(() => ({}));
+          deleteErrors.push(errData.error || `Failed to delete service ${service.name}`);
+        }
+      }
+
+      if (deleteErrors.length > 0) {
+        throw new Error(`Merged service created, but failed to remove originals: ${deleteErrors.join('; ')}`);
       }
 
       onSuccess();

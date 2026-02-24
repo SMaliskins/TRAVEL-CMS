@@ -227,6 +227,8 @@ export async function DELETE(
 ) {
   try {
     const { orderCode, serviceId } = await params;
+    const { searchParams } = new URL(request.url);
+    const mergeIntoServiceId = searchParams.get("mergeIntoServiceId");
 
     // Get order by code
     const { data: order, error: orderError } = await supabaseAdmin
@@ -240,6 +242,56 @@ export async function DELETE(
         { error: "Order not found" },
         { status: 404 }
       );
+    }
+
+    // When merging: reassign invoice_items and travellers to the target service
+    if (mergeIntoServiceId) {
+      const { error: invoiceReassignError } = await supabaseAdmin
+        .from("invoice_items")
+        .update({ service_id: mergeIntoServiceId })
+        .eq("service_id", serviceId);
+
+      if (invoiceReassignError) {
+        console.error("Reassign invoice_items error:", invoiceReassignError);
+        return NextResponse.json(
+          { error: "Failed to reassign invoice items", details: invoiceReassignError.message },
+          { status: 500 }
+        );
+      }
+
+      // Reassign service travellers: collect existing, then move non-duplicates
+      const { data: sourceTravellers } = await supabaseAdmin
+        .from("order_service_travellers")
+        .select("traveller_id, company_id")
+        .eq("service_id", serviceId);
+
+      if (sourceTravellers && sourceTravellers.length > 0) {
+        const { data: targetTravellers } = await supabaseAdmin
+          .from("order_service_travellers")
+          .select("traveller_id")
+          .eq("service_id", mergeIntoServiceId);
+
+        const existingIds = new Set((targetTravellers || []).map(t => t.traveller_id));
+        const toInsert = sourceTravellers
+          .filter(t => !existingIds.has(t.traveller_id))
+          .map(t => ({
+            company_id: t.company_id,
+            service_id: mergeIntoServiceId,
+            traveller_id: t.traveller_id,
+          }));
+
+        if (toInsert.length > 0) {
+          await supabaseAdmin
+            .from("order_service_travellers")
+            .insert(toInsert);
+        }
+
+        // Delete source traveller links (CASCADE would handle this, but be explicit)
+        await supabaseAdmin
+          .from("order_service_travellers")
+          .delete()
+          .eq("service_id", serviceId);
+      }
     }
 
     // Delete service
