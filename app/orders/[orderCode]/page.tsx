@@ -619,7 +619,7 @@ export default function OrderPage({
         <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]">
           <div className="flex items-stretch flex-wrap lg:flex-nowrap">
             {/* Block 1: Order Code + Status + Type/Source */}
-            <div className="shrink-0 pr-3 flex flex-col justify-center">
+            <div className="shrink-0 pr-2 flex flex-col justify-center">
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
                   {orderCode}
@@ -638,9 +638,9 @@ export default function OrderPage({
                   Created on {formatDateDDMMYYYY(order.created_at)} by {order.owner_name || "Unknown"}
                 </div>
               )}
-              {/* Order Type & Source Radio Bars */}
+              {/* Order Type + Source: только на узких экранах (в шапке — в пустом месте по центру) */}
               {order && (
-                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                <div className="mt-1 flex sm:hidden items-center gap-1.5 flex-wrap">
                   <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
                     {[
                       { value: "leisure", label: "Leisure" },
@@ -737,11 +737,11 @@ export default function OrderPage({
             </div>
 
             {/* Groove divider */}
-            <div className="hidden lg:flex self-stretch items-center mx-3 my-1.5">
+            <div className="hidden lg:flex self-stretch items-center mx-1.5 my-1">
               <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
             </div>
-            
-            {/* Block 2: Client + Itinerary + Dates */}
+
+            {/* Block 2: Client + Itinerary + Dates — занимает оставшееся место, блок тегов справа не сжимается */}
             {!order ? (
               <div className="flex-1 min-w-0 flex items-center text-gray-500">
                 {orderLoading ? "Loading order..." : null}
@@ -780,41 +780,84 @@ export default function OrderPage({
                     </span>
                   </div>
                 ) : (
-                  <div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">Lead Passenger</div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span 
-                        className={`text-base font-semibold cursor-pointer rounded px-1 -mx-1 transition-colors ${
-                          isCtrlPressed && order.client_party_id 
-                            ? "text-blue-600 underline" 
-                            : "text-gray-900 hover:bg-gray-100"
-                        }`}
-                        onClick={() => {
-                          if (isCtrlPressed && order.client_party_id) {
-                            router.push(`/directory/${order.client_party_id}`);
-                          } else {
-                            startEditingClient();
-                          }
-                        }}
-                        title={isCtrlPressed ? "Ctrl+Click to open client" : "Click to change client"}
-                      >
-                        {order.client_display_name || "Select client"}
-                      </span>
-                      {order.client_phone && (
-                        <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
-                          {order.client_phone}
-                        </a>
-                      )}
-                      {order.client_email && (
-                        <a href={`mailto:${order.client_email}`} className="text-sm text-blue-600 hover:text-blue-800">
-                          {order.client_email}
-                        </a>
-                      )}
+                  <div className="flex flex-nowrap items-center gap-4 sm:gap-5 min-w-0">
+                    {/* Lead Passenger — слева */}
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">Lead Passenger</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span 
+                          className={`text-base font-semibold cursor-pointer rounded px-1 -mx-1 transition-colors ${
+                            isCtrlPressed && order.client_party_id 
+                              ? "text-blue-600 underline" 
+                              : "text-gray-900 hover:bg-gray-100"
+                          }`}
+                          onClick={() => {
+                            if (isCtrlPressed && order.client_party_id) {
+                              router.push(`/directory/${order.client_party_id}`);
+                            } else {
+                              startEditingClient();
+                            }
+                          }}
+                          title={isCtrlPressed ? "Ctrl+Click to open client" : "Click to change client"}
+                        >
+                          {order.client_display_name || "Select client"}
+                        </span>
+                        {order.client_phone && (
+                          <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
+                            {order.client_phone}
+                          </a>
+                        )}
+                        {order.client_email && (
+                          <a href={`mailto:${order.client_email}`} className="text-sm text-blue-600 hover:text-blue-800">
+                            {order.client_email}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    {/* Destination — справа, рядом с Lead Passenger */}
+                    <div 
+                      className="min-w-0 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
+                      onClick={startEditingItinerary}
+                      title="Click to edit itinerary"
+                    >
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">Destination</div>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        {parsedItinerary.origin || parsedItinerary.destinations.length > 0 || autoDestinations.length > 0 ? (
+                          (() => {
+                            const manualDests = [
+                              ...parsedItinerary.destinations,
+                              ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name 
+                                ? [parsedItinerary.returnCity] : [])
+                            ];
+                            const allCities = autoDestinations.length > 0 ? autoDestinations : manualDests;
+                            if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set</span>;
+                            const countryCities: Record<string, { countryCode?: string; cities: string[] }> = {};
+                            for (const city of allCities) {
+                              const cityName = (city as { name?: string }).name || (city as { city?: string }).city || "";
+                              if (!cityName) continue;
+                              const cityData = getCityByName(cityName);
+                              const countryName = cityData?.country || (city as Record<string, unknown>).country as string || "Unknown";
+                              const countryCode = city.countryCode || cityData?.countryCode;
+                              if (!countryCities[countryName]) countryCities[countryName] = { countryCode, cities: [] };
+                              if (!countryCities[countryName].cities.includes(cityName)) countryCities[countryName].cities.push(cityName);
+                            }
+                            return Object.entries(countryCities).map(([country, data], idx) => (
+                              <span key={country} className="flex items-center text-sm font-semibold text-gray-900">
+                                {data.countryCode && <span>{countryCodeToFlag(data.countryCode)}</span>}
+                                {country} ({data.cities.join(", ")})
+                                {idx < Object.keys(countryCities).length - 1 && <span className="text-gray-400 mx-1">/</span>}
+                              </span>
+                            ));
+                          })()
+                        ) : (
+                          <span className="text-gray-400 text-sm">Click to set</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
                 
-                {/* Row 2: Itinerary */}
+                {/* Itinerary edit form (view is above: Destination справа от Lead Passenger) */}
                 {editingHeaderField === "itinerary" ? (
                   <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
                     <div className="grid grid-cols-2 gap-3">
@@ -920,65 +963,9 @@ export default function OrderPage({
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <div 
-                    className="flex items-center gap-1.5 flex-wrap mt-1 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
-                    onClick={startEditingItinerary}
-                    title="Click to edit itinerary"
-                  >
-                    {parsedItinerary.origin || parsedItinerary.destinations.length > 0 || autoDestinations.length > 0 ? (
-                      <>
-                        <span className="text-[10px] text-gray-400 uppercase tracking-wider mr-1">Destination:</span>
-                        {/* Only show destinations (where main service is). NOT origin/departure point. */}
-                        {(() => {
-                          const manualDests = [
-                            ...parsedItinerary.destinations,
-                            ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name 
-                              ? [parsedItinerary.returnCity] : [])
-                          ];
-                          // Prefer auto-detected (from services: nights + dropoff only, no airports/pickup) so destination is correct
-                          const allCities = autoDestinations.length > 0 ? autoDestinations : manualDests;
-                          if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set destination</span>;
-                          
-                          // Group by country
-                          const countryCities: Record<string, { countryCode?: string; cities: string[] }> = {};
-                          for (const city of allCities) {
-                            const cityName = (city as { name?: string }).name || (city as { city?: string }).city || "";
-                            if (!cityName) continue;
-                            const cityData = getCityByName(cityName);
-                            const countryName = cityData?.country || (city as Record<string, unknown>).country as string || "Unknown";
-                            const countryCode = city.countryCode || cityData?.countryCode;
-                            
-                            if (!countryCities[countryName]) {
-                              countryCities[countryName] = { countryCode, cities: [] };
-                            }
-                            if (!countryCities[countryName].cities.includes(cityName)) {
-                              countryCities[countryName].cities.push(cityName);
-                            }
-                          }
-                          
-                          return Object.entries(countryCities).map(([country, data], idx) => (
-                            <span key={country} className="flex items-center">
-                                <span className="flex items-center gap-1 text-sm font-semibold text-gray-900">
-                                {data.countryCode && (
-                                  <span>{countryCodeToFlag(data.countryCode)}</span>
-                                )}
-                                {country} ({data.cities.join(", ")})
-                              </span>
-                              {idx < Object.keys(countryCities).length - 1 && (
-                                <span className="text-gray-400 text-sm mx-2">/</span>
-                              )}
-                            </span>
-                          ));
-                        })()}
-                      </>
-                    ) : (
-                      <span className="text-gray-400 text-sm">Click to set destination</span>
-                    )}
-                  </div>
-                )}
+                ) : null}
                 
-                {/* Row 3: Dates */}
+                {/* Row: Dates (под Lead Passenger и Destination) */}
                 {editingHeaderField === "dates" ? (
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
                     <div className="w-80">
@@ -1008,7 +995,7 @@ export default function OrderPage({
                   </div>
                 ) : (
                   <div 
-                    className="flex items-center gap-1.5 mt-0.5 text-xs text-gray-600 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
+                    className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-600 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
                     onClick={startEditingDates}
                     title="Click to edit dates"
                   >
@@ -1030,14 +1017,116 @@ export default function OrderPage({
                 )}
               </div>
             )}
+
+            {/* Groove divider */}
+            <div className="hidden lg:flex self-stretch items-center mx-1.5 my-1">
+              <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
+            </div>
+
+            {/* Order Type + Source — shrink-0 чтобы не обрезался, по ширине контента */}
+            {order && (
+              <div className="hidden sm:flex shrink-0 items-center gap-2 px-1">
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit shrink-0">
+                  {[
+                    { value: "leisure", label: "Leisure" },
+                    { value: "business", label: "Business" },
+                    { value: "lifestyle", label: "Lifestyle" },
+                  ].map((type) => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        if (order.order_type === type.value) return;
+                        const prevValue = order.order_type;
+                        setOrder({ ...order, order_type: type.value });
+                        (async () => {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                              method: "PATCH",
+                              headers: {
+                                "Content-Type": "application/json",
+                                ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                              },
+                              credentials: "include",
+                              body: JSON.stringify({ order_type: type.value }),
+                            });
+                            if (!response.ok) {
+                              setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
+                            }
+                          } catch (err) {
+                            console.error("Update error:", err);
+                            setOrder(prev => prev ? { ...prev, order_type: prevValue } : prev);
+                          }
+                        })();
+                      }}
+                      className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
+                        order.order_type === type.value
+                          ? "bg-gray-700 text-white shadow-sm"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+                {showOrderSource && (
+                  <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit shrink-0">
+                    {[
+                      { value: "TA", label: "TA" },
+                      { value: "TO", label: "TO" },
+                      { value: "CORP", label: "CORP" },
+                      { value: "NON", label: "NON" },
+                    ].map((source) => (
+                      <button
+                        key={source.value}
+                        type="button"
+                        onClick={() => {
+                          if (order.order_source === source.value) return;
+                          const prevValue = order.order_source;
+                          setOrder({ ...order, order_source: source.value });
+                          (async () => {
+                            try {
+                              const { data: { session } } = await supabase.auth.getSession();
+                              const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+                                method: "PATCH",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+                                },
+                                credentials: "include",
+                                body: JSON.stringify({ order_source: source.value }),
+                              });
+                              if (!response.ok) {
+                                setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
+                              }
+                            } catch (err) {
+                              console.error("Update error:", err);
+                              setOrder(prev => prev ? { ...prev, order_source: prevValue } : prev);
+                            }
+                          })();
+                        }}
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
+                          order.order_source === source.value
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        } disabled:opacity-50`}
+                      >
+                        {source.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Block 3: Total + Payment Status */}
             {order && (<>
               {/* Groove divider */}
-              <div className="hidden lg:flex self-stretch items-center mx-3 my-1.5">
-                <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
-              </div>
-              <div className="flex items-center gap-3 shrink-0 justify-end">
+<div className="hidden lg:flex self-stretch items-center mx-1.5 my-1">
+              <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
+            </div>
+              <div className="flex items-center gap-2 shrink-0 justify-end">
                 {/* Total amount with hover tooltip for payment plan */}
                 <div className="text-right relative group/total">
                   <div className="text-xl font-bold text-gray-900 cursor-default">
@@ -1099,7 +1188,7 @@ export default function OrderPage({
                             €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
                           </span>
                         )}
-                        {isPartial && (
+                        {isPartial && !isOverpaid && (
                           <span className="text-xs text-gray-600">
                             €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid, €{(order.amount_debt ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining
                           </span>
