@@ -1975,7 +1975,7 @@ export default function EditServiceModalNew({
           resStatus,
           refNr,
           ticketNr,
-          ticketNumbers: categoryType === "flight" ? ticketNumbers : undefined,
+          ticketNumbers: categoryType === "flight" ? ticketNumbers.map((t) => ({ clientId: t.clientId ?? "", clientName: t.clientName, ticketNr: t.ticketNr })) : undefined,
           dateFrom,
           dateTo,
           // Flight-specific
