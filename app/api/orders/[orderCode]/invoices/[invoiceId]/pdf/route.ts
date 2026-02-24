@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { generateInvoiceHTML } from "@/lib/invoices/generateInvoiceHTML";
+import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 
 // GET /api/orders/[orderCode]/invoices/[invoiceId]/pdf - Generate PDF (or HTML fallback) for invoice
@@ -43,7 +43,7 @@ export async function GET(
     const companyId = orderRow?.company_id ?? null;
 
     let companyLogoUrl: string | null = null;
-    let companyInfo: { name: string; address?: string | null; regNr?: string | null; vatNr?: string | null; bankName?: string | null; bankAccount?: string | null; bankSwift?: string | null; country?: string | null } | null = null;
+    let companyInfo: InvoiceCompanyInfo | null = null;
     if (companyId) {
       const { data: company } = await supabaseAdmin
         .from("companies")
