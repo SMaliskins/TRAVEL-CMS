@@ -3237,7 +3237,7 @@ export default function EditServiceModalNew({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "hotel" ? "Nights" : "Units"}</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">{(categoryType as string) === "hotel" ? "Nights" : "Units"}</label>
                         <input
                           type="number"
                           min="1"
@@ -3435,7 +3435,7 @@ export default function EditServiceModalNew({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "hotel" ? "Margin" : "Marge"} ({currencySymbol})</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{(categoryType as string) === "hotel" ? "Margin" : "Marge"} ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
@@ -3468,7 +3468,7 @@ export default function EditServiceModalNew({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "hotel" ? "Nights" : "Units"}</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{(categoryType as string) === "hotel" ? "Nights" : "Units"}</label>
                       <input
                         type="number"
                         min="1"
