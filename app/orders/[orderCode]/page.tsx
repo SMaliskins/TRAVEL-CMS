@@ -124,6 +124,7 @@ export default function OrderPage({
   const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
   const [invoiceServicesByPayer, setInvoiceServicesByPayer] = useState<Map<string, any[]>>(new Map());
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
+  const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
   const [companyCurrencyCode, setCompanyCurrencyCode] = useState<string>("EUR");
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
@@ -251,19 +252,25 @@ export default function OrderPage({
     return { origin: originCity, destinations, returnCity, daysNights, daysUntil };
   }, [order?.countries_cities, order?.date_from, order?.date_to]);
 
-  // Auto-save detected destinations to DB when countries_cities is empty
+  // Auto-save detected destinations: when empty, or when saved list wrongly includes origin/return (e.g. Riga) so Orders list shows correct
   useEffect(() => {
-    if (!order || autoDestSavedRef.current) return;
-    if (order.countries_cities && order.countries_cities.trim()) return;
-    if (autoDestinations.length === 0) return;
+    if (!order || autoDestSavedRef.current || autoDestinations.length === 0) return;
+    const hasSaved = order.countries_cities && order.countries_cities.trim();
+    if (hasSaved) {
+      const originName = parsedItinerary.origin?.name?.toLowerCase();
+      const returnName = parsedItinerary.returnCity?.name?.toLowerCase();
+      const savedHasOriginOrReturn = parsedItinerary.destinations.some(
+        (d) => (originName && d.name?.toLowerCase() === originName) || (returnName && d.name?.toLowerCase() === returnName)
+      );
+      if (!savedHasOriginOrReturn) return; // don't overwrite when saved looks fine
+    }
     autoDestSavedRef.current = true;
 
     const unique = autoDestinations.filter((c, i, arr) =>
-      arr.findIndex(x => x.city.toLowerCase() === c.city.toLowerCase()) === i
+      arr.findIndex((x) => x.city.toLowerCase() === c.city.toLowerCase()) === i
     );
     if (unique.length === 0) return;
-    // Use pipe-delimited format: |destinations|return:
-    const destsStr = unique.map(c => `${c.city}, ${c.country}`).join("; ");
+    const destsStr = unique.map((c) => `${c.city}, ${c.country}`).join("; ");
     const formatted = `|${destsStr}|return:`;
 
     (async () => {
@@ -277,12 +284,12 @@ export default function OrderPage({
           },
           body: JSON.stringify({ countries_cities: formatted }),
         });
-        setOrder(prev => prev ? { ...prev, countries_cities: formatted } : prev);
+        setOrder((prev) => (prev ? { ...prev, countries_cities: formatted } : prev));
       } catch (err) {
         console.error("Error auto-saving destinations:", err);
       }
     })();
-  }, [order, autoDestinations, orderCode]);
+  }, [order, autoDestinations, orderCode, parsedItinerary.origin?.name, parsedItinerary.returnCity?.name, parsedItinerary.destinations]);
 
   // Build destinations array for map (origin + destinations + returnCity if different)
   const itineraryDestinations: CityWithCountry[] = useMemo(() => {
@@ -350,21 +357,24 @@ export default function OrderPage({
     } else {
       setEditOrigin(null);
     }
-    setEditDestinations(parsedItinerary.destinations.map(d => {
-      const cityData = getCityByName(d.name);
+    // Use auto-detected destinations when available (e.g. Zurich only), else saved destinations
+    const destsToEdit = autoDestinations.length > 0 ? autoDestinations : parsedItinerary.destinations;
+    setEditDestinations(destsToEdit.map((d) => {
+      const name = "city" in d ? d.city : d.name;
+      const cityData = getCityByName(name);
       return cityData ? {
         city: cityData.name,
         country: cityData.country || "",
         countryCode: cityData.countryCode,
         lat: cityData.lat,
         lng: cityData.lng,
-      } : { city: d.name, country: "" };
+      } : { city: name, country: (d as { country?: string }).country || "" };
     }));
     // Default to return to origin
     setEditReturnToOrigin(true);
     setEditReturnCity(null);
     setEditingHeaderField("itinerary");
-  }, [parsedItinerary.origin, parsedItinerary.destinations]);
+  }, [parsedItinerary.origin, parsedItinerary.destinations, autoDestinations]);
 
   // Save functions
   const saveClient = async (partyId: string, displayName: string) => {
@@ -530,6 +540,26 @@ export default function OrderPage({
     });
     return () => { cancelled = true; };
   }, [params]);
+
+  // Payment summary (linkedToInvoices) for overpayment in header — refetch when invoices may change
+  useEffect(() => {
+    if (!orderCode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setLinkedToInvoices(Number(data?.paymentSummary?.linkedToInvoices) || 0);
+      } catch {
+        if (!cancelled) setLinkedToInvoices(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [orderCode, invoiceRefetchTrigger]);
 
   // Update order status
   const handleStatusChange = async (newStatus: OrderStatus) => {
@@ -906,8 +936,8 @@ export default function OrderPage({
                             ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name 
                               ? [parsedItinerary.returnCity] : [])
                           ];
-                          // If no manually set destinations, use auto-detected from services
-                          const allCities = manualDests.length > 0 ? manualDests : autoDestinations;
+                          // Prefer auto-detected (from services: nights + dropoff only, no airports/pickup) so destination is correct
+                          const allCities = autoDestinations.length > 0 ? autoDestinations : manualDests;
                           if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set destination</span>;
                           
                           // Group by country
@@ -1037,8 +1067,9 @@ export default function OrderPage({
                   {(() => {
                     const paid = order.amount_paid ?? 0;
                     const total = order.amount_total ?? 0;
-                    const overpayment = Math.max(0, Math.round((paid - total) * 100) / 100);
-                    const isOverpaid = total > 0 && paid > total + 0.01;
+                    // Overpayment = paid not linked to any active (non-cancelled) invoice
+                    const overpayment = Math.max(0, Math.round((paid - linkedToInvoices) * 100) / 100);
+                    const isOverpaid = paid > linkedToInvoices + 0.01;
                     const isPaid = total > 0 && paid >= total && !isOverpaid;
                     const isPartial = paid > 0 && total > 0 && paid < total;
                     const isUnpaid = total > 0 && paid === 0;
@@ -1260,10 +1291,11 @@ export default function OrderPage({
                       setActiveTab("client");
                       showToast("error", "Please select services from the table and click 'Issue Invoice'");
                     }}
+                    onInvoiceChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
                   />
                 )}
               </div>
-              {order && (
+              {order && !showInvoiceCreator && (
                 <div className="rounded-lg bg-white p-6 shadow-sm">
                   <OrderPaymentsList
                     key={`payments-${invoiceRefetchTrigger}`}

@@ -2,11 +2,13 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { formatDateDDMMYYYY, parseDisplayToIso } from "@/utils/dateFormat";
+import { useDateFormat } from "@/contexts/CompanySettingsContext";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { useToast } from "@/contexts/ToastContext";
+import { Check, X } from "lucide-react";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
-import { getInvoiceLabels } from "@/lib/invoices/generateInvoiceHTML";
+import { getInvoiceLabels, numberToWords, getCategoryLabel, getCategoryTypeFromName } from "@/lib/invoices/generateInvoiceHTML";
 import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
 
 interface Service {
@@ -14,6 +16,7 @@ interface Service {
   name: string;
   clientPrice: number;
   category: string;
+  categoryType?: string | null;
   dateFrom?: string;
   dateTo?: string;
   client?: string;
@@ -58,6 +61,7 @@ interface CompanyInfo {
   bankName?: string;
   bankAccount?: string;
   bankSwift?: string;
+  bankAccounts?: { account_name?: string; bank_name?: string; iban?: string; swift?: string; currency?: string }[];
   logoUrl?: string | null;
   defaultCurrency?: string;
 }
@@ -97,6 +101,7 @@ export default function InvoiceCreator({
   const [invoiceLanguage, setInvoiceLanguage] = useState<string>("en");
   const [showAddInvoiceLang, setShowAddInvoiceLang] = useState(false);
   const [addInvoiceLangSearch, setAddInvoiceLangSearch] = useState("");
+  const addInvoiceLangPopoverRef = useRef<HTMLDivElement>(null);
 
   // State for multiple invoices creation
   const [currentPayerIndex, setCurrentPayerIndex] = useState(0);
@@ -123,28 +128,50 @@ export default function InvoiceCreator({
   // Single-invoice number (used when not bulk; effectiveInvoiceNumber reads this)
   const [invoiceNumber, setInvoiceNumber] = useState("");
 
-  // Load company invoice languages on mount; pre-fill language from last invoice; list cancelled numbers for reuse.
+  // Load company invoice languages on mount; pre-fill language from payer company or last invoice; list cancelled numbers for reuse.
   useEffect(() => {
     let cancelled = false;
+    const payerPartyId = selectedServices[0]?.payerPartyId;
     (async () => {
       try {
-        const [companyRes, invoicesRes] = await Promise.all([
+        const [companyRes, invoicesRes, payerDirRes] = await Promise.all([
           fetch("/api/company", { credentials: "include" }),
           fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, { credentials: "include" }),
+          payerPartyId ? fetch(`/api/directory/${encodeURIComponent(payerPartyId)}`, { credentials: "include" }) : Promise.resolve(null),
         ]);
         if (cancelled) return;
         const companyData = companyRes.ok ? await companyRes.json() : null;
-        const list = Array.isArray(companyData?.company?.invoice_languages) ? companyData.company.invoice_languages : ["en"];
-        if (list.length > 0 && !cancelled) {
+        let list = Array.isArray(companyData?.company?.invoice_languages) ? companyData.company.invoice_languages : ["en"];
+        if (list.length === 0) list = ["en"];
+        let defaultLang = list[0];
+        if (payerPartyId && payerDirRes?.ok) {
+          const dirData = await payerDirRes.json();
+          const payerInvoiceLang = dirData?.record?.invoiceLanguage && String(dirData.record.invoiceLanguage).trim();
+          if (payerInvoiceLang) {
+            defaultLang = payerInvoiceLang;
+            if (!list.includes(payerInvoiceLang)) {
+              list = [payerInvoiceLang, ...list];
+              setInvoiceLanguages(list);
+            }
+          }
+        }
+        if (!cancelled && list.length > 0) {
           setInvoiceLanguages((prev) => (prev.length === list.length && prev.every((c, i) => c === list[i]) ? prev : list));
         }
-        let defaultLang = list[0];
-        if (invoicesRes.ok) {
+        if (invoicesRes.ok && !payerPartyId) {
           const invoicesData = await invoicesRes.json();
           const allInvoices = Array.isArray(invoicesData?.invoices) ? invoicesData.invoices : [];
           const lastInvoice = allInvoices[0] ?? null;
           const lastLang = lastInvoice?.language && String(lastInvoice.language).trim();
           if (lastLang && list.includes(lastLang)) defaultLang = lastLang;
+          const cancelledNumbers = allInvoices
+            .filter((inv: { status?: string }) => inv.status === "cancelled")
+            .map((inv: { invoice_number?: string }) => inv.invoice_number)
+            .filter(Boolean);
+          setCancelledInvoiceNumbers((prev) => (prev.length === cancelledNumbers.length && prev.every((n, i) => n === cancelledNumbers[i]) ? prev : cancelledNumbers));
+        } else if (invoicesRes.ok) {
+          const invoicesData = await invoicesRes.json();
+          const allInvoices = Array.isArray(invoicesData?.invoices) ? invoicesData.invoices : [];
           const cancelledNumbers = allInvoices
             .filter((inv: { status?: string }) => inv.status === "cancelled")
             .map((inv: { invoice_number?: string }) => inv.invoice_number)
@@ -157,7 +184,31 @@ export default function InvoiceCreator({
       }
     })();
     return () => { cancelled = true; };
-  }, [orderCode]);
+  }, [orderCode, selectedServices]);
+
+  // Close Add language popup on click outside or Escape
+  useEffect(() => {
+    if (!showAddInvoiceLang) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const el = addInvoiceLangPopoverRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setShowAddInvoiceLang(false);
+        setAddInvoiceLangSearch("");
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowAddInvoiceLang(false);
+        setAddInvoiceLangSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [showAddInvoiceLang]);
 
   // Default payment terms from a payer's services (so second payer gets Deposit + Final Payment in invoice)
   const getDefaultTermsForServices = (services: Service[]): PaymentTermsSnapshot => {
@@ -196,7 +247,7 @@ export default function InvoiceCreator({
     return base;
   };
 
-  // Initialize payer groups if multiple payers (each payer gets default terms from its services)
+  // Initialize payer groups if multiple payers (each payer gets default terms and invoice language from its company)
   useEffect(() => {
     if (hasMultiplePayers && servicesByPayer) {
       const groups: Array<{ payerKey: string; payerName: string; services: Service[] }> = [];
@@ -206,15 +257,41 @@ export default function InvoiceCreator({
       });
       setPayerGroups(groups);
       setPaymentTermsByPayerIndex(groups.map((g) => getDefaultTermsForServices(g.services)));
-      setInvoiceLanguageByPayerIndex((prev) =>
-        groups.map((_, i) => (prev[i] ?? "en"))
-      );
       setInvoiceNumberByPayerIndex((prev) =>
         groups.map((_, i) => prev[i] ?? "")
       );
       if (groups.length > 0) {
         setCurrentPayerIndex(0);
       }
+      setInvoiceLanguageByPayerIndex(groups.map(() => "en"));
+      (async () => {
+        const langs = await Promise.all(
+          groups.map(async (g) => {
+            const partyId = g.services[0]?.payerPartyId;
+            if (!partyId) return "en";
+            try {
+              const res = await fetch(`/api/directory/${encodeURIComponent(partyId)}`, { credentials: "include" });
+              if (!res.ok) return "en";
+              const data = await res.json();
+              const lang = data?.record?.invoiceLanguage && String(data.record.invoiceLanguage).trim();
+              return lang || "en";
+            } catch {
+              return "en";
+            }
+          })
+        );
+        setInvoiceLanguageByPayerIndex(langs);
+        const missing = [...new Set(langs.filter((l) => l !== "en"))];
+        if (missing.length > 0) {
+          setInvoiceLanguages((prev) => {
+            const next = [...prev];
+            for (const code of missing) {
+              if (!next.includes(code)) next.push(code);
+            }
+            return next.length === prev.length && next.every((c, i) => c === prev[i]) ? prev : next;
+          });
+        }
+      })();
     } else {
       setPayerGroups([]);
       setPaymentTermsByPayerIndex([]);
@@ -349,21 +426,33 @@ export default function InvoiceCreator({
     editableName: string;
     editablePrice: number;
     editableClient: string;
+    editableDateText: string;
   }>>([]);
   
   // Update editable services and payer info when current services change (for multiple payers).
   // Only set state when the list of service ids actually changes to avoid re-render loops from unstable parent refs.
   const currentServicesIds = currentServices.map((s) => s.id).join(",");
   useEffect(() => {
-    const next = currentServices.map(s => ({
-      ...s,
-      editableName: getServiceDisplayNameForInvoice(s),
-      editablePrice: s.clientPrice,
-      editableClient: s.client || "",
-    }));
+    const nextFromServices = currentServices.map(s => {
+      const catType = s.categoryType || getCategoryTypeFromName(s.category);
+      const catLabel = getCategoryLabel(catType, effectiveInvoiceLanguage);
+      const displayName = getServiceDisplayNameForInvoice(s);
+      const dateFrom = s.dateFrom;
+      const dateTo = s.dateTo;
+      const editableDateText = dateFrom
+        ? formatDateDDMMYYYY(dateFrom) + (dateTo && dateTo !== dateFrom ? " - " + formatDateDDMMYYYY(dateTo) : "")
+        : "";
+      return {
+        ...s,
+        editableName: catLabel ? `${catLabel}: ${displayName}` : displayName,
+        editablePrice: Number(s.clientPrice) || 0,
+        editableClient: s.client || "",
+        editableDateText,
+      };
+    });
     setEditableServices((prev) => {
-      if (prev.length !== next.length || prev.some((p, i) => p.id !== next[i]?.id)) return next;
-      return prev;
+      const manualRows = prev.filter((r) => String(r.id).startsWith("manual-"));
+      return [...nextFromServices, ...manualRows];
     });
     // Reset payer info for new group
     if (currentServices.length > 0) {
@@ -374,27 +463,33 @@ export default function InvoiceCreator({
       
       // Load payer details from DB if partyId exists
       if (newPayerPartyId) {
-        fetch(`/api/directory/${newPayerPartyId}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data) {
-              setPayerInfo(data);
-              setPayerType(data.type === 'person' ? 'person' : 'company');
-              setPayerAddress(data.address || "");
-              setPayerEmail(data.email || "");
-              setPayerPhone(data.phone || "");
-              if (data.type === 'company') {
-                setPayerRegNr(data.regNr || data.registrationNumber || "");
-                setPayerVatNr(data.vatNr || data.vatNumber || "");
-                setPayerBankName(data.bankName || "");
-                setPayerBankAccount(data.bankAccount || "");
-                setPayerBankSwift(data.bankSwift || "");
-              } else {
-                setPayerPersonalCode(data.personalCode || "");
-              }
+        (async () => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const headers: Record<string, string> = {};
+            if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+            const res = await fetch(`/api/directory/${newPayerPartyId}`, { headers });
+            if (!res.ok) { console.error("Payer fetch failed:", res.status); return; }
+            const json = await res.json();
+            const data = json?.record ?? json;
+            if (!data || json?.error) { console.error("Payer data error:", json?.error); return; }
+            setPayerInfo(data);
+            setPayerType(data.type === 'person' ? 'person' : 'company');
+            if (data.companyName) setPayerName(data.companyName);
+            setPayerAddress(data.legalAddress || data.actualAddress || data.address || "");
+            setPayerEmail(data.email || "");
+            setPayerPhone(data.phone || "");
+            if (data.type === 'company') {
+              setPayerRegNr(data.regNumber || data.regNr || "");
+              setPayerVatNr(data.vatNumber || data.vatNr || "");
+              setPayerBankName(data.bankName || "");
+              setPayerBankAccount(data.iban || data.bankAccount || "");
+              setPayerBankSwift(data.swift || data.bankSwift || "");
+            } else {
+              setPayerPersonalCode(data.personalCode || "");
             }
-          })
-          .catch(e => console.error('Error loading payer info:', e));
+          } catch (e) { console.error("Error loading payer info:", e); }
+        })();
       } else {
         // Clear payer fields if no partyId
         setPayerInfo(null);
@@ -409,9 +504,12 @@ export default function InvoiceCreator({
         setPayerBankSwift("");
       }
     }
-  }, [currentServicesIds, currentPayerIndex, currentServices]);
+  }, [currentServicesIds, currentPayerIndex, currentServices, effectiveInvoiceLanguage]);
   
   const [taxRate, setTaxRate] = useState(0);
+
+  // Drag-and-drop reorder
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
   // Payment terms - with % support
   const [depositType, setDepositType] = useState<'amount' | 'percent'>('amount');
@@ -512,6 +610,7 @@ export default function InvoiceCreator({
             bankName: data.bankName,
             bankAccount: data.bankAccount,
             bankSwift: data.bankSwift,
+            bankAccounts: Array.isArray(data.bankAccounts) ? data.bankAccounts : [],
             logoUrl: data.logoUrl || null,
             defaultCurrency: data.defaultCurrency || "EUR",
           });
@@ -624,18 +723,80 @@ export default function InvoiceCreator({
 
   const formatDate = (dateString: string) => formatDateDDMMYYYY(dateString || null);
 
-  const parseDateToYYYYMMDD = (s: string): string => {
-    const normalized = s.trim().replace(/\//g, ".");
-    const dmy = normalized.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (dmy) {
-      const [, day, month, year] = dmy;
-      const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-      const d = new Date(iso + "T00:00:00");
-      return isNaN(d.getTime()) ? invoiceDate : iso;
+  const handleCopyLine = (idx: number) => {
+    const row = editableServices[idx];
+    const copy: Service & { editableName: string; editablePrice: number; editableClient: string; editableDateText: string } = {
+      ...row,
+      id: `manual-${Date.now()}`,
+      name: row.editableName,
+      clientPrice: row.editablePrice,
+      editableName: row.editableName,
+      editablePrice: row.editablePrice,
+      editableClient: row.editableClient,
+      editableDateText: row.editableDateText ?? "",
+      dateFrom: row.dateFrom,
+      dateTo: row.dateTo,
+      client: row.editableClient || undefined,
+      category: row.category || "",
+    };
+    setEditableServices((prev) => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  };
+
+  const handleDragStart = (idx: number) => setDraggedIdx(idx);
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.add("opacity-80");
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.currentTarget.classList.remove("opacity-80");
+  };
+  const handleDrop = (e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove("opacity-80");
+    if (draggedIdx === null || draggedIdx === dropIdx) {
+      setDraggedIdx(null);
+      return;
     }
+    setEditableServices((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(draggedIdx, 1);
+      next.splice(dropIdx, 0, removed);
+      return next;
+    });
+    setDraggedIdx(null);
+  };
+  const handleDragEnd = () => setDraggedIdx(null);
+
+  const dateFormat = useDateFormat();
+
+  const parseDateToYYYYMMDD = (s: string): string | null => {
+    const normalized = s.trim().replace(/\//g, ".");
+    const iso = parseDisplayToIso(normalized, dateFormat);
+    if (iso) return iso;
     const ymd = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (ymd) return ymd[0];
-    return invoiceDate;
+    return null;
+  };
+
+  const editableDateTextToApiDates = (text: string): { service_date_from: string | null; service_date_to: string | null; service_dates_text: string | null } => {
+    const t = (text ?? "").trim();
+    if (!t) return { service_date_from: null, service_date_to: null, service_dates_text: null };
+    const parts = t.split(/\s*[-–]\s*/).map((s) => s.trim()).filter(Boolean);
+    const fromPart = parts[0];
+    const toPart = parts[1] ?? parts[0];
+    const from = fromPart ? parseDateToYYYYMMDD(fromPart) : null;
+    const to = toPart ? parseDateToYYYYMMDD(toPart) : null;
+    const validFrom = from && /^\d{4}-\d{2}-\d{2}$/.test(from);
+    const validTo = to && /^\d{4}-\d{2}-\d{2}$/.test(to);
+    return {
+      service_date_from: validFrom ? from : null,
+      service_date_to: validTo ? to : (validFrom ? from : null),
+      service_dates_text: t || null,
+    };
   };
 
   const [isSaving, setIsSaving] = useState(false);
@@ -659,9 +820,16 @@ export default function InvoiceCreator({
     return currentServices.reduce((a, b) => (a.clientPrice >= b.clientPrice ? a : b));
   }, [currentServices]);
 
-  // Earliest service start date for Final Payment Date presets
+  // Earliest service start date for Final Payment Date presets (from editableDateText when parseable)
   const earliestServiceDate = useMemo(() => {
-    const dates = editableServices.map((s) => s.dateFrom).filter(Boolean) as string[];
+    const dates = editableServices
+      .map((s) => {
+        const t = (s.editableDateText ?? "").trim();
+        if (!t) return null;
+        const part = t.split(/\s*[-–]\s*/).map((p) => p.trim()).filter(Boolean)[0];
+        return part ? parseDateToYYYYMMDD(part) : null;
+      })
+      .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)));
     if (dates.length === 0) return null;
     return dates.sort()[0];
   }, [editableServices]);
@@ -701,6 +869,12 @@ export default function InvoiceCreator({
 
   // Labels for live preview by selected invoice language (per payer in bulk)
   const previewLabels = useMemo(() => getInvoiceLabels(effectiveInvoiceLanguage), [effectiveInvoiceLanguage]);
+
+  // Latvia company = show Latvia totals block in preview (by company country, not invoice language)
+  const isLatviaCompany = useMemo(() => {
+    const c = (companyInfo?.country && String(companyInfo.country).trim()) || "";
+    return /latvia|latvija|lettland/i.test(c);
+  }, [companyInfo?.country]);
 
   // Default deposit from service with largest sum (parse "10% deposit, 90% final") — once per payer when services have terms
   const defaultDepositAppliedForPayerIndices = React.useRef<Set<number>>(new Set());
@@ -801,16 +975,22 @@ export default function InvoiceCreator({
         status: 'draft',
         is_credit: servicesTotal < 0,
         language: languageOverride ?? invoiceLanguage ?? "en",
-        items: services.map((s) => ({
-          service_id: s.id,
-          service_name: getServiceDisplayNameForInvoice(s),
-          service_client: s.editableClient,
-          service_date_from: s.dateFrom,
-          service_date_to: s.dateTo,
-          quantity: 1,
-          unit_price: s.editablePrice,
-          line_total: s.editablePrice,
-        })),
+        linked_service_ids: services.map((s) => s.id).filter((id) => !String(id).startsWith("manual-")),
+        items: services.map((s) => {
+          const { service_date_from, service_date_to, service_dates_text } = editableDateTextToApiDates(s.editableDateText ?? "");
+          return {
+            service_id: String(s.id).startsWith("manual-") ? null : s.id,
+            service_name: s.editableName,
+            service_client: s.editableClient,
+            service_category: s.category || "",
+            service_date_from,
+            service_date_to,
+            service_dates_text: service_dates_text || null,
+            quantity: 1,
+            unit_price: s.editablePrice,
+            line_total: s.editablePrice,
+          };
+        }),
       }),
     });
 
@@ -900,22 +1080,26 @@ export default function InvoiceCreator({
             // Try to load payer details from DB
             if (groupPayerPartyId) {
               try {
-                const payerRes = await fetch(`/api/directory/${groupPayerPartyId}`);
+                const { data: { session: s } } = await supabase.auth.getSession();
+                const hdrs: Record<string, string> = {};
+                if (s?.access_token) hdrs["Authorization"] = `Bearer ${s.access_token}`;
+                const payerRes = await fetch(`/api/directory/${groupPayerPartyId}`, { headers: hdrs });
                 if (payerRes.ok) {
-                  const payerData = await payerRes.json();
+                  const json = await payerRes.json();
+                  const payerData = json?.record ?? json;
                   groupPayerInfo = {
-                    name: payerData.displayName || payerData.name || group.payerName,
+                    name: payerData.companyName || payerData.displayName || payerData.name || group.payerName,
                     partyId: groupPayerPartyId,
                     type: (payerData.type === 'person' ? 'person' : 'company') as 'company' | 'person',
-                    address: payerData.address || "",
+                    address: payerData.legalAddress || payerData.actualAddress || payerData.address || "",
                     email: payerData.email || "",
                     phone: payerData.phone || "",
-                    regNr: payerData.regNr || payerData.registrationNumber || "",
-                    vatNr: payerData.vatNr || payerData.vatNumber || "",
+                    regNr: payerData.regNumber || payerData.regNr || "",
+                    vatNr: payerData.vatNumber || payerData.vatNr || "",
                     personalCode: payerData.personalCode || "",
                     bankName: payerData.bankName || "",
-                    bankAccount: payerData.bankAccount || "",
-                    bankSwift: payerData.bankSwift || "",
+                    bankAccount: payerData.iban || payerData.bankAccount || "",
+                    bankSwift: payerData.swift || payerData.bankSwift || "",
                   };
                 }
               } catch (e) {
@@ -927,7 +1111,7 @@ export default function InvoiceCreator({
             const groupServices = group.services.map(s => ({
               ...s,
               editableName: s.name,
-              editablePrice: s.clientPrice,
+              editablePrice: Number(s.clientPrice) || 0,
               editableClient: s.client || "",
             }));
             
@@ -987,18 +1171,24 @@ export default function InvoiceCreator({
             status: 'draft',
             is_credit: isCredit,
             language: invoiceLanguage || "en",
-            items: editableServices.map((s) => ({
-              service_id: s.id,
-              service_name: getServiceDisplayNameForInvoice(s),
-              service_client: s.editableClient,
-              service_date_from: s.dateFrom,
-              service_date_to: s.dateTo,
-              quantity: 1,
-              unit_price: s.editablePrice,
-              line_total: s.editablePrice,
-            })),
-          }),
-        });
+            linked_service_ids: selectedServices.map((s) => s.id).filter((id) => !String(id).startsWith("manual-")),
+            items: editableServices.map((s) => {
+          const { service_date_from, service_date_to, service_dates_text } = editableDateTextToApiDates(s.editableDateText ?? "");
+          return {
+            service_id: String(s.id).startsWith("manual-") ? null : s.id,
+            service_name: s.editableName,
+            service_client: s.editableClient,
+            service_category: s.category || "",
+            service_date_from,
+            service_date_to,
+            service_dates_text: service_dates_text || null,
+            quantity: 1,
+            unit_price: s.editablePrice,
+            line_total: s.editablePrice,
+          };
+        }),
+      }),
+    });
 
         if (!response.ok) {
           const rawText = await response.text();
@@ -1139,76 +1329,77 @@ export default function InvoiceCreator({
           )}
         </div>
 
-        {/* Invoice language — choice from company list; × removes from company; "+" adds and syncs to Company Settings */}
+        {/* Invoice language — nugget chips: selected = blue + checkmark, unselected = grey; × removes; "+" adds */}
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <label className="block text-sm font-medium text-gray-700 mb-1">Invoice language</label>
           <div className="flex flex-wrap items-center gap-2">
-            {invoiceLanguages.map((code) => (
-              <span
-                key={code}
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm ${effectiveInvoiceLanguage === code ? "bg-blue-100 border-blue-300 text-blue-800 ring-1 ring-blue-300" : "bg-gray-50 border-gray-200 text-gray-700"}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setEffectiveInvoiceLanguage(code)}
-                  className="text-left"
-                  title={`Use ${getInvoiceLanguageLabel(code)} for this invoice`}
+            {invoiceLanguages.map((code) => {
+              const isSelected = effectiveInvoiceLanguage === code;
+              return (
+                <span
+                  key={code}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm ${isSelected ? "bg-blue-50 border-blue-500 text-blue-800" : "bg-gray-100 border-gray-300 text-gray-700"}`}
                 >
-                  {effectiveInvoiceLanguage === code && "✓ "}
-                  {getInvoiceLanguageLabel(code)}
-                </button>
-                {invoiceLanguages.length > 1 && (
                   <button
                     type="button"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const nextList = invoiceLanguages.filter((c) => c !== code);
-                      if (nextList.length === 0) return;
-                      const isBulk = hasMultiplePayers && payerGroups.length > 1;
-                      if (isBulk) {
-                        // Bulk: only deselect this language for the current invoice; do not remove from company
-                        if (effectiveInvoiceLanguage === code) setEffectiveInvoiceLanguage(nextList[0]);
-                      } else {
-                        // Single: remove from company and update selection
-                        try {
-                          const { data: { session } } = await supabase.auth.getSession();
-                          const res = await fetch("/api/company", {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-                            credentials: "include",
-                            body: JSON.stringify({ invoice_languages: nextList }),
-                          });
-                          if (res.ok) {
+                    onClick={() => setEffectiveInvoiceLanguage(code)}
+                    className="inline-flex items-center gap-1.5 text-left"
+                    title={`Use ${getInvoiceLanguageLabel(code)} for this invoice`}
+                  >
+                    {isSelected && <Check size={14} className="shrink-0 text-blue-600" strokeWidth={2.5} />}
+                    {getInvoiceLanguageLabel(code)}
+                  </button>
+                  {invoiceLanguages.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const nextList = invoiceLanguages.filter((c) => c !== code);
+                        if (nextList.length === 0) return;
+                        const isBulk = hasMultiplePayers && payerGroups.length > 1;
+                        if (isBulk) {
+                          if (effectiveInvoiceLanguage === code) setEffectiveInvoiceLanguage(nextList[0]);
+                        } else {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const res = await fetch("/api/company", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+                              credentials: "include",
+                              body: JSON.stringify({ invoice_languages: nextList }),
+                            });
+                            if (res.ok) {
+                              setInvoiceLanguages(nextList);
+                              if (effectiveInvoiceLanguage === code) setEffectiveInvoiceLanguage(nextList[0]);
+                            }
+                          } catch {
                             setInvoiceLanguages(nextList);
                             if (effectiveInvoiceLanguage === code) setEffectiveInvoiceLanguage(nextList[0]);
                           }
-                        } catch {
-                          setInvoiceLanguages(nextList);
-                          if (effectiveInvoiceLanguage === code) setEffectiveInvoiceLanguage(nextList[0]);
                         }
-                      }
-                    }}
-                    className="ml-0.5 rounded p-0.5 hover:bg-black/10 text-current"
-                    aria-label={`Remove ${getInvoiceLanguageLabel(code)}`}
-                    title={hasMultiplePayers && payerGroups.length > 1 ? "Deselect for this invoice only" : "Remove from company languages"}
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            ))}
+                      }}
+                      className="shrink-0 rounded p-0.5 hover:bg-black/10 text-gray-500 hover:text-gray-700"
+                      aria-label={`Remove ${getInvoiceLanguageLabel(code)}`}
+                      title={hasMultiplePayers && payerGroups.length > 1 ? "Deselect for this invoice only" : "Remove from company languages"}
+                    >
+                      <X size={14} strokeWidth={2} />
+                    </button>
+                  )}
+                </span>
+              );
+            })}
             <div className="relative inline-block">
               <button
                 type="button"
                 onClick={() => { setShowAddInvoiceLang(true); setAddInvoiceLangSearch(""); }}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 text-lg leading-none"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 title="Add language (saves to Company Settings)"
                 aria-label="Add language"
               >
-                +
+                <span className="text-lg leading-none">+</span>
               </button>
               {showAddInvoiceLang && (
-                <div className="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg border border-gray-200 bg-white shadow-lg p-2">
+                <div ref={addInvoiceLangPopoverRef} className="absolute left-0 top-full mt-1 z-20 w-56 rounded-lg border border-gray-200 bg-white shadow-lg p-2">
                   <input
                     type="text"
                     value={addInvoiceLangSearch}
@@ -1251,7 +1442,14 @@ export default function InvoiceCreator({
                       </li>
                     ))}
                   </ul>
-                  <button type="button" onClick={() => { setShowAddInvoiceLang(false); setAddInvoiceLangSearch(""); }} className="mt-2 text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddInvoiceLang(false); setAddInvoiceLangSearch(""); }}
+                    className="mt-2 w-full text-center text-sm text-gray-600 hover:text-gray-800 py-1.5 border-t border-gray-100"
+                    aria-label="Cancel"
+                  >
+                    Cancel
+                  </button>
                 </div>
               )}
             </div>
@@ -1534,15 +1732,15 @@ export default function InvoiceCreator({
           </button>
         </div>
         
-        {/* A4 Container - maintains aspect ratio */}
+        {/* A4 Container - fixed width (210mm) so invoice and totals block align */}
         <div 
-          className="flex-1 overflow-y-auto bg-white"
+          className="flex-1 overflow-y-auto bg-white flex justify-center"
           style={{ 
             aspectRatio: `${a4AspectRatio}`,
             maxHeight: 'calc(100vh - 120px)',
           }}
         >
-          <div className="p-6" style={{ minHeight: '100%' }}>
+          <div className="p-6 w-full max-w-[210mm]" style={{ minHeight: '100%' }}>
             {/* Invoice Header - Editable */}
             <div className="mb-6 border-b-2 border-gray-200 pb-4">
               <div className="flex items-start justify-between mb-3">
@@ -1671,52 +1869,38 @@ export default function InvoiceCreator({
                 <div className="mb-2">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">{previewLabels.beneficiary}</h3>
-                    <div className="text-xs text-gray-900 space-y-1 break-words">
+                    <div className="text-xs text-gray-900 space-y-0.5 break-words">
                       <div className="font-semibold text-sm break-words">{companyInfo?.legalName || companyInfo?.name || "Legal Company Name"}</div>
-                      {(companyInfo?.regNr || companyInfo?.vatNr) && (
+                      {companyInfo?.regNr && (
+                        <div className="text-gray-600">{previewLabels.regNr}: {companyInfo.regNr}</div>
+                      )}
+                      {companyInfo?.vatNr && (
+                        <div className="text-gray-600">{previewLabels.pvn}: {companyInfo.vatNr}</div>
+                      )}
+                      {(companyInfo?.legalAddress || companyInfo?.address) && (
                         <div className="text-gray-600 break-words">
-                          {companyInfo?.regNr && <span>{previewLabels.regNr}: {companyInfo.regNr}</span>}
-                          {companyInfo?.regNr && companyInfo?.vatNr && <span className="mx-1">•</span>}
-                          {companyInfo?.vatNr && <span>{previewLabels.pvn}: {companyInfo.vatNr}</span>}
+                          {companyInfo?.legalAddress || companyInfo?.address}
                         </div>
                       )}
-                      <div className="text-gray-600 break-words whitespace-pre-line">
-                        {companyInfo?.legalAddress && <>{companyInfo.legalAddress}<br /></>}
-                        {!companyInfo?.legalAddress && companyInfo?.address && <>{companyInfo.address}<br /></>}
-                        {companyInfo?.country && <>{companyInfo.country}</>}
-                      </div>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 min-w-0 overflow-hidden">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">{previewLabels.payer}</h3>
-                <div className="text-xs text-gray-900 space-y-1 break-words">
+                <div className="text-xs text-gray-900 space-y-0.5 break-words">
                   <div className="font-semibold text-sm break-words">{payerName || "-"}</div>
                   {payerType === 'company' && payerRegNr && (
-                    <div className="text-gray-600 break-words">{previewLabels.regNr}: {payerRegNr}</div>
+                    <div className="text-gray-600">{previewLabels.regNr}: {payerRegNr}</div>
                   )}
                   {payerType === 'company' && payerVatNr && (
-                    <div className="text-gray-600 break-words">{previewLabels.pvn}: {payerVatNr}</div>
+                    <div className="text-gray-600">{previewLabels.pvn}: {payerVatNr}</div>
                   )}
                   {payerType === 'person' && payerPersonalCode && (
-                    <div className="text-gray-600 break-words">{previewLabels.personalCode}: {payerPersonalCode}</div>
+                    <div className="text-gray-600">{previewLabels.personalCode}: {payerPersonalCode}</div>
                   )}
                   {payerAddress && (
-                    <div className="text-gray-600 whitespace-pre-line break-words">{payerAddress}</div>
-                  )}
-                  {payerEmail && (
-                    <div className="text-gray-600">{payerEmail}</div>
-                  )}
-                  {payerPhone && (
-                    <div className="text-gray-600">{payerPhone}</div>
-                  )}
-                  {payerType === 'company' && payerBankName && (
-                    <div className="text-gray-600 mt-1">
-                      <div>{previewLabels.bank}: {payerBankName}</div>
-                      {payerBankAccount && <div>{previewLabels.account}: {payerBankAccount}</div>}
-                      {payerBankSwift && <div>SWIFT: {payerBankSwift}</div>}
-                    </div>
+                    <div className="text-gray-600 break-words">{payerAddress}</div>
                   )}
                 </div>
               </div>
@@ -1726,32 +1910,61 @@ export default function InvoiceCreator({
             <div className="mb-6 overflow-hidden">
               <table className="w-full text-xs table-fixed">
                 <colgroup>
+                  <col className="w-6" />
                   <col className="w-28" />
                   <col className="min-w-0" />
                   <col className="min-w-0" />
                   <col className="w-24" />
+                  <col className="w-16" />
                 </colgroup>
                 <thead>
                   <tr className="border-b-2 border-gray-300 bg-gray-50">
+                    <th className="w-6 py-2 px-1"></th>
                     <th className="text-left py-2 px-2 font-semibold text-gray-700">{previewLabels.dates}</th>
                     <th className="text-left py-2 px-2 font-semibold text-gray-700">{previewLabels.service}</th>
                     <th className="text-left py-2 px-2 font-semibold text-gray-700">{previewLabels.client}</th>
                     <th className="text-right py-2 px-2 font-semibold text-gray-700">{previewLabels.amount}</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {editableServices.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="text-center py-4 text-gray-400 italic">
+                      <td colSpan={6} className="text-center py-4 text-gray-400 italic">
                         {previewLabels.noItems}
                       </td>
                     </tr>
                   ) : (
                     editableServices.map((service, idx) => (
-                      <tr key={service.id} className={idx < editableServices.length - 1 ? "border-b border-gray-200" : ""}>
-                        <td className="py-2 px-2 text-gray-600 align-top min-w-0 break-words" style={{ wordBreak: "break-word" }}>
-                          {service.dateFrom ? formatDate(service.dateFrom) : '-'}
-                          {service.dateTo && service.dateTo !== service.dateFrom ? ` - ${formatDate(service.dateTo)}` : ''}
+                      <tr
+                        key={service.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", String(idx));
+                          e.dataTransfer.effectAllowed = "move";
+                          handleDragStart(idx);
+                        }}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, idx)}
+                        onDragEnd={handleDragEnd}
+                        className={`group ${draggedIdx === idx ? "opacity-50" : ""} ${idx < editableServices.length - 1 ? "border-b border-gray-200" : ""}`}
+                      >
+                        <td className="py-2 px-1 align-top cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600" title="Перетягнути порядок">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="inline-block"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                        </td>
+                        <td className="py-2 px-2 align-top min-w-0">
+                          <input
+                            type="text"
+                            value={service.editableDateText ?? ""}
+                            onChange={(e) => {
+                              const updated = [...editableServices];
+                              updated[idx] = { ...updated[idx], editableDateText: e.target.value };
+                              setEditableServices(updated);
+                            }}
+                            placeholder="Даты или любой текст"
+                            className="w-full min-w-0 bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5 text-xs text-gray-600"
+                          />
                         </td>
                         <td className="py-2 px-2 align-top min-w-0">
                           <textarea
@@ -1762,6 +1975,7 @@ export default function InvoiceCreator({
                               setEditableServices(updated);
                             }}
                             rows={3}
+                            placeholder="Напр. Flight: Riga - Zurich - Riga или свой текст"
                             className="w-full min-h-[3rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 resize-y block break-words"
                             style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
                           />
@@ -1789,15 +2003,37 @@ export default function InvoiceCreator({
                             <input
                               type="number"
                               step="0.01"
-                              value={service.editablePrice}
+                              min={0}
+                              value={service.editablePrice === 0 ? "" : Number(service.editablePrice)}
                               onChange={(e) => {
                                 const updated = [...editableServices];
-                                updated[idx].editablePrice = parseFloat(e.target.value) || 0;
+                                const v = e.target.value;
+                                updated[idx].editablePrice = v === "" ? 0 : parseFloat(v) || 0;
                                 setEditableServices(updated);
                               }}
                               className="w-20 text-right bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <span className="text-gray-600">{currencySymbol}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-1 align-top">
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLine(idx)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 p-0.5 rounded"
+                              title="Copy line"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditableServices(prev => prev.filter((_, i) => i !== idx))}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500 p-0.5 rounded"
+                              title="Remove row"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1807,35 +2043,84 @@ export default function InvoiceCreator({
               </table>
             </div>
 
-            {/* Totals - Modern Design, Editable VAT */}
-            <div className="flex justify-end mb-6">
-              <div className="w-64 bg-gray-50 rounded-lg p-4 border border-gray-200 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">{previewLabels.subtotal}:</span>
-                  <span className="text-gray-900 font-semibold">{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-600">{previewLabels.vat}:</span>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={taxRate}
-                      onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      className="w-12 text-right bg-transparent border-b border-dashed border-gray-400 focus:border-blue-500 focus:outline-none text-gray-900 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <span className="text-gray-600">%</span>
-                    <span className="text-gray-900 font-semibold ml-2">
-                      {formatCurrency(taxAmount)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex justify-between text-base font-bold border-t-2 border-gray-400 pt-2 mt-2">
-                  <span>{previewLabels.total}:</span>
-                  <span className="text-blue-600">{formatCurrency(total)}</span>
-                </div>
+            {/* Totals - same width as invoice content (210mm); gray block full width of content */}
+            <div className="mb-6">
+              <div className="rounded-lg p-4 border border-gray-200 space-y-2 w-full bg-gray-50">
+                {isLatviaCompany ? (
+                  <>
+                    <div className="flex justify-between items-center text-xs pb-2 border-b border-gray-200">
+                      <span className="text-gray-600">{previewLabels.vat}:</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={taxRate}
+                          onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-12 text-right text-xs bg-transparent border-b border-dashed border-gray-400 focus:border-blue-500 focus:outline-none text-gray-900 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-gray-600">%</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">{(previewLabels as Record<string, string>).summa ?? "Summa"}:</span>
+                      <span className="text-gray-900 font-semibold">{formatCurrency(subtotal)} {currencyCode}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">{(previewLabels as Record<string, string>).nonTaxableAmount ?? "Neapliekama ar PVN"}:</span>
+                      <span className="text-gray-900">0 {currencyCode}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">{(previewLabels as Record<string, string>).taxable0 ?? "Ar PVN 0%"}:</span>
+                      <span className="text-gray-900">{formatCurrency(taxRate === 0 ? subtotal : 0)} {currencyCode}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">{(previewLabels as Record<string, string>).taxable21 ?? "Ar PVN 21%"}:</span>
+                      <span className="text-gray-900">{formatCurrency(taxRate === 21 ? subtotal : 0)} {currencyCode}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">{(previewLabels as Record<string, string>).vat21 ?? "PVN 21%"}:</span>
+                      <span className="text-gray-900">{formatCurrency(taxRate === 21 ? taxAmount : 0)} {currencyCode}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">{(previewLabels as Record<string, string>).legalNote0 ?? ""}</p>
+                    <p className="text-[11px] text-gray-500 mb-2">{(previewLabels as Record<string, string>).legalNote21 ?? ""}</p>
+                    <div className="flex justify-between text-sm font-bold border-t border-gray-300 pt-2">
+                      <span>{(previewLabels as Record<string, string>).summaApmaksai ?? "Summa apmaksai"}:</span>
+                      <span className="text-blue-600">{formatCurrency(total)} {currencyCode}</span>
+                    </div>
+                    <p className="text-xs italic text-gray-600">{(previewLabels as Record<string, string>).summaVardiem ?? "Summa vārdiem"}: {numberToWords(total, effectiveInvoiceLanguage)}</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">{previewLabels.subtotal}:</span>
+                      <span className="text-gray-900 font-semibold">{formatCurrency(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-600">{previewLabels.vat}:</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={taxRate}
+                          onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-12 text-right bg-transparent border-b border-dashed border-gray-400 focus:border-blue-500 focus:outline-none text-gray-900 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-gray-600">%</span>
+                        <span className="text-gray-900 font-semibold ml-2">
+                          {formatCurrency(taxAmount)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-base font-bold border-t-2 border-gray-400 pt-2 mt-2">
+                      <span>{previewLabels.total}:</span>
+                      <span className="text-blue-600">{formatCurrency(total)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1859,7 +2144,7 @@ export default function InvoiceCreator({
                   <div className="flex justify-between text-gray-700">
                     <span>{previewLabels.deposit}:</span>
                     <span className="font-semibold">
-                      {formatCurrency(dep)} by {formatDate(depDate)}
+                      {formatCurrency(dep)} {previewLabels.by || "by"} {formatDate(depDate)}
                     </span>
                   </div>
                 )}
@@ -1867,20 +2152,29 @@ export default function InvoiceCreator({
                   <div className="flex justify-between text-gray-700">
                     <span>{fullPay ? `${previewLabels.fullPayment}:` : `${previewLabels.finalPayment}:`}</span>
                     <span className="font-semibold">
-                      {formatCurrency(fpAmount ?? totalForDisplay)} by {formatDate(fpDate)}
+                      {formatCurrency(fpAmount ?? totalForDisplay)} {previewLabels.by || "by"} {formatDate(fpDate)}
                     </span>
                   </div>
                 )}
                 </div>
-                {/* Banking Details under Payment Terms */}
-                {(companyInfo?.bankName || companyInfo?.bankAccount || companyInfo?.bankSwift) && (
+                {/* Banking Details under Payment Terms — Beneficiary Name + bullets (1 bank per line) */}
+                {((companyInfo?.bankAccounts?.length ?? 0) > 0 || companyInfo?.bankName || companyInfo?.bankAccount || companyInfo?.bankSwift) && (
                   <div className="mt-3 pt-3 border-t border-amber-300">
                     <div className="text-xs font-semibold text-gray-700 uppercase mb-1.5">{previewLabels.bankingDetails}</div>
-                    <div className="space-y-0.5 text-xs text-gray-700">
-                      {companyInfo?.bankName && <div>{previewLabels.bank}: {companyInfo.bankName}</div>}
-                      {companyInfo?.bankAccount && <div>{previewLabels.account}: {companyInfo.bankAccount}</div>}
-                      {companyInfo?.bankSwift && <div>SWIFT: {companyInfo.bankSwift}</div>}
+                    <div className="text-xs text-gray-700">
+                      {previewLabels.beneficiaryName}: {companyInfo?.legalName || companyInfo?.name || ""}
                     </div>
+                    <ul className="mt-1.5 list-disc list-inside space-y-1 text-xs text-gray-700">
+                      {(companyInfo?.bankAccounts?.length ?? 0) > 0
+                        ? companyInfo!.bankAccounts!.map((acc: { bank_name?: string; iban?: string; swift?: string; currency?: string }, i: number) => {
+                            const curr = (acc.currency === "MULTI" || acc.currency === "Multi-currency") ? "Multi-currency" : (acc.currency || "");
+                            const parts = [acc.bank_name, acc.iban, acc.swift ? `SWIFT: ${acc.swift}` : "", curr].filter(Boolean);
+                            return <li key={i}>{parts.join(" · ")}</li>;
+                          })
+                        : (companyInfo?.bankName || companyInfo?.bankAccount || companyInfo?.bankSwift) && (
+                          <li>{[companyInfo.bankName, companyInfo.bankAccount, companyInfo.bankSwift ? `SWIFT: ${companyInfo.bankSwift}` : ""].filter(Boolean).join(" · ")}</li>
+                        )}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -1891,15 +2185,22 @@ export default function InvoiceCreator({
                   <div className="text-xs text-gray-700">
                     <span className="font-semibold">{formatDate(dueDate)}</span>
                   </div>
-                  {/* Banking Details under Due Date if no Payment Terms */}
-                  {(companyInfo?.bankName || companyInfo?.bankAccount || companyInfo?.bankSwift) && (
+                  {/* Banking Details under Due Date — Beneficiary Name + bullets */}
+                  {((companyInfo?.bankAccounts?.length ?? 0) > 0 || companyInfo?.bankName || companyInfo?.bankAccount || companyInfo?.bankSwift) && (
                     <div className="mt-3 pt-3 border-t border-amber-300">
                       <div className="text-xs font-semibold text-gray-700 uppercase mb-1.5">{previewLabels.bankingDetails}</div>
-                      <div className="space-y-0.5 text-xs text-gray-700">
-                        {companyInfo?.bankName && <div>{previewLabels.bank}: {companyInfo.bankName}</div>}
-                        {companyInfo?.bankAccount && <div>{previewLabels.account}: {companyInfo.bankAccount}</div>}
-                        {companyInfo?.bankSwift && <div>SWIFT: {companyInfo.bankSwift}</div>}
-                      </div>
+                      <div className="text-xs text-gray-700">{previewLabels.beneficiaryName}: {companyInfo?.legalName || companyInfo?.name || ""}</div>
+                      <ul className="mt-1.5 list-disc list-inside space-y-1 text-xs text-gray-700">
+                        {(companyInfo?.bankAccounts?.length ?? 0) > 0
+                          ? companyInfo!.bankAccounts!.map((acc: { bank_name?: string; iban?: string; swift?: string; currency?: string }, i: number) => {
+                              const curr = (acc.currency === "MULTI" || acc.currency === "Multi-currency") ? "Multi-currency" : (acc.currency || "");
+                              const parts = [acc.bank_name, acc.iban, acc.swift ? `SWIFT: ${acc.swift}` : "", curr].filter(Boolean);
+                              return <li key={i}>{parts.join(" · ")}</li>;
+                            })
+                          : (companyInfo?.bankName || companyInfo?.bankAccount || companyInfo?.bankSwift) && (
+                            <li>{[companyInfo.bankName, companyInfo.bankAccount, companyInfo.bankSwift ? `SWIFT: ${companyInfo.bankSwift}` : ""].filter(Boolean).join(" · ")}</li>
+                          )}
+                      </ul>
                     </div>
                   )}
                 </div>

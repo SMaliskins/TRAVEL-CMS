@@ -32,6 +32,7 @@ import { Map as MapIcon, ClipboardList } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, getCityByIATA } from "@/lib/data/cities";
+import { getCategoryTypeFromName } from "@/lib/invoices/generateInvoiceHTML";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import ItineraryTabs from "./ItineraryTabs";
 import SmartHintRow from "./SmartHintRow";
@@ -82,6 +83,7 @@ interface Service {
   payer_party_id?: string;
   servicePrice: number;
   clientPrice: number;
+  quantity?: number; // Units or nights for PRICING multiply (default 1)
   resStatus: "draft" | "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr?: string;
   ticketNr?: string;
@@ -126,6 +128,8 @@ interface Service {
   boardingPasses?: { id: string; fileName: string; fileUrl: string; clientId: string; clientName: string; uploadedAt: string }[];
   baggage?: string; // Baggage info
   cabinClass?: "economy" | "premium_economy" | "business" | "first";
+  /** Flight: per-client cost/marge/sale (from API pricing_per_client) */
+  pricingPerClient?: { cost: number; marge: number; sale: number }[] | null;
   // Terms & Conditions
   priceType?: "ebd" | "regular" | "spo" | null;
   refundPolicy?: "non_ref" | "refundable" | "fully_ref" | null;
@@ -1112,18 +1116,19 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     });
   };
 
-  // Fetch services from API
-  const fetchServices = useCallback(async () => {
+  // Fetch services from API (noCache = true after edit so Itinerary gets fresh dates)
+  const fetchServices = useCallback(async (noCache?: boolean) => {
     if (!orderCode) return;
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, {
+      const url = `/api/orders/${encodeURIComponent(orderCode)}/services${noCache ? `?_=${Date.now()}` : ""}`;
+      const response = await fetch(url, {
         headers: {
           ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
         },
         credentials: "include",
+        ...(noCache ? { cache: "no-store" } : {}),
       });
 
       if (response.ok) {
@@ -1148,6 +1153,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
           servicePrice: Number(s.servicePrice ?? s.service_price ?? 0),
           clientPrice: Number(s.clientPrice ?? s.client_price ?? 0),
+          quantity: Number(s.quantity ?? (s as { quantity?: number }).quantity ?? 1),
           resStatus: String(s.resStatus ?? s.res_status ?? "booked") as Service["resStatus"],
           refNr: String(s.refNr ?? s.ref_nr ?? ""),
           ticketNr: String(s.ticketNr ?? s.ticket_nr ?? ""),
@@ -1160,6 +1166,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           boardingPasses: (s.boardingPasses ?? s.boarding_passes ?? []) as Service["boardingPasses"],
           baggage: String(s.baggage ?? ""),
           cabinClass: String(s.cabinClass ?? s.cabin_class ?? "economy") as Service["cabinClass"],
+          pricingPerClient: Array.isArray(s.pricingPerClient ?? s.pricing_per_client) ? (s.pricingPerClient ?? s.pricing_per_client) as Service["pricingPerClient"] : null,
           // Terms & Conditions
           priceType: (s.priceType ?? s.price_type ?? null) as Service["priceType"],
           refundPolicy: (s.refundPolicy ?? s.refund_policy ?? null) as Service["refundPolicy"],
@@ -1269,56 +1276,115 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
 
-  // Auto-detect destinations from services and emit via callback
+  // Auto-detect destinations: (1) where they spend the most time (nights), (2) where the most services are
   useEffect(() => {
     if (!onDestinationsFromServices || services.length === 0) return;
-    const seenCities = new Set<string>();
-    const destinations: CityWithCountry[] = [];
+    type CityEntry = { city: CityWithCountry; nights: number; serviceCount: number };
+    const byKey = new Map<string, CityEntry>();
 
-    const addCity = (candidate: string) => {
-      if (!candidate || seenCities.has(candidate.toLowerCase())) return;
-      const cityData = getCityByName(candidate) || getCityByIATA(candidate);
-      if (cityData) {
-        seenCities.add(candidate.toLowerCase());
-        seenCities.add(cityData.name.toLowerCase());
-        destinations.push({ city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng });
+    const nightsBetween = (from: string | undefined, to: string | undefined): number => {
+      if (!from || !to) return 0;
+      const d1 = new Date(from);
+      const d2 = new Date(to);
+      if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) return 0;
+      const days = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      return Math.max(0, days);
+    };
+
+    const addCity = (candidate: string, nights: number, serviceDelta: number = 1) => {
+      if (!candidate?.trim()) return;
+      const cityData = getCityByName(candidate.trim()) || getCityByIATA(candidate.trim());
+      if (!cityData) return;
+      const key = cityData.name.toLowerCase();
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.nights += nights;
+        existing.serviceCount += serviceDelta;
+      } else {
+        byKey.set(key, {
+          city: { city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng },
+          nights,
+          serviceCount: serviceDelta,
+        });
       }
     };
 
     for (const service of services) {
       if (service.resStatus === "cancelled") continue;
-      const categoryType = ((service as any).categoryType || service.category?.toLowerCase()) as string | undefined;
+      const categoryType = ((service as any).categoryType ?? (service as any).category_type ?? getCategoryTypeFromName(service.category) ?? service.category?.toLowerCase()) as string | undefined;
+      const dateFrom = (service as any).dateFrom ?? (service as any).service_date_from;
+      const dateTo = (service as any).dateTo ?? (service as any).service_date_to;
+      const nights = nightsBetween(dateFrom, dateTo);
 
-      // Flight & Tour: extract arrival cities from segments
-      if (categoryType === "flight" || categoryType === "tour") {
-        const segments = (service as any).flightSegments as Array<{ arrival?: string; arrival_code?: string; arrivalCity?: string; arrival_city?: string }> | undefined;
-        if (segments) {
-          for (const seg of segments) {
-            addCity(String(seg.arrivalCity ?? seg.arrival_city ?? ""));
-            addCity(String(seg.arrival_code ?? seg.arrival ?? ""));
-          }
-        }
-      }
-
-      // Hotel & Tour: extract city from hotel address or name
+      // Hotel/tour: unique cities per service get (nights, +1 service)
       if (categoryType === "hotel" || categoryType === "tour") {
+        const cityDataByKey = new Map<string, { city: CityWithCountry }>();
+        const candidates: string[] = [];
         const hotelAddress = (service as any).hotelAddress as string | undefined;
         const hotelName = (service as any).hotelName as string | undefined;
-        if (hotelAddress) {
-          const parts = hotelAddress.split(",").map((p: string) => p.trim());
-          for (const part of parts) {
-            addCity(part);
+        if (hotelAddress) candidates.push(...hotelAddress.split(",").map((p: string) => p.trim()));
+        if (hotelName) candidates.push(...hotelName.split(",").map((p: string) => p.trim()));
+        candidates.push(service.name?.split(",")[0]?.trim() || "");
+        for (const c of candidates) {
+          if (!c) continue;
+          const cityData = getCityByName(c) || getCityByIATA(c);
+          if (cityData) {
+            const key = cityData.name.toLowerCase();
+            if (!cityDataByKey.has(key)) {
+              cityDataByKey.set(key, { city: { city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng } });
+            }
           }
         }
-        if (hotelName) {
-          const nameParts = hotelName.split(",").map((p: string) => p.trim());
-          for (const part of nameParts) {
-            addCity(part);
+        for (const [, { city }] of cityDataByKey) {
+          const key = city.city.toLowerCase();
+          const existing = byKey.get(key);
+          if (existing) {
+            existing.nights += nights;
+            existing.serviceCount += 1;
+          } else {
+            byKey.set(key, { city, nights, serviceCount: 1 });
           }
         }
-        addCity(service.name?.split(",")[0]?.trim() || "");
+      }
+
+    }
+
+    // Flight: destination = WHERE they fly TO (arrival). Origin = first departure across all flights — not a destination.
+    const flightSegmentsAll: Array<{ arrival: string; arrivalCity?: string; departure: string; departureDate: string; departureTime: string }> = [];
+    for (const service of services) {
+      if (service.resStatus === "cancelled") continue;
+      const catType = ((service as any).categoryType ?? getCategoryTypeFromName(service.category) ?? service.category?.toLowerCase()) as string | undefined;
+      if (catType !== "flight" || !(service as any).flightSegments?.length) continue;
+      const segs = (service as any).flightSegments as Array<Record<string, unknown>>;
+      for (const s of segs) {
+        flightSegmentsAll.push({
+          arrival: String(s.arrival ?? ""),
+          arrivalCity: (s.arrivalCity ?? s.arrival_city) as string | undefined,
+          departure: String(s.departure ?? ""),
+          departureDate: String(s.departureDate ?? s.departure_date ?? ""),
+          departureTime: String(s.departureTimeScheduled ?? s.departure_time_scheduled ?? s.departureTime ?? s.departure_time ?? ""),
+        });
       }
     }
+    flightSegmentsAll.sort((a, b) => new Date(`${a.departureDate}T${a.departureTime}`).getTime() - new Date(`${b.departureDate}T${b.departureTime}`).getTime());
+    const originCode = flightSegmentsAll[0]?.departure?.trim();
+    const originCityData = originCode ? (getCityByIATA(originCode) || getCityByName(originCode)) : undefined;
+    const originCityName = originCityData?.name?.toLowerCase();
+    for (const seg of flightSegmentsAll) {
+      const arrCode = seg.arrival?.trim();
+      if (!arrCode) continue;
+      const arrCityData = getCityByIATA(arrCode) || getCityByName(seg.arrivalCity || seg.arrival);
+      if (!arrCityData) continue;
+      if (originCityName && arrCityData.name?.toLowerCase() === originCityName) continue; // return home = not destination
+      addCity(arrCityData.name, 0, 1);
+    }
+
+    // Sort: first by nights (most time), then by service count (most services)
+    const sorted = Array.from(byKey.values()).sort((a, b) => b.nights - a.nights || b.serviceCount - a.serviceCount);
+    const withNights = sorted.filter((e) => e.nights > 0);
+    // Prefer cities where they stay; if none (e.g. flight-only), use flight arrivals (where they fly TO)
+    const list = withNights.length > 0 ? withNights : sorted;
+    const destinations = list.map((e) => e.city);
     if (destinations.length > 0) {
       onDestinationsFromServices(destinations);
     }
@@ -1387,6 +1453,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       invoice_id: null,
       servicePrice: service.servicePrice || 0,
       clientPrice: service.clientPrice || 0,
+      quantity: service.quantity ?? 1,
       resStatus: service.resStatus || "booked",
       refNr: service.refNr || "",
       ticketNr: service.ticketNr || "",
@@ -2251,9 +2318,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             onServiceUpdated={(updated: Partial<Service> & { id: string }) => {
               setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
               setEditServiceId(null);
-              // Refresh travellers and services after update (clients may have been added)
               fetchTravellers();
-              fetchServices();
+              // Refetch after short delay so backend has committed; noCache so Itinerary gets fresh dates
+              setTimeout(() => fetchServices(true), 150);
             }}
           />
         </>

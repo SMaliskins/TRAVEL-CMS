@@ -152,6 +152,7 @@ export async function GET(
           service_category,
           service_date_from,
           service_date_to,
+          service_dates_text,
           quantity,
           unit_price,
           line_total
@@ -169,14 +170,17 @@ export async function GET(
       );
     }
 
-    // Fetch ALL active payments for this order (exclude cancelled)
-    const invoiceIds = (invoices || []).map((inv: { id: string }) => inv.id);
+    // Only "active" invoices (not cancelled/replaced) count for linked payments
+    const activeInvoiceIds = (invoices || []).filter(
+      (inv: { status?: string }) => inv.status !== "cancelled" && inv.status !== "replaced"
+    ).map((inv: { id: string }) => inv.id);
+
     const { data: allOrderPayments } = await supabaseAdmin
       .from("payments")
       .select("invoice_id, amount, status")
       .eq("order_id", order.id);
 
-    // Only count payments directly linked to each invoice (no auto-distribution)
+    // linkedTotal = only payments linked to active (non-cancelled) invoices
     let paidByInvoice: Record<string, number> = {};
     let linkedTotal = 0;
     let unlinkedTotal = 0;
@@ -187,12 +191,13 @@ export async function GET(
         if ((p as { status?: string }).status === "cancelled") continue;
         const amt = Number(p.amount) || 0;
         totalOrderPayments += amt;
-        if (p.invoice_id && invoiceIds.includes(p.invoice_id)) {
+        if (p.invoice_id && activeInvoiceIds.includes(p.invoice_id)) {
           paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] || 0) + amt;
           linkedTotal += amt;
         } else if (!p.invoice_id) {
           unlinkedTotal += amt;
         }
+        // Payments linked to cancelled/replaced invoices are not in linkedTotal (count as overpayment)
       }
     }
 
@@ -257,6 +262,7 @@ export async function POST(
       client_address,
       client_email,
       items, // Array of { service_id, service_name, service_client, service_category, quantity, unit_price }
+      linked_service_ids, // Optional: all service IDs to mark as invoiced (when user consolidates lines, items may omit service_id)
       subtotal,
       tax_rate,
       tax_amount,
@@ -287,37 +293,42 @@ export async function POST(
       );
     }
 
-    // Check if any services are already invoiced or cancelled
-    const serviceIds = items.map((s: any) => s.service_id);
-    const { data: existingServices, error: checkError } = await supabaseAdmin
-      .from("order_services")
-      .select("id, invoice_id, res_status")
-      .in("id", serviceIds);
+    // Service IDs to link: linked_service_ids (all originally selected) when provided, else derive from items
+    const fromItems = items.filter((s: any) => s.service_id != null && s.service_id !== "").map((s: any) => s.service_id);
+    const linkedIds = Array.isArray(linked_service_ids)
+      ? linked_service_ids.filter((id: unknown) => id != null && String(id).trim() !== "")
+      : [];
+    const serviceIds = linkedIds.length > 0 ? linkedIds : fromItems;
+    if (serviceIds.length > 0) {
+      const { data: existingServices, error: checkError } = await supabaseAdmin
+        .from("order_services")
+        .select("id, invoice_id, res_status")
+        .in("id", serviceIds);
 
-    if (checkError) {
-      console.error("Error checking services:", checkError);
-      return NextResponse.json(
-        { error: "Failed to check services" },
-        { status: 500 }
-      );
-    }
+      if (checkError) {
+        console.error("Error checking services:", checkError);
+        return NextResponse.json(
+          { error: "Failed to check services" },
+          { status: 500 }
+        );
+      }
 
-    // Filter out cancelled services and check for already invoiced
-    const cancelledServices = existingServices?.filter((s: any) => s.res_status === 'cancelled') || [];
-    const invoicedServices = existingServices?.filter((s: any) => s.invoice_id !== null) || [];
+      const cancelledServices = existingServices?.filter((s: any) => s.res_status === 'cancelled') || [];
+      const invoicedServices = existingServices?.filter((s: any) => s.invoice_id !== null) || [];
 
-    if (cancelledServices.length > 0) {
-      return NextResponse.json(
-        { error: "Some services are cancelled and cannot be invoiced" },
-        { status: 400 }
-      );
-    }
+      if (cancelledServices.length > 0) {
+        return NextResponse.json(
+          { error: "Some services are cancelled and cannot be invoiced" },
+          { status: 400 }
+        );
+      }
 
-    if (invoicedServices.length > 0) {
-      return NextResponse.json(
-        { error: "Some services are already invoiced" },
-        { status: 400 }
-      );
+      if (invoicedServices.length > 0) {
+        return NextResponse.json(
+          { error: "Some services are already invoiced" },
+          { status: 400 }
+        );
+      }
     }
 
     // Check if invoice number is already in use
@@ -461,15 +472,16 @@ export async function POST(
       );
     }
 
-    // Create invoice items
+    // Create invoice items (service_id null for manual lines)
     const invoiceItems = items.map((item: any) => ({
       invoice_id: invoice.id,
-      service_id: item.service_id,
+      service_id: item.service_id != null && item.service_id !== "" ? item.service_id : null,
       service_name: item.service_name || "",
       service_client: item.service_client || "",
       service_category: item.service_category || "",
       service_date_from: item.service_date_from || null,
       service_date_to: item.service_date_to || null,
+      service_dates_text: item.service_dates_text != null && String(item.service_dates_text).trim() ? String(item.service_dates_text).trim() : null,
       quantity: item.quantity || 1,
       unit_price: item.unit_price || 0,
       line_total: (item.quantity || 1) * (item.unit_price || 0),
@@ -490,22 +502,23 @@ export async function POST(
       );
     }
 
-    // Update order_services to link them to this invoice
-    const { error: updateServicesError } = await supabaseAdmin
-      .from("order_services")
-      .update({ invoice_id: invoice.id })
-      .in("id", serviceIds);
+    // Update order_services to link them to this invoice (only items with service_id)
+    if (serviceIds.length > 0) {
+      const { error: updateServicesError } = await supabaseAdmin
+        .from("order_services")
+        .update({ invoice_id: invoice.id })
+        .in("id", serviceIds);
 
-    if (updateServicesError) {
-      console.error("Error updating services:", updateServicesError);
-      console.error("Service IDs attempted:", serviceIds);
-      // Rollback: delete invoice and items
-      await supabaseAdmin.from("invoice_items").delete().eq("invoice_id", invoice.id);
-      await supabaseAdmin.from("invoices").delete().eq("id", invoice.id);
-      return NextResponse.json(
-        { error: `Failed to update services: ${updateServicesError?.message || "Unknown error"}` },
-        { status: 500 }
-      );
+      if (updateServicesError) {
+        console.error("Error updating services:", updateServicesError);
+        console.error("Service IDs attempted:", serviceIds);
+        await supabaseAdmin.from("invoice_items").delete().eq("invoice_id", invoice.id);
+        await supabaseAdmin.from("invoices").delete().eq("id", invoice.id);
+        return NextResponse.json(
+          { error: `Failed to update services: ${updateServicesError?.message || "Unknown error"}` },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({
