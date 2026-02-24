@@ -95,6 +95,7 @@ export interface ServiceData {
   payerName: string;
   servicePrice: number;
   clientPrice: number;
+  quantity?: number; // Units/nights (from API response when adding service)
   vatRate: number; // 0 or 21
   resStatus: "draft" | "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr: string;
