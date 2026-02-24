@@ -77,7 +77,7 @@ export async function GET(
           bankSwift: defaultBank?.swift || (company as { swift_code?: string; bank_swift?: string }).swift_code || (company as { bank_swift?: string }).bank_swift || null,
           bankAccounts: bankAccounts ?? [],
           country: (company as { country?: string }).country ?? null,
-        };
+        } satisfies InvoiceCompanyInfo;
       }
     }
 
