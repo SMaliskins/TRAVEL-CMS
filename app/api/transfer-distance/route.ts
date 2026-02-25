@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAirportByIata } from "@/lib/airports";
-import { CITIES } from "@/lib/data/cities";
+import { CITIES, loadWorldCities } from "@/lib/data/cities";
 import { estimateTransfer } from "@/lib/geo";
 
 /**

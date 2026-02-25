@@ -182,7 +182,7 @@ export default function OrderRouteSummary({
               <>
                 <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
                   {parsedRoute.origin.countryCode && (
-                    <span className="text-base">{countryCodeToFlag(parsedRoute.origin.countryCode)}</span>
+                    <span className="text-base mr-1">{countryCodeToFlag(parsedRoute.origin.countryCode)}</span>
                   )}
                   {parsedRoute.origin.name}
                 </span>
@@ -193,7 +193,7 @@ export default function OrderRouteSummary({
               <span key={`${city?.name || idx}-${idx}`} className="flex items-center">
                 <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
                   {city.countryCode && (
-                    <span className="text-base">{countryCodeToFlag(city.countryCode)}</span>
+                    <span className="text-base mr-1">{countryCodeToFlag(city.countryCode)}</span>
                   )}
                   {city.name}
                 </span>
@@ -207,7 +207,7 @@ export default function OrderRouteSummary({
                 <span className="text-gray-400 text-sm">→</span>
                 <span className="flex items-center gap-1 text-base font-semibold text-gray-700">
                   {parsedRoute.returnCity.countryCode && (
-                    <span className="text-base">{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
+                    <span className="text-base mr-1">{countryCodeToFlag(parsedRoute.returnCity.countryCode)}</span>
                   )}
                   {parsedRoute.returnCity.name}
                 </span>

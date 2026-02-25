@@ -9,7 +9,7 @@ import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
 import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Clock, CircleAlert, CirclePlus } from "lucide-react";
-import { getCityByName } from "@/lib/data/cities";
+import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -281,6 +281,11 @@ const countryToISO: Record<string, string> = {
   "Vietnam": "VN",
   "Philippines": "PH",
   "Cambodia": "KH",
+  "Uzbekistan": "UZ",
+  "Kazakhstan": "KZ",
+  "Kyrgyzstan": "KG",
+  "Tajikistan": "TJ",
+  "Turkmenistan": "TM",
 };
 
 // Get country flag emoji from country name
@@ -324,17 +329,17 @@ function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
     return item.split(';').map(sub => {
       const s = sub.trim();
       if (!s) return null;
+      const cityName = s.split(',')[0]?.trim() || s;
+      const cityData = getCityByName(cityName);
+      if (cityData?.countryCode) {
+        return { city: cityData.name, flag: countryCodeToFlag(cityData.countryCode) };
+      }
       const match = s.match(/^(.+),\s*([^,]+)$/);
       if (match) {
         const city = match[1].trim();
         const country = match[2].trim();
         const flag = getCountryFlag(country);
         return { city, flag };
-      }
-      const cityData = getCityByName(s);
-      if (cityData) {
-        const flag = getCountryFlag(cityData.country || "");
-        return { city: s, flag };
       }
       return { city: s, flag: null };
     }).filter(Boolean);

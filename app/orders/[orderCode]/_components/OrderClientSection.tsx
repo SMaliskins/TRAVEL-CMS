@@ -7,7 +7,7 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import PartySelect from "@/components/PartySelect";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
 import DateRangePicker from "@/components/DateRangePicker";
-import { getCityByName, countryCodeToFlag, CITIES } from "@/lib/data/cities";
+import { getCityByName, countryCodeToFlag, CITIES, loadWorldCities } from "@/lib/data/cities";
 import ChecklistPanel from "./ChecklistPanel";
 
 // Dynamic import TripMap to avoid SSR issues with Leaflet
@@ -116,7 +116,13 @@ export default function OrderClientSection({
 }: OrderClientSectionProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  
+  const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
+
+  // Load extended world cities on mount (enables getCityByName for Tashkent, etc.)
+  useEffect(() => {
+    loadWorldCities().then(() => setWorldCitiesLoaded(true));
+  }, []);
+
   // Which field is being edited (double-click to edit, or from initialEditingField)
   // Map client/itinerary/dates to "itinerary" since they share the same editor
   const mappedInitialField = initialEditingField ? "itinerary" : null;
@@ -148,9 +154,10 @@ export default function OrderClientSection({
         const cityParts = originStr.split(",");
         const cityName = cityParts[0]?.trim() || "";
         const cityData = getCityByName(cityName);
+        const countryFromStore = cityParts[1]?.trim() || "";
         originCity = {
           city: cityName,
-          country: cityParts[1]?.trim() || "",
+          country: countryFromStore || cityData?.country || "",
           countryCode: cityData?.countryCode,
           lat: cityData?.lat,
           lng: cityData?.lng,
@@ -160,9 +167,10 @@ export default function OrderClientSection({
         const cityParts = returnStr.split(",");
         const cityName = cityParts[0]?.trim() || "";
         const cityData = getCityByName(cityName);
+        const countryFromStore = cityParts[1]?.trim() || "";
         returnCity = {
           city: cityName,
-          country: cityParts[1]?.trim() || "",
+          country: countryFromStore || cityData?.country || "",
           countryCode: cityData?.countryCode,
           lat: cityData?.lat,
           lng: cityData?.lng,
@@ -173,9 +181,10 @@ export default function OrderClientSection({
           const cityParts = item.trim().split(",");
           const cityName = cityParts[0]?.trim() || "";
           const cityData = getCityByName(cityName);
+          const countryFromStore = cityParts[1]?.trim() || "";
           return {
             city: cityName,
-            country: cityParts[1]?.trim() || "",
+            country: countryFromStore || cityData?.country || "",
             countryCode: cityData?.countryCode,
             lat: cityData?.lat,
             lng: cityData?.lng,
@@ -190,7 +199,7 @@ export default function OrderClientSection({
     }
     
     return { origin: originCity, destinations, returnCity };
-  }, [countriesCities]);
+  }, [countriesCities, worldCitiesLoaded]);
 
   // Edit states
   const [editClientId, setEditClientId] = useState<string | null>(clientPartyId || null);
@@ -481,7 +490,7 @@ export default function OrderClientSection({
                         <>
                           <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
                             {parsedItinerary.origin.countryCode && (
-                              <span className="text-base">{countryCodeToFlag(parsedItinerary.origin.countryCode)}</span>
+                              <span className="text-base mr-1">{countryCodeToFlag(parsedItinerary.origin.countryCode)}</span>
                             )}
                             {parsedItinerary.origin.city}
                           </span>
@@ -492,7 +501,7 @@ export default function OrderClientSection({
                         <span key={`${city.city}-${idx}`} className="flex items-center">
                           <span className="flex items-center gap-1 text-base font-semibold text-gray-900">
                             {city.countryCode && (
-                              <span className="text-base">{countryCodeToFlag(city.countryCode)}</span>
+                              <span className="text-base mr-1">{countryCodeToFlag(city.countryCode)}</span>
                             )}
                             {city.city}
                           </span>
@@ -506,7 +515,7 @@ export default function OrderClientSection({
                           <span className="text-gray-400 text-xs">→</span>
                           <span className="flex items-center gap-1 text-base font-semibold text-gray-700">
                             {parsedItinerary.returnCity.countryCode && (
-                              <span className="text-base">{countryCodeToFlag(parsedItinerary.returnCity.countryCode)}</span>
+                              <span className="text-base mr-1">{countryCodeToFlag(parsedItinerary.returnCity.countryCode)}</span>
                             )}
                             {parsedItinerary.returnCity.city}
                           </span>
@@ -550,7 +559,7 @@ export default function OrderClientSection({
                           onClick={() => setEditOrigin(city)}
                           className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1"
                         >
-                          {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
+                          {city.countryCode && <span className="mr-1">{countryCodeToFlag(city.countryCode)}</span>}
                           {city.city}
                         </button>
                       ))}
@@ -562,7 +571,7 @@ export default function OrderClientSection({
                       onDragStart={() => handleDragStart(editOrigin, "origin")}
                       className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded cursor-move text-xs"
                     >
-                      {editOrigin.countryCode && <span>{countryCodeToFlag(editOrigin.countryCode)}</span>}
+                      {editOrigin.countryCode && <span className="mr-1">{countryCodeToFlag(editOrigin.countryCode)}</span>}
                       {editOrigin.city}
                       <button
                         type="button"
@@ -600,7 +609,7 @@ export default function OrderClientSection({
                         onDragStart={() => handleDragStart(city, "destinations")}
                         className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded cursor-move text-xs"
                       >
-                        {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
+                        {city.countryCode && <span className="mr-1">{countryCodeToFlag(city.countryCode)}</span>}
                         {city.city}
                         <button
                           type="button"

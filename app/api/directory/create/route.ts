@@ -125,6 +125,12 @@ export async function POST(request: NextRequest) {
       country: data.country || null,
       // Supplier service areas
       service_areas: data.supplierExtras?.serviceAreas || null,
+      // Supplier services description (rich text)
+      supplier_services_description: (data.supplierExtras?.serviceDescription?.trim()) || null,
+      // Supplier website
+      supplier_website: (data.supplierExtras?.website?.trim()) || null,
+      // Supplier documents
+      supplier_documents: Array.isArray(data.supplierExtras?.documents) && data.supplierExtras.documents.length > 0 ? data.supplierExtras.documents : null,
       // Supplier commissions
       supplier_commissions: data.supplierExtras?.commissions || null,
       // Corporate accounts / Loyalty cards
@@ -163,7 +169,7 @@ export async function POST(request: NextRequest) {
         dob: data.dob || null,
         personal_code: data.personalCode || null,
         citizenship: data.citizenship || null,
-        address: null, // Address not in current DirectoryRecord type
+        address: null,
         // Passport fields
         passport_number: data.passportNumber || null,
         passport_issue_date: data.passportIssueDate || null,
@@ -172,6 +178,9 @@ export async function POST(request: NextRequest) {
         passport_full_name: data.passportFullName || null,
         nationality: data.nationality || null,
         avatar_url: data.avatarUrl || null,
+        // Person client languages
+        correspondence_languages: Array.isArray(data.correspondenceLanguages) && data.correspondenceLanguages.length > 0 ? data.correspondenceLanguages : ["en"],
+        invoice_language: data.invoiceLanguage || "en",
       };
 
       const { error: personError } = await supabaseAdmin

@@ -45,6 +45,8 @@ export default function DirectoryPage() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const [syncLanguagesLoading, setSyncLanguagesLoading] = useState(false);
+  const [syncLanguagesResult, setSyncLanguagesResult] = useState<{ updated: number; skipped: number } | null>(null);
 
   const limit = 50;
   const totalPages = Math.ceil(total / limit) || 1;
@@ -247,9 +249,42 @@ export default function DirectoryPage() {
     loadRecords("", null, 1, "active");
   };
 
+  const handleSyncLanguages = async () => {
+    setShowActionsMenu(false);
+    setSyncLanguagesLoading(true);
+    setSyncLanguagesResult(null);
+    try {
+      const response = await fetchWithAuth("/api/directory/sync-languages", { method: "POST" });
+      const data = await response.json();
+      if (response.ok) {
+        setSyncLanguagesResult({ updated: data.updated ?? 0, skipped: data.skipped ?? 0 });
+        loadRecords(searchQuery, selectedRole, page, showArchiveView ? "archived" : "active");
+      } else {
+        alert(data.error || "Failed to sync languages");
+      }
+    } catch (err) {
+      console.error("Sync languages error:", err);
+      alert("Failed to sync languages");
+    } finally {
+      setSyncLanguagesLoading(false);
+    }
+  };
+
+  // Auto-clear sync result after 5s
+  useEffect(() => {
+    if (!syncLanguagesResult) return;
+    const t = setTimeout(() => setSyncLanguagesResult(null), 5000);
+    return () => clearTimeout(t);
+  }, [syncLanguagesResult]);
+
   return (
     <div className="bg-gray-50 min-h-screen p-6">
       <div className="mx-auto max-w-[1400px] space-y-6">
+        {syncLanguagesResult && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            Languages synced: {syncLanguagesResult.updated} updated, {syncLanguagesResult.skipped} skipped (already set or unknown country).
+          </div>
+        )}
         {/* Header */}
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -305,6 +340,17 @@ export default function DirectoryPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
                         Import contacts
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSyncLanguages}
+                        disabled={syncLanguagesLoading}
+                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                        </svg>
+                        {syncLanguagesLoading ? "Syncing…" : "Sync languages from passports"}
                       </button>
                     </div>
                   )}

@@ -407,6 +407,11 @@ export default function DirectoryDetailPage() {
           onValidationChange={setIsFormValid}
           onDirtyChange={setIsDirty}
           onAvatarChange={(avatarUrl) => setRecord((prev) => prev ? { ...prev, avatarUrl } : null)}
+          onDocumentsChange={(documents) =>
+            setRecord((prev) =>
+              prev ? { ...prev, supplierExtras: { ...prev.supplierExtras, documents } } : null
+            )
+          }
           saveSuccess={saveSuccess}
         />
 

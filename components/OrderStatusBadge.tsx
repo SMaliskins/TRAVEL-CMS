@@ -8,7 +8,7 @@ interface OrderStatusBadgeProps {
   status: OrderStatus;
   onChange?: (newStatus: OrderStatus) => void;
   readonly?: boolean;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
 }
 
 const STATUS_CONFIG: Record<OrderStatus, { 
@@ -84,11 +84,13 @@ export default function OrderStatusBadge({
     setIsOpen(false);
   };
 
-  const sizeClasses = size === "sm" 
-    ? "px-2 py-0.5 text-xs" 
-    : "px-3 py-1 text-sm";
-  
-  const dotSize = size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2";
+  const sizeClasses = size === "xs"
+    ? "px-1.5 py-0.5 text-[10px]"
+    : size === "sm"
+      ? "px-2 py-0.5 text-xs"
+      : "px-3 py-1 text-sm";
+
+  const dotSize = size === "xs" ? "h-1 w-1" : size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2";
 
   const badge = (
     <span
@@ -98,7 +100,7 @@ export default function OrderStatusBadge({
       <span className={`${dotSize} rounded-full ${config.dotColor}`} />
       {config.label}
       {!readonly && onChange && (
-        <svg className="h-3 w-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={size === "xs" ? "h-2 w-2 ml-0.5" : "h-3 w-3 ml-0.5"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       )}

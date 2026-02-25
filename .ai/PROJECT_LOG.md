@@ -5,6 +5,24 @@
 
 ---
 
+### 📅 [2026-02-19] | [~16:00]
+**Агент:** `Code Writer`
+**Задача:** `Passport parsing + Person clients languages`
+**Статус:** `SUCCESS`
+
+**Действия:**
+- Passport parse-passport API: formatDate — парсинг DD.MM.YYYY/DD/MM/YYYY (европейский формат), избежание swap месяц/день
+- Passport API: gender — маппинг Mrs/Mr/Ms → female/male
+- Passport AI prompt: явная инструкция по диакритике (Latvian ā, č, ē, ž и т.д.); формат дат YYYY-MM-DD, никогда не путать месяц и день
+- DirectoryForm: onChange PassportDetailsInput — gender Mrs/Mr/Ms
+- DirectoryForm: person clients — языки коммуникации и счета (correspondenceLanguages, invoiceLanguage); автоопределение языка из страны паспорта
+
+**Результат:** Дата срока действия парсится корректно; пол Mrs/Mr сохраняется; диакритика — усилен prompt; персоны имеют языки; автоопределение языка по стране паспорта; mobile — добавление клиентов.
+
+**Next Step:** QA, run migrations (person correspondence/invoice languages)
+
+---
+
 ### 📅 [2026-02-19] | [14:15]
 **Агент:** `Code Writer`
 **Задача:** `Finance Payments Module`

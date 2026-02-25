@@ -12,7 +12,7 @@ import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
-import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
+import { getCityByName, countryCodeToFlag, loadWorldCities } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Plus } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
@@ -143,7 +143,13 @@ export default function OrderPage({
   const [draggedDestIdx, setDraggedDestIdx] = useState<number | null>(null);
   const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
   const autoDestSavedRef = useRef(false);
-  
+  const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
+
+  // Load world cities on mount so getCityByName finds Tashkent etc. for DESTINATION display
+  useEffect(() => {
+    loadWorldCities().then(() => setWorldCitiesLoaded(true));
+  }, []);
+
   // Track Ctrl key for Ctrl+click navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -250,20 +256,13 @@ export default function OrderPage({
     }
 
     return { origin: originCity, destinations, returnCity, daysNights, daysUntil };
-  }, [order?.countries_cities, order?.date_from, order?.date_to]);
+  }, [order?.countries_cities, order?.date_from, order?.date_to, worldCitiesLoaded]);
 
-  // Auto-save detected destinations: when empty, or when saved list wrongly includes origin/return (e.g. Riga) so Orders list shows correct
+  // Auto-save detected destinations только когда countries_cities пусто — не перезаписывать ручной ввод
   useEffect(() => {
     if (!order || autoDestSavedRef.current || autoDestinations.length === 0) return;
     const hasSaved = order.countries_cities && order.countries_cities.trim();
-    if (hasSaved) {
-      const originName = parsedItinerary.origin?.name?.toLowerCase();
-      const returnName = parsedItinerary.returnCity?.name?.toLowerCase();
-      const savedHasOriginOrReturn = parsedItinerary.destinations.some(
-        (d) => (originName && d.name?.toLowerCase() === originName) || (returnName && d.name?.toLowerCase() === returnName)
-      );
-      if (!savedHasOriginOrReturn) return; // don't overwrite when saved looks fine
-    }
+    if (hasSaved) return; // никогда не перезаписывать сохранённые направления
     autoDestSavedRef.current = true;
 
     const unique = autoDestinations.filter((c, i, arr) =>
@@ -357,8 +356,9 @@ export default function OrderPage({
     } else {
       setEditOrigin(null);
     }
-    // Use auto-detected destinations when available (e.g. Zurich only), else saved destinations
-    const destsToEdit = autoDestinations.length > 0 ? autoDestinations : parsedItinerary.destinations;
+    // При редактировании: приоритет сохранённым destinations; autoDestinations только если countries_cities пусто
+    const hasSaved = order?.countries_cities?.trim();
+    const destsToEdit = hasSaved ? parsedItinerary.destinations : (autoDestinations.length > 0 ? autoDestinations : parsedItinerary.destinations);
     setEditDestinations(destsToEdit.map((d) => {
       const name = "city" in d ? d.city : d.name;
       const cityData = getCityByName(name);
@@ -374,7 +374,7 @@ export default function OrderPage({
     setEditReturnToOrigin(true);
     setEditReturnCity(null);
     setEditingHeaderField("itinerary");
-  }, [parsedItinerary.origin, parsedItinerary.destinations, autoDestinations]);
+  }, [order?.countries_cities, parsedItinerary.origin, parsedItinerary.destinations, autoDestinations]);
 
   // Save functions
   const saveClient = async (partyId: string, displayName: string) => {
@@ -627,6 +627,7 @@ export default function OrderPage({
                 {order && (
                   <OrderStatusBadge 
                     status={effectiveStatus}
+                    size="xs"
                     onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
                     readonly={effectiveStatus === "Completed" || isSaving}
                   />
@@ -634,7 +635,7 @@ export default function OrderPage({
               </div>
               {/* Created date + Agent - directly under order code */}
               {order?.created_at && (
-                <div className="mt-0.5 text-xs text-gray-400">
+                <div className="mt-0.5 text-[10px] text-gray-400">
                   Created on {formatDateDDMMYYYY(order.created_at)} by {order.owner_name || "Unknown"}
                 </div>
               )}
@@ -829,7 +830,9 @@ export default function OrderPage({
                               ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name 
                                 ? [parsedItinerary.returnCity] : [])
                             ];
-                            const allCities = autoDestinations.length > 0 ? autoDestinations : manualDests;
+                            // Приоритет: сохранённые countries_cities; autoDestinations только когда ничего не сохранено
+                            const hasSaved = order?.countries_cities?.trim();
+                            const allCities = hasSaved ? manualDests : (autoDestinations.length > 0 ? autoDestinations : manualDests);
                             if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set</span>;
                             const countryCities: Record<string, { countryCode?: string; cities: string[] }> = {};
                             for (const city of allCities) {
@@ -843,7 +846,7 @@ export default function OrderPage({
                             }
                             return Object.entries(countryCities).map(([country, data], idx) => (
                               <span key={country} className="flex items-center text-sm font-semibold text-gray-900">
-                                {data.countryCode && <span>{countryCodeToFlag(data.countryCode)}</span>}
+                                {data.countryCode && <span className="mr-1">{countryCodeToFlag(data.countryCode)}</span>}
                                 {country} ({data.cities.join(", ")})
                                 {idx < Object.keys(countryCities).length - 1 && <span className="text-gray-400 mx-1">/</span>}
                               </span>
@@ -896,7 +899,7 @@ export default function OrderPage({
                                     : "bg-green-100 text-green-800 hover:bg-green-200"
                                 }`}
                               >
-                                {city.countryCode && <span>{countryCodeToFlag(city.countryCode)}</span>}
+                                {city.countryCode && <span className="mr-1">{countryCodeToFlag(city.countryCode)}</span>}
                                 {city.city}
                                 <button
                                   type="button"

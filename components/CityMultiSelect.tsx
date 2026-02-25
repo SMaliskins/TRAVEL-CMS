@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { City, searchCities, countryCodeToFlag } from "@/lib/data/cities";
+import { City, searchCities, countryCodeToFlag, loadWorldCities } from "@/lib/data/cities";
 
 export interface CityWithCountry {
   city: string;
@@ -28,8 +28,14 @@ export default function CityMultiSelect({
 }: CityMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load extended world cities on mount (enables search for Tashkent, etc.)
+  useEffect(() => {
+    loadWorldCities().then(() => setWorldCitiesLoaded(true));
+  }, []);
 
   // Get unique countries from selected cities (preserving order of first appearance)
   const selectedCountries = useMemo(() => {
@@ -60,7 +66,7 @@ export default function CityMultiSelect({
     return searchCities(searchQuery).filter(
       (city) => !selectedCityNames.has(city.name)
     );
-  }, [searchQuery, selectedCities]);
+  }, [searchQuery, selectedCities, worldCitiesLoaded]);
 
   // Click outside to close
   useEffect(() => {

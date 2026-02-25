@@ -60,11 +60,9 @@ Return a JSON object with this structure:
 }
 
 Rules:
-- Dates in YYYY-MM-DD format. You MUST extract passportIssueDate and passportExpiryDate when they appear on the document (e.g. "Date of issue", "Date of expiry", "Izdošanas datums", "Derīgums līdz").
+- Dates in YYYY-MM-DD format (always year-month-day). European passports use DD.MM.YYYY — convert to YYYY-MM-DD. Example: 15.03.2028 → 2028-03-15 (March 15, not day 15 of month 3). NEVER swap month and day.
 - passportIssuingCountry: full country name in English (e.g. "Latvia", "United States", "Ukraine", "United Kingdom"), NOT a 2-letter code. This is used for statistics.
-- passportFullName: full name in Title Case (first letter of each word uppercase, rest lowercase). Preserve diacritics exactly as on the document (e.g. "Rāvis", "Žaklīna", not "Ravis", "Zaklina").
-- firstName: given name(s) in Title Case. Preserve diacritics as on the document (e.g. Rihards, Žaklīna).
-- lastName: surname/family name in Title Case. Preserve diacritics as on the document (e.g. Rāvis, not Ravis).
+- passportFullName, firstName, lastName: First letter of each word UPPERCASE, rest lowercase. CRITICAL — preserve EXACT diacritics from the human-readable zone (NOT MRZ). Latvian: ā, č, ē, ģ, ī, ķ, ļ, ņ, š, ū, ž. Example: Pavloviča, Žaklīna — NEVER write Pavlovica, Zaklina. Copy characters exactly as printed on the passport.
 - Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), Estonian, Latvian, etc. Parse Cyrillic names correctly and output in Latin with Title Case.
 - dob is the date of birth from the passport.
 - nationality: 2-letter ISO country code is acceptable.
@@ -81,8 +79,19 @@ const COUNTRY_CODE_TO_NAME: Record<string, string> = {
 
 function formatDate(dateStr: string | undefined): string | undefined {
   if (!dateStr) return undefined;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  const date = new Date(dateStr);
+  const s = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // DD.MM.YYYY or DD/MM/YYYY (European) — avoid JS Date parsing month/day swap
+  const eu = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+  if (eu) {
+    const [, d, mo, y] = eu;
+    const dN = parseInt(d, 10);
+    const moN = parseInt(mo, 10);
+    if (moN >= 1 && moN <= 12 && dN >= 1 && dN <= 31) {
+      return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+  }
+  const date = new Date(s);
   if (!isNaN(date.getTime())) return date.toISOString().split("T")[0];
   return undefined;
 }
@@ -94,8 +103,14 @@ function toTitleCase(s: string): string {
     .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
 }
 
-function normalizePassport(passport: PassportData): PassportData {
-  let issuingCountry = passport.passportIssuingCountry?.trim() || undefined;
+/** Support both camelCase and snake_case from AI response */
+function getRaw<T>(p: Record<string, unknown>, camel: string, snake: string): T | undefined {
+  const v = p[camel] ?? p[snake];
+  return (typeof v === "string" ? v.trim() : v) as T | undefined;
+}
+
+function normalizePassport(passport: Record<string, unknown> & Partial<PassportData>): PassportData {
+  let issuingCountry = getRaw<string>(passport, "passportIssuingCountry", "passport_issuing_country") || undefined;
   if (issuingCountry && issuingCountry.length === 2) {
     issuingCountry = COUNTRY_CODE_TO_NAME[issuingCountry.toUpperCase()] || issuingCountry;
   }
@@ -106,7 +121,14 @@ function normalizePassport(passport: PassportData): PassportData {
   let fullName = passport.passportFullName?.trim() || undefined;
   if (fullName && fullName === fullName.toUpperCase()) fullName = toTitleCase(fullName);
   const g = passport.gender?.trim()?.toLowerCase();
-  const gender = g === "male" || g === "female" ? g : (g === "m" ? "male" : g === "f" ? "female" : undefined);
+  const gender =
+    g === "male" || g === "female"
+      ? g
+      : g === "m" || g === "mr"
+        ? "male"
+        : g === "f" || g === "mrs" || g === "ms"
+          ? "female"
+          : undefined;
 
   return {
     passportNumber: passport.passportNumber || undefined,

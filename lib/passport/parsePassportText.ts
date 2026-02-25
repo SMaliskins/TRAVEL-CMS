@@ -42,9 +42,12 @@ const CODE_TO_NAME: Record<string, string> = {
 const MONTHS: Record<string, string> = {
   jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
   jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
-  // Ukrainian abbreviations
+  // Ukrainian
   січ: "01", лют: "02", бер: "03", кві: "04", тра: "05", чер: "06",
   лип: "07", сер: "08", вер: "09", жов: "10", лис: "11", гру: "12",
+  // Latvian (janv, febr, marts, apr, maijs, jūn, jūl, aug, sept, okt, nov, dec)
+  janv: "01", febr: "02", marts: "03", maijs: "05", jūn: "06", jūl: "07",
+  sept: "09", okt: "10",
 };
 
 /** Convert 2-digit year to 4-digit: 76->1976, 18->2018, 28->2028 */
@@ -59,11 +62,28 @@ function yyToYyyy(yy: number): number {
 function parseDate(str: string): string | undefined {
   if (!str) return undefined;
   
-  // DD.MM.YYYY or DD/MM/YYYY
+  // DD.MM.YYYY or DD/MM/YYYY (European order — day first)
   let m = str.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
   if (m) {
-    const [, d, mo, y] = m;
+    let [, d, mo, y] = m;
+    const dNum = parseInt(d, 10);
+    const moNum = parseInt(mo, 10);
+    if (moNum > 12 && dNum <= 12) {
+      [d, mo] = [mo, d];
+    }
     return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  // DD.MM.YY
+  m = str.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2})\b/);
+  if (m) {
+    let [, d, mo, yy] = m;
+    const dNum = parseInt(d, 10);
+    const moNum = parseInt(mo, 10);
+    if (moNum > 12 && dNum <= 12) {
+      [d, mo] = [mo, d];
+    }
+    const yyyy = yyToYyyy(parseInt(yy, 10));
+    return `${yyyy}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
   
   // YYYY-MM-DD
@@ -141,26 +161,52 @@ function toTitleCase(name: string): string {
 }
 
 /**
- * Extract name (surname + given names) - ENGLISH/LATIN only
+ * Extract name (surname + given names) from human-readable zone.
+ * Preserves diacritics (ā, č, ē, ģ, ī, ķ, ļ, ņ, š, ū, ž) — NEVER use MRZ for names when human-readable exists.
  */
 function extractNames(text: string): { firstName?: string; lastName?: string; fullName?: string } {
   let firstName: string | undefined;
   let lastName: string | undefined;
 
-  const surnameMatch = text.match(/Surname[^\p{L}]*([\p{L}'\-]+(?:\/[\p{L}'\-]+)?)/u);
-  if (surnameMatch) {
-    lastName = extractLatinPart(surnameMatch[1]);
+  // Surname — Latvian "Uzvārds/Surname/Nom:" (value on next line) or "Surname: PAVLOVIČA"
+  const surnamePatterns = [
+    /(?:Uzvārds|Surname|Nom|Фамілія|Фамилия)[^\n]*\n\s*([\p{L}\s'\-]+)/u,
+    /(?:Uzvārds|Surname|Nom)[^:]*:\s*([\p{L}\s'\-]+)/u,
+    /Surname[^\p{L}]*([\p{L}'\-]+(?:\/[\p{L}'\-]+)?)/u,
+  ];
+  for (const re of surnamePatterns) {
+    const m = text.match(re);
+    if (m) {
+      const val = extractLatinPart(m[1]).trim();
+      if (val && val.length > 1 && !/^(?:Nom|Surname|Given)$/i.test(val)) {
+        lastName = val;
+        break;
+      }
+    }
   }
 
-  const givenMatch = text.match(/Given\s*names?[^\p{L}]*([\p{L}'\-]+(?:\/[\p{L}'\-]+)?)/u);
-  if (givenMatch) {
-    firstName = extractLatinPart(givenMatch[1]);
+  // Given names — Latvian "Vārds/Given names/Prénoms:" (value on next line)
+  const givenPatterns = [
+    /(?:Vārds|Given\s*names?|Prénoms|Ім'я|Имя)[^\n]*\n\s*([\p{L}\s'\-]+)/u,
+    /(?:Vārds|Given\s*names?|Prénoms)[^:]*:\s*([\p{L}\s'\-]+)/u,
+    /Given\s*names?[^\p{L}]*([\p{L}'\-]+(?:\/[\p{L}'\-]+)?)/u,
+  ];
+  for (const re of givenPatterns) {
+    const m = text.match(re);
+    if (m) {
+      const val = extractLatinPart(m[1]).trim();
+      if (val && val.length > 1 && !/^(?:Prénoms|Given|Vārds)$/i.test(val)) {
+        firstName = val;
+        break;
+      }
+    }
   }
 
-  /** Keep Unicode letters (e.g. ā, ž, ī) — do not strip diacritics */
+  /** Keep Unicode letters (ā, č, ē, ž, etc.) — do NOT strip diacritics */
   firstName = firstName?.replace(/[^\p{L}'\s-]/gu, "").trim() || undefined;
   lastName = lastName?.replace(/[^\p{L}'\s-]/gu, "").trim() || undefined;
 
+  /** MRZ fallback only when human-readable failed — MRZ has no diacritics (č→c, š→s, ž→z) */
   if (!lastName || !firstName) {
     const mrzMatch = text.match(/([A-Z]+)<<([A-Z]+)/);
     if (mrzMatch) {
@@ -169,7 +215,6 @@ function extractNames(text: string): { firstName?: string; lastName?: string; fu
     }
   }
 
-  // Title case: first letter uppercase, rest lowercase
   if (firstName) firstName = toTitleCase(firstName);
   if (lastName) lastName = toTitleCase(lastName);
 
@@ -201,7 +246,7 @@ function extractDates(text: string): { dob?: string; issueDate?: string; expiryD
     }
   }
 
-  const datePatternDot = "(\\d{1,2}[.\\/]\\d{1,2}[.\\/]\\d{4})";
+  const datePatternDot = "(\\d{1,2}[.\\/]\\d{1,2}[.\\/]\\d{2,4})";
   const issuePatterns = [
     new RegExp(`Date\\s*of\\s*issue[^\\d]*${datePattern}`, "i"),
     new RegExp(`[Дд]ата\\s*видач[іi][^\\d]*${datePattern}`, "i"),

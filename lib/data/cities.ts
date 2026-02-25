@@ -20,7 +20,33 @@ export function countryCodeToFlag(countryCode: string): string {
   return String.fromCodePoint(...codePoints);
 }
 
-// Popular travel destinations with coordinates
+// Extended cities loaded from /data/world-cities.json (all countries' cities)
+let worldCitiesCache: City[] | null = null;
+
+/** Load extended world cities from public data (call on app mount for full coverage) */
+export async function loadWorldCities(): Promise<void> {
+  if (worldCitiesCache) return;
+  try {
+    const res = await fetch("/data/world-cities.json");
+    if (res.ok) {
+      const data = (await res.json()) as City[];
+      worldCitiesCache = data;
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function getAllCities(): City[] {
+  if (!worldCitiesCache) return CITIES;
+  const existingKeys = new Set(CITIES.map((c) => `${c.name.toLowerCase()}|${c.countryCode}`));
+  const extended = worldCitiesCache.filter(
+    (w) => !existingKeys.has(`${w.name.toLowerCase()}|${w.countryCode}`)
+  );
+  return [...CITIES, ...extended];
+}
+
+// Popular travel destinations with coordinates (always available)
 export const CITIES: City[] = [
   // Italy
   { name: "Rome", country: "Italy", countryCode: "IT", lat: 41.9028, lng: 12.4964, iataCode: "FCO" },
@@ -344,36 +370,38 @@ export const CITIES: City[] = [
 // Legacy export for backwards compatibility
 export const POPULAR_CITIES = CITIES;
 
-// Search cities by name or country
+// Search cities by name or country (uses extended world cities when loaded)
 export function searchCities(query: string): City[] {
   if (!query || query.length < 2) return [];
   const lowerQuery = query.toLowerCase();
-  return CITIES.filter(
-    (city) =>
-      city.name.toLowerCase().includes(lowerQuery) ||
-      city.country.toLowerCase().includes(lowerQuery)
-  ).slice(0, 15);
+  return getAllCities()
+    .filter(
+      (city) =>
+        city.name.toLowerCase().includes(lowerQuery) ||
+        city.country.toLowerCase().includes(lowerQuery)
+    )
+    .slice(0, 20);
 }
 
-// Get city by name
+// Get city by name (uses extended world cities when loaded)
 export function getCityByIATA(iataCode: string): City | undefined {
   if (!iataCode) return undefined;
   const code = iataCode.toUpperCase();
-  return CITIES.find(city => city.iataCode?.toUpperCase() === code);
+  return CITIES.find((city) => city.iataCode?.toUpperCase() === code);
 }
 
 export function getCityByName(name: string): City | undefined {
   if (!name) return undefined;
-  return CITIES.find(
+  return getAllCities().find(
     (city) => city.name.toLowerCase() === name.toLowerCase()
   );
 }
 
-// Get all unique countries with flags
+// Get all unique countries with flags (uses extended list when loaded)
 export function getCountriesWithFlags(): { name: string; code: string; flag: string }[] {
   const countriesMap = new Map<string, { name: string; code: string }>();
-  
-  CITIES.forEach((city) => {
+
+  getAllCities().forEach((city) => {
     if (!countriesMap.has(city.countryCode)) {
       countriesMap.set(city.countryCode, {
         name: city.country,

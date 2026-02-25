@@ -8,8 +8,21 @@ export interface SupplierCommission {
   isActive: boolean;
 }
 
+export interface SupplierDocument {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  uploadedAt: string;
+}
+
 export interface SupplierDetails {
   serviceAreas?: string[]; // Categories from travel_service_categories (e.g., ["Hotel", "Transfer"])
+  /** Rich text description of services provided (HTML or plain text) */
+  serviceDescription?: string;
+  /** Supplier website URL */
+  website?: string;
+  /** Documents: brochures, rate cards, etc. */
+  documents?: SupplierDocument[];
   commissions?: SupplierCommission[];
 }
 

@@ -193,8 +193,17 @@ export async function GET(
 
     const paymentsTotal = (paymentsData ?? []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const balance = invoicesTotal - paymentsTotal;
+    // partial = partially paid (some received, some still owed); unpaid = nothing paid
     const paymentStatus =
-      balance < -0.01 ? "overpaid" : overdueInvoices.length > 0 ? "overdue" : balance > 0.01 ? "partial" : "paid";
+      balance < -0.01
+        ? "overpaid"
+        : overdueInvoices.length > 0
+          ? "overdue"
+          : balance > 0.01
+            ? paymentsTotal > 0
+              ? "partial"
+              : "unpaid"
+            : "paid";
 
     const stats = {
       ordersCount,

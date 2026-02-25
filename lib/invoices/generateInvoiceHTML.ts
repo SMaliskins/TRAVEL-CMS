@@ -623,15 +623,15 @@ export function generateInvoiceHTML(
     .bank-table th, .bank-table td { padding: 6px 10px; text-align: left; border: 1px solid #ddd; }
     .bank-table th { background: #f5f5f5; font-weight: 600; }
     .bank-table td.num { text-align: right; }
-    .totals-table { width: 100%; max-width: 400px; border-collapse: collapse; font-size: 12px; }
+    .totals-table { border-collapse: collapse; font-size: 12px; margin-left: auto; }
     .totals-table td { padding: 6px 10px; border: 1px solid #eee; }
     .totals-table td:first-child { background: #fafafa; }
-    .totals-table td.num { text-align: right; }
+    .totals-table td.num { text-align: right; width: 100px; min-width: 100px; }
     .totals-table tr.total-row td { font-weight: bold; border-top: 2px solid #333; }
     .items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
     .items-table th, .items-table td { padding: 8px 10px; border: 1px solid #ddd; font-size: 12px; }
     .items-table th { text-align: left; background: #f5f5f5; font-weight: 600; text-transform: uppercase; color: #444; }
-    .items-table td.amount { text-align: right; }
+    .items-table th:last-child, .items-table td.amount { text-align: right; width: 100px; min-width: 100px; box-sizing: border-box; }
     table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
     th { text-align: left; padding: 8px 10px; background: #f5f5f5; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; }
     td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
@@ -678,6 +678,7 @@ export function generateInvoiceHTML(
           <span class="company-name">${invoice.payer_name || "-"}</span><br>
           ${invoice.payer_reg_nr ? `${t.regNr}: ${invoice.payer_reg_nr}<br>` : ""}
           ${invoice.payer_vat_nr ? `${t.pvn}: ${invoice.payer_vat_nr}<br>` : ""}
+          ${invoice.payer_personal_code ? `${t.personalCode}: ${invoice.payer_personal_code}<br>` : ""}
           ${invoice.payer_address ? invoice.payer_address + "<br>" : ""}
         </div>
       </div>
@@ -695,11 +696,10 @@ export function generateInvoiceHTML(
     <tbody>
       ${invoice.invoice_items?.map((item: any) => {
         const serviceText = item.service_name?.trim() || "-";
-        const serviceCell = `${t.service}: ${serviceText}`;
         return `
         <tr>
           <td>${(item.service_dates_text && String(item.service_dates_text).trim()) ? String(item.service_dates_text).trim() : formatDatesCell(item.service_date_from, item.service_date_to)}</td>
-          <td style="word-wrap: break-word; white-space: normal;">${serviceCell}</td>
+          <td style="word-wrap: break-word; white-space: normal;">${serviceText}</td>
           <td>${item.service_client || "-"}</td>
           <td class="amount">${formatCurrency(item.line_total)}</td>
         </tr>
@@ -724,7 +724,8 @@ export function generateInvoiceHTML(
     ` : ""}
   </table>
   ${isLatviaCompany ? `
-  <table class="totals-table" style="margin-top: 12px;">
+  <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
+  <table class="totals-table">
     ${(() => {
       const subtotal = invoice.subtotal ?? 0;
       const taxRate = invoice.tax_rate ?? 0;
@@ -748,6 +749,7 @@ export function generateInvoiceHTML(
       `;
     })()}
   </table>
+  </div>
   ` : ""}
 
   ${(invoice.deposit_amount || invoice.final_payment_amount) ? `

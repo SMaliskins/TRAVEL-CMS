@@ -134,16 +134,16 @@ export default function NewDirectoryPage() {
   const canSave = isFormValid && !isSaving;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto w-full max-w-[95vw] space-y-6">
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-[95vw] sm:max-w-4xl space-y-4 sm:space-y-6">
         {/* PageHeader - Settings style with buttons */}
-        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
-          <div className="flex items-center justify-between">
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-4 sm:px-6 py-4 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">New Record</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">New Record</h1>
               <p className="text-sm text-gray-500">Create a new contact in directory</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Link href="/directory" className="text-sm text-blue-600 hover:text-blue-700">
                 ← Back to Directory
               </Link>

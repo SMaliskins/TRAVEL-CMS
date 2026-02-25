@@ -7,6 +7,7 @@ import {
   DirectoryRole,
   SupplierDetails,
   SupplierCommission,
+  SupplierDocument,
   SubagentDetails,
   SubagentCommissionType,
   CorporateAccount,
@@ -80,6 +81,8 @@ interface DirectoryFormProps {
   onValidationChange?: (isValid: boolean) => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onAvatarChange?: (avatarUrl: string | undefined) => void;
+  /** Callback when supplier documents change (for parent to refetch record) */
+  onDocumentsChange?: (documents: SupplierDocument[]) => void;
   saveSuccess?: boolean; // Signal that save was successful for green border effect
 }
 
@@ -89,7 +92,7 @@ export interface DirectoryFormHandle {
 
 const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
   function DirectoryForm(
-    { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange, onAvatarChange, saveSuccess = false },
+    { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange, onAvatarChange, onDocumentsChange, saveSuccess = false },
     ref
   ) {
     const formRef = React.useRef<HTMLFormElement>(null);
@@ -112,7 +115,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       invoicesCount?: number;
       invoicesTotal?: number;
       paymentsTotal?: number;
-      paymentStatus?: "paid" | "partial" | "overdue" | "overpaid";
+      paymentStatus?: "paid" | "partial" | "unpaid" | "overdue" | "overpaid";
       balance?: number;
       overdueInvoices?: Array<{ invoice_number: string | null; due_date: string; total: number }>;
     } | null>(null);
@@ -279,6 +282,16 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [serviceAreas, setServiceAreas] = useState<string[]>(
       record?.supplierExtras?.serviceAreas || []
     );
+    const [supplierServiceDescription, setSupplierServiceDescription] = useState(
+      record?.supplierExtras?.serviceDescription || ""
+    );
+    const [supplierWebsite, setSupplierWebsite] = useState(
+      record?.supplierExtras?.website || ""
+    );
+    const [supplierDocuments, setSupplierDocuments] = useState<SupplierDocument[]>(
+      record?.supplierExtras?.documents || []
+    );
+    const [uploadingDoc, setUploadingDoc] = useState(false);
     const [availableCategories, setAvailableCategories] = useState<{id: string; name: string; type: string}[]>([]);
     const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>(
       record?.supplierExtras?.commissions || []
@@ -421,6 +434,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           personalCode: record.personalCode || undefined,
           isAlienPassport: record.isAlienPassport,
         });
+        if (record.supplierExtras) {
+          setServiceAreas(record.supplierExtras.serviceAreas || []);
+          setSupplierServiceDescription(record.supplierExtras.serviceDescription || "");
+          setSupplierWebsite(record.supplierExtras.website || "");
+          setSupplierDocuments(record.supplierExtras.documents || []);
+          setSupplierCommissions(record.supplierExtras.commissions || []);
+        }
       } else if (mode === "create") {
         // Reset passport fields in create mode
         setPassportData({
@@ -560,9 +580,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         const initialAreas = initialSupplier?.serviceAreas || [];
         const currentAreas = [...serviceAreas].sort().join(",");
         const initialAreasStr = [...initialAreas].sort().join(",");
-        if (currentAreas !== initialAreasStr) {
-          return true;
-        }
+        if (currentAreas !== initialAreasStr) return true;
+        const initialDesc = (initialSupplier?.serviceDescription || "").trim();
+        const currentDesc = supplierServiceDescription.trim();
+        if (initialDesc !== currentDesc) return true;
+        const initialWeb = (initialSupplier?.website || "").trim();
+        const currentWeb = supplierWebsite.trim();
+        if (initialWeb !== currentWeb) return true;
+        if (JSON.stringify(supplierCommissions) !== JSON.stringify(initialSupplier?.commissions || [])) return true;
       }
 
       // Check subagent details
@@ -725,8 +750,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         }
       }
 
-      // Country
+      // Country, languages (company and person clients)
       if (displayType === "company") {
+        formData.country = country.trim() || undefined;
+        formData.correspondenceLanguages = correspondenceLanguages.length > 0 ? correspondenceLanguages : undefined;
+        formData.invoiceLanguage = invoiceLanguage || undefined;
+      }
+      if (displayType === "person" && isClient) {
         formData.country = country.trim() || undefined;
         formData.correspondenceLanguages = correspondenceLanguages.length > 0 ? correspondenceLanguages : undefined;
         formData.invoiceLanguage = invoiceLanguage || undefined;
@@ -736,6 +766,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       if (roles.includes("supplier")) {
         formData.supplierExtras = {
           serviceAreas: serviceAreas.length > 0 ? serviceAreas : undefined,
+          serviceDescription: supplierServiceDescription.trim() || undefined,
+          website: supplierWebsite.trim() || undefined,
           commissions: supplierCommissions.length > 0 ? supplierCommissions : undefined,
         };
       }
@@ -1326,8 +1358,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               </div>
               )}
 
-              {/* Language of correspondence & invoice - company only: show only selected, edit via + / dropdown */}
-              {displayType === "company" && (
+              {/* Language of correspondence & invoice (company and person clients) */}
+              {(displayType === "company" || (displayType === "person" && isClient)) && (
                 <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
                   <h3 className="text-sm font-semibold text-gray-800 mb-3">Languages</h3>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1621,9 +1653,41 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         setPersonalCode(data.personalCode);
                         markFieldDirty("personalCode");
                       }
-                      if (data.gender === "male" || data.gender === "female") {
-                        setGender(data.gender);
-                        markFieldDirty("gender");
+                      if (data.gender) {
+                        const g = String(data.gender).toLowerCase();
+                        const genderVal =
+                          g === "male" || g === "m" || g === "mr"
+                            ? "male"
+                            : g === "female" || g === "f" || g === "mrs" || g === "ms"
+                              ? "female"
+                              : null;
+                        if (genderVal) {
+                          setGender(genderVal);
+                          markFieldDirty("gender");
+                        }
+                      }
+                      // Auto-detect language from passport country (only when freshly parsed, not on manual edit)
+                      const countryParsed = options?.parsedFields?.has("passportIssuingCountry") ?? options?.parsedFields?.has("passport_issuing_country");
+                      if (countryParsed && data.passportIssuingCountry) {
+                        const c = String(data.passportIssuingCountry).toLowerCase().replace(/\s/g, "");
+                        const langMap: Record<string, string> = {
+                          latvia: "lv", lva: "lv",
+                          estonia: "et", est: "et",
+                          lithuania: "lt", ltu: "lt",
+                          ukraine: "uk", ukr: "uk",
+                          russia: "ru", rus: "ru",
+                          germany: "de", deu: "de",
+                          poland: "pl", pol: "pl",
+                        };
+                        const lang = langMap[c];
+                        if (lang) {
+                          setCorrespondenceLanguages((prev) =>
+                            prev.includes(lang) ? prev : [lang, ...prev.filter((x) => x !== "en")].slice(0, 5)
+                          );
+                          setInvoiceLanguage(lang);
+                          markFieldDirty("correspondenceLanguages");
+                          markFieldDirty("invoiceLanguage");
+                        }
                       }
                       markFieldDirty("passport");
                     }}
@@ -1818,6 +1882,148 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           </p>
                         )}
                       </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Website
+                        </label>
+                        <input
+                          type="text"
+                          value={supplierWebsite}
+                          onChange={(e) => {
+                            setSupplierWebsite(e.target.value);
+                            markFieldDirty("supplierWebsite");
+                          }}
+                          placeholder="https://example.com or fastrackvip.com"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                        />
+                        {supplierWebsite.trim() && (
+                          <a
+                            href={
+                              /^https?:\/\//i.test(supplierWebsite.trim())
+                                ? supplierWebsite.trim()
+                                : `https://${supplierWebsite.trim()}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                          >
+                            Open website in new window →
+                          </a>
+                        )}
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Description of services
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Describe the services this supplier provides
+                        </p>
+                        <textarea
+                          value={supplierServiceDescription}
+                          onChange={(e) => {
+                            setSupplierServiceDescription(e.target.value);
+                            markFieldDirty("supplierServiceDescription");
+                          }}
+                          placeholder="e.g. Hotel accommodation, transfers, excursions..."
+                          rows={4}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-green-500 focus:ring-1 focus:ring-green-500 min-h-[100px] resize-y"
+                        />
+                      </div>
+                      {mode === "edit" && record?.id && (
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-gray-700">
+                            Documents
+                          </label>
+                          <p className="text-xs text-gray-500 mb-2">
+                            Upload brochures, rate cards, or other info about this supplier
+                          </p>
+                          {supplierDocuments.length > 0 && (
+                            <ul className="mb-3 space-y-1">
+                              {supplierDocuments.map((doc) => (
+                                <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-white border border-gray-200 px-3 py-2 text-sm">
+                                  <a
+                                    href={doc.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline truncate flex-1 min-w-0"
+                                  >
+                                    {doc.fileName}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetchWithAuth(
+                                          `/api/directory/${record.id}/supplier-documents?docId=${encodeURIComponent(doc.id)}`,
+                                          { method: "DELETE" }
+                                        );
+                                        if (res.ok) {
+                                          const next = supplierDocuments.filter((d) => d.id !== doc.id);
+                                          setSupplierDocuments(next);
+                                          onDocumentsChange?.(next);
+                                        } else {
+                                          const err = await res.json();
+                                          alert(err.error || "Failed to delete");
+                                        }
+                                      } catch {
+                                        alert("Failed to delete document");
+                                      }
+                                    }}
+                                    className="text-red-500 hover:text-red-700 shrink-0 p-1"
+                                    aria-label="Remove document"
+                                  >
+                                    ×
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <label
+                            className={`flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                              uploadingDoc ? "border-gray-200 bg-gray-50" : "border-gray-300 bg-gray-50/50 hover:bg-gray-100 hover:border-green-400"
+                            }`}
+                          >
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx"
+                              multiple
+                              disabled={uploadingDoc}
+                              onChange={async (e) => {
+                                const files = Array.from(e.target.files || []);
+                                e.target.value = "";
+                                if (files.length === 0) return;
+                                setUploadingDoc(true);
+                                try {
+                                  for (const file of files) {
+                                    const fd = new FormData();
+                                    fd.set("file", file);
+                                    const res = await fetchWithAuth(`/api/directory/${record.id}/supplier-documents`, {
+                                      method: "POST",
+                                      body: fd,
+                                    });
+                                    if (!res.ok) {
+                                      const err = await res.json();
+                                      throw new Error(err.error || "Upload failed");
+                                    }
+                                    const { document: newDoc } = await res.json();
+                                    const next = [...supplierDocuments, newDoc];
+                                    setSupplierDocuments(next);
+                                    onDocumentsChange?.(next);
+                                  }
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : "Failed to upload");
+                                } finally {
+                                  setUploadingDoc(false);
+                                }
+                              }}
+                            />
+                            <span className="text-sm text-gray-500">
+                              {uploadingDoc ? "Uploading…" : "Click or drop PDF, images, Word, Excel (max 15MB)"}
+                            </span>
+                          </label>
+                        </div>
+                      )}
                       <div className="pt-4 border-t border-gray-200">
                         <div className="flex items-center justify-between mb-3">
                           <label className="text-sm font-medium text-gray-700">Commissions</label>
@@ -2136,10 +2342,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                                   <span className={`text-sm font-medium truncate ml-2 ${
                                     stats.paymentStatus === "overdue" ? "text-amber-600" :
                                     stats.paymentStatus === "overpaid" ? "text-green-600" :
-                                    stats.paymentStatus === "partial" ? "text-orange-600" : "text-gray-900"
+                                    stats.paymentStatus === "partial" ? "text-orange-600" :
+                                    stats.paymentStatus === "unpaid" ? "text-red-600" : "text-gray-900"
                                   }`}>
                                     {stats.paymentStatus === "paid" ? "Paid" :
-                                     stats.paymentStatus === "partial" ? "Partial" :
+                                     stats.paymentStatus === "partial" ? "Partially paid" :
+                                     stats.paymentStatus === "unpaid" ? "Unpaid" :
                                      stats.paymentStatus === "overdue" ? "Overdue" :
                                      stats.paymentStatus === "overpaid" ? "Overpaid" : "-"}
                                   </span>

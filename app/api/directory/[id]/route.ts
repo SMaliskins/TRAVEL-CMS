@@ -89,6 +89,17 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     }
     record.invoiceLanguage = row.invoice_language || undefined;
   }
+  // Person clients: languages (from party_person)
+  if (row.party_type === "person") {
+    if (Array.isArray(row.correspondence_languages) && row.correspondence_languages.length > 0) {
+      record.correspondenceLanguages = row.correspondence_languages;
+    } else if (row.correspondence_language) {
+      record.correspondenceLanguages = [row.correspondence_language];
+    } else {
+      record.correspondenceLanguages = ["en"];
+    }
+    record.invoiceLanguage = row.invoice_language || "en";
+  }
 
   // Corporate accounts / Loyalty cards
   if (row.corporate_accounts) record.corporateAccounts = row.corporate_accounts;
@@ -102,6 +113,9 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   if (row.is_supplier) {
     record.supplierExtras = {
       serviceAreas: row.service_areas || undefined,
+      serviceDescription: row.supplier_services_description || undefined,
+      website: row.supplier_website || undefined,
+      documents: row.supplier_documents || undefined,
       commissions: row.supplier_commissions || undefined,
     };
   }
@@ -477,6 +491,18 @@ export async function PUT(
     if (updates.supplierExtras?.serviceAreas !== undefined) {
       partyUpdates.service_areas = updates.supplierExtras.serviceAreas || null;
     }
+    // Supplier services description (rich text)
+    if (updates.supplierExtras?.serviceDescription !== undefined) {
+      partyUpdates.supplier_services_description = updates.supplierExtras.serviceDescription?.trim() || null;
+    }
+    // Supplier website
+    if (updates.supplierExtras?.website !== undefined) {
+      partyUpdates.supplier_website = updates.supplierExtras.website?.trim() || null;
+    }
+    // Supplier documents
+    if (updates.supplierExtras?.documents !== undefined) {
+      partyUpdates.supplier_documents = Array.isArray(updates.supplierExtras.documents) && updates.supplierExtras.documents.length > 0 ? updates.supplierExtras.documents : null;
+    }
     // Supplier commissions
     if (updates.supplierExtras?.commissions !== undefined) {
       partyUpdates.supplier_commissions = updates.supplierExtras.commissions || null;
@@ -648,6 +674,12 @@ export async function PUT(
       const nationalityValue = updates.nationality !== undefined ? updates.nationality || null : undefined;
       if (nationalityValue !== undefined) {
         personUpdates.nationality = nationalityValue;
+      }
+      if (updates.correspondenceLanguages !== undefined) {
+        personUpdates.correspondence_languages = Array.isArray(updates.correspondenceLanguages) && updates.correspondenceLanguages.length > 0 ? updates.correspondenceLanguages : null;
+      }
+      if (updates.invoiceLanguage !== undefined) {
+        personUpdates.invoice_language = updates.invoiceLanguage || null;
       }
 
       // Only update if there are fields to update
