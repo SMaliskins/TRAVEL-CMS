@@ -21,6 +21,25 @@ async function getCurrentUser(request: NextRequest) {
   return user;
 }
 
+// Resolve company_id: profiles first, then user_profiles (same as cmsAuth — supports travel experts)
+async function getCompanyIdForUser(userId: string): Promise<string | null> {
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profile?.company_id) return profile.company_id;
+
+  const { data: userProfile } = await supabaseAdmin
+    .from("user_profiles")
+    .select("company_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return userProfile?.company_id ?? null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -53,47 +72,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const firstNameTrimmed = (data.firstName ?? "").toString().trim();
+    const lastNameTrimmed = (data.lastName ?? "").toString().trim();
+    const companyNameTrimmed = (data.companyName ?? "").toString().trim();
+
     if (partyType === "person") {
-      if (!data.firstName || !data.lastName) {
+      if (!firstNameTrimmed || !lastNameTrimmed) {
         return NextResponse.json(
-          { error: "firstName and lastName are required for person type" },
+          { error: "First name and last name are required for person type" },
           { status: 400 }
         );
       }
     }
 
     if (partyType === "company") {
-      if (!data.companyName) {
+      if (!companyNameTrimmed) {
         return NextResponse.json(
-          { error: "companyName is required for company type" },
+          { error: "Company name is required for company type" },
           { status: 400 }
         );
       }
     }
 
-    // Generate display_name if not provided
-    let displayName = "";
-    if (partyType === "person") {
-      displayName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
-    } else {
-      displayName = data.companyName || "";
-    }
+    // Generate display_name from trimmed values
+    const displayName = partyType === "person"
+      ? `${firstNameTrimmed} ${lastNameTrimmed}`.trim()
+      : companyNameTrimmed;
 
-    // Get company_id from profiles table (for tenant isolation)
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profileError || !profile?.company_id) {
+    // Resolve company_id: profiles first, then user_profiles (supports travel experts and other roles)
+    const companyId = await getCompanyIdForUser(user.id);
+    if (!companyId) {
       return NextResponse.json(
         { error: "User profile not found or company_id missing. Please contact administrator." },
         { status: 403 }
       );
     }
-
-    const companyId = profile.company_id;
 
     // Create party record
     const partyData: any = {
@@ -145,8 +158,8 @@ export async function POST(request: NextRequest) {
       const personData: any = {
         party_id: partyId,
         title: data.title || null,
-        first_name: data.firstName,
-        last_name: data.lastName,
+        first_name: firstNameTrimmed,
+        last_name: lastNameTrimmed,
         dob: data.dob || null,
         personal_code: data.personalCode || null,
         citizenship: data.citizenship || null,
@@ -177,7 +190,7 @@ export async function POST(request: NextRequest) {
     } else {
       const companyData: any = {
         party_id: partyId,
-        company_name: data.companyName,
+        company_name: companyNameTrimmed,
         logo_url: data.companyAvatarUrl || null,
         reg_number: data.regNumber || null,
         vat_number: data.vatNumber || null,
