@@ -423,7 +423,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           invoice_date: editDatesForm.invoice_date || null,
-          deposit_date: editDatesForm.deposit_date || null,
+          deposit_date: (editingLinesInvoice.deposit_amount == null || Number(editingLinesInvoice.deposit_amount) === 0)
+            ? null
+            : (editDatesForm.deposit_date || null),
           final_payment_date: editDatesForm.final_payment_date || null,
         }),
       });
@@ -679,6 +681,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
                   />
                 </div>
+                {(editingLinesInvoice.deposit_amount != null && Number(editingLinesInvoice.deposit_amount) > 0) && (
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Deposit / prepayment date</label>
                   <DateInput
@@ -687,6 +690,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
                   />
                 </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Final payment date</label>
                   <DateInput

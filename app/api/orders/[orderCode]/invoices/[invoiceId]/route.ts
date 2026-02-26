@@ -79,6 +79,15 @@ export async function PATCH(
       );
     }
 
+    // Sync order.client_payment_due_date for DUE column in orders list
+    const orderDue = (invoice as any).final_payment_date ?? (invoice as any).due_date ?? null;
+    if (orderDue && (final_payment_date !== undefined || due_date !== undefined)) {
+      await supabaseAdmin
+        .from("orders")
+        .update({ client_payment_due_date: orderDue })
+        .eq("id", existingInvoice.order_id);
+    }
+
     let paymentMovedToDeposit = 0;
 
     // If cancelling: move payment to order deposit (only if invoice was paid), unlock services

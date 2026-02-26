@@ -95,6 +95,82 @@ body {
   }
 }
 
+/* Login page animations */
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(20px, -20px) scale(1.05); }
+  66% { transform: translate(-15px, 15px) scale(0.98); }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); }
+  50% { box-shadow: 0 0 35px rgba(59, 130, 246, 0.6); }
+}
+
+@keyframes ambient-float {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); opacity: 0.6; }
+  25% { transform: translate(8px, -12px) rotate(5deg); opacity: 0.8; }
+  50% { transform: translate(-6px, 8px) rotate(-3deg); opacity: 0.5; }
+  75% { transform: translate(10px, 6px) rotate(2deg); opacity: 0.7; }
+}
+
+@keyframes loginFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-float { animation: float 8s ease-in-out infinite; }
+.animate-float-delay-1 { animation: float 8s ease-in-out 1s infinite; }
+.animate-float-delay-2 { animation: float 8s ease-in-out 2s infinite; }
+.animate-gradient-shift { animation: gradientShift 15s ease infinite; }
+.animate-ambient-float { animation: ambient-float 12s ease-in-out infinite; }
+.animate-login-fade-in { animation: loginFadeIn 0.6s ease-out forwards; }
+.animate-pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+
+/* DNA Travel helix — постоянная 2D анимация (без 3D — стабильнее) */
+@keyframes dnaSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes helixFlow {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(-100px) rotate(360deg); }
+}
+
+@keyframes dnaNodeGlow {
+  0%, 100% { opacity: 0.9; filter: drop-shadow(0 0 4px currentColor); }
+  50% { opacity: 1; filter: drop-shadow(0 0 12px currentColor) drop-shadow(0 0 24px currentColor); }
+}
+
+@keyframes dnaPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-dna-pulse { animation: dnaPulse 2s ease-in-out infinite; }
+
+.animate-dna-spin { animation: dnaSpin 20s linear infinite; }
+.animate-helix-flow { animation: helixFlow 15s linear infinite; }
+.animate-dna-node { animation: dnaNodeGlow 2.5s ease-in-out infinite; }
+
 /* Green border animation for Main details container - instant highlight */
 @keyframes greenBorderDraw {
   0% {

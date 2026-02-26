@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     // Get all services for these orders with their invoice status and pricing
     const { data: servicesData } = await supabaseAdmin
       .from("order_services")
-      .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value")
+      .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate")
       .eq("company_id", companyId)
       .in("order_id", orderIds);
     
@@ -155,12 +155,13 @@ export async function GET(request: NextRequest) {
     });
     
     
-    // Get all invoices for these orders with their payment status
+    // Get all invoices for these orders with payment status and due dates
     const invoicesQuery = await supabaseAdmin
       .from("invoices")
-      .select("id, order_id, status, total")
+      .select("id, order_id, status, total, due_date, final_payment_date")
       .eq("company_id", companyId)
-      .in("order_id", orderIds);
+      .in("order_id", orderIds)
+      .neq("status", "cancelled");
     
     const invoicesData = invoicesQuery.data;
     const invoicesError = invoicesQuery.error;
@@ -169,7 +170,7 @@ export async function GET(request: NextRequest) {
     } else {
     }
     
-    // Build invoice statistics per order
+    // Build invoice statistics and due dates per order
     const invoiceStats = new Map<string, {
       totalServices: number;
       invoicedServices: number;
@@ -177,6 +178,7 @@ export async function GET(request: NextRequest) {
       allServicesInvoiced: boolean;
       totalInvoices: number;
       allInvoicesPaid: boolean;
+      dueDate: string | null;
     }>();
     
     
@@ -187,14 +189,13 @@ export async function GET(request: NextRequest) {
       console.log('Sample invoice:', invoicesData[0]);
     }
     
-    // Build service stats (amount, profit) and invoice stats per order
-    const serviceStats = new Map<string, { amount: number; profit: number }>();
+    // Build service stats (amount, profit, vat) — profit за вычетом VAT
+    const serviceStats = new Map<string, { amount: number; profit: number; vat: number }>();
     
     orderIds.forEach((orderId: string) => {
       const services = (servicesData || []).filter((s: any) => s.order_id === orderId);
       const invoices = (invoicesData || []).filter((i: any) => i.order_id === orderId);
       
-      // Only count non-cancelled services
       const activeServices = services.filter((s: any) => s.res_status !== 'cancelled');
       const totalServices = activeServices.length;
       const invoicedServices = activeServices.filter((s: any) => s.invoice_id).length;
@@ -202,24 +203,44 @@ export async function GET(request: NextRequest) {
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
       
       const amount = activeServices.reduce((sum: number, s: any) => sum + (Number(s.client_price) || 0), 0);
-      const profit = activeServices.reduce((sum: number, s: any) => {
+      let profit = 0;
+      let vat = 0;
+      activeServices.forEach((s: any) => {
         const clientPrice = Number(s.client_price) || 0;
         const servicePrice = Number(s.service_price) || 0;
         const cat = (s.category || "").toLowerCase();
         const isTour = cat.includes("tour") || cat.includes("package");
+        // vat_rate=0 в БД — fallback по категории (flight=0, остальные=21)
+        const dbRate = Number(s.vat_rate);
+        const vatRate = (dbRate > 0) ? dbRate : (cat.includes("flight") ? 0 : 21);
+        let margin = 0;
         if (isTour && s.commission_amount != null) {
           const commission = Number(s.commission_amount) || 0;
-          return sum + (clientPrice - (servicePrice - commission));
+          margin = clientPrice - (servicePrice - commission);
+        } else {
+          margin = clientPrice - servicePrice;
         }
-        return sum + (clientPrice - servicePrice);
-      }, 0);
+        const vatAmount = vatRate > 0 && margin >= 0 ? Math.round(margin * vatRate / (100 + vatRate) * 100) / 100 : 0;
+        profit += margin - vatAmount;
+        vat += vatAmount;
+      });
       
-      serviceStats.set(orderId, { amount, profit });
+      serviceStats.set(orderId, { amount, profit, vat });
       
       // Check if all invoices are fully paid (status = 'paid')
       const allInvoicesPaid = invoices.length > 0 && invoices.every((inv: any) => 
         inv.status === 'paid'
       );
+
+      // Due date: from order.client_payment_due_date or latest invoice final_payment_date / due_date
+      const orderRec = orders.find((o: any) => o.id === orderId);
+      let dueDate: string | null = (orderRec?.client_payment_due_date as string) || null;
+      if (!dueDate && invoices.length > 0) {
+        const dates = invoices
+          .map((inv: any) => inv.final_payment_date || inv.due_date)
+          .filter(Boolean) as string[];
+        dueDate = dates.length > 0 ? dates.sort().pop()! : null;
+      }
       
       invoiceStats.set(orderId, {
         totalServices,
@@ -228,6 +249,7 @@ export async function GET(request: NextRequest) {
         allServicesInvoiced,
         totalInvoices: invoices.length,
         allInvoicesPaid,
+        dueDate,
       });
     });
 
@@ -238,9 +260,10 @@ export async function GET(request: NextRequest) {
       const svcStats = serviceStats.get(orderId);
       const invStats = invoiceStats.get(orderId);
       
-      // Amount and profit from services, fallback to order fields if no services
+      // Amount, profit (за вычетом VAT), vat from services
       const amount = svcStats?.amount || Number(order.amount_total) || 0;
-      const profit = svcStats?.profit || Number(order.profit_estimated) || 0;
+      const profit = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
+      const vat = svcStats?.vat ?? 0;
       const paid = Number(order.amount_paid) || 0;
       const debt = amount - paid; // Calculate debt as amount - paid
       
@@ -258,6 +281,7 @@ export async function GET(request: NextRequest) {
         amount,
         paid,
         debt,
+        vat,
         profit,
         status: order.status || "Draft",
         type: order.order_type || "TA",
@@ -272,6 +296,7 @@ export async function GET(request: NextRequest) {
         allServicesInvoiced: invStats?.allServicesInvoiced || false,
         totalInvoices: invStats?.totalInvoices || 0,
         allInvoicesPaid: invStats?.allInvoicesPaid || false,
+        dueDate: invStats?.dueDate || (order.client_payment_due_date as string) || undefined,
       };
     });
 

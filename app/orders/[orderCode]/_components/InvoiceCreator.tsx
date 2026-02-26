@@ -983,6 +983,14 @@ export default function InvoiceCreator({
       final_payment_amount = (isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment) || null;
       final_payment_date = finalPaymentDate?.trim() ? finalPaymentDate : null;
     }
+    // При full payment (без депозита) не отправляем deposit_date — не засорять счёт лишней датой
+    if (deposit_amount == null || deposit_amount === 0) {
+      deposit_date = null;
+    }
+    // При full payment due_date = дата полной оплаты (final_payment_date)
+    const effectiveDueDate = (final_payment_date && (deposit_amount == null || deposit_amount === 0))
+      ? final_payment_date
+      : (dueDate && dueDate.trim() !== '' ? dueDate : null);
 
     const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
       method: 'POST',
@@ -1002,7 +1010,7 @@ export default function InvoiceCreator({
         payer_bank_account: payerInfo.bankAccount,
         payer_bank_swift: payerInfo.bankSwift,
         invoice_date: invoiceDate,
-        due_date: (dueDate && dueDate.trim() !== '') ? dueDate : null,
+        due_date: effectiveDueDate,
         subtotal: servicesSubtotal,
         tax_rate: taxRate,
         tax_amount: servicesTaxAmount,

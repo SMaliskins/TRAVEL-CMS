@@ -582,6 +582,15 @@ export async function POST(
       }
     }
 
+    // Sync order.client_payment_due_date from invoice (для колонки DUE в списке заказов)
+    const orderDueDate = (invoice as any).final_payment_date ?? (invoice as any).due_date ?? null;
+    if (orderDueDate) {
+      await supabaseAdmin
+        .from("orders")
+        .update({ client_payment_due_date: orderDueDate })
+        .eq("id", order.id);
+    }
+
     return NextResponse.json({
       success: true,
       invoice: {

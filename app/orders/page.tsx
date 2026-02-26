@@ -8,7 +8,7 @@ import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
-import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Clock, CircleAlert, CirclePlus } from "lucide-react";
+import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus } from "lucide-react";
 import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -24,6 +24,7 @@ interface OrderRow {
   amount: number;
   paid: number;
   debt: number;
+  vat: number;
   profit: number;
   status: OrderStatus;
   type: OrderType;
@@ -45,6 +46,7 @@ interface OrderTotals {
   amount: number;
   paid: number;
   debt: number;
+  vat: number;
   profit: number;
 }
 
@@ -83,6 +85,7 @@ function calculateTotals(orders: OrderRow[]): OrderTotals {
     amount: sumSafe(orders.map((o) => o.amount)),
     paid: sumSafe(orders.map((o) => o.paid)),
     debt: sumSafe(orders.map((o) => o.debt)),
+    vat: sumSafe(orders.map((o) => o.vat ?? 0)),
     profit: sumSafe(orders.map((o) => o.profit)),
   };
 }
@@ -798,8 +801,11 @@ export default function OrdersPage() {
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Debt
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Profit after PVN">
                   Profit
+                </th>
+                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="VAT (PVN — Pievienotās vērtības nodoklis)">
+                  VAT
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   Status
@@ -841,6 +847,9 @@ export default function OrdersPage() {
                     <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
                       {formatCurrency(year.totals.profit)}
                     </td>
+                    <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-700">
+                      {formatCurrency(year.totals.vat)}
+                    </td>
                     <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
                   </tr>
 
@@ -872,6 +881,9 @@ export default function OrdersPage() {
                           </td>
                           <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
                             {formatCurrency(month.totals.profit)}
+                          </td>
+                          <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-700">
+                            {formatCurrency(month.totals.vat)}
                           </td>
                           <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
                         </tr>
@@ -908,6 +920,9 @@ export default function OrdersPage() {
                                 </td>
                                 <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
                                   {formatCurrency(day.totals.profit)}
+                                </td>
+                                <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-700">
+                                  {formatCurrency(day.totals.vat)}
                                 </td>
                                 <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
                               </tr>
@@ -956,9 +971,13 @@ export default function OrdersPage() {
                                         )}
                                       </td>
                                       
-                                      {/* Days to due column */}
+                                      {/* DUE: число дней / галка если оплачено / - если нет счёта */}
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
-                                        {daysToDue !== null ? (
+                                        {order.allInvoicesPaid || (order.debt <= 0 && order.amount > 0) ? (
+                                          <span title="Оплачено" className="inline-flex justify-center text-green-600">
+                                            <Check size={16} strokeWidth={3} />
+                                          </span>
+                                        ) : daysToDue !== null ? (
                                           <span
                                             className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`}
                                             title={`Due date: ${order.dueDate}`}
@@ -1004,16 +1023,17 @@ export default function OrdersPage() {
                                       <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
                                         {formatCurrency(order.profit)}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight">
+                                      <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight text-gray-700">
+                                        {formatCurrency(order.vat ?? 0)}
+                                      </td>
+                                      <td className="w-8 px-2 py-1.5 text-center">
                                         {(() => {
                                           const colors = getStatusBadgeColor(order.status);
                                           return (
                                             <span
-                                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium leading-tight ${colors.bg} ${colors.text}`}
-                                            >
-                                              <span className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} />
-                                              {order.status}
-                                            </span>
+                                              title={order.status}
+                                              className={`inline-block h-2.5 w-2.5 rounded-full ${colors.dot} cursor-help`}
+                                            />
                                           );
                                         })()}
                                       </td>
