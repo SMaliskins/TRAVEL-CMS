@@ -47,8 +47,8 @@ export async function GET(
       );
     }
 
-    // Next invoice number: NNNYY-INITIALS-NNNN (e.g. 00126-SMA-0001)
-    // NNN = order number 3 digits, YY = year 2 digits, INITIALS = agent, NNNN = company invoice sequence 4 digits
+    // Reserve next invoice number(s) for this order. Same number returned on every visit until save or release.
+    // Cancelled invoice numbers are not in the pool — only issued + reserved count for next sequence.
     if (getNextNumber) {
       const authHeader = request.headers.get("authorization");
       let userInitials = "XX";
@@ -77,66 +77,119 @@ export async function GET(
       }
 
       const currentYear = new Date().getFullYear().toString().slice(-2);
-      // Order number 3 digits from order_code (e.g. "001-26-sma" → "001", "0014-26-sm" → "014")
       const parts = orderCode.split("-");
       const orderNumRaw = parts[0] ? parseInt(parts[0], 10) : 0;
       const orderNum3 = isNaN(orderNumRaw) ? "001" : String(Math.max(0, orderNumRaw)).padStart(3, "0").slice(-3);
       const prefix = `${orderNum3}${currentYear}`;
 
-      // Current max sequence from existing invoices (for sync with table + fallback)
-      const { data: invoices } = await supabaseAdmin
+      // 1) Existing reserved numbers for this order — return same numbers on every visit
+      const { data: existingReserved } = await supabaseAdmin
+        .from("invoice_reservations")
+        .select("invoice_number")
+        .eq("order_id", order.id)
+        .eq("status", "reserved")
+        .order("invoice_number", { ascending: true });
+
+      const existingNumbers = (existingReserved || []).map((r: { invoice_number: string }) => r.invoice_number);
+      if (existingNumbers.length >= count) {
+        const out = existingNumbers.slice(0, count);
+        if (count <= 1) return NextResponse.json({ nextInvoiceNumber: out[0] });
+        return NextResponse.json({ nextInvoiceNumbers: out });
+      }
+
+      // 2) Need more: first take from released pool (same company), then from sequence
+      const needCount = count - existingNumbers.length;
+      const currentYearNum = parseInt(currentYear, 10);
+
+      // Max sequence to avoid collisions: issued/replaced invoices + reserved/used (cancelled excluded)
+      const { data: issuedInvoices } = await supabaseAdmin
         .from("invoices")
         .select("invoice_number")
-        .eq("company_id", order.company_id);
+        .eq("company_id", order.company_id)
+        .in("status", ["issued", "replaced"]);
 
-      let maxSeq = 0;
-      if (invoices) {
-        invoices.forEach((inv: { invoice_number?: string }) => {
+      let minSeq = 0;
+      if (issuedInvoices) {
+        issuedInvoices.forEach((inv: { invoice_number?: string }) => {
           const m = inv.invoice_number?.match(/^\d{5}-[A-Z]+-(\d{4})$/);
-          if (m) {
-            const yearInNum = inv.invoice_number!.slice(3, 5);
-            if (yearInNum === currentYear) {
-              const n = parseInt(m[1], 10);
-              if (n > maxSeq) maxSeq = n;
-            }
-          }
-          const leg = inv.invoice_number?.match(/^INV-\d{4}-(\d{2})-[A-Z]+-(\d+)$/);
-          if (leg && leg[1] === currentYear) {
-            const n = parseInt(leg[2], 10);
-            if (n > maxSeq) maxSeq = n;
+          if (m && inv.invoice_number!.slice(3, 5) === currentYear) {
+            const n = parseInt(m[1], 10);
+            if (n > minSeq) minSeq = n;
           }
         });
       }
 
-      // Atomic reservation so parallel requests never get the same numbers (RPC locks row)
-      const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc("reserve_invoice_sequences", {
-        p_company_id: order.company_id,
-        p_year: currentYear,
-        p_count: count,
-        p_min_sequence: maxSeq,
-      });
+      const { data: reservedOrUsed } = await supabaseAdmin
+        .from("invoice_reservations")
+        .select("invoice_number")
+        .eq("company_id", order.company_id)
+        .in("status", ["reserved", "used"]);
 
-      let start: number;
-      if (rpcError || rpcData == null) {
-        start = maxSeq + 1;
-      } else {
-        // RPC can return scalar, or [n], or [{ reserve_invoice_sequences: n }]
-        const raw = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-        const n = typeof raw === "object" && raw !== null && "reserve_invoice_sequences" in raw
-          ? (raw as { reserve_invoice_sequences: number }).reserve_invoice_sequences
-          : Number(raw);
-        start = typeof n === "number" && Number.isInteger(n) && n >= 1 ? n : maxSeq + 1;
+      if (reservedOrUsed) {
+        reservedOrUsed.forEach((r: { invoice_number: string }) => {
+          const m = r.invoice_number?.match(/-(\d{4})$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > minSeq) minSeq = n;
+          }
+        });
       }
 
-      if (count <= 1) {
-        const nextInvoiceNumber = `${prefix}-${userInitials}-${String(start).padStart(4, "0")}`;
-        return NextResponse.json({ nextInvoiceNumber });
+      // Released numbers for this company and year — reuse smallest first
+      const { data: released } = await supabaseAdmin
+        .from("invoice_reservations")
+        .select("id, invoice_number")
+        .eq("company_id", order.company_id)
+        .eq("status", "released")
+        .like("invoice_number", `${prefix}-%`)
+        .order("invoice_number", { ascending: true });
+
+      const releasedList = (released || []).slice(0, needCount);
+      const toTakeFromReleased = releasedList.length;
+      const toTakeFromSequence = needCount - toTakeFromReleased;
+
+      const newNumbers: string[] = [];
+
+      for (let i = 0; i < toTakeFromReleased; i++) {
+        const row = releasedList[i];
+        const { error: upErr } = await supabaseAdmin
+          .from("invoice_reservations")
+          .update({ order_id: order.id, status: "reserved", reserved_at: new Date().toISOString() })
+          .eq("id", row.id);
+        if (!upErr) newNumbers.push(row.invoice_number);
       }
-      const nextInvoiceNumbers: string[] = [];
-      for (let i = 0; i < count; i++) {
-        nextInvoiceNumbers.push(`${prefix}-${userInitials}-${String(start + i).padStart(4, "0")}`);
+
+      if (toTakeFromSequence > 0) {
+        const { data: seqResult, error: rpcErr } = await supabaseAdmin.rpc("reserve_invoice_sequences", {
+          p_company_id: order.company_id,
+          p_year: currentYear,
+          p_count: toTakeFromSequence,
+          p_min_sequence: minSeq,
+        });
+        if (rpcErr) {
+          console.error("[Invoices API] reserve_invoice_sequences error:", rpcErr);
+          return NextResponse.json({ error: "Failed to reserve invoice number" }, { status: 500 });
+        }
+        const firstSeq = typeof seqResult === "number" ? seqResult : (seqResult as number[])?.[0] ?? 0;
+        for (let i = 0; i < toTakeFromSequence; i++) {
+          const num = `${prefix}-${userInitials}-${String(firstSeq + i).padStart(4, "0")}`;
+          await supabaseAdmin.from("invoice_reservations").insert({
+            company_id: order.company_id,
+            order_id: order.id,
+            invoice_number: num,
+            status: "reserved",
+          });
+          newNumbers.push(num);
+        }
       }
-      return NextResponse.json({ nextInvoiceNumbers });
+
+      const allNumbers = [...existingNumbers, ...newNumbers];
+      if (allNumbers.length < count) {
+        return NextResponse.json({ error: "Failed to reserve enough invoice numbers" }, { status: 500 });
+      }
+
+      if (count <= 1) return NextResponse.json({ nextInvoiceNumber: allNumbers[0] });
+      return NextResponse.json({ nextInvoiceNumbers: allNumbers.slice(0, count) });
     }
 
     // Get all invoices for this order
@@ -453,24 +506,32 @@ export async function POST(
         invoice_date: invoice_date || new Date().toISOString().split("T")[0],
         due_date: due_date || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
       });
-      
+
       // Check if error is about missing columns
       const errorMessage = invoiceError?.message || "Unknown error";
       if (errorMessage.includes("deposit_amount") || errorMessage.includes("column") && errorMessage.includes("not found")) {
         return NextResponse.json(
-          { 
+          {
             error: `Database schema error: Missing payment terms columns. Please run migration: migrations/add_invoice_payment_terms.sql in Supabase SQL Editor`,
             details: errorMessage
           },
           { status: 500 }
         );
       }
-      
+
       return NextResponse.json(
         { error: `Failed to create invoice: ${errorMessage}` },
         { status: 500 }
       );
     }
+
+    // Mark reservation as used so the number is not returned to the pool
+    await supabaseAdmin
+      .from("invoice_reservations")
+      .update({ status: "used" })
+      .eq("order_id", order.id)
+      .eq("invoice_number", String(invoice_number).trim())
+      .eq("status", "reserved");
 
     // Create invoice items (service_id null for manual lines)
     const invoiceItems = items.map((item: any) => ({

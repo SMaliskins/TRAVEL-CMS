@@ -623,7 +623,7 @@ export function generateInvoiceHTML(
     .bank-table th, .bank-table td { padding: 6px 10px; text-align: left; border: 1px solid #ddd; }
     .bank-table th { background: #f5f5f5; font-weight: 600; }
     .bank-table td.num { text-align: right; }
-    .totals-table { border-collapse: collapse; font-size: 12px; margin-left: auto; }
+    .totals-table { border-collapse: collapse; font-size: 12px; margin-left: auto; max-width: 50%; }
     .totals-table td { padding: 6px 10px; border: 1px solid #eee; }
     .totals-table td:first-child { background: #fafafa; }
     .totals-table td.num { text-align: right; width: 100px; min-width: 100px; }

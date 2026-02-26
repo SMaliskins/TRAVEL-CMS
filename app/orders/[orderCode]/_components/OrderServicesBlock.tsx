@@ -83,6 +83,10 @@ interface Service {
   payer_party_id?: string;
   servicePrice: number;
   clientPrice: number;
+  serviceCurrency?: string | null;
+  servicePriceForeign?: number | null;
+  exchangeRate?: number | null;
+  actuallyPaid?: number | null;
   quantity?: number; // Units or nights for PRICING multiply (default 1)
   resStatus: "draft" | "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
   refNr?: string;
@@ -132,6 +136,8 @@ interface Service {
   pricingPerClient?: { cost: number; marge: number; sale: number }[] | null;
   // Terms & Conditions
   priceType?: "ebd" | "regular" | "spo" | null;
+  /** Hotel only: 'night' = price × nights, 'stay' = total for stay */
+  hotelPricePer?: "night" | "stay" | null;
   refundPolicy?: "non_ref" | "refundable" | "fully_ref" | null;
   paymentDeadlineDeposit?: string | null;
   paymentDeadlineFinal?: string | null;
@@ -263,6 +269,7 @@ interface OrderServicesBlockProps {
   onIssueInvoice?: (services: any[]) => void;
   itineraryDestinations?: CityWithCountry[];
   orderSource?: 'TA' | 'TO' | 'CORP' | 'NON';
+  /** Company default currency from Company Settings / Regional Settings / Currency; passed to Add/Edit service modals */
   companyCurrencyCode?: string;
   onDestinationsFromServices?: (destinations: CityWithCountry[]) => void;
   onTotalsChanged?: (totals: { amount_total: number; profit_estimated: number }) => void;
@@ -278,7 +285,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   onIssueInvoice,
   itineraryDestinations = [],
   orderSource = 'NON',
-  companyCurrencyCode = 'EUR',
+  companyCurrencyCode = 'EUR', // fallback; parent (order page) passes from Company Settings / Regional Settings / Currency
   onDestinationsFromServices,
   onTotalsChanged,
   stickyTopOffset = 0,
@@ -1153,6 +1160,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
           servicePrice: Number(s.servicePrice ?? s.service_price ?? 0),
           clientPrice: Number(s.clientPrice ?? s.client_price ?? 0),
+          serviceCurrency: (s.serviceCurrency ?? (s as { service_currency?: string }).service_currency) ?? null,
+          servicePriceForeign: (s.servicePriceForeign ?? (s as { service_price_foreign?: number }).service_price_foreign) ?? null,
+          exchangeRate: (s.exchangeRate ?? (s as { exchange_rate?: number }).exchange_rate) ?? null,
+          actuallyPaid: (s.actuallyPaid ?? (s as { actually_paid?: number }).actually_paid) ?? null,
           quantity: Number(s.quantity ?? (s as { quantity?: number }).quantity ?? 1),
           resStatus: String(s.resStatus ?? s.res_status ?? "booked") as Service["resStatus"],
           refNr: String(s.refNr ?? s.ref_nr ?? ""),
@@ -1210,6 +1221,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           hotelRoomsNextTo: (s.hotelRoomsNextTo ?? s.hotel_rooms_next_to ?? null) as string | null,
           hotelParking: (s.hotelParking ?? s.hotel_parking ?? null) as boolean | null,
           hotelPreferencesFreeText: (s.hotelPreferencesFreeText ?? s.hotel_preferences_free_text ?? null) as string | null,
+          hotelPricePer: (s.hotelPricePer ?? (s as { hotel_price_per?: string }).hotel_price_per ?? null) as Service["hotelPricePer"],
           supplierBookingType: (s.supplierBookingType ?? s.supplier_booking_type ?? null) as string | null,
           paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
           paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,

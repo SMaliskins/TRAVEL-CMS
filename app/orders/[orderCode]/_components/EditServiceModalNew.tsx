@@ -8,7 +8,7 @@ import { FlightSegment } from '@/components/FlightItineraryInput';
 import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
-import { formatDateDDMMYYYY, formatDateShort, segmentDisplayArrivalDate, normalizeSegmentsArrivalYear, normalizeSegmentsWithCalendar } from '@/utils/dateFormat';
+import { formatDateDDMMYYYY, formatDateShort, segmentDisplayArrivalDate, normalizeSegmentsArrivalYear, normalizeSegmentsWithCalendar, nightsBetween } from '@/utils/dateFormat';
 import { toTitleCaseForDisplay } from '@/utils/nameFormat';
 import DateInput from '@/components/DateInput';
 import ChangeServiceModal from './ChangeServiceModal';
@@ -78,6 +78,11 @@ interface Service {
   hotelBedType?: "king_queen" | "twin" | "not_guaranteed";
   hotelEarlyCheckIn?: boolean;
   hotelLateCheckIn?: boolean;
+  hotelEarlyCheckInTime?: string | null;
+  hotelLateCheckInTime?: string | null;
+  hotelRoomUpgrade?: boolean;
+  hotelLateCheckOut?: boolean;
+  hotelLateCheckOutTime?: string | null;
   hotelHigherFloor?: boolean;
   hotelKingSizeBed?: boolean;
   hotelHoneymooners?: boolean;
@@ -106,6 +111,7 @@ interface Service {
   cabinClass?: "economy" | "premium_economy" | "business" | "first";
   // Terms & Conditions
   priceType?: "ebd" | "regular" | "spo" | null;
+  hotelPricePer?: "night" | "stay" | null;
   refundPolicy?: "non_ref" | "refundable" | "fully_ref" | null;
   freeCancellationUntil?: string | null;
   cancellationPenaltyAmount?: number | null;
@@ -120,6 +126,9 @@ interface Service {
   commissionAmount?: number | null;
   agentDiscountValue?: number | null;
   agentDiscountType?: "%" | "€" | null;
+  // Hotel: real amount charged (e.g. by bank)
+  actuallyPaid?: number | null;
+  actually_paid?: number | null;
 }
 
 interface ClientEntry {
@@ -158,6 +167,7 @@ interface EditServiceModalProps {
   orderCode: string;
   onClose: () => void;
   onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
+  /** Company default currency from Company Settings / Regional Settings / Currency */
   companyCurrencyCode?: string;
   initialClients?: ClientEntry[];
   flightServices?: FlightServiceRef[];
@@ -302,6 +312,26 @@ export default function EditServiceModalNew({
   });
   const [clientPrice, setClientPrice] = useState(String(service.clientPrice || 0));
   const [priceUnits, setPriceUnits] = useState((service as { quantity?: number | null }).quantity ?? 1); // Units or nights (from DB)
+  const [hotelPricePer, setHotelPricePer] = useState<"night" | "stay">(() => {
+    const svc = service as { hotelPricePer?: "night" | "stay"; quantity?: number };
+    if (svc.hotelPricePer === "stay" || svc.hotelPricePer === "night") return svc.hotelPricePer;
+    return "stay"; // default: per stay
+  });
+  const [serviceCurrency, setServiceCurrency] = useState<string>(() => (service as { serviceCurrency?: string }).serviceCurrency || companyCurrencyCode || "EUR");
+  const [servicePriceForeign, setServicePriceForeign] = useState(() => {
+    const v = (service as { servicePriceForeign?: number | null }).servicePriceForeign;
+    return v != null && v !== "" ? String(v) : "";
+  });
+  const [exchangeRate, setExchangeRate] = useState(() => {
+    const v = (service as { exchangeRate?: number | null }).exchangeRate;
+    return v != null && v !== "" ? String(v) : "";
+  });
+  const [actuallyPaid, setActuallyPaid] = useState(() => {
+    const v = (service as { actuallyPaid?: number | null; actually_paid?: number | null }).actuallyPaid
+      ?? (service as { actually_paid?: number | null }).actually_paid;
+    return v != null && v !== "" ? String(v) : "";
+  });
+  const [rateFetching, setRateFetching] = useState(false);
   // Flight: per-client pricing (from API or fallback to single row)
   const [pricingPerClient, setPricingPerClient] = useState<{ cost: string; marge: string; sale: string }[]>(() => {
     const svc = service as { pricingPerClient?: { cost?: number; marge?: number; sale?: number }[]; pricing_per_client?: { cost?: number; marge?: number; sale?: number }[] };
@@ -391,7 +421,12 @@ export default function EditServiceModalNew({
   );
   const [hotelPreferences, setHotelPreferences] = useState({
     earlyCheckIn: service.hotelEarlyCheckIn || false,
+    earlyCheckInTime: (service as { hotelEarlyCheckInTime?: string | null }).hotelEarlyCheckInTime || "",
     lateCheckIn: service.hotelLateCheckIn || false,
+    lateCheckInTime: (service as { hotelLateCheckInTime?: string | null }).hotelLateCheckInTime || "",
+    lateCheckOut: (service as { hotelLateCheckOut?: boolean }).hotelLateCheckOut || false,
+    lateCheckOutTime: (service as { hotelLateCheckOutTime?: string | null }).hotelLateCheckOutTime || "",
+    roomUpgrade: (service as { hotelRoomUpgrade?: boolean }).hotelRoomUpgrade || false,
     higherFloor: service.hotelHigherFloor || false,
     kingSizeBed: service.hotelKingSizeBed || false,
     honeymooners: service.hotelHoneymooners || false,
@@ -661,6 +696,23 @@ export default function EditServiceModalNew({
     setFlightSegments(prev => normalizeSegmentsWithCalendar(prev, dateFrom ?? undefined, dateTo ?? undefined) as FlightSegment[]);
   }, [dateFrom, dateTo, categoryType]);
 
+  // Hotel Per night: sync nights from Dates; when dates change, preserve per-night rates
+  const prevDatesRefEdit = useRef<string>('');
+  useEffect(() => {
+    if (categoryType !== 'hotel' || hotelPricePer !== 'night' || !dateFrom || !dateTo) return;
+    const key = `${dateFrom}|${dateTo}`;
+    const n = nightsBetween(dateFrom, dateTo);
+    if (n == null || n < 1) return;
+    if (prevDatesRefEdit.current === key) return;
+    prevDatesRefEdit.current = key;
+    const prev = priceUnits;
+    const perCost = prev > 0 ? (parseFloat(servicePrice) || 0) / prev : 0;
+    const perSale = prev > 0 ? (parseFloat(clientPrice) || 0) / prev : 0;
+    setPriceUnits(n);
+    setServicePrice(String(Math.round(perCost * n * 100) / 100));
+    if (!service.invoice_id) setClientPrice(String(Math.round(perSale * n * 100) / 100));
+  }, [categoryType, hotelPricePer, dateFrom, dateTo, priceUnits, servicePrice, clientPrice, service.invoice_id]);
+
   // Sync ticketNumbers with clients for Flight
   useEffect(() => {
     if (categoryType === "flight") {
@@ -807,35 +859,33 @@ export default function EditServiceModalNew({
     pricingLastEditedRef.current = null;
   }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
 
-  // Non-Tour: Cost, Marge, Sale logic
+  // Non-Tour: when Client price changes, recalculate Margin = Total Client price - Service price.
   useEffect(() => {
     if (categoryType === "tour") return;
-    const cost = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    const totalClient = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+    const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
+    const units = isHotelPerNight && priceUnits >= 1 ? priceUnits : 1;
+    const totalMargin = Math.round((totalClient - totalService) * 100) / 100;
+    const marginPerNight = units > 0 ? Math.round((totalMargin / units) * 100) / 100 : 0;
+    const newMarge = isHotelPerNight ? marginPerNight.toFixed(2) : totalMargin.toFixed(2);
+    setMarge(newMarge);
+  }, [categoryType, hotelPricePer, servicePrice, clientPrice, priceUnits]);
+
+  // Non-Tour: when user edits Margin, recalculate Total Client price = Margin + Service price.
+  useEffect(() => {
+    if (categoryType === "tour") return;
+    if (pricingLastEditedRef.current !== "marge") return;
+    const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
+    const units = isHotelPerNight && priceUnits >= 1 ? priceUnits : 1;
     const margeVal = Math.round((parseFloat(marge) || 0) * 100) / 100;
-    const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
-    const expectedSale = Math.round((cost + margeVal) * 100) / 100;
-    const expectedSaleRounded = parseFloat(expectedSale.toFixed(2));
-    if (!pricingLastEditedRef.current) {
-      if (cost > 0 && margeVal !== 0 && Math.abs(expectedSaleRounded - saleVal) > 0.001) {
-        setClientPrice(expectedSaleRounded.toFixed(2));
-      }
-      return;
-    }
-    if (pricingLastEditedRef.current === "cost" || pricingLastEditedRef.current === "marge") {
-      if (Math.abs(expectedSaleRounded - saleVal) > 0.001) {
-        pricingLastEditedRef.current = null;
-        setClientPrice(expectedSaleRounded.toFixed(2));
-      }
-    } else if (pricingLastEditedRef.current === "sale") {
-      const calculatedMarge = Math.round((saleVal - cost) * 100) / 100;
-      const calculatedMargeRounded = parseFloat(calculatedMarge.toFixed(2));
-      if (Math.abs(calculatedMargeRounded - margeVal) > 0.001) {
-        pricingLastEditedRef.current = null;
-        setMarge(calculatedMargeRounded.toFixed(2));
-      }
-    }
-  }, [servicePrice, marge, clientPrice, categoryType]);
-  
+    const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
+    const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
+    setClientPrice(totalClient.toFixed(2));
+    pricingLastEditedRef.current = null;
+  }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
+
   // Auto-confirm when all tickets filled (Flight) or ref_nr filled (Hotel)
   useEffect(() => {
     if (categoryType === "flight") {
@@ -1000,6 +1050,11 @@ export default function EditServiceModalNew({
   }, []);
 
   const roomOptionsForDropdown = useMemo(() => [...new Set([...hotelRoomOptions, ...customRooms])], [hotelRoomOptions, customRooms]);
+  const filteredRoomOptions = useMemo(() => {
+    const q = hotelRoom.trim().toLowerCase();
+    if (!q) return roomOptionsForDropdown;
+    return roomOptionsForDropdown.filter((opt) => opt.toLowerCase().includes(q));
+  }, [roomOptionsForDropdown, hotelRoom]);
   const boardOptionsForDropdown = useMemo(() => {
     if (hotelMealOptions.length > 0) {
       const rhCodeToLabel: Record<string, string> = {
@@ -1809,7 +1864,7 @@ export default function EditServiceModalNew({
         client_price: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
-        quantity: categoryType === "flight" ? 1 : priceUnits,
+        quantity: categoryType === "flight" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
         vat_rate: vatRate,
         res_status: resStatus || "booked",
         ref_nr: categoryType === "flight" && refNrs.length > 0 ? refNrs.filter(Boolean).join(", ") || null : refNr || null,
@@ -1827,7 +1882,12 @@ export default function EditServiceModalNew({
         payload.hotel_board = hotelBoard;
         payload.hotel_bed_type = hotelBedType ?? "not_guaranteed";
         payload.hotel_early_check_in = hotelPreferences.earlyCheckIn;
+        payload.hotel_early_check_in_time = hotelPreferences.earlyCheckInTime || null;
         payload.hotel_late_check_in = hotelPreferences.lateCheckIn;
+        payload.hotel_late_check_in_time = hotelPreferences.lateCheckInTime || null;
+        payload.hotel_room_upgrade = hotelPreferences.roomUpgrade;
+        payload.hotel_late_check_out = hotelPreferences.lateCheckOut;
+        payload.hotel_late_check_out_time = hotelPreferences.lateCheckOutTime || null;
         payload.hotel_higher_floor = hotelPreferences.higherFloor;
         payload.hotel_king_size_bed = hotelPreferences.kingSizeBed;
         payload.hotel_honeymooners = hotelPreferences.honeymooners;
@@ -1837,6 +1897,17 @@ export default function EditServiceModalNew({
         payload.hotel_parking = hotelPreferences.parking;
         payload.hotel_preferences_free_text = hotelPreferences.freeText;
         payload.supplier_booking_type = supplierBookingType;
+        payload.hotel_price_per = hotelPricePer;
+        if (serviceCurrency && serviceCurrency !== (companyCurrencyCode || "EUR")) {
+          payload.service_currency = serviceCurrency;
+          if (servicePriceForeign !== "" && servicePriceForeign != null) payload.service_price_foreign = parseFloat(servicePriceForeign) || null;
+          if (exchangeRate !== "" && exchangeRate != null) payload.exchange_rate = parseFloat(exchangeRate) || null;
+        } else {
+          payload.service_currency = companyCurrencyCode || "EUR";
+          payload.service_price_foreign = null;
+          payload.exchange_rate = null;
+        }
+        if (actuallyPaid !== "" && actuallyPaid != null) payload.actually_paid = parseFloat(actuallyPaid) || null;
       }
 
       // Add Tour-specific fields (Package Tour)
@@ -2166,9 +2237,9 @@ export default function EditServiceModalNew({
   ) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-lg" style={modalStyle}>
-        <div className="sticky top-0 bg-white border-b border-[#E0E0E0] px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-future-overlay">
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-future-container" style={modalStyle}>
+        <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded bg-[#E6FAE6]">
               <svg className="h-3.5 w-3.5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2431,7 +2502,7 @@ export default function EditServiceModalNew({
         )}
 
         {/* Content: light grey background #F8F9FA, two columns left ~65% right ~35% */}
-        <div className="p-4 bg-[#F8F9FA]">
+        <div className="p-4 modal-future-form-bg rounded-b-2xl">
           {error && (
             <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
               {error}
@@ -2446,8 +2517,8 @@ export default function EditServiceModalNew({
                 <div className="space-y-3">
 
                   {/* BASIC INFO */}
-                  <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-3">
-                    <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">BASIC INFO</h4>
+                  <div className="p-3 modal-section space-y-3">
+                    <h4 className="modal-section-title">BASIC INFO</h4>
                     <div>
                       <label className="block text-sm font-normal text-[#343A40] mb-1">Hotel <span className="text-red-500">*</span></label>
                       <HotelSuggestInput
@@ -2467,6 +2538,26 @@ export default function EditServiceModalNew({
                         placeholder="Search hotel by name..."
                       />
                     </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 rounded-md border border-[#CED4DA] bg-white focus-within:border-[#FFC107] focus-within:ring-1 focus-within:ring-amber-400">
+                          <span className="pl-2.5 text-[#6C757D]" aria-hidden><svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg></span>
+                          <input type="text" value={hotelAddress} onChange={(e) => setHotelAddress(e.target.value)} placeholder="Address" className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-[#343A40] bg-transparent placeholder:text-[#6C757D] border-0 focus:ring-0 focus:outline-none" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 rounded-md border border-[#CED4DA] bg-white focus-within:border-[#FFC107] focus-within:ring-1 focus-within:ring-amber-400">
+                          <span className="pl-2.5 text-[#6C757D]" aria-hidden><svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></span>
+                          <input type="tel" value={hotelPhone} onChange={(e) => setHotelPhone(e.target.value)} placeholder="Phone" className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-[#343A40] bg-transparent placeholder:text-[#6C757D] border-0 focus:ring-0 focus:outline-none" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 rounded-md border border-[#CED4DA] bg-white focus-within:border-[#FFC107] focus-within:ring-1 focus-within:ring-amber-400">
+                          <span className="pl-2.5 text-[#6C757D]" aria-hidden><svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg></span>
+                          <input type="email" value={hotelEmail} onChange={(e) => setHotelEmail(e.target.value)} placeholder="Email" className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-[#343A40] bg-transparent placeholder:text-[#6C757D] border-0 focus:ring-0 focus:outline-none" />
+                        </div>
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-sm font-normal text-[#343A40] mb-1">Dates</label>
                       <DateRangePicker
@@ -2483,7 +2574,10 @@ export default function EditServiceModalNew({
                         <input
                           type="text"
                           value={hotelRoom}
-                          onChange={(e) => setHotelRoom(e.target.value)}
+                          onChange={(e) => {
+                            setHotelRoom(e.target.value);
+                            if (roomOptionsForDropdown.length > 0) setRoomListOpen(true);
+                          }}
                           onFocus={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
                           onClick={() => roomOptionsForDropdown.length > 0 && setRoomListOpen(true)}
                           onBlur={() => {
@@ -2497,9 +2591,9 @@ export default function EditServiceModalNew({
                           placeholder="Room type"
                           className="w-full rounded-md border border-[#CED4DA] px-2.5 py-1.5 text-sm text-[#343A40] bg-white placeholder:text-[#6C757D] focus:border-[#FFC107] focus:ring-1 focus:ring-amber-400"
                         />
-                        {roomListOpen && roomOptionsForDropdown.length > 0 && (
+                        {roomListOpen && filteredRoomOptions.length > 0 && (
                           <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
-                            {roomOptionsForDropdown.map((opt) => (
+                            {filteredRoomOptions.map((opt) => (
                               <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { setHotelRoom(opt); setRoomListOpen(false); }}>{opt}</button>
                             ))}
                           </div>
@@ -2529,11 +2623,11 @@ export default function EditServiceModalNew({
                           placeholder="Board"
                           className="w-full rounded-md border border-[#CED4DA] px-2.5 py-1.5 text-sm text-[#343A40] bg-white placeholder:text-[#6C757D] focus:border-[#FFC107] focus:ring-1 focus:ring-amber-400"
                         />
-                        {boardListOpen && boardOptionsForDropdown.length > 0 && (
-                          <div className="absolute z-50 mt-0.5 w-full max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
+{boardListOpen && boardOptionsForDropdown.length > 0 && (
+                          <div className="absolute z-50 mt-0.5 w-full min-w-[11rem] max-h-48 overflow-auto rounded-lg border border-amber-200 bg-white shadow-lg">
                             {boardOptionsForDropdown.map((opt) => (
-                              <button key={opt} type="button" className="w-full px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 break-words" onClick={() => { const bk = (Object.entries(BOARD_LABELS).find(([, l]) => l === opt)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(opt); setMealPlanText(BOARD_LABELS[bk] || opt); setHotelBoard(bk); setBoardListOpen(false); }}>{opt}</button>
-                          ))}
+                              <button key={opt} type="button" className="w-full min-w-0 px-2.5 py-1.5 text-left text-sm hover:bg-amber-50 border-b border-amber-50 last:border-0 whitespace-nowrap" onClick={() => { const bk = (Object.entries(BOARD_LABELS).find(([, l]) => l === opt)?.[0] as typeof hotelBoard) ?? mapRatehawkMealToBoard(opt); setMealPlanText(BOARD_LABELS[bk] || opt); setHotelBoard(bk); setBoardListOpen(false); }}>{opt}</button>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -2548,9 +2642,61 @@ export default function EditServiceModalNew({
                     </div>
                   </div>
 
+                  {/* CLIENTS & PAYER */}
+                  <div className="p-3 modal-section space-y-2">
+                    <h4 className="modal-section-title">CLIENTS & PAYER</h4>
+                    <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
+                      {categoryType === "hotel" ? (
+                        <div className="space-y-2">
+                          {!isLoadingClients && clients.filter(c => c.id || c.name?.trim()).length === 0 && (
+                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                              Minimum 1 client required. Add a client before saving.
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-1.5">
+                            {clients.filter(c => c.id || c.name).map((client, _, arr) => {
+                              const realIndex = clients.indexOf(client);
+                              return (
+                                <span key={realIndex} className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40]">
+                                  {toTitleCaseForDisplay(client.name || "")}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeClient(realIndex)}
+                                    className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
+                                    aria-label="Remove"
+                                  >
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddAccompanyingModal(true)}
+                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            + Add Accompanying Persons
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
+                      <PartySelect
+                        key={`payer-${payerPartyId || "empty"}`}
+                        value={payerPartyId}
+                        onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }}
+                        initialDisplayName={payerName}
+                      />
+                    </div>
+                  </div>
+
                   {/* Supplier */}
-                  <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                    <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">Supplier</h4>
+                  <div className="p-3 modal-section space-y-2">
+                    <h4 className="modal-section-title">Supplier</h4>
                     <div className="flex gap-2 items-center">
                       <div className="w-[38%] shrink-0">
                         <select
@@ -2602,39 +2748,39 @@ export default function EditServiceModalNew({
                   </div>
 
                   {/* Preferences */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-normal text-[#343A40]">Preferences</label>
+                  <div className="p-3 modal-section modal-section-amber space-y-2">
+                    <h4 className="modal-section-title-amber">Preferences</h4>
                     <div className="grid grid-cols-4 gap-x-3 gap-y-2">
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="modal-checkbox" />
                         Early check-in
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="modal-checkbox" />
                         Late check-in
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="modal-checkbox" />
                         Higher floor
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.kingSizeBed} onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.kingSizeBed} onChange={(e) => setHotelPreferences(prev => ({ ...prev, kingSizeBed: e.target.checked }))} className="modal-checkbox" />
                         King size bed
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.honeymooners} onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.honeymooners} onChange={(e) => setHotelPreferences(prev => ({ ...prev, honeymooners: e.target.checked }))} className="modal-checkbox" />
                         Honeymooners
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.silentRoom} onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.silentRoom} onChange={(e) => setHotelPreferences(prev => ({ ...prev, silentRoom: e.target.checked }))} className="modal-checkbox" />
                         Silent room
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.repeatGuests} onChange={(e) => setHotelPreferences(prev => ({ ...prev, repeatGuests: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.repeatGuests} onChange={(e) => setHotelPreferences(prev => ({ ...prev, repeatGuests: e.target.checked }))} className="modal-checkbox" />
                         Repeat Guests
                       </label>
-                      <label className="flex items-center gap-1.5 text-sm font-normal text-[#343A40]">
-                        <input type="checkbox" checked={hotelPreferences.parking} onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))} className="rounded border-[#CED4DA] accent-[#387ADF] focus:ring-amber-400" />
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.parking} onChange={(e) => setHotelPreferences(prev => ({ ...prev, parking: e.target.checked }))} className="modal-checkbox" />
                         Parking
                       </label>
                     </div>
@@ -2643,7 +2789,7 @@ export default function EditServiceModalNew({
                       onChange={(e) => setHotelPreferences(prev => ({ ...prev, freeText: e.target.value }))}
                       placeholder="Additional preferences (free text)"
                       rows={2}
-                      className="w-full rounded-md border border-[#CED4DA] px-2.5 py-1.5 text-sm text-[#343A40] bg-white placeholder:text-[#6C757D] focus:border-[#FFC107] focus:ring-1 focus:ring-amber-400 resize-y"
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-800 bg-white placeholder:text-slate-400 modal-input focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 resize-y"
                     />
                     <button
                       type="button"
@@ -2655,33 +2801,11 @@ export default function EditServiceModalNew({
                         const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:\n\nRoom: ${hotelRoom || "Not specified"}\nBoard: ${hotelBoard}\nBed Type: ${hotelBedType}\nPreferences: ${preferencesList || "None"}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ""}`;
                         alert(`Message to hotel:\n\n${message}\n\n(Will be saved to Communication tab)`);
                       }}
-                      className="px-3 py-1.5 text-xs font-medium text-[#FF8C00] border border-[#FF8C00] hover:bg-[#FF8C00] hover:text-white rounded-md transition-colors inline-flex items-center gap-1.5"
+                      className="modal-primary-btn px-3 py-1.5 text-xs font-medium text-[#FF8C00] border border-[#FF8C00] hover:bg-[#FF8C00] hover:text-white rounded-md inline-flex items-center gap-1.5"
                     >
                       <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                       Send to Hotel
                     </button>
-                  </div>
-
-                  {/* Contact: Address / Phone / Email */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <div className="flex items-center gap-1.5 rounded-md border border-[#CED4DA] bg-white focus-within:border-[#FFC107] focus-within:ring-1 focus-within:ring-amber-400">
-                        <span className="pl-2.5 text-[#6C757D]" aria-hidden><svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg></span>
-                        <input type="text" value={hotelAddress} onChange={(e) => setHotelAddress(e.target.value)} placeholder="Address" className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-[#343A40] bg-transparent placeholder:text-[#6C757D] border-0 focus:ring-0 focus:outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 rounded-md border border-[#CED4DA] bg-white focus-within:border-[#FFC107] focus-within:ring-1 focus-within:ring-amber-400">
-                        <span className="pl-2.5 text-[#6C757D]" aria-hidden><svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></span>
-                        <input type="tel" value={hotelPhone} onChange={(e) => setHotelPhone(e.target.value)} placeholder="Phone" className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-[#343A40] bg-transparent placeholder:text-[#6C757D] border-0 focus:ring-0 focus:outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 rounded-md border border-[#CED4DA] bg-white focus-within:border-[#FFC107] focus-within:ring-1 focus-within:ring-amber-400">
-                        <span className="pl-2.5 text-[#6C757D]" aria-hidden><svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg></span>
-                        <input type="email" value={hotelEmail} onChange={(e) => setHotelEmail(e.target.value)} placeholder="Email" className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-[#343A40] bg-transparent placeholder:text-[#6C757D] border-0 focus:ring-0 focus:outline-none" />
-                      </div>
-                    </div>
                   </div>
 
                   {/* Cancel / Save */}
@@ -2689,7 +2813,7 @@ export default function EditServiceModalNew({
                     <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
                       Cancel
                     </button>
-                    <button type="button" onClick={handleSave} disabled={isSubmitting} className="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                    <button type="button" onClick={handleSave} disabled={isSubmitting} className="modal-primary-btn px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                       {isSubmitting ? (
                         <>
                           <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -2704,8 +2828,8 @@ export default function EditServiceModalNew({
 
                 </div>
               ) : (
-              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">BASIC INFO</h4>
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">BASIC INFO</h4>
                 
                 {/* Category only in header "Edit Service — {category}" (mirror Add). For Hotel: no Name (in Hotel Details), no Dates (in Hotel Details) */}
                 <div>
@@ -2927,10 +3051,79 @@ export default function EditServiceModalNew({
               </div>
             )}
 
+            {/* CLIENT & PAYER — under BASIC INFO for flight */}
+            {categoryType === "flight" && (
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">CLIENT & PAYER</h4>
+                <div className="space-y-2">
+                  {!isLoadingClients && clients.filter(c => c.id || c.name?.trim()).length === 0 && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      Minimum 1 client required. Add a client before saving.
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    {clients.filter(c => c.id || c.name).map((client, idx) => {
+                      const realIndex = clients.indexOf(client);
+                      const ticketEntry = ticketNumbers[idx];
+                      const displayName = toTitleCaseForDisplay(client.name || "") || "-";
+                      return (
+                        <div key={client.id ?? realIndex} className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0">
+                            {displayName}
+                            <button
+                              type="button"
+                              onClick={() => removeClient(realIndex)}
+                              className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
+                              aria-label="Remove"
+                            >
+                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                          <input
+                            type="text"
+                            value={ticketEntry?.ticketNr ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setTicketNumbers((prev) => {
+                                const n = [...prev];
+                                if (n[idx]) n[idx] = { ...n[idx], ticketNr: v };
+                                else n[idx] = { clientId: client.id ?? null, clientName: client.name, ticketNr: v };
+                                return n;
+                              });
+                            }}
+                            placeholder="E-ticket"
+                            className="w-32 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccompanyingModal(true)}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    + Add Accompanying Persons
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
+                  <PartySelect
+                    key={`payer-${payerPartyId || "empty"}`}
+                    value={payerPartyId}
+                    onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }}
+                    initialDisplayName={payerName}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* PARTIES — Supplier + Ref Nr + Status (flight only) */}
             {categoryType === "flight" && (
-              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">SUPPLIER</h4>
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">SUPPLIER</h4>
                 <PartySelect
                   value={supplierPartyId}
                   onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
@@ -2990,7 +3183,7 @@ export default function EditServiceModalNew({
 
             </div>
 
-            {/* Right side: CLIENT + PRICING + REFERENCES */}
+            {/* Right side: PARTIES (tour/other only) + PRICING + REFERENCES */}
             {(() => {
               const needsWrapper = categoryType === "hotel" || categoryType === "flight";
               const RightWrapper = needsWrapper ? "div" : React.Fragment;
@@ -2998,11 +3191,12 @@ export default function EditServiceModalNew({
               return (
                 <RightWrapper {...rightWrapperProps}>
             <div className="space-y-3">
-              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">{categoryType === "hotel" ? "CLIENTS" : categoryType === "flight" ? "CLIENT" : "PARTIES"}</h4>
+              {/* PARTIES (CLIENTS/CLIENT moved under BASIC INFO for hotel/flight) */}
+              {categoryType !== "hotel" && categoryType !== "flight" && (
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">PARTIES</h4>
                 
-                {/* Supplier: for Flight/Hotel in left column; for Tour/other here */}
-                {categoryType !== "flight" && categoryType !== "hotel" && (
+                {/* Supplier: for Tour/other here */}
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   <PartySelect
@@ -3012,7 +3206,6 @@ export default function EditServiceModalNew({
                     initialDisplayName={supplierName}
                   />
                 </div>
-                )}
                 
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
                   {categoryType !== "flight" && categoryType !== "hotel" && (
@@ -3140,11 +3333,49 @@ export default function EditServiceModalNew({
                   />
                 </div>
               </div>
+              )}
             </div>
 
             <div className="space-y-2">
-              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">PRICING</h4>
+              <div className="p-3 modal-section space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="modal-section-title">PRICING</h4>
+                  {(categoryType as string) === "hotel" && (
+                    <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100" role="group" aria-label="Price per night or per stay">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (hotelPricePer === "stay") {
+                            const n = (dateFrom && dateTo && nightsBetween(dateFrom, dateTo)) ?? 1;
+                            setPriceUnits(n >= 1 ? n : 1);
+                            prevDatesRefEdit.current = dateFrom && dateTo ? `${dateFrom}|${dateTo}` : "";
+                          }
+                          setHotelPricePer("night");
+                        }}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${hotelPricePer === "night" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                      >
+                        Per night
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (hotelPricePer === "night") {
+                            const totalCost = parseFloat(servicePrice) || 0;
+                            const totalSale = parseFloat(clientPrice) || 0;
+                            setServicePrice(String(totalCost));
+                            if (!service.invoice_id) setClientPrice(String(totalSale));
+                            setPriceUnits(1);
+                            prevDatesRefEdit.current = "";
+                          }
+                          setHotelPricePer("stay");
+                        }}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${hotelPricePer === "stay" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                      >
+                        Per stay
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Tour: Row1 Cost | Commission; Row2 Agent discount | Sale; Row3 Marge (calc) | VAT */}
                 {categoryType === "tour" ? (
@@ -3417,74 +3648,197 @@ export default function EditServiceModalNew({
                     })()}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={priceUnits > 0 ? (parseFloat(servicePrice) / priceUnits) || "" : servicePrice}
-                        onChange={(e) => {
-                          pricingLastEditedRef.current = "cost";
-                          const v = parseFloat(e.target.value) || 0;
-                          setServicePrice(String(Math.round(v * priceUnits * 100) / 100));
-                        }}
-                        placeholder="0.00"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                      />
+                  <div className="space-y-2">
+                    {(categoryType as string) === "hotel" && (
+                      <>
+                        {/* Supplier zone: money to supplier — background */}
+                        <div className="rounded-lg bg-amber-50/60 border border-amber-200/60 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-slate-600 shrink-0">Supplier&apos;s Service currency</span>
+                            <select
+                              value={serviceCurrency}
+                              onChange={(e) => {
+                                const c = e.target.value;
+                                setServiceCurrency(c);
+                                setExchangeRate("");
+                                if (c === (companyCurrencyCode || "EUR")) {
+                                  const f = parseFloat(servicePriceForeign) || 0;
+                                  const r = parseFloat(exchangeRate) || 0;
+                                  const mult = (categoryType as string) === "hotel" && hotelPricePer === "night" ? (priceUnits >= 1 ? priceUnits : 1) : 1;
+                                  if (f > 0 && r > 0) setServicePrice(String(Math.round(f * r * mult * 100) / 100));
+                                }
+                              }}
+                              className="cursor-pointer text-blue-600 hover:text-blue-700 hover:underline bg-transparent border-0 border-b border-dashed border-gray-400 py-0.5 px-0 text-sm font-medium focus:ring-0 focus:outline-none min-w-0"
+                              aria-label="Supplier's Service currency (click to change)"
+                            >
+                              <option value="EUR">{getCurrencySymbol("EUR")} (EUR)</option>
+                              <option value="CHF">{getCurrencySymbol("CHF")} (CHF)</option>
+                              <option value="USD">{getCurrencySymbol("USD")} (USD)</option>
+                              <option value="GBP">{getCurrencySymbol("GBP")} (GBP)</option>
+                            </select>
+                          </div>
+                          {serviceCurrency !== (companyCurrencyCode || "EUR") && (
+                            <>
+                              {hotelPricePer === "night" ? (
+                                <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-3 items-center text-sm">
+                                  <span className="text-slate-500 font-medium"></span>
+                                  <span className="text-slate-500 font-medium text-right tabular-nums">Per night</span>
+                                  <span className="text-slate-500 font-medium text-right tabular-nums">Per stay</span>
+                                </div>
+                              ) : null}
+                              <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-3 items-center">
+                                <span className="text-slate-600 shrink-0">Service price</span>
+                                {hotelPricePer === "night" ? (
+                                  <>
+                                    <div className="flex items-center justify-end gap-0.5 w-[5.5rem]">
+                                      <span className="text-slate-600 text-xs">{getCurrencySymbol(serviceCurrency)}</span>
+                                      <input type="number" step="0.01" min="0" value={servicePriceForeign} onChange={(e) => { const v = e.target.value; setServicePriceForeign(v); const f = parseFloat(v) || 0; const r = parseFloat(exchangeRate) || 0; const mult = priceUnits >= 1 ? priceUnits : 1; if (r > 0) setServicePrice(String(Math.round(f * r * mult * 100) / 100)); }} placeholder="0.00" className="w-20 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                    </div>
+                                    <div className="flex items-center justify-end gap-0.5 w-[5.5rem]">
+                                      <span className="text-slate-600 text-xs">{getCurrencySymbol(serviceCurrency)}</span>
+                                      <input type="number" step="0.01" min="0" value={priceUnits >= 1 ? Math.round((parseFloat(servicePriceForeign) || 0) * priceUnits * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) { const perNight = Math.round((v / priceUnits) * 100) / 100; setServicePriceForeign(String(perNight)); const r = parseFloat(exchangeRate) || 0; if (r > 0) setServicePrice(String(Math.round(perNight * r * priceUnits * 100) / 100)); } }} placeholder="0.00" className="w-20 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-0.5 col-span-2">
+                                    <span className="text-slate-600 text-xs">{getCurrencySymbol(serviceCurrency)}</span>
+                                    <input type="number" step="0.01" min="0" value={servicePriceForeign} onChange={(e) => { const v = e.target.value; setServicePriceForeign(v); const f = parseFloat(v) || 0; const r = parseFloat(exchangeRate) || 0; if (r > 0) setServicePrice(String(Math.round(f * r * 100) / 100)); }} placeholder="0.00" className="w-24 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm text-slate-500">1 {serviceCurrency} =</span>
+                                <div className="flex items-center gap-1.5">
+                                  <button type="button" disabled={rateFetching} onClick={async () => { setRateFetching(true); try { const url = `${typeof window !== "undefined" ? window.location.origin : ""}/api/currency-rate?from=${encodeURIComponent(serviceCurrency)}&to=${encodeURIComponent(companyCurrencyCode || "EUR")}`; const r = await fetch(url); const data = await r.json(); const rateVal = data.rate != null ? Number(data.rate) : NaN; if (Number.isFinite(rateVal) && rateVal > 0) { setExchangeRate(String(rateVal)); const f = parseFloat(servicePriceForeign) || 0; const mult = hotelPricePer === "night" ? (priceUnits >= 1 ? priceUnits : 1) : 1; if (f > 0) setServicePrice(String(Math.round(f * rateVal * mult * 100) / 100)); } } catch (_) {} setRateFetching(false); }} className="text-sm text-blue-600 hover:underline disabled:opacity-50">{rateFetching ? "…" : "Fetch"}</button>
+                                  <div className="inline-flex items-center rounded border border-slate-300 overflow-hidden focus-within:border-sky-500">
+                                    <span className="pl-2 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
+                                    <input type="number" step="0.0001" min="0" max="10" value={exchangeRate}
+                                      onChange={(e) => { const v = e.target.value; setExchangeRate(v); const f = parseFloat(servicePriceForeign) || 0; const r = parseFloat(v) || 0; const mult = hotelPricePer === "night" ? (priceUnits >= 1 ? priceUnits : 1) : 1; if (r > 0) setServicePrice(String(Math.round(f * r * mult * 100) / 100)); }}
+                                      placeholder="—" title="Rate to company currency" className="w-20 py-1 pl-1 pr-2 text-right text-sm tabular-nums border-0 bg-transparent modal-input focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                          {(categoryType as string) === "hotel" && hotelPricePer === "night" && (
+                            <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-3 items-center text-sm">
+                              <span className="text-slate-600 shrink-0">Service price ({currencySymbol})</span>
+                              {serviceCurrency !== (companyCurrencyCode || "EUR") ? (
+                                <>
+                                  <span className="text-slate-800 tabular-nums text-right w-[5.5rem]">{(() => { const f = parseFloat(servicePriceForeign) || 0; const r = parseFloat(exchangeRate) || 0; const perNight = r > 0 ? Math.round(f * r * 100) / 100 : 0; return perNight > 0 ? `${currencySymbol}${(perNight).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"; })()}</span>
+                                  <span className="text-slate-800 tabular-nums text-right w-[5.5rem]">{(() => { const f = parseFloat(servicePriceForeign) || 0; const r = parseFloat(exchangeRate) || 0; const total = r > 0 && priceUnits >= 1 ? Math.round(f * r * priceUnits * 100) / 100 : 0; return total > 0 ? `${currencySymbol}${(total).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"; })()}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={priceUnits > 0 && !isNaN(parseFloat(servicePrice)) ? Math.round((parseFloat(servicePrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; setServicePrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                                  <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={!isNaN(parseFloat(servicePrice)) ? Math.round(parseFloat(servicePrice) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; setServicePrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Divider under supplier zone */}
+                        <div className="border-t border-slate-300 my-2" role="separator" aria-label="Separator between supplier and client zone" />
+                      </>
+                    )}
+                    {(categoryType as string) === "hotel" ? (
+                    <div className="rounded-lg bg-sky-50/50 border border-sky-200/60 p-3 space-y-2">
+                    <div className="space-y-2">
+                      {hotelPricePer === "night" ? (
+                        /* Hotel Per night: two columns, fixed width for alignment */
+                        <>
+                          <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center text-sm">
+                            <span className="text-slate-500 font-medium"></span>
+                            <span className="text-slate-500 font-medium text-right tabular-nums">Per night</span>
+                            <span className="text-slate-500 font-medium text-right tabular-nums">Per stay</span>
+                          </div>
+                          {serviceCurrency !== (companyCurrencyCode || "EUR") && (
+                            <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
+                              <span className="text-slate-600 shrink-0">Actually paid</span>
+                              <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={priceUnits >= 1 && actuallyPaid !== "" && !isNaN(parseFloat(actuallyPaid)) ? Math.round((parseFloat(actuallyPaid) / priceUnits) * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) setActuallyPaid(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                              <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={actuallyPaid !== "" && !isNaN(parseFloat(actuallyPaid)) ? Math.round(parseFloat(actuallyPaid) * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setActuallyPaid(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
+                            <span className="text-slate-600 shrink-0">Margin</span>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" value={marge !== "" && !isNaN(parseFloat(marge)) ? Math.round(parseFloat(marge) * 100) / 100 : marge} onChange={(e) => { pricingLastEditedRef.current = "marge"; setMarge(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" value={priceUnits >= 1 && marge !== "" && !isNaN(parseFloat(marge)) ? Math.round(parseFloat(marge) * priceUnits * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "marge"; const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) setMarge(String(Math.round((v / priceUnits) * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                          </div>
+                          <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
+                            <span className="text-slate-600 shrink-0">Client price</span>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500 disabled:opacity-70"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={!!service.invoice_id} value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { if (service.invoice_id) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500 disabled:opacity-70"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={!!service.invoice_id} value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { if (service.invoice_id) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                          </div>
+                          <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center pt-1.5 mt-0.5 border-t border-sky-200/80">
+                            <span className="text-slate-700 font-medium shrink-0">Total Client price</span>
+                            <div className="w-[5.5rem] text-right tabular-nums font-medium text-slate-900">{currencySymbol}{(priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className="w-[5.5rem] text-right tabular-nums font-medium text-slate-900">{currencySymbol}{(Math.round(parseFloat(clientPrice) || 0) * 100 / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          </div>
+                        </>
+                      ) : (
+                        /* Hotel Per stay: single column */
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-slate-600 shrink-0">Service price</span>
+                            {(categoryType as string) === "hotel" && serviceCurrency !== (companyCurrencyCode || "EUR") ? <span className="text-sm text-slate-800 tabular-nums text-right w-28">{(() => { const f = parseFloat(servicePriceForeign) || 0; const r = parseFloat(exchangeRate) || 0; const eur = r > 0 ? Math.round(f * r * 100) / 100 : 0; return eur > 0 ? `${currencySymbol}${(eur).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"; })()}</span> : <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>}
+                          </div>
+                          {serviceCurrency !== (companyCurrencyCode || "EUR") && (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm text-slate-600 shrink-0">Actually paid</span>
+                              <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500">
+                                <span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span>
+                                <input type="number" step="0.01" min="0" value={actuallyPaid} onChange={(e) => setActuallyPaid(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-slate-600 shrink-0">Margin</span>
+                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" value={marge} onChange={(e) => { pricingLastEditedRef.current = "marge"; setMarge(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-slate-600 shrink-0">Total Client price</span>
+                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500 disabled:opacity-70"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { if (service.invoice_id) return; pricingLastEditedRef.current = "sale"; setClientPrice(e.target.value); }} placeholder="0.00" disabled={!!service.invoice_id} className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{(categoryType as string) === "hotel" ? "Margin" : "Marge"} ({currencySymbol})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={marge}
-                        onChange={(e) => {
-                          pricingLastEditedRef.current = "marge";
-                          setMarge(e.target.value);
-                        }}
-                        placeholder="0.00"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale ({currencySymbol})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={priceUnits > 0 ? (parseFloat(clientPrice) / priceUnits) || "" : clientPrice}
-                        onChange={(e) => {
-                          if (service.invoice_id) return;
-                          pricingLastEditedRef.current = "sale";
-                          const v = parseFloat(e.target.value) || 0;
-                          setClientPrice(String(Math.round(v * priceUnits * 100) / 100));
-                        }}
-                        placeholder="0.00"
-                        disabled={!!service.invoice_id}
-                        title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                      />
+                    ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-600 shrink-0">Cost</span>
+                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-600 shrink-0">Marge</span>
+                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" value={marge} onChange={(e) => { pricingLastEditedRef.current = "marge"; setMarge(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-600 shrink-0">Sale</span>
+                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-0.5">{(categoryType as string) === "hotel" ? "Nights" : "Units"}</label>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={priceUnits}
-                        onChange={(e) => {
-                          const u = Math.max(1, Math.floor(Number(e.target.value) || 1));
-                          const perCost = priceUnits > 0 ? (parseFloat(servicePrice) || 0) / priceUnits : 0;
-                          const perSale = priceUnits > 0 ? (parseFloat(clientPrice) || 0) / priceUnits : 0;
-                          setServicePrice(String(Math.round(perCost * u * 100) / 100));
-                          if (!service.invoice_id) setClientPrice(String(Math.round(perSale * u * 100) / 100));
-                          setPriceUnits(u);
-                        }}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                      />
-                    </div>
+                    )}
+                      {(categoryType as string) !== "hotel" && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-slate-600 shrink-0">Units</span>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={priceUnits}
+                            onChange={(e) => {
+                              const u = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                              const perCost = priceUnits > 0 ? (parseFloat(servicePrice) || 0) / priceUnits : 0;
+                              const perSale = priceUnits > 0 ? (parseFloat(clientPrice) || 0) / priceUnits : 0;
+                              setServicePrice(String(Math.round(perCost * u * 100) / 100));
+                              if (!service.invoice_id) setClientPrice(String(Math.round(perSale * u * 100) / 100));
+                              setPriceUnits(u);
+                            }}
+                            className="w-20 rounded border border-gray-300 px-1.5 py-1 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          />
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -3494,20 +3848,20 @@ export default function EditServiceModalNew({
                   const vatAmount = vatRate > 0 ? margin * vatRate / (100 + vatRate) : 0;
                   const profit = margin - vatAmount;
                   return (
-                    <div className="text-xs font-medium pt-1 border-t border-gray-200">
+                    <div className="text-sm font-medium pt-1 border-t border-gray-200">
                       {vatRate > 0 ? (
                         <>
                           <div className={margin >= 0 ? "text-green-600" : "text-red-600"}>
-                            Margin: {currencySymbol}{margin.toFixed(2)}
-                            <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toFixed(2)})</span>
+                            Margin: {currencySymbol}{margin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                           </div>
                           <div className={margin >= 0 ? "text-green-700 font-semibold" : "text-red-600 font-semibold"}>
-                            Profit: {currencySymbol}{profit.toFixed(2)}
+                            Profit: {currencySymbol}{profit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         </>
                       ) : (
                         <div className={margin >= 0 ? "text-green-700 font-semibold" : "text-red-600 font-semibold"}>
-                          Profit: {currencySymbol}{margin.toFixed(2)}
+                          Profit: {currencySymbol}{margin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       )}
                     </div>
@@ -3515,13 +3869,13 @@ export default function EditServiceModalNew({
                 })()}
 
                 {categoryType !== "tour" && (
-                <div className="flex items-end gap-4 flex-wrap">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">VAT</label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-slate-600 shrink-0">VAT</span>
                     <select
                       value={vatRate}
                       onChange={(e) => setVatRate(Number(e.target.value))}
-                      className="w-16 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 min-w-0 w-16"
                       aria-label="VAT"
                     >
                       <option value={0}>0%</option>
@@ -3530,25 +3884,45 @@ export default function EditServiceModalNew({
                   </div>
                   {(() => {
                     const marginPerUnit = parseFloat(marge) || 0;
-                    const totalMargin = Math.round(marginPerUnit * priceUnits * 100) / 100;
-                    const vatAmount = vatRate > 0 ? Math.round(totalMargin * vatRate / (100 + vatRate) * 100) / 100 : 0;
-                    const profit = totalMargin - vatAmount;
+                    const effUnits = (categoryType as string) === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits;
+                    const totalMargin = Math.round(marginPerUnit * effUnits * 100) / 100;
+                    const paid = (categoryType as string) === "hotel" && actuallyPaid !== "" ? parseFloat(actuallyPaid) : null;
+                    const saleTotal = parseFloat(clientPrice) || 0;
+                    const marginFromPaid = paid != null && Number.isFinite(paid) ? Math.round((saleTotal - paid) * 100) / 100 : null;
+                    const baseForVat = marginFromPaid != null ? marginFromPaid : totalMargin;
+                    const vatAmount = vatRate > 0 && baseForVat >= 0 ? Math.round(baseForVat * vatRate / (100 + vatRate) * 100) / 100 : 0;
+                    const profit = marginFromPaid != null ? Math.round((marginFromPaid - vatAmount) * 100) / 100 : (totalMargin - vatAmount);
                     return (
-                      <div className="text-xs font-medium flex-1 pt-1 border-t border-gray-200 min-w-[140px]">
+                      <div className="text-sm font-medium pt-1 border-t border-gray-200">
                         {vatRate > 0 ? (
                           <>
-                            <div className={totalMargin >= 0 ? 'text-[#28A745]' : 'text-red-600'}>
-                              Margin: {currencySymbol}{totalMargin.toFixed(2)}
-                              {priceUnits > 1 && <span className="text-gray-500 ml-1">({marginPerUnit.toFixed(2)}×{priceUnits})</span>}
-                              <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toFixed(2)})</span>
-                            </div>
-                            <div className={totalMargin >= 0 ? 'text-[#28A745] font-semibold' : 'text-red-600 font-semibold'}>
-                              Profit: {currencySymbol}{profit.toFixed(2)}
-                            </div>
+                            {marginFromPaid != null ? (
+                              <>
+                                <div className="text-gray-600">Margin (est.): {currencySymbol}{totalMargin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                <div className={marginFromPaid >= 0 ? 'text-[#28A745]' : 'text-red-600'}>
+                                  Margin (actually paid): {currencySymbol}{marginFromPaid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                                </div>
+                                <div className={(profit >= 0 ? 'text-[#28A745]' : 'text-red-600') + ' font-semibold'}>
+                                  Profit: {currencySymbol}{profit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className={totalMargin >= 0 ? 'text-[#28A745]' : 'text-red-600'}>
+                                  Margin: {currencySymbol}{totalMargin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {effUnits > 1 && <span className="text-gray-500 ml-1">({marginPerUnit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×{effUnits})</span>}
+                                  <span className="text-gray-500 ml-1">(VAT: {currencySymbol}{vatAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                                </div>
+                                <div className={totalMargin >= 0 ? 'text-[#28A745] font-semibold' : 'text-red-600 font-semibold'}>
+                                  Profit: {currencySymbol}{profit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </>
+                            )}
                           </>
                         ) : (
-                          <div className={totalMargin >= 0 ? 'text-[#28A745] font-semibold' : 'text-red-600 font-semibold'}>
-                            Profit: {currencySymbol}{totalMargin.toFixed(2)}
+                          <div className={(marginFromPaid != null ? (marginFromPaid >= 0) : totalMargin >= 0) ? 'text-[#28A745] font-semibold' : 'text-red-600 font-semibold'}>
+                            Profit: {currencySymbol}{((marginFromPaid != null ? (marginFromPaid - vatAmount) : totalMargin)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         )}
                       </div>
@@ -3560,8 +3934,8 @@ export default function EditServiceModalNew({
 
               {/* REFERENCES — for tour/other (flight refs moved to PARTIES in left column) */}
               {categoryType !== "hotel" && categoryType !== "flight" && (
-              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">REFERENCES</h4>
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">REFERENCES</h4>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}
@@ -3621,7 +3995,7 @@ export default function EditServiceModalNew({
                       type="button" 
                       onClick={handleSave} 
                       disabled={isSubmitting} 
-                      className="flex-1 px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="modal-primary-btn flex-1 px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isSubmitting ? (
                         <>
@@ -3647,8 +4021,8 @@ export default function EditServiceModalNew({
               
               {/* Booking Terms (hidden for Flight) */}
               {categoryType !== "flight" && (
-              <div className="p-3 bg-white rounded-md border border-[#CED4DA] shadow-sm space-y-2">
-                <h4 className="text-xs font-semibold text-[#343A40] uppercase tracking-wide">Booking Terms</h4>
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">Booking Terms</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Price Type - only for Tour, full width so "Early Booking (EBD)" is visible */}
                   {categoryType === "tour" && (
@@ -4003,7 +4377,7 @@ export default function EditServiceModalNew({
               <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
                 Cancel
               </button>
-              <button type="button" onClick={handleSave} disabled={isSubmitting} className="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+              <button type="button" onClick={handleSave} disabled={isSubmitting} className="modal-primary-btn px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {isSubmitting ? (
                   <>
                     <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">

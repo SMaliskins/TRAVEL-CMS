@@ -203,6 +203,10 @@ export async function GET(
         payerName: s.payer_name || "",
         servicePrice: parseFloat(s.service_price || "0"),
         clientPrice: parseFloat(s.client_price || "0"),
+        serviceCurrency: (row as { service_currency?: string | null }).service_currency ?? null,
+        servicePriceForeign: (row as { service_price_foreign?: number | null }).service_price_foreign != null ? parseFloat(String((row as { service_price_foreign?: number }).service_price_foreign)) : null,
+        exchangeRate: (row as { exchange_rate?: number | null }).exchange_rate != null ? parseFloat(String((row as { exchange_rate?: number }).exchange_rate)) : null,
+        actuallyPaid: (row as { actually_paid?: number | null }).actually_paid != null ? parseFloat(String((row as { actually_paid?: number }).actually_paid)) : null,
         quantity: (s as { quantity?: number | null }).quantity ?? 1,
         resStatus: s.res_status || "booked",
         refNr: s.ref_nr || "",
@@ -229,6 +233,11 @@ export async function GET(
         hotelBedType: row.hotel_bed_type ?? null,
         hotelEarlyCheckIn: row.hotel_early_check_in ?? null,
         hotelLateCheckIn: row.hotel_late_check_in ?? null,
+        hotelEarlyCheckInTime: (row as { hotel_early_check_in_time?: string | null }).hotel_early_check_in_time ?? null,
+        hotelLateCheckInTime: (row as { hotel_late_check_in_time?: string | null }).hotel_late_check_in_time ?? null,
+        hotelRoomUpgrade: (row as { hotel_room_upgrade?: boolean | null }).hotel_room_upgrade ?? null,
+        hotelLateCheckOut: (row as { hotel_late_check_out?: boolean | null }).hotel_late_check_out ?? null,
+        hotelLateCheckOutTime: (row as { hotel_late_check_out_time?: string | null }).hotel_late_check_out_time ?? null,
         hotelHigherFloor: row.hotel_higher_floor ?? null,
         hotelKingSizeBed: row.hotel_king_size_bed ?? null,
         hotelHoneymooners: row.hotel_honeymooners ?? null,
@@ -237,6 +246,7 @@ export async function GET(
         hotelRoomsNextTo: row.hotel_rooms_next_to ?? null,
         hotelParking: row.hotel_parking ?? null,
         hotelPreferencesFreeText: row.hotel_preferences_free_text ?? null,
+        hotelPricePer: (row as { hotel_price_per?: string | null }).hotel_price_per ?? null,
         supplierBookingType: row.supplier_booking_type ?? null,
         paymentDeadlineDeposit: row.payment_deadline_deposit ?? null,
         paymentDeadlineFinal: row.payment_deadline_final ?? null,
@@ -322,7 +332,15 @@ export async function POST(
       client_name: body.clientName || null,
       payer_party_id: body.payerPartyId || null,
       payer_name: body.payerName || null,
-      service_price: body.servicePrice || 0,
+      service_price: (() => {
+        const foreign = body.servicePriceForeign != null ? parseFloat(String(body.servicePriceForeign)) : null;
+        const rate = body.exchangeRate != null ? parseFloat(String(body.exchangeRate)) : null;
+        const curr = body.serviceCurrency || "EUR";
+        if (foreign != null && rate != null && curr && curr.toUpperCase() !== "EUR") {
+          return Math.round(foreign * rate * 100) / 100;
+        }
+        return body.servicePrice ?? 0;
+      })(),
       client_price: body.clientPrice || 0,
       quantity: body.quantity ?? body.priceUnits ?? 1,
       res_status: body.resStatus || "booked",
@@ -344,6 +362,11 @@ export async function POST(
     if (body.hotelBedType !== undefined) serviceData.hotel_bed_type = body.hotelBedType || null;
     if (body.hotelEarlyCheckIn !== undefined) serviceData.hotel_early_check_in = !!body.hotelEarlyCheckIn;
     if (body.hotelLateCheckIn !== undefined) serviceData.hotel_late_check_in = !!body.hotelLateCheckIn;
+    if (body.hotelEarlyCheckInTime !== undefined) serviceData.hotel_early_check_in_time = body.hotelEarlyCheckInTime || null;
+    if (body.hotelLateCheckInTime !== undefined) serviceData.hotel_late_check_in_time = body.hotelLateCheckInTime || null;
+    if (body.hotelRoomUpgrade !== undefined) serviceData.hotel_room_upgrade = !!body.hotelRoomUpgrade;
+    if (body.hotelLateCheckOut !== undefined) serviceData.hotel_late_check_out = !!body.hotelLateCheckOut;
+    if (body.hotelLateCheckOutTime !== undefined) serviceData.hotel_late_check_out_time = body.hotelLateCheckOutTime || null;
     if (body.hotelHigherFloor !== undefined) serviceData.hotel_higher_floor = !!body.hotelHigherFloor;
     if (body.hotelKingSizeBed !== undefined) serviceData.hotel_king_size_bed = !!body.hotelKingSizeBed;
     if (body.hotelHoneymooners !== undefined) serviceData.hotel_honeymooners = !!body.hotelHoneymooners;
@@ -352,6 +375,11 @@ export async function POST(
     if (body.hotelRoomsNextTo !== undefined) serviceData.hotel_rooms_next_to = body.hotelRoomsNextTo || null;
     if (body.hotelParking !== undefined) serviceData.hotel_parking = !!body.hotelParking;
     if (body.hotelPreferencesFreeText !== undefined) serviceData.hotel_preferences_free_text = body.hotelPreferencesFreeText || null;
+    if (body.hotelPricePer !== undefined) serviceData.hotel_price_per = body.hotelPricePer === "stay" ? "stay" : (body.hotelPricePer || "night");
+    if (body.serviceCurrency !== undefined) serviceData.service_currency = body.serviceCurrency || "EUR";
+    if (body.servicePriceForeign !== undefined) serviceData.service_price_foreign = body.servicePriceForeign != null ? parseFloat(String(body.servicePriceForeign)) : null;
+    if (body.exchangeRate !== undefined) serviceData.exchange_rate = body.exchangeRate != null ? parseFloat(String(body.exchangeRate)) : null;
+    if (body.actuallyPaid !== undefined) serviceData.actually_paid = body.actuallyPaid != null && body.actuallyPaid !== "" ? parseFloat(String(body.actuallyPaid)) : null;
     if (body.supplierBookingType !== undefined) serviceData.supplier_booking_type = body.supplierBookingType || null;
     // Payment / terms
     if (body.paymentDeadlineDeposit !== undefined) serviceData.payment_deadline_deposit = body.paymentDeadlineDeposit || null;

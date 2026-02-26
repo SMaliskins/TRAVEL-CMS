@@ -510,6 +510,19 @@ export default function InvoiceCreator({
 
   // Drag-and-drop reorder
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const dragPreviewRef = useRef<HTMLElement | null>(null);
+  const dragMoveListenerRef = useRef<((e: DragEvent) => void) | null>(null);
+
+  useEffect(() => () => {
+    if (dragMoveListenerRef.current) {
+      document.removeEventListener("dragover", dragMoveListenerRef.current);
+      dragMoveListenerRef.current = null;
+    }
+    if (dragPreviewRef.current?.parentNode) {
+      dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
+      dragPreviewRef.current = null;
+    }
+  }, []);
 
   // Payment terms - with % support
   const [depositType, setDepositType] = useState<'amount' | 'percent'>('amount');
@@ -568,11 +581,27 @@ export default function InvoiceCreator({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showTypePopover]);
 
-  // Load invoice number on mount (only for single-invoice mode; bulk reserves at create time)
+  // Load invoice number on mount — single: reserve one; bulk: reserve N for this order (same numbers on revisit)
   useEffect(() => {
     if (hasMultiplePayers && servicesByPayer && servicesByPayer.size > 1) return;
     generateInvoiceNumber().then(setInvoiceNumber);
   }, [orderCode, hasMultiplePayers, servicesByPayer]);
+
+  // Bulk: reserve N numbers when we have payer groups and no numbers yet
+  useEffect(() => {
+    if (!(hasMultiplePayers && payerGroups.length > 1)) return;
+    const need = payerGroups.length;
+    const have = invoiceNumberByPayerIndex.filter((n) => n?.trim()).length;
+    if (have >= need) return;
+    generateInvoiceNumbers(need).then((nums) => setInvoiceNumberByPayerIndex(nums.slice(0, need)));
+  }, [orderCode, hasMultiplePayers, payerGroups.length]);
+
+  // Release reserved number(s) when closing without saving (return to company pool)
+  useEffect(() => {
+    return () => {
+      fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/release-reservation`, { method: "POST" }).catch(() => {});
+    };
+  }, [orderCode]);
 
   // Default deposit date to today on mount (once)
   useEffect(() => {
@@ -769,7 +798,17 @@ export default function InvoiceCreator({
     });
     setDraggedIdx(null);
   };
-  const handleDragEnd = () => setDraggedIdx(null);
+  const handleDragEnd = () => {
+    if (dragMoveListenerRef.current) {
+      document.removeEventListener("dragover", dragMoveListenerRef.current);
+      dragMoveListenerRef.current = null;
+    }
+    if (dragPreviewRef.current?.parentNode) {
+      dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
+      dragPreviewRef.current = null;
+    }
+    setDraggedIdx(null);
+  };
 
   const dateFormat = useDateFormat();
 
@@ -1915,7 +1954,7 @@ export default function InvoiceCreator({
             </div>
 
             {/* Services Table - Editable (full text with wrap) */}
-            <div className="mb-6 overflow-hidden">
+            <div className="mb-6 overflow-hidden select-text" style={{ userSelect: "text" }}>
               <table className="w-full text-xs table-fixed">
                 <colgroup>
                   <col className="w-6" />
@@ -1946,22 +1985,76 @@ export default function InvoiceCreator({
                     editableServices.map((service, idx) => (
                       <tr
                         key={service.id}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("text/plain", String(idx));
-                          e.dataTransfer.effectAllowed = "move";
-                          handleDragStart(idx);
-                        }}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDrop(e, idx)}
                         onDragEnd={handleDragEnd}
                         className={`group ${draggedIdx === idx ? "opacity-50" : ""} ${idx < editableServices.length - 1 ? "border-b border-gray-200" : ""}`}
                       >
-                        <td className="py-2 px-1 align-top cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600" title="Перетягнути порядок">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="inline-block"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                        <td
+                          className="py-2 px-1 align-top cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+                          title="Перетягнути порядок"
+                          draggable
+                          onDrag={(e) => {
+                            if (dragPreviewRef.current) {
+                              const ev = e.nativeEvent ?? e;
+                              dragPreviewRef.current.style.left = ((ev as DragEvent).clientX + 10) + "px";
+                              dragPreviewRef.current.style.top = ((ev as DragEvent).clientY + 10) + "px";
+                            }
+                          }}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", String(idx));
+                            e.dataTransfer.effectAllowed = "move";
+                            handleDragStart(idx);
+                            const tr = (e.target as HTMLElement).closest("tr");
+                            const table = tr?.closest("table");
+                            if (tr && table) {
+                              if (dragMoveListenerRef.current) {
+                                document.removeEventListener("dragover", dragMoveListenerRef.current);
+                                dragMoveListenerRef.current = null;
+                              }
+                              if (dragPreviewRef.current?.parentNode) {
+                                dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
+                              }
+                              const tableRect = table.getBoundingClientRect();
+                              const rowRect = tr.getBoundingClientRect();
+                              const offX = 10, offY = 10;
+                              const colgroup = table.querySelector("colgroup");
+                              const cloneTable = document.createElement("table");
+                              cloneTable.className = table.className;
+                              cloneTable.setAttribute("style",
+                                "position:fixed;left:" + (rowRect.left + offX) + "px;top:" + (rowRect.top + offY) + "px;width:" + tableRect.width + "px;" +
+                                "background:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.2);border-radius:6px;pointer-events:none;opacity:0.98;border-collapse:collapse;z-index:99999;"
+                              );
+                              if (colgroup) cloneTable.appendChild(colgroup.cloneNode(true));
+                              const cloneTbody = document.createElement("tbody");
+                              const cloneTr = tr.cloneNode(true) as HTMLTableRowElement;
+                              cloneTr.querySelector("td")?.removeAttribute("draggable");
+                              cloneTr.querySelectorAll("input, textarea, button").forEach((el) => {
+                                (el as HTMLInputElement).readOnly = true;
+                                (el as HTMLElement).style.pointerEvents = "none";
+                              });
+                              cloneTbody.appendChild(cloneTr);
+                              cloneTable.appendChild(cloneTbody);
+                              document.body.appendChild(cloneTable);
+                              dragPreviewRef.current = cloneTable;
+                              const movePreview = (ev: DragEvent) => {
+                                if (dragPreviewRef.current && typeof ev.clientX === "number" && typeof ev.clientY === "number") {
+                                  dragPreviewRef.current.style.left = (ev.clientX + offX) + "px";
+                                  dragPreviewRef.current.style.top = (ev.clientY + offY) + "px";
+                                }
+                              };
+                              dragMoveListenerRef.current = movePreview;
+                              document.addEventListener("dragover", movePreview);
+                              const c = document.createElement("canvas");
+                              c.width = 1; c.height = 1;
+                              try { e.dataTransfer.setDragImage(c, 0, 0); } catch (_) {}
+                            }
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="inline-block pointer-events-none"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                         </td>
-                        <td className="py-2 px-2 align-top min-w-0">
+                        <td className="py-0 px-0 align-top min-w-0 select-text" onMouseDown={(e) => e.stopPropagation()}>
                           <input
                             type="text"
                             value={service.editableDateText ?? ""}
@@ -1970,11 +2063,13 @@ export default function InvoiceCreator({
                               updated[idx] = { ...updated[idx], editableDateText: e.target.value };
                               setEditableServices(updated);
                             }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => e.stopPropagation()}
                             placeholder="Даты или любой текст"
-                            className="w-full min-w-0 bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5 text-xs text-gray-600"
+                            className="w-full min-w-0 min-h-[2rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none px-2 py-2 text-xs text-gray-600 cursor-text select-text"
                           />
                         </td>
-                        <td className="py-2 px-2 align-top min-w-0">
+                        <td className="py-0 px-0 align-top min-w-0 select-text" onMouseDown={(e) => e.stopPropagation()}>
                           <textarea
                             value={service.editableName}
                             onChange={(e) => {
@@ -1982,13 +2077,15 @@ export default function InvoiceCreator({
                               updated[idx].editableName = e.target.value;
                               setEditableServices(updated);
                             }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => e.stopPropagation()}
                             rows={3}
                             placeholder="Напр. Flight: Riga - Zurich - Riga или свой текст"
-                            className="w-full min-h-[3rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 resize-y block break-words"
+                            className="w-full min-h-[3rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 resize-y block break-words px-2 py-2 cursor-text select-text"
                             style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
                           />
                         </td>
-                        <td className="py-2 px-2 align-top min-w-0">
+                        <td className="py-0 px-0 align-top min-w-0 select-text" onMouseDown={(e) => e.stopPropagation()}>
                           <textarea
                             value={service.editableClient.split(/\s*,\s*/).join("\n")}
                             onChange={(e) => {
@@ -2000,13 +2097,15 @@ export default function InvoiceCreator({
                                 .join(", ");
                               setEditableServices(updated);
                             }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => e.stopPropagation()}
                             rows={3}
                             placeholder="One name per line"
-                            className="w-full min-h-[3rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-600 resize-y block break-words"
+                            className="w-full min-h-[3rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-600 resize-y block break-words px-2 py-2 cursor-text select-text"
                             style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
                           />
                         </td>
-                        <td className="py-2 px-2 text-right">
+                        <td className="py-2 px-2 text-right select-text" onMouseDown={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <input
                               type="number"
@@ -2019,7 +2118,9 @@ export default function InvoiceCreator({
                                 updated[idx].editablePrice = v === "" ? 0 : parseFloat(v) || 0;
                                 setEditableServices(updated);
                               }}
-                              className="w-20 text-right bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onDragStart={(e) => e.stopPropagation()}
+                              className="w-20 text-right bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 font-semibold select-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                             <span className="text-gray-600">{currencySymbol}</span>
                           </div>

@@ -126,6 +126,7 @@ export default function OrderPage({
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
+  // Company currency from Company Settings / Regional Settings / Currency (default_currency); used by service modals
   const [companyCurrencyCode, setCompanyCurrencyCode] = useState<string>("EUR");
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [editingHeaderField, setEditingHeaderField] = useState<"client" | "itinerary" | "dates" | null>(null);
@@ -476,7 +477,7 @@ export default function OrderPage({
     }
   };
 
-  // Fetch company settings for conditional Order Source display
+  // Fetch company settings (Order Source, Regional Settings / Currency) so service modals use company currency
   useEffect(() => {
     const fetchCompanySettings = async () => {
       try {
@@ -490,6 +491,7 @@ export default function OrderPage({
         if (response.ok) {
           const data = await response.json();
           setShowOrderSource(data.company?.show_order_source || false);
+          // Company Settings / Regional Settings / Currency → used by Add/Edit service modals
           setCompanyCurrencyCode(data.company?.default_currency || "EUR");
         }
       } catch (err) {

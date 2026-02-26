@@ -134,6 +134,23 @@ export function segmentDisplayArrivalDate(seg: { departureDate?: string; arrival
   return arr;
 }
 
+/**
+ * Number of nights between two dates (from = check-in, to = check-out).
+ * Accepts ISO (YYYY-MM-DD) or display format (dd.mm.yyyy) if parseDisplayToIso is used by caller.
+ */
+export function nightsBetween(from: string | undefined, to: string | undefined): number | null {
+  if (!from || !to) return null;
+  const isoFrom = from.includes(".") ? parseDisplayToIso(from) : from;
+  const isoTo = to.includes(".") ? parseDisplayToIso(to) : to;
+  if (!isoFrom || !isoTo) return null;
+  const dFrom = new Date(isoFrom + "T00:00:00");
+  const dTo = new Date(isoTo + "T00:00:00");
+  if (isNaN(dFrom.getTime()) || isNaN(dTo.getTime())) return null;
+  const diffMs = dTo.getTime() - dFrom.getTime();
+  const nights = Math.round(diffMs / (24 * 60 * 60 * 1000));
+  return nights >= 0 ? nights : null;
+}
+
 /** Normalize segment so arrivalDate uses departure year when same MM-DD (fixes Schedule display and saved data). */
 export function normalizeSegmentArrivalYear<T extends { departureDate?: string; arrivalDate?: string }>(seg: T): T {
   const fixed = segmentDisplayArrivalDate(seg);

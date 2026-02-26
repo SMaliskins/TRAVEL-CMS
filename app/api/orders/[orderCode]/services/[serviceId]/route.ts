@@ -44,6 +44,24 @@ export async function PATCH(
     if (body.service_name !== undefined) updates.service_name = body.service_name;
     if (body.category !== undefined) updates.category = body.category;
     if (body.service_price !== undefined) updates.service_price = body.service_price;
+    if (body.service_currency !== undefined) updates.service_currency = body.service_currency || "EUR";
+    if (body.serviceCurrency !== undefined) updates.service_currency = body.serviceCurrency || "EUR";
+    if (body.service_price_foreign !== undefined) updates.service_price_foreign = body.service_price_foreign != null ? parseFloat(String(body.service_price_foreign)) : null;
+    if (body.servicePriceForeign !== undefined) updates.service_price_foreign = body.servicePriceForeign != null ? parseFloat(String(body.servicePriceForeign)) : null;
+    if (body.exchange_rate !== undefined) updates.exchange_rate = body.exchange_rate != null ? parseFloat(String(body.exchange_rate)) : null;
+    if (body.exchangeRate !== undefined) updates.exchange_rate = body.exchangeRate != null ? parseFloat(String(body.exchangeRate)) : null;
+    if (body.service_price_foreign != null && body.exchange_rate != null && (body.service_currency || body.serviceCurrency) && (body.service_currency || body.serviceCurrency) !== "EUR") {
+      const foreign = parseFloat(String(body.service_price_foreign));
+      const rate = parseFloat(String(body.exchange_rate));
+      if (Number.isFinite(foreign) && Number.isFinite(rate)) updates.service_price = Math.round(foreign * rate * 100) / 100;
+    }
+    if (body.servicePriceForeign != null && body.exchangeRate != null && body.serviceCurrency && body.serviceCurrency !== "EUR") {
+      const foreign = parseFloat(String(body.servicePriceForeign));
+      const rate = parseFloat(String(body.exchangeRate));
+      if (Number.isFinite(foreign) && Number.isFinite(rate)) updates.service_price = Math.round(foreign * rate * 100) / 100;
+    }
+    if (body.actually_paid !== undefined) updates.actually_paid = body.actually_paid != null && body.actually_paid !== "" ? parseFloat(String(body.actually_paid)) : null;
+    if (body.actuallyPaid !== undefined) updates.actually_paid = body.actuallyPaid != null && body.actuallyPaid !== "" ? parseFloat(String(body.actuallyPaid)) : null;
     if (body.client_price !== undefined) {
       if (!isInvoiced) {
         updates.client_price = body.client_price;
@@ -81,6 +99,11 @@ export async function PATCH(
     if (body.hotelBedType !== undefined) updates.hotel_bed_type = body.hotelBedType;
     if (body.hotel_early_check_in !== undefined) updates.hotel_early_check_in = body.hotel_early_check_in;
     if (body.hotel_late_check_in !== undefined) updates.hotel_late_check_in = body.hotel_late_check_in;
+    if (body.hotel_early_check_in_time !== undefined) updates.hotel_early_check_in_time = body.hotel_early_check_in_time || null;
+    if (body.hotel_late_check_in_time !== undefined) updates.hotel_late_check_in_time = body.hotel_late_check_in_time || null;
+    if (body.hotel_room_upgrade !== undefined) updates.hotel_room_upgrade = body.hotel_room_upgrade;
+    if (body.hotel_late_check_out !== undefined) updates.hotel_late_check_out = body.hotel_late_check_out;
+    if (body.hotel_late_check_out_time !== undefined) updates.hotel_late_check_out_time = body.hotel_late_check_out_time || null;
     if (body.hotel_higher_floor !== undefined) updates.hotel_higher_floor = body.hotel_higher_floor;
     if (body.hotel_king_size_bed !== undefined) updates.hotel_king_size_bed = body.hotel_king_size_bed;
     if (body.hotel_honeymooners !== undefined) updates.hotel_honeymooners = body.hotel_honeymooners;
@@ -89,6 +112,8 @@ export async function PATCH(
     if (body.hotel_rooms_next_to !== undefined) updates.hotel_rooms_next_to = body.hotel_rooms_next_to;
     if (body.hotel_parking !== undefined) updates.hotel_parking = body.hotel_parking;
     if (body.hotel_preferences_free_text !== undefined) updates.hotel_preferences_free_text = body.hotel_preferences_free_text;
+    if (body.hotel_price_per !== undefined) updates.hotel_price_per = body.hotel_price_per === "stay" ? "stay" : (body.hotel_price_per || "night");
+    if (body.hotelPricePer !== undefined) updates.hotel_price_per = body.hotelPricePer === "stay" ? "stay" : (body.hotelPricePer || "night");
     if (body.supplier_booking_type !== undefined) updates.supplier_booking_type = body.supplier_booking_type;
     if (body.payment_deadline_deposit !== undefined) updates.payment_deadline_deposit = body.payment_deadline_deposit;
     if (body.payment_deadline_final !== undefined) updates.payment_deadline_final = body.payment_deadline_final;

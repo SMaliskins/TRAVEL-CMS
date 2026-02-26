@@ -5,6 +5,24 @@
 
 ---
 
+### 📅 [2026-02-19] | Invoice number reservation (Create Invoice)
+**Агент:** Code Writer
+**Задача:** Reserve invoice number on Create Invoice; release on abandon; cancelled ≠ pool
+**Статус:** SUCCESS
+
+**Действия:**
+- Migration: `invoice_reservations` (company_id, order_id, invoice_number, status: reserved | used | released)
+- GET nextNumber: reserve for order — return existing reserved for this order; else from released pool (same company/year) or RPC reserve_invoice_sequences; minSeq from issued + reserved only (cancelled excluded)
+- POST create invoice: mark reservation as used after successful insert
+- POST /api/orders/[orderCode]/invoices/release-reservation: set status=released for this order (return to pool)
+- InvoiceCreator: release on unmount; bulk reserves N numbers when payer groups set
+
+**Результат:** Номер резервируется при открытии Create Invoice и не меняется при переходах по вкладкам; при закрытии без сохранения — возврат в пул; аннулированные номера только для повторного использования в том же заказе, не в общий пул.
+
+**Next Step:** Выполнить миграцию `migrations/add_invoice_reservations.sql` в Supabase.
+
+---
+
 ### 📅 [2026-02-19] | [~16:00]
 **Агент:** `Code Writer`
 **Задача:** `Passport parsing + Person clients languages`
