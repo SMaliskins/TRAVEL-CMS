@@ -16,6 +16,7 @@ export interface OrderRow {
   amount: number;
   paid: number;
   debt: number;
+  vat: number;
   profit: number;
   status: OrderStatus;
   type: OrderType;
