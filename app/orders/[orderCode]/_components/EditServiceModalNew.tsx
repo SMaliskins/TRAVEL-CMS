@@ -320,16 +320,16 @@ export default function EditServiceModalNew({
   const [serviceCurrency, setServiceCurrency] = useState<string>(() => (service as { serviceCurrency?: string }).serviceCurrency || companyCurrencyCode || "EUR");
   const [servicePriceForeign, setServicePriceForeign] = useState(() => {
     const v = (service as { servicePriceForeign?: number | null }).servicePriceForeign;
-    return v != null && v !== "" ? String(v) : "";
+    return v != null ? String(v) : "";
   });
   const [exchangeRate, setExchangeRate] = useState(() => {
     const v = (service as { exchangeRate?: number | null }).exchangeRate;
-    return v != null && v !== "" ? String(v) : "";
+    return v != null ? String(v) : "";
   });
   const [actuallyPaid, setActuallyPaid] = useState(() => {
     const v = (service as { actuallyPaid?: number | null; actually_paid?: number | null }).actuallyPaid
       ?? (service as { actually_paid?: number | null }).actually_paid;
-    return v != null && v !== "" ? String(v) : "";
+    return v != null ? String(v) : "";
   });
   const [rateFetching, setRateFetching] = useState(false);
   // Flight: per-client pricing (from API or fallback to single row)
@@ -2645,7 +2645,7 @@ export default function EditServiceModalNew({
                   {/* CLIENTS & PAYER */}
                   <div className="p-3 modal-section space-y-2">
                     <h4 className="modal-section-title">CLIENTS & PAYER</h4>
-                    <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
+                    <div>
                       {categoryType === "hotel" ? (
                         <div className="space-y-2">
                           {!isLoadingClients && clients.filter(c => c.id || c.name?.trim()).length === 0 && (
@@ -3208,103 +3208,8 @@ export default function EditServiceModalNew({
                 </div>
                 
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
-                  {categoryType !== "flight" && categoryType !== "hotel" && (
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Client</label>
-                  )}
-                  {categoryType === "hotel" ? (
-                    /* Hotel: simple text pills + ClientMultiSelectDropdown for adding */
-                    <div className="space-y-2">
-                      {/* Warning when no real clients — only after loading is complete */}
-                      {!isLoadingClients && clients.filter(c => c.id || c.name?.trim()).length === 0 && (
-                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                          Minimum 1 client required. Add a client before saving.
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-1.5">
-                        {clients.filter(c => c.id || c.name).map((client, _, arr) => {
-                          const realIndex = clients.indexOf(client);
-                          return (
-                            <span key={realIndex} className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40]">
-                              {toTitleCaseForDisplay(client.name || "")}
-                              <button
-                                type="button"
-                                onClick={() => removeClient(realIndex)}
-                                className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
-                                aria-label="Remove"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </span>
-                          );
-                        })}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddAccompanyingModal(true)}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        + Add Accompanying Persons
-                      </button>
-                    </div>
-                  ) : categoryType === "flight" ? (
-                    /* Flight: client + e-ticket per row, then Add Accompanying Persons */
-                    <div className="space-y-2">
-                      {!isLoadingClients && clients.filter(c => c.id || c.name?.trim()).length === 0 && (
-                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                          Minimum 1 client required. Add a client before saving.
-                        </p>
-                      )}
-                      <div className="space-y-2">
-                        {clients.filter(c => c.id || c.name).map((client, idx) => {
-                          const realIndex = clients.indexOf(client);
-                          const ticketEntry = ticketNumbers[idx];
-                          const displayName = toTitleCaseForDisplay(client.name || "") || "-";
-                          return (
-                            <div key={client.id ?? realIndex} className="flex items-center gap-2 flex-wrap">
-                              <span className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0">
-                                {displayName}
-                                <button
-                                  type="button"
-                                  onClick={() => removeClient(realIndex)}
-                                  className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
-                                  aria-label="Remove"
-                                >
-                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </span>
-                              <input
-                                type="text"
-                                value={ticketEntry?.ticketNr ?? ""}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  setTicketNumbers((prev) => {
-                                    const n = [...prev];
-                                    if (n[idx]) n[idx] = { ...n[idx], ticketNr: v };
-                                    else n[idx] = { clientId: client.id ?? null, clientName: client.name, ticketNr: v };
-                                    return n;
-                                  });
-                                }}
-                                placeholder="E-ticket"
-                                className="w-32 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddAccompanyingModal(true)}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        + Add Accompanying Persons
-                      </button>
-                    </div>
-                  ) : (
-                    /* Tour / other: PartySelect rows */
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Client</label>
+                  {/* Tour/other only (hotel/flight have CLIENTS in left column) */}
                     <div className="space-y-1.5">
                       {clients.map((client, index) => (
                         <div key={index} className="flex gap-1 items-center">
@@ -3320,7 +3225,6 @@ export default function EditServiceModalNew({
                       ))}
                       <button type="button" onClick={addClient} className="text-sm text-[#387ADF] hover:text-blue-800">+ Add</button>
                     </div>
-                  )}
                 </div>
                 
                 <div>
@@ -3346,7 +3250,7 @@ export default function EditServiceModalNew({
                         type="button"
                         onClick={() => {
                           if (hotelPricePer === "stay") {
-                            const n = (dateFrom && dateTo && nightsBetween(dateFrom, dateTo)) ?? 1;
+                            const n = dateFrom && dateTo ? Number(nightsBetween(dateFrom, dateTo)) || 1 : 1;
                             setPriceUnits(n >= 1 ? n : 1);
                             prevDatesRefEdit.current = dateFrom && dateTo ? `${dateFrom}|${dateTo}` : "";
                           }

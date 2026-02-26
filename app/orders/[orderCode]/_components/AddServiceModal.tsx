@@ -2878,91 +2878,7 @@ export default function AddServiceModal({
                   />
                 </div>
 
-                {categoryType === "hotel" ? (
-                  /* Hotel: simple pills + ClientMultiSelectDropdown */
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      {clients.filter(c => c.id || c.name).map((client) => {
-                        const realIndex = clients.indexOf(client);
-                        const displayName = toTitleCaseForDisplay(client.name || "") || "—";
-                        return (
-                          <span key={client.id || realIndex} className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40]">
-                            {displayName}
-                            <button
-                              type="button"
-                              onClick={() => removeClient(realIndex)}
-                              className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
-                              aria-label={`Remove ${displayName}`}
-                            >
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddAccompanyingModal(true)}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      + Add Accompanying Persons
-                    </button>
-                  </div>
-                ) : categoryType === "flight" ? (
-                  /* Flight: client + e-ticket per row, then Add Accompanying Persons */
-                  <div className="space-y-2">
-                    <div className="space-y-2">
-                      {clients.filter(c => c.id || c.name).map((client, idx) => {
-                        const realIndex = clients.indexOf(client);
-                        const ticketEntry = ticketNumbers[idx];
-                        const displayName = toTitleCaseForDisplay(client.name || "") || "-";
-                        return (
-                          <div key={client.id || realIndex} className="flex items-center gap-2 flex-wrap">
-                            <span className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0">
-                              {displayName}
-                              <button
-                                type="button"
-                                onClick={() => removeClient(realIndex)}
-                                className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
-                                aria-label={`Remove ${displayName}`}
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </span>
-                            <input
-                              type="text"
-                              value={ticketEntry?.ticketNr ?? ""}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setTicketNumbers((prev) => {
-                                  const n = [...prev];
-                                  if (n[idx]) n[idx] = { ...n[idx], ticketNr: v };
-                                  else n[idx] = { clientId: client.id, clientName: client.name, ticketNr: v };
-                                  return n;
-                                });
-                                ticketNumbersRef.current[idx] = v;
-                              }}
-                              placeholder="E-ticket"
-                              className="w-32 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddAccompanyingModal(true)}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      + Add Accompanying Persons
-                    </button>
-                  </div>
-                ) : (
-                  /* Tour / other: original chips UI */
+                {/* Tour / other: ClientMultiSelectDropdown + chips UI (hotel/flight have CLIENTS in left column) */}
                   <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                     <div className="flex items-center justify-between mb-0.5">
                       <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
@@ -3006,7 +2922,6 @@ export default function AddServiceModal({
                       )}
                     </div>
                   </div>
-                )}
 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
@@ -3031,7 +2946,7 @@ export default function AddServiceModal({
                         type="button"
                         onClick={() => {
                           if (hotelPricePer === "stay") {
-                            const n = (dateFrom && dateTo && nightsBetween(dateFrom, dateTo)) ?? 1;
+                            const n = dateFrom && dateTo ? Number(nightsBetween(dateFrom, dateTo)) || 1 : 1;
                             setPriceUnits(n >= 1 ? n : 1);
                             prevDatesRef.current = dateFrom && dateTo ? `${dateFrom}|${dateTo}` : "";
                           }
