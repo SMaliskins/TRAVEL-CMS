@@ -62,9 +62,8 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen overflow-hidden">
-      {/* Left panel — branding with animated gradient & floating orbs */}
+      {/* Left panel — branding with video background */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-blue-900">
-        {/* Видео на заднем фоне */}
         <video
           autoPlay
           loop
@@ -72,9 +71,8 @@ export default function LoginPage() {
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
         >
-          <source src="/Vid/DNK.mp4" type="video/mp4" />
+          <source src="/Vid/856486-hd_1920_1080_30fps.mp4" type="video/mp4" />
         </video>
-        {/* Синий оверлей для читаемости текста */}
         <div
           className="absolute inset-0"
           style={{

@@ -22,30 +22,49 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const checkAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-
-        if (session) {
-          setIsAuthenticated(true);
-          // If authenticated and on login page, redirect to dashboard
-          if (publicPath) {
-            router.push("/dashboard");
-            return;
-          }
-        } else {
+        if (!session) {
           setIsAuthenticated(false);
-          // If not authenticated and not on public path, redirect to login
           if (!publicPath) {
             router.push("/login");
             return;
           }
+          setIsLoading(false);
+          return;
+        }
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) {
+          const isRefreshTokenError = error && (
+            (error as { message?: string }).message?.includes("Refresh Token") ||
+            (error as { code?: string }).code === "refresh_token_not_found"
+          );
+          if (isRefreshTokenError) {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          }
+          setIsAuthenticated(false);
+          if (!publicPath) {
+            router.push("/login");
+            return;
+          }
+          setIsLoading(false);
+          return;
+        }
+        setIsAuthenticated(true);
+        if (publicPath) {
+          router.push("/dashboard");
+          return;
         }
       } catch (error) {
-        console.error("Auth check failed:", error);
+        const msg = error && typeof error === "object" && "message" in error ? String((error as { message?: string }).message || "") : "";
+        const isRefreshTokenError = msg.includes("Refresh Token") || msg.includes("refresh_token_not_found");
+        if (isRefreshTokenError) {
+          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        }
+        setIsAuthenticated(false);
         if (!publicPath) {
           router.push("/login");
           return;
         }
       }
-
       setIsLoading(false);
     };
 
