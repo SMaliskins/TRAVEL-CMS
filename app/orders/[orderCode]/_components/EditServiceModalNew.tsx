@@ -4677,43 +4677,23 @@ export default function EditServiceModalNew({
           <div className="mt-3 p-3 modal-section space-y-2">
             <h4 className="modal-section-title">Booking Terms</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Price Type - only for Tour */}
-              {categoryType === "tour" && (
-                <div className="sm:col-span-2 min-w-0">
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Price Type</label>
-                  <select
-                    value={priceType}
-                    onChange={(e) => setPriceType(e.target.value as "ebd" | "regular" | "spo")}
-                    className="w-full min-w-[10rem] rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="regular">Regular</option>
-                    <option value="ebd">Early Booking (EBD)</option>
-                    <option value="spo">Special Offer (SPO)</option>
-                  </select>
-                </div>
-              )}
-              
-              {/* PAYMENT TERMS (Hotel) / Refund Policy - hidden for Tour */}
-              {categoryType === "hotel" && (
-                <div className="col-span-2 mt-2 pt-2 border-t border-gray-200">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">PAYMENT TERMS</h4>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5 mt-1">Refund Policy</label>
-                  <select
-                    value={refundPolicy}
-                    onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
-                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                    aria-label="Refund Policy"
-                  >
-                    <option value="non_ref">Non-refundable</option>
-                    <option value="refundable">Refundable (with conditions)</option>
-                    <option value="fully_ref">Fully Refundable</option>
-                  </select>
-                </div>
-              )}
+              {/* Refund Policy - Transfer only */}
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
+                <select
+                  value={refundPolicy}
+                  onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
+                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                >
+                  <option value="non_ref">Non-refundable</option>
+                  <option value="refundable">Refundable (with conditions)</option>
+                  <option value="fully_ref">Fully Refundable</option>
+                </select>
+              </div>
             </div>
             
-            {/* Cancellation/Refund details - hidden for Tour */}
-            {categoryType !== "tour" && refundPolicy !== "non_ref" && (
+            {/* Cancellation/Refund details */}
+            {refundPolicy !== "non_ref" && (
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
@@ -4749,76 +4729,16 @@ export default function EditServiceModalNew({
               </div>
             )}
             
-            {/* Payment Deadlines */}
+            {/* Payment Deadlines - Transfer uses single deadline */}
             <div className="border-t border-gray-200 pt-2 mt-2">
-              {categoryType === "tour" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="min-w-0">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit Due</label>
-                    <DateInput
-                      value={paymentDeadlineDeposit}
-                      onChange={setPaymentDeadlineDeposit}
-                      className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={depositPercent}
-                      onChange={(e) => setDepositPercent(e.target.value)}
-                      placeholder="10"
-                      className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("depositPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Final Due</label>
-                    <DateInput
-                      value={paymentDeadlineFinal}
-                      onChange={setPaymentDeadlineFinal}
-                      className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Final %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={finalPercent}
-                      onChange={(e) => setFinalPercent(e.target.value)}
-                      placeholder="90"
-                      className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("finalPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                    />
-                  </div>
-                </div>
-              ) : categoryType === "hotel" ? (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                  <DateInput
-                    value={paymentDeadlineFinal}
-                    onChange={setPaymentDeadlineFinal}
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  />
-                  {refundPolicy === "non_ref" && (
-                    <span className="text-xs text-gray-500 mt-1 block">Auto-set to today for non-refundable</span>
-                  )}
-                  {refundPolicy === "refundable" && (
-                    <span className="text-xs text-gray-500 mt-1 block">Auto-set to Free cancel until date</span>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                  <DateInput
-                    value={paymentDeadlineFinal}
-                    onChange={setPaymentDeadlineFinal}
-                    className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
+                <DateInput
+                  value={paymentDeadlineFinal}
+                  onChange={setPaymentDeadlineFinal}
+                  className="w-full rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white"
+                />
+              </div>
             </div>
           </div>
           )}
