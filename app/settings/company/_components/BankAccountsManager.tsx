@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { BANK_LIST } from "@/lib/constants/banks";
 
 interface BankAccount {
   id: string;
@@ -205,7 +206,26 @@ export default function BankAccountsManager({ readonly }: Props) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Bank Name</label>
-                      <input type="text" value={formBank} onChange={(e) => setFormBank(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                      <select
+                        value={formBank && BANK_LIST.includes(formBank as (typeof BANK_LIST)[number]) && formBank !== "Other" ? formBank : "Other"}
+                        onChange={(e) => setFormBank(e.target.value === "Other" ? "" : e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      >
+                        <option value="">Select bank</option>
+                        {BANK_LIST.filter((b) => b !== "Other").map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                        <option value="Other">Other</option>
+                      </select>
+                      {(!formBank || !BANK_LIST.includes(formBank as (typeof BANK_LIST)[number]) || formBank === "Other") && (
+                        <input
+                          type="text"
+                          value={formBank && !BANK_LIST.includes(formBank as (typeof BANK_LIST)[number]) ? formBank : ""}
+                          onChange={(e) => setFormBank(e.target.value)}
+                          placeholder="Custom bank name"
+                          className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
@@ -293,12 +313,26 @@ export default function BankAccountsManager({ readonly }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Bank Name</label>
-              <input
-                type="text"
-                value={formBank}
-                onChange={(e) => setFormBank(e.target.value)}
+              <select
+                value={formBank && BANK_LIST.includes(formBank as (typeof BANK_LIST)[number]) && formBank !== "Other" ? formBank : "Other"}
+                onChange={(e) => setFormBank(e.target.value === "Other" ? "" : e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
+              >
+                <option value="">Select bank</option>
+                {BANK_LIST.filter((b) => b !== "Other").map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+                <option value="Other">Other</option>
+              </select>
+              {(!formBank || !BANK_LIST.includes(formBank as (typeof BANK_LIST)[number]) || formBank === "Other") && (
+                <input
+                  type="text"
+                  value={formBank && !BANK_LIST.includes(formBank as (typeof BANK_LIST)[number]) ? formBank : ""}
+                  onChange={(e) => setFormBank(e.target.value)}
+                  placeholder="Custom bank name"
+                  className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>

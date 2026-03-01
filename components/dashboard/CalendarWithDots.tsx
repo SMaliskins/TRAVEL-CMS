@@ -78,8 +78,8 @@ export default function CalendarWithDots({
     selectedDate ? events.filter((e) => e.date === selectedDate) : [];
 
   return (
-    <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
-      <h3 className="mb-4 text-lg font-semibold text-gray-900">Calendar</h3>
+    <div className={`booking-glass-panel !p-6 ${className}`}>
+      <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">Calendar</h3>
 
       <div className="mb-4">
         <h4 className="text-sm font-medium text-gray-700">{monthName}</h4>

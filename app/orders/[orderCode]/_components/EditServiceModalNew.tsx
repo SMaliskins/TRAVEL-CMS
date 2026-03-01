@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient';
 import PartySelect from '@/components/PartySelect';
 import DateRangePicker from '@/components/DateRangePicker';
-import { FlightSegment } from '@/components/FlightItineraryInput';
+import FlightItineraryInput, { FlightSegment } from '@/components/FlightItineraryInput';
 import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
@@ -126,6 +126,7 @@ interface Service {
   commissionAmount?: number | null;
   agentDiscountValue?: number | null;
   agentDiscountType?: "%" | "€" | null;
+  servicePriceLineItems?: { description: string; amount: number; commissionable: boolean }[];
   // Hotel: real amount charged (e.g. by bank)
   actuallyPaid?: number | null;
   actually_paid?: number | null;
@@ -297,7 +298,15 @@ export default function EditServiceModalNew({
   
   const [payerPartyId, setPayerPartyId] = useState<string | null>(service.payerPartyId || null);
   const [payerName, setPayerName] = useState(service.payer || "");
-  const [servicePrice, setServicePrice] = useState(String(service.servicePrice || 0));
+  const [servicePrice, setServicePrice] = useState(() => {
+    const total = Number(service.servicePrice || 0);
+    const raw = (service as { servicePriceLineItems?: { amount?: number }[] }).servicePriceLineItems;
+    if (Array.isArray(raw) && raw.length > 0) {
+      const lineSum = raw.reduce((s, it) => s + (Number(it?.amount) || 0), 0);
+      return String(Math.max(0, Math.round((total - lineSum) * 100) / 100));
+    }
+    return String(total);
+  });
   const [marge, setMarge] = useState(() => {
     const cat = (service as { categoryType?: string; category?: string }).categoryType;
     const catStr = String((service as { category?: string }).category || "").toLowerCase();
@@ -362,6 +371,19 @@ export default function EditServiceModalNew({
   });
   const [agentDiscountType, setAgentDiscountType] = useState<"%" | "€">(
     (service.agentDiscountType as "%" | "€") || "€"
+  );
+  const [servicePriceLineItems, setServicePriceLineItems] = useState<{ description: string; amount: number; commissionable: boolean }[]>(
+    () => {
+      const raw = (service as { servicePriceLineItems?: { description?: string; amount?: number; commissionable?: boolean }[] }).servicePriceLineItems;
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw.map((it) => ({
+          description: it.description ?? "",
+          amount: Number(it.amount) || 0,
+          commissionable: it.commissionable !== false,
+        }));
+      }
+      return [];
+    }
   );
   // Track which field was last edited to determine calculation direction
   const pricingLastEditedRef = useRef<'cost' | 'marge' | 'sale' | 'agent' | 'commission' | null>(null);
@@ -661,6 +683,7 @@ export default function EditServiceModalNew({
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [isParsingFlight, setIsParsingFlight] = useState(false);
+  const flightFileInputRef = useRef<HTMLInputElement>(null);
   const [baggage, setBaggage] = useState<string>(service.baggage || "");
   const [cabinClass, setCabinClass] = useState<"economy" | "premium_economy" | "business" | "first">(service.cabinClass || "economy");
   
@@ -814,16 +837,36 @@ export default function EditServiceModalNew({
     if (newRoute && newRoute !== serviceName) setServiceName(newRoute);
   }, [flightSegments, categoryType]); // serviceName intentionally omitted so segment edits update the name
 
-  // Commission amount in € - use persisted commission_rate/commission_amount, else supplierCommissions
-  const getCommissionAmount = (cost: number): number => {
+  // Effective Service Price: Service Price (base) + sum of line items. Line items ADD to Service Price, do not replace.
+  const effectiveServicePrice = useMemo(() => {
+    const base = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    if (categoryType === "tour" && servicePriceLineItems.length > 0) {
+      const lineSum = servicePriceLineItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+      return Math.round((base + lineSum) * 100) / 100;
+    }
+    return base;
+  }, [categoryType, servicePriceLineItems, servicePrice]);
+
+  // Commissionable base: Service Price (commissionable) + sum of commissionable line items
+  const commissionableCost = useMemo(() => {
+    const base = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    if (categoryType === "tour" && servicePriceLineItems.length > 0) {
+      const commissionableSum = servicePriceLineItems
+        .filter((it) => it.commissionable)
+        .reduce((s, it) => s + (Number(it.amount) || 0), 0);
+      return Math.round((base + commissionableSum) * 100) / 100;
+    }
+    return effectiveServicePrice;
+  }, [categoryType, servicePriceLineItems, servicePrice, effectiveServicePrice]);
+
+  // Commission amount in € — applies to commissionableCost (full or line-item sum)
+  const getCommissionAmount = (baseCost: number): number => {
     if (categoryType !== "tour") return 0;
     if (selectedCommissionIndex >= 0 && supplierCommissions[selectedCommissionIndex]) {
       const rate = supplierCommissions[selectedCommissionIndex].rate;
-      if (rate != null && rate > 0) return Math.round((cost * rate / 100) * 100) / 100;
+      if (rate != null && rate > 0) return Math.round((baseCost * rate / 100) * 100) / 100;
     }
-    const rate = Number(service.commissionRate);
-    if (rate > 0) return Math.round((cost * rate / 100) * 100) / 100;
-    return Math.round((Number(service.commissionAmount) || 0) * 100) / 100;
+    return 0;
   };
 
   const getAgentDiscountAmount = (cost: number): number => {
@@ -836,11 +879,12 @@ export default function EditServiceModalNew({
 
   // Tour: recalc only when user edits Pricing; skip on open (ref === null) — same as Add
   // Formulas: AgentDiscount = Cost - Sale, Sale = Cost - AgentDiscount, Margin = Sale - (Cost - Commission)
+  // Commission applies to commissionableCost (full cost or sum of commissionable line items)
   useEffect(() => {
     if (categoryType !== "tour") return;
     if (!pricingLastEditedRef.current) return;
-    const cost = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
-    const commissionAmount = getCommissionAmount(cost);
+    const cost = effectiveServicePrice;
+    const commissionAmount = getCommissionAmount(commissionableCost);
     const netCost = Math.round((cost - commissionAmount) * 100) / 100;
 
     if (pricingLastEditedRef.current === "sale") {
@@ -849,15 +893,23 @@ export default function EditServiceModalNew({
       setAgentDiscountType("€");
       setAgentDiscountValue(discount.toFixed(2));
       setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
+      pricingLastEditedRef.current = null;
       return;
     }
-    // User edited cost, commission, or agent discount → recalc Sale and Margin
+    if (pricingLastEditedRef.current === "commission") {
+      // Commission change: recalc Margin only, keep Total Client price
+      const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+      setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
+      pricingLastEditedRef.current = null;
+      return;
+    }
+    // User edited cost or agent discount → recalc Sale and Margin
     const discountAmount = getAgentDiscountAmount(cost);
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
     setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
-  }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
+  }, [categoryType, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
 
   // Non-Tour: when Client price changes, recalculate Margin = Total Client price - Service price.
   useEffect(() => {
@@ -1447,7 +1499,7 @@ export default function EditServiceModalNew({
     if (rate <= 0 && amount > 0 && cost > 0) {
       rate = Math.round((amount / cost) * 10000) / 100;
     }
-    const displayName = name || (amount > 0 ? "Saved" : null);
+    const displayName = name || (rate > 0 ? `${rate}%` : null);
     if (displayName && (rate > 0 || amount > 0)) {
       setSupplierCommissions([{ name: displayName, rate: rate || 0, isActive: true }]);
       setSelectedCommissionIndex(0);
@@ -1860,11 +1912,11 @@ export default function EditServiceModalNew({
         payer_name: payerName,
         service_price: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.cost) || 0), 0) * 100) / 100
-          : parseFloat(servicePrice) || 0,
+          : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
         client_price: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
-        quantity: categoryType === "flight" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
+        quantity: categoryType === "flight" || categoryType === "tour" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
         vat_rate: vatRate,
         res_status: resStatus || "booked",
         ref_nr: categoryType === "flight" && refNrs.length > 0 ? refNrs.filter(Boolean).join(", ") || null : refNr || null,
@@ -1918,7 +1970,8 @@ export default function EditServiceModalNew({
         payload.hotel_star_rating = hotelStarRating || null;
         payload.hotel_room = hotelRoom || null;
         payload.hotel_board = hotelBoard || null;
-        payload.meal_plan_text = mealPlanText?.trim() || null;
+        // meal_plan_text must match Meal dropdown for display; derive from hotelBoard if mealPlanText empty
+        payload.meal_plan_text = mealPlanText?.trim() || (hotelBoard ? BOARD_LABELS[hotelBoard] : null) || null;
         payload.transfer_type = transferType || null;
         payload.additional_services = additionalServices || null;
         if (flightSegments.length > 0) payload.flight_segments = flightSegments;
@@ -1979,14 +2032,18 @@ export default function EditServiceModalNew({
         payload.change_fee = changeFee ? parseFloat(changeFee) : null;
       }
 
-      // Tour (Package Tour): commission + agent discount + commission_amount + commission_rate (persisted)
+      // Tour (Package Tour): commission + agent discount + line items. Commission applies to commissionableCost only
       if (categoryType === "tour") {
         const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
         payload.commission_name = comm?.name ?? null;
-        payload.commission_rate = comm?.rate ?? Number(service.commissionRate) ?? null;
-        const cost = parseFloat(servicePrice) || 0;
-        const commAmount = comm?.rate != null && comm.rate > 0 ? Math.round((cost * comm.rate / 100) * 100) / 100 : (Number(service.commissionAmount) || 0);
+        payload.commission_rate = comm != null ? (comm.rate ?? null) : null;
+        const commAmount = comm?.rate != null && comm.rate > 0 ? Math.round((commissionableCost * comm.rate / 100) * 100) / 100 : 0;
         payload.commission_amount = commAmount;
+        payload.service_price_line_items = servicePriceLineItems.map((it) => ({
+          description: it.description.trim(),
+          amount: Number(it.amount) || 0,
+          commissionable: !!it.commissionable,
+        }));
         const discVal = parseFloat(agentDiscountValue);
         payload.agent_discount_value = Number.isFinite(discVal) ? discVal : null;
         payload.agent_discount_type = agentDiscountValue.trim() ? agentDiscountType : null;
@@ -2027,7 +2084,7 @@ export default function EditServiceModalNew({
         const opt = (v: string | null | undefined) => (v?.trim() ? v.trim() : undefined);
         const finalServicePrice = categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.cost) || 0), 0) * 100) / 100
-          : parseFloat(servicePrice) || 0;
+          : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0);
         const finalClientPrice = categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0) * 100) / 100
           : parseFloat(clientPrice) || 0;
@@ -2077,12 +2134,14 @@ export default function EditServiceModalNew({
           hotelPreferencesFreeText: showHotelFields ? (hotelPreferences.freeText || undefined) : undefined,
           // Tour: commission accepts null
           commissionName: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.name ?? null : null) : undefined,
-          commissionRate: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.rate ?? null : Number(service.commissionRate) ?? null) : undefined,
-          commissionAmount: categoryType === "tour" ? (() => { const c = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null; const cost = parseFloat(servicePrice) || 0; return c?.rate != null && c.rate > 0 ? Math.round((cost * c.rate / 100) * 100) / 100 : (Number(service.commissionAmount) || 0); })() : undefined,
+          commissionRate: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.rate ?? null : null) : undefined,
+          commissionAmount: categoryType === "tour" ? (() => { const c = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null; const cost = parseFloat(servicePrice) || 0; return c?.rate != null && c.rate > 0 ? Math.round((cost * c.rate / 100) * 100) / 100 : 0; })() : undefined,
           agentDiscountValue: categoryType === "tour" ? (agentDiscountValue.trim() ? parseFloat(agentDiscountValue) : null) : undefined,
           agentDiscountType: categoryType === "tour" ? agentDiscountType : undefined,
+          servicePriceLineItems: categoryType === "tour" ? servicePriceLineItems : undefined,
+          _keepModalOpen: categoryType === "tour",
         });
-        onClose();
+        if (categoryType !== "tour") onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
         setError(errData.error || 'Failed to update service');
@@ -2336,10 +2395,33 @@ export default function EditServiceModalNew({
                     className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     autoFocus
                   />
+                  <input
+                    ref={flightFileInputRef}
+                    type="file"
+                    accept=".pdf,.txt,.eml"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        const dt = new DataTransfer();
+                        dt.items.add(f);
+                        handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
+                      }
+                      e.target.value = "";
+                    }}
+                  />
                   {parseError && (
                     <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
                   )}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => flightFileInputRef.current?.click()}
+                      disabled={isLoadingPdf}
+                      className="px-4 py-1.5 text-sm border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      Attach PDF
+                    </button>
                     <button
                       type="button"
                       onClick={handleParseFlight}
@@ -2509,7 +2591,7 @@ export default function EditServiceModalNew({
             </div>
           )}
 
-          <div className={`grid grid-cols-1 gap-3 ${categoryType === "flight" ? "md:grid-cols-[3fr_2fr]" : categoryType === "hotel" ? "md:grid-cols-[1.65fr_1fr]" : "md:grid-cols-3"}`}>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
             
             <div className={`space-y-3 ${categoryType === "hotel" ? "" : ""}`}>
               {categoryType === "hotel" ? (
@@ -2840,7 +2922,7 @@ export default function EditServiceModalNew({
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "25.01 RIX-FRA-NCE / 02.02 NCE-FRA-RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : "Description"}
+                    placeholder={categoryType === "flight" ? "25.01 RIX-FRA-NCE / 02.02 NCE-FRA-RIX" : categoryType === "tour" ? "RIX-BOJ" : "Description"}
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${categoryType === "tour" && parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : categoryType === "tour" && parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
@@ -2972,7 +3054,11 @@ export default function EditServiceModalNew({
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Meal</label>
                       <select
                         value={hotelBoard}
-                        onChange={(e) => setHotelBoard(e.target.value as typeof hotelBoard)}
+                        onChange={(e) => {
+                          const v = e.target.value as typeof hotelBoard;
+                          setHotelBoard(v);
+                          setMealPlanText(BOARD_LABELS[v] || "");
+                        }}
                         className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelBoard") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       >
                         <option value="room_only">RO</option>
@@ -3032,6 +3118,19 @@ export default function EditServiceModalNew({
                     </div>
                   </>
                 ) : null}
+                {/* Ref Nr (booking ref) — for Tour, above Status in BASIC INFO */}
+                {categoryType === "tour" && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr (booking ref)</label>
+                    <input
+                      type="text"
+                      value={refNr}
+                      onChange={(e) => setRefNr(e.target.value)}
+                      placeholder="Booking ref"
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                    />
+                  </div>
+                )}
                 {categoryType !== "flight" && (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
@@ -3180,67 +3279,30 @@ export default function EditServiceModalNew({
 
             {/* Flight Schedule — in the left column */}
             {categoryType === "flight" && flightScheduleBlock}
+            {/* Tour: Flight Information — parse document above or add/edit manually */}
+            {categoryType === "tour" && (
+              <div className="mt-3 p-3 rounded-lg border bg-sky-50/50 border-sky-100">
+                <h4 className="text-xs font-semibold uppercase tracking-wide mb-2 text-sky-600">FLIGHT INFORMATION</h4>
+                <p className="text-xs text-gray-500 mb-3">Parse document above, or add flight segments manually:</p>
+                <FlightItineraryInput
+                  segments={flightSegments}
+                  onSegmentsChange={(segs) => setFlightSegments(normalizeSegmentsArrivalYear(segs) as FlightSegment[])}
+                  readonly={false}
+                />
+              </div>
+            )}
 
             </div>
 
-            {/* Right side: PARTIES (tour/other only) + PRICING + REFERENCES */}
+            {/* Right side: for tour = PARTIES + Booking Terms (PRICING+REFERENCES in left col); for hotel/flight = PRICING + PARTIES + REFERENCES + Booking Terms */}
             {(() => {
               const needsWrapper = categoryType === "hotel" || categoryType === "flight";
-              const RightWrapper = needsWrapper ? "div" : React.Fragment;
-              const rightWrapperProps = needsWrapper ? { className: "md:col-span-1 space-y-2" as const } : {};
+              const RightWrapper = needsWrapper ? "div" : "div";
+              const rightWrapperProps = needsWrapper ? { className: "space-y-2" as const } : { className: "space-y-2" as const };
               return (
                 <RightWrapper {...rightWrapperProps}>
-            <div className="space-y-3">
-              {/* PARTIES (CLIENTS/CLIENT moved under BASIC INFO for hotel/flight) */}
-              {categoryType !== "hotel" && categoryType !== "flight" && (
-              <div className="p-3 modal-section space-y-2">
-                <h4 className="modal-section-title">PARTIES</h4>
-                
-                {/* Supplier: for Tour/other here */}
-                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect
-                    value={supplierPartyId}
-                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
-                    roleFilter="supplier"
-                    initialDisplayName={supplierName}
-                  />
-                </div>
-                
-                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Client</label>
-                  {/* Tour/other only (hotel/flight have CLIENTS in left column) */}
-                    <div className="space-y-1.5">
-                      {clients.map((client, index) => (
-                        <div key={index} className="flex gap-1 items-center">
-                          <div className="flex-1 min-w-0">
-                            <PartySelect key={`client-${client.id || index}`} value={client.id} onChange={(id, name) => updateClient(index, id, name)} initialDisplayName={client.name} />
-                          </div>
-                          {clients.length > 1 && (
-                            <button type="button" onClick={() => removeClient(index)} className="px-1.5 text-red-400 hover:text-red-600">
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={addClient} className="text-sm text-[#387ADF] hover:text-blue-800">+ Add</button>
-                    </div>
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect
-                    key={`payer-${payerPartyId || 'empty'}`}
-                    value={payerPartyId}
-                    onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }}
-                    initialDisplayName={payerName}
-                  />
-                </div>
-              </div>
-              )}
-            </div>
-
             <div className="space-y-2">
+              {/* PRICING */}
               <div className="p-3 modal-section space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="modal-section-title">PRICING</h4>
@@ -3281,25 +3343,28 @@ export default function EditServiceModalNew({
                   )}
                 </div>
 
-                {/* Tour: Row1 Cost | Commission; Row2 Agent discount | Sale; Row3 Marge (calc) | VAT */}
+                {/* Tour: Row1 Service Price | Commission; Row2 Agent discount | Total Client price; Row3 Margin (calc) | VAT; Line items (optional) */}
                 {categoryType === "tour" ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={priceUnits > 0 ? (parseFloat(servicePrice) / priceUnits) || "" : servicePrice}
-                          onChange={(e) => {
-                            pricingLastEditedRef.current = "cost";
-                            const v = parseFloat(e.target.value) || 0;
-                            setServicePrice(String(Math.round(v * priceUnits * 100) / 100));
-                          }}
-                          placeholder="0.00"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
-                        />
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Service Price</label>
+                        <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                          <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={servicePrice}
+                            onChange={(e) => {
+                              pricingLastEditedRef.current = "cost";
+                              const v = parseFloat(e.target.value) || 0;
+                              setServicePrice(String(Math.round(v * 100) / 100));
+                            }}
+                            placeholder="0.00"
+                            className={`flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] border-0 bg-transparent ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : ""}`}
+                          />
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Commission</label>
@@ -3316,11 +3381,96 @@ export default function EditServiceModalNew({
                           <option value={-1}>—</option>
                           {supplierCommissions.map((c, i) => (
                             <option key={i} value={i}>
-                              {c.name}{c.rate != null ? ` (${c.rate}%)` : ""}
+                              {c.name}{c.rate != null && c.name !== `${c.rate}%` ? ` (${c.rate}%)` : ""}
                             </option>
                           ))}
                         </select>
                       </div>
+                    </div>
+                    {/* Extra: positions adding to Service Price (commissionable / non-commissionable) */}
+                    <div className="border-t border-gray-100 pt-1.5 mt-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-gray-600">Extra</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            pricingLastEditedRef.current = "cost";
+                            setServicePriceLineItems((prev) => [...prev, { description: "", amount: 0, commissionable: true }]);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                      {servicePriceLineItems.length > 0 && (
+                        <div className="space-y-1">
+                          {servicePriceLineItems.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 py-1.5 px-2 rounded bg-gray-50 border border-gray-100">
+                              <input
+                                type="text"
+                                placeholder="Description"
+                                value={item.description}
+                                onChange={(e) => {
+                                  pricingLastEditedRef.current = "cost";
+                                  setServicePriceLineItems((prev) => {
+                                    const next = [...prev];
+                                    next[idx] = { ...next[idx], description: e.target.value };
+                                    return next;
+                                  });
+                                }}
+                                className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-1 text-sm"
+                              />
+                              <div className="inline-flex shrink-0 rounded border border-gray-300 overflow-hidden">
+                                <span className="pl-1.5 py-1 text-slate-500 text-xs">{currencySymbol}</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.amount || ""}
+                                  onChange={(e) => {
+                                    pricingLastEditedRef.current = "cost";
+                                    const v = parseFloat(e.target.value) || 0;
+                                    setServicePriceLineItems((prev) => {
+                                      const next = [...prev];
+                                      next[idx] = { ...next[idx], amount: v };
+                                      return next;
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="w-16 py-1 pr-1.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                />
+                              </div>
+                              <label className="flex shrink-0 items-center gap-1 text-xs text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={item.commissionable}
+                                  onChange={(e) => {
+                                    pricingLastEditedRef.current = "cost";
+                                    setServicePriceLineItems((prev) => {
+                                      const next = [...prev];
+                                      next[idx] = { ...next[idx], commissionable: e.target.checked };
+                                      return next;
+                                    });
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                Comm
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  pricingLastEditedRef.current = "cost";
+                                  setServicePriceLineItems((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                                className="shrink-0 text-red-500 hover:text-red-600 p-0.5"
+                                aria-label="Remove"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -3353,53 +3503,41 @@ export default function EditServiceModalNew({
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Sale ({currencySymbol})</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={priceUnits > 0 ? (parseFloat(clientPrice) / priceUnits) || "" : clientPrice}
-                          onChange={(e) => {
-                            if (service.invoice_id) return;
-                            pricingLastEditedRef.current = "sale";
-                            const v = parseFloat(e.target.value) || 0;
-                            setClientPrice(String(Math.round(v * priceUnits * 100) / 100));
-                          }}
-                          placeholder="0.00"
-                          disabled={!!service.invoice_id}
-                          title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">{(categoryType as string) === "hotel" ? "Nights" : "Units"}</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={priceUnits}
-                          onChange={(e) => {
-                            const u = Math.max(1, Math.floor(Number(e.target.value) || 1));
-                            const perSale = priceUnits > 0 ? (parseFloat(clientPrice) || 0) / priceUnits : 0;
-                            const perCost = priceUnits > 0 ? (parseFloat(servicePrice) || 0) / priceUnits : 0;
-                            if (!service.invoice_id) setClientPrice(String(Math.round(perSale * u * 100) / 100));
-                            setServicePrice(String(Math.round(perCost * u * 100) / 100));
-                            setPriceUnits(u);
-                          }}
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                        />
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Total Client price</label>
+                        <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                          <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={clientPrice}
+                            onChange={(e) => {
+                              if (service.invoice_id) return;
+                              pricingLastEditedRef.current = "sale";
+                              const v = parseFloat(e.target.value) || 0;
+                              setClientPrice(String(Math.round(v * 100) / 100));
+                            }}
+                            placeholder="0.00"
+                            disabled={!!service.invoice_id}
+                            title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          />
+                        </div>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge ({currencySymbol})</label>
-                        <input
-                          type="text"
-                          readOnly
-                          value={marge}
-                          className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-700"
-                          aria-readonly
-                        />
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Margin</label>
+                        <div className="inline-flex w-full rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+                          <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
+                          <input
+                            type="text"
+                            readOnly
+                            value={marge}
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right text-gray-700 bg-transparent border-0"
+                            aria-readonly
+                          />
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">VAT</label>
@@ -3836,34 +3974,46 @@ export default function EditServiceModalNew({
                 )}
               </div>
 
-              {/* REFERENCES — for tour/other (flight refs moved to PARTIES in left column) */}
+              {/* PARTIES — under PRICING for tour/other */}
               {categoryType !== "hotel" && categoryType !== "flight" && (
               <div className="p-3 modal-section space-y-2">
-                <h4 className="modal-section-title">REFERENCES</h4>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">
-                    {categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}
-                  </label>
-                  <input
-                    type="text"
-                    value={refNr}
-                    onChange={(e) => setRefNr(e.target.value)}
-                    placeholder="Booking ref"
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                <h4 className="modal-section-title">PARTIES</h4>
+                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                  <PartySelect
+                    value={supplierPartyId}
+                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                    roleFilter="supplier"
+                    initialDisplayName={supplierName}
                   />
                 </div>
-                {showTicketNr && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ticket Nr</label>
-                    <input
-                      type="text"
-                      value={ticketNr}
-                      onChange={(e) => setTicketNr(e.target.value)}
-                      placeholder="555-1234567890"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
+                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Client</label>
+                  <div className="space-y-1.5">
+                    {clients.map((client, index) => (
+                      <div key={index} className="flex gap-1 items-center">
+                        <div className="flex-1 min-w-0">
+                          <PartySelect key={`client-${client.id || index}`} value={client.id} onChange={(id, name) => updateClient(index, id, name)} initialDisplayName={client.name} />
+                        </div>
+                        {clients.length > 1 && (
+                          <button type="button" onClick={() => removeClient(index)} className="px-1.5 text-red-400 hover:text-red-600">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={addClient} className="text-sm text-[#387ADF] hover:text-blue-800">+ Add</button>
                   </div>
-                )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
+                  <PartySelect
+                    key={`payer-${payerPartyId || 'empty'}`}
+                    value={payerPartyId}
+                    onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }}
+                    initialDisplayName={payerName}
+                  />
+                </div>
               </div>
               )}
 
@@ -4079,11 +4229,9 @@ export default function EditServiceModalNew({
               )}
             </div>
             </RightWrapper>
-            );
+                );
             })()}
           </div>
-
-          {/* Flight Schedule rendered in left column (see flightScheduleBlock above) */}
 
           {showTransferFields && (
             <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">

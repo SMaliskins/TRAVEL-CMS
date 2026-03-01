@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createClient } from "@supabase/supabase-js";
 import { normalizePhoneForSave } from "@/utils/phone";
+import { formatNameForDb } from "@/utils/nameFormat";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -170,9 +171,11 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Generate display_name
+        // Generate display_name (standard format: first letter uppercase)
+        const fn = recordData.type === 'person' ? formatNameForDb(recordData.firstName || '') : '';
+        const ln = recordData.type === 'person' ? formatNameForDb(recordData.lastName || '') : '';
         const displayName = recordData.type === 'person'
-          ? `${recordData.firstName || ''} ${recordData.lastName || ''}`.trim()
+          ? `${fn} ${ln}`.trim()
           : recordData.companyName || '';
 
         // Create party record
@@ -207,8 +210,8 @@ export async function POST(request: NextRequest) {
         if (recordData.type === 'person') {
           const personData: any = {
             party_id: partyId,
-            first_name: recordData.firstName,
-            last_name: recordData.lastName,
+            first_name: fn,
+            last_name: ln,
             personal_code: recordData.personalCode || null,
             dob: recordData.dob || null,
             nationality: recordData.nationality || null,

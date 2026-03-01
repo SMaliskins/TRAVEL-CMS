@@ -34,7 +34,7 @@ export default function RecentlyCompletedList({
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) return "today";
     if (diffDays === 1) return "1 day ago";
     return `${diffDays} days ago`;
@@ -42,8 +42,8 @@ export default function RecentlyCompletedList({
 
   if (recentlyCompleted.length === 0) {
     return (
-      <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">
+      <div className={`booking-glass-panel !p-6 ${className}`}>
+        <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">
           📋 Recently Completed (Follow-up)
         </h3>
         <div className="flex h-32 items-center justify-center text-gray-500">
@@ -54,8 +54,8 @@ export default function RecentlyCompletedList({
   }
 
   return (
-    <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
-      <h3 className="mb-4 text-lg font-semibold text-gray-900">
+    <div className={`booking-glass-panel !p-6 ${className}`}>
+      <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">
         📋 Recently Completed (Follow-up)
       </h3>
       <div className="space-y-3">

@@ -261,6 +261,9 @@ export async function GET(
         commissionAmount: row.commission_amount ?? null,
         agentDiscountValue: row.agent_discount_value ?? null,
         agentDiscountType: row.agent_discount_type ?? null,
+        servicePriceLineItems: Array.isArray((row as { service_price_line_items?: unknown }).service_price_line_items)
+          ? (row as { service_price_line_items: Array<{ description?: string; amount?: number; commissionable?: boolean }> }).service_price_line_items
+          : [],
         // Transfer
         pickupLocation: row.pickup_location ?? null,
         dropoffLocation: row.dropoff_location ?? null,
@@ -397,6 +400,10 @@ export async function POST(
     if (body.commissionAmount !== undefined) serviceData.commission_amount = body.commissionAmount != null ? parseFloat(body.commissionAmount) : null;
     if (body.agentDiscountValue !== undefined) serviceData.agent_discount_value = body.agentDiscountValue != null && body.agentDiscountValue !== "" ? parseFloat(body.agentDiscountValue) : null;
     if (body.agentDiscountType !== undefined) serviceData.agent_discount_type = body.agentDiscountType || null;
+    if (body.servicePriceLineItems !== undefined && Array.isArray(body.servicePriceLineItems)) {
+      serviceData.service_price_line_items = body.servicePriceLineItems;
+      // service_price is sent by client as base + line items total; do not overwrite
+    }
     // Transfer (legacy flat fields)
     if (body.pickupLocation !== undefined) serviceData.pickup_location = body.pickupLocation || null;
     if (body.dropoffLocation !== undefined) serviceData.dropoff_location = body.dropoffLocation || null;

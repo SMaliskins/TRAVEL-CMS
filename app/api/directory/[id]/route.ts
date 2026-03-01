@@ -4,6 +4,7 @@ import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
 import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 import { normalizePhoneForSave } from "@/utils/phone";
+import { formatNameForDb } from "@/utils/nameFormat";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -59,6 +60,24 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.isAlienPassport = row.is_alien_passport === true;
   }
 
+  // Bank accounts (party level; for Supplier, Subagent, Client)
+  if (row.bank_accounts && Array.isArray(row.bank_accounts) && row.bank_accounts.length > 0) {
+    record.bankAccounts = row.bank_accounts.map((a: { bank_name?: string; bankName?: string; iban?: string; swift?: string }) => ({
+      bankName: a.bank_name || a.bankName || "",
+      iban: a.iban || "",
+      swift: a.swift || "",
+    })).filter((a: { bankName: string; iban: string }) => a.bankName?.trim() || a.iban?.trim());
+  } else if (row.bank_name || row.iban || row.swift) {
+    record.bankAccounts = [{
+      bankName: row.bank_name || "",
+      iban: row.iban || "",
+      swift: row.swift || "",
+    }];
+    record.bankName = row.bank_name || undefined;
+    record.iban = row.iban || undefined;
+    record.swift = row.swift || undefined;
+  }
+
   // Company fields
   if (row.party_type === "company") {
     record.companyName = row.company_name || row.display_name || undefined;
@@ -67,9 +86,9 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.vatNumber = row.vat_number || undefined;
     record.legalAddress = row.legal_address || undefined;
     record.actualAddress = row.actual_address || undefined;
-    record.bankName = row.bank_name || undefined;
-    record.iban = row.iban || undefined;
-    record.swift = row.swift || undefined;
+    if (!record.bankName) record.bankName = row.bank_name || undefined;
+    if (!record.iban) record.iban = row.iban || undefined;
+    if (!record.swift) record.swift = row.swift || undefined;
   }
 
   // Common fields
@@ -480,12 +499,20 @@ export async function PUT(
     if (updates.country !== undefined) {
       partyUpdates.country = updates.country || null;
     }
-    // Corporate accounts / Loyalty cards
+    // Corporate accounts / Loyalty cards / Bank accounts
     if (updates.corporateAccounts !== undefined) {
       partyUpdates.corporate_accounts = updates.corporateAccounts && updates.corporateAccounts.length > 0 ? updates.corporateAccounts : null;
     }
     if (updates.loyaltyCards !== undefined) {
       partyUpdates.loyalty_cards = updates.loyaltyCards && updates.loyaltyCards.length > 0 ? updates.loyaltyCards : null;
+    }
+    if (updates.bankAccounts !== undefined) {
+      const normalized = Array.isArray(updates.bankAccounts)
+        ? updates.bankAccounts
+            .map((a) => ({ bank_name: (a.bankName || "").trim(), iban: (a.iban || "").trim(), swift: (a.swift || "").trim() }))
+            .filter((a) => a.bank_name || a.iban)
+        : [];
+      partyUpdates.bank_accounts = normalized.length > 0 ? normalized : null;
     }
     // Supplier service areas
     if (updates.supplierExtras?.serviceAreas !== undefined) {
@@ -651,10 +678,10 @@ export async function PUT(
       const personUpdates: Record<string, unknown> = {};
       if (updates.title !== undefined) personUpdates.title = updates.title;
       if (updates.firstName !== undefined && updates.firstName !== null && String(updates.firstName).trim() !== "") {
-        personUpdates.first_name = updates.firstName;
+        personUpdates.first_name = formatNameForDb(String(updates.firstName));
       }
       if (updates.lastName !== undefined && updates.lastName !== null && String(updates.lastName).trim() !== "") {
-        personUpdates.last_name = updates.lastName;
+        personUpdates.last_name = formatNameForDb(String(updates.lastName));
       }
       if (updates.gender !== undefined) personUpdates.gender = updates.gender || null;
       if (updates.dob !== undefined) personUpdates.dob = updates.dob;
@@ -772,9 +799,21 @@ export async function PUT(
       if (updates.vatNumber !== undefined) companyUpdates.vat_number = updates.vatNumber;
       if (updates.legalAddress !== undefined) companyUpdates.legal_address = updates.legalAddress;
       if (updates.actualAddress !== undefined) companyUpdates.actual_address = updates.actualAddress;
-      if (updates.bankName !== undefined) companyUpdates.bank_name = updates.bankName || null;
-      if (updates.iban !== undefined) companyUpdates.iban = updates.iban || null;
-      if (updates.swift !== undefined) companyUpdates.swift = updates.swift || null;
+      // Keep first bank account in company for backward compat (bank_accounts in party is source of truth)
+      if (updates.bankAccounts !== undefined) {
+        if (updates.bankAccounts.length > 0) {
+          const first = updates.bankAccounts[0];
+          companyUpdates.bank_name = (first.bankName || "").trim() || null;
+          companyUpdates.iban = (first.iban || "").trim() || null;
+          companyUpdates.swift = (first.swift || "").trim() || null;
+        } else {
+          companyUpdates.bank_name = null;
+          companyUpdates.iban = null;
+          companyUpdates.swift = null;
+        }
+      } else if (updates.bankName !== undefined) companyUpdates.bank_name = updates.bankName || null;
+      else if (updates.iban !== undefined) companyUpdates.iban = updates.iban || null;
+      else if (updates.swift !== undefined) companyUpdates.swift = updates.swift || null;
       if (updates.contactPerson !== undefined) companyUpdates.contact_person = updates.contactPerson || null;
       if (updates.correspondenceLanguages !== undefined) companyUpdates.correspondence_languages = Array.isArray(updates.correspondenceLanguages) && updates.correspondenceLanguages.length > 0 ? updates.correspondenceLanguages : null;
       if (updates.invoiceLanguage !== undefined) companyUpdates.invoice_language = updates.invoiceLanguage || null;

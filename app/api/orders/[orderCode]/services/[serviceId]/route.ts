@@ -129,6 +129,10 @@ export async function PATCH(
     if (body.commission_amount !== undefined) updates.commission_amount = body.commission_amount;
     if (body.agent_discount_value !== undefined) updates.agent_discount_value = body.agent_discount_value;
     if (body.agent_discount_type !== undefined) updates.agent_discount_type = body.agent_discount_type;
+    if (body.service_price_line_items !== undefined) {
+      updates.service_price_line_items = Array.isArray(body.service_price_line_items) ? body.service_price_line_items : [];
+      // service_price is sent by client as base + line items total; do not overwrite
+    }
     if (body.pickup_location !== undefined) updates.pickup_location = body.pickup_location;
     if (body.dropoff_location !== undefined) updates.dropoff_location = body.dropoff_location;
     if (body.pickup_time !== undefined) updates.pickup_time = body.pickup_time;

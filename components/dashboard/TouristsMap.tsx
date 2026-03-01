@@ -63,8 +63,8 @@ export default function TouristsMap({
 
   if (!activeLocations || activeLocations.length === 0) {
     return (
-      <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">
+      <div className={`booking-glass-panel !p-6 ${className}`}>
+        <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">
           {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
         </h3>
         <div className="flex h-96 items-center justify-center text-gray-500">
@@ -94,11 +94,11 @@ export default function TouristsMap({
   };
 
   return (
-    <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
-      <h3 className="mb-4 text-lg font-semibold text-gray-900">
+    <div className={`booking-glass-panel !p-6 ${className}`}>
+      <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">
         {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
       </h3>
-      <div className="h-96 w-full overflow-hidden rounded-lg">
+      <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
         <MapContainer
           center={[avgLat, avgLng]}
           zoom={5}

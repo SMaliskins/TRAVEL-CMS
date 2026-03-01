@@ -135,7 +135,7 @@ export default function NewDirectoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[95vw] sm:max-w-4xl space-y-4 sm:space-y-6">
+      <div className="mx-auto w-full max-w-[95vw] space-y-4 sm:space-y-6">
         {/* PageHeader - Settings style with buttons */}
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-4 sm:px-6 py-4 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

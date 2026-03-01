@@ -12,6 +12,7 @@ import {
   SubagentCommissionType,
   CorporateAccount,
   LoyaltyCard,
+  BankAccount,
 } from "@/lib/types/directory";
 import { useRipple } from "@/hooks/useRipple";
 import { ValidationIcon } from "@/components/ValidationIcon";
@@ -21,6 +22,7 @@ import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
+import { BANK_LIST } from "@/lib/constants/banks";
 import { Check, X, Plus } from "lucide-react";
 
 function getZodiacSign(dateStr: string): string | null {
@@ -42,6 +44,8 @@ function getZodiacSign(dateStr: string): string | null {
 const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "lv", label: "Latvian" },
+  { value: "lt", label: "Lithuanian" },
+  { value: "et", label: "Estonian" },
   { value: "ru", label: "Russian" },
   { value: "de", label: "German" },
   { value: "fr", label: "French" },
@@ -256,9 +260,15 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [vatNo, setVatNo] = useState(record?.vatNumber || "");
     const [address, setAddress] = useState(record?.legalAddress || "");
     const [actualAddress, setActualAddress] = useState(record?.actualAddress || "");
-    const [bankName, setBankName] = useState(record?.bankName || "");
-    const [iban, setIban] = useState(record?.iban || "");
-    const [swift, setSwift] = useState(record?.swift || "");
+    const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
+      if (record?.bankAccounts && record.bankAccounts.length > 0) {
+        return record.bankAccounts.map((a) => ({ bankName: a.bankName || "", iban: a.iban || "", swift: a.swift || "" }));
+      }
+      if (record?.bankName || record?.iban || record?.swift) {
+        return [{ bankName: record.bankName || "", iban: record.iban || "", swift: record.swift || "" }];
+      }
+      return [];
+    });
     const [contactPerson, setContactPerson] = useState(record?.contactPerson || "");
     const [correspondenceLanguages, setCorrespondenceLanguages] = useState<string[]>(
       Array.isArray(record?.correspondenceLanguages) && record.correspondenceLanguages.length > 0
@@ -413,9 +423,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         );
         setInvoiceLanguage(record.invoiceLanguage || "en");
         setCompanyName(record.companyName || "");
-        setBankName(record.bankName || "");
-        setIban(record.iban || "");
-        setSwift(record.swift || "");
+        setBankAccounts(
+          record.bankAccounts && record.bankAccounts.length > 0
+            ? record.bankAccounts.map((a) => ({ bankName: a.bankName || "", iban: a.iban || "", swift: a.swift || "" }))
+            : record.bankName || record.iban || record.swift
+              ? [{ bankName: record.bankName || "", iban: record.iban || "", swift: record.swift || "" }]
+              : []
+        );
         setRegNo(record.regNumber || "");
         setVatNo(record.vatNumber || "");
         setAddress(record.legalAddress || "");
@@ -497,9 +511,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         regNumber: record.regNumber,
         legalAddress: record.legalAddress,
         actualAddress: record.actualAddress,
-        bankName: record.bankName,
-        iban: record.iban,
-        swift: record.swift,
+        bankAccounts: record.bankAccounts || (record.bankName || record.iban || record.swift ? [{ bankName: record.bankName || "", iban: record.iban || "", swift: record.swift || "" }] : []),
         contactPerson: record.contactPerson,
         correspondenceLanguages: record.correspondenceLanguages,
         invoiceLanguage: record.invoiceLanguage,
@@ -557,9 +569,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         vatNo.trim() !== (initialValues.vatNumber || "").trim() ||
         address.trim() !== (initialValues.legalAddress || "").trim() ||
         actualAddress.trim() !== (initialValues.actualAddress || "").trim() ||
-        bankName.trim() !== (initialValues.bankName || "").trim() ||
-        iban.trim() !== (initialValues.iban || "").trim() ||
-        swift.trim() !== (initialValues.swift || "").trim() ||
+        (() => {
+          const a = bankAccounts.map((x) => ({ b: x.bankName.trim(), i: x.iban.trim(), s: x.swift.trim() }));
+          const init = (initialValues.bankAccounts as BankAccount[] | undefined) || [];
+          const b = init.map((x) => ({ b: (x.bankName || "").trim(), i: (x.iban || "").trim(), s: (x.swift || "").trim() }));
+          return a.length !== b.length || a.some((v, i) => v.b !== b[i]?.b || v.i !== b[i]?.i || v.s !== b[i]?.s);
+        })() ||
         contactPerson.trim() !== (initialValues.contactPerson || "").trim() ||
         (() => {
           const a = correspondenceLanguages.slice().sort();
@@ -741,9 +756,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.vatNumber = vatNo || undefined;
         formData.legalAddress = address || undefined;
         formData.actualAddress = actualAddress || undefined;
-        formData.bankName = bankName || undefined;
-        formData.iban = iban || undefined;
-        formData.swift = swift || undefined;
         formData.contactPerson = contactPerson || undefined;
         if (!record || !record.personalCode) {
           formData.personalCode = regNo || undefined;
@@ -781,12 +793,17 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         };
       }
 
-      // Corporate accounts / Loyalty cards
+      // Corporate accounts / Loyalty cards / Bank accounts
       if (displayType === "company") {
-        formData.corporateAccounts = corporateAccounts.filter(a => a.providerName.trim() && a.accountCode.trim());
+        formData.corporateAccounts = isSupplier
+          ? []
+          : corporateAccounts.filter(a => a.providerName.trim() && a.accountCode.trim());
       }
       if (displayType === "person") {
         formData.loyaltyCards = loyaltyCards.filter(c => c.providerName.trim() && c.cardCode.trim());
+      }
+      if (isClient || isSupplier || isSubagent) {
+        formData.bankAccounts = bankAccounts.filter((a) => (a.bankName || "").trim() || (a.iban || "").trim());
       }
 
       onSubmit(formData, closeAfterSave);
@@ -1465,55 +1482,122 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                 </div>
               )}
 
-              {/* Bank details - company only, after contact info */}
-              {displayType === "company" && (
+              {/* Bank details - Supplier, Subagent, Client (multiple accounts) */}
+              {(isClient || isSupplier || isSubagent) && (
                 <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Bank details</h3>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Bank name</label>
-                      <input
-                        type="text"
-                        value={bankName}
-                        onChange={(e) => { setBankName(e.target.value); markFieldDirty("bankName"); }}
-                        onBlur={() => markFieldTouched("bankName")}
-                        onFocus={() => markFieldTouched("bankName")}
-                        className={getInputClasses("bankName", false, bankName)}
-                        aria-label="Bank name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">IBAN</label>
-                      <input
-                        type="text"
-                        value={iban}
-                        onChange={(e) => { setIban(e.target.value); markFieldDirty("iban"); }}
-                        onBlur={() => markFieldTouched("iban")}
-                        onFocus={() => markFieldTouched("iban")}
-                        className={getInputClasses("iban", false, iban)}
-                        placeholder="e.g. LV80BANK0000435195001"
-                        aria-label="IBAN"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT</label>
-                      <input
-                        type="text"
-                        value={swift}
-                        onChange={(e) => { setSwift(e.target.value); markFieldDirty("swift"); }}
-                        onBlur={() => markFieldTouched("swift")}
-                        onFocus={() => markFieldTouched("swift")}
-                        className={getInputClasses("swift", false, swift)}
-                        placeholder="e.g. HABALV22"
-                        aria-label="SWIFT/BIC"
-                      />
-                    </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-800">Bank details</h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBankAccounts([...bankAccounts, { bankName: "", iban: "", swift: "" }]);
+                        markFieldDirty("bankAccounts");
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      <Plus size={14} />
+                      Add
+                    </button>
                   </div>
+                  {bankAccounts.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No bank accounts</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {bankAccounts.map((acc, idx) => (
+                        <div key={idx} className="flex flex-col gap-2 bg-white rounded-lg p-3 border border-gray-100">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-medium text-gray-500">Account {idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBankAccounts(bankAccounts.filter((_, i) => i !== idx));
+                                markFieldDirty("bankAccounts");
+                              }}
+                              className="text-gray-400 hover:text-red-600 text-xs"
+                              aria-label="Remove account"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-0.5">Bank name</label>
+                              <select
+                                value={acc.bankName && BANK_LIST.includes(acc.bankName as (typeof BANK_LIST)[number]) && acc.bankName !== "Other" ? acc.bankName : "Other"}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  const next = [...bankAccounts];
+                                  next[idx] = { ...next[idx], bankName: v === "Other" ? "" : v };
+                                  setBankAccounts(next);
+                                  markFieldDirty("bankAccounts");
+                                }}
+                                className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                                aria-label="Bank name"
+                              >
+                                <option value="">Select bank</option>
+                                {BANK_LIST.filter((b) => b !== "Other").map((b) => (
+                                  <option key={b} value={b}>{b}</option>
+                                ))}
+                                <option value="Other">Other</option>
+                              </select>
+                              {(!acc.bankName || !BANK_LIST.includes(acc.bankName as (typeof BANK_LIST)[number]) || acc.bankName === "Other") && (
+                                <input
+                                  type="text"
+                                  value={acc.bankName && !BANK_LIST.includes(acc.bankName as (typeof BANK_LIST)[number]) ? acc.bankName : ""}
+                                  onChange={(e) => {
+                                    const next = [...bankAccounts];
+                                    next[idx] = { ...next[idx], bankName: e.target.value };
+                                    setBankAccounts(next);
+                                    markFieldDirty("bankAccounts");
+                                  }}
+                                  placeholder="Custom bank name"
+                                  className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                                  aria-label="Custom bank name"
+                                />
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-0.5">IBAN</label>
+                              <input
+                                type="text"
+                                value={acc.iban}
+                                onChange={(e) => {
+                                  const next = [...bankAccounts];
+                                  next[idx] = { ...next[idx], iban: e.target.value };
+                                  setBankAccounts(next);
+                                  markFieldDirty("bankAccounts");
+                                }}
+                                placeholder="e.g. LV80BANK0000435195001"
+                                className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                                aria-label="IBAN"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-0.5">SWIFT</label>
+                              <input
+                                type="text"
+                                value={acc.swift}
+                                onChange={(e) => {
+                                  const next = [...bankAccounts];
+                                  next[idx] = { ...next[idx], swift: e.target.value };
+                                  setBankAccounts(next);
+                                  markFieldDirty("bankAccounts");
+                                }}
+                                placeholder="e.g. HABALV22"
+                                className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm"
+                                aria-label="SWIFT/BIC"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Corporate accounts - company only */}
-              {displayType === "company" && (
+              {/* Corporate accounts - company only, not for Supplier */}
+              {displayType === "company" && !isSupplier && (
                 <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-800">Corporate accounts</h3>

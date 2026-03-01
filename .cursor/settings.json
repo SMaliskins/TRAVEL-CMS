@@ -8,6 +8,18 @@
     },
     "stripe": {
       "enabled": true
+    },
+    "supabase": {
+      "enabled": true
+    },
+    "langfuse": {
+      "enabled": true
+    },
+    "runlayer": {
+      "enabled": true
+    },
+    "vercel": {
+      "enabled": true
     }
   }
 }

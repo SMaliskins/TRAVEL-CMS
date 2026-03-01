@@ -1,6 +1,8 @@
 // Cities database with coordinates and country codes for flags
 // Flag emojis are generated from ISO 3166-1 alpha-2 country codes
 
+import { getAirportByIata } from "@/lib/airports";
+
 export interface City {
   name: string;
   country: string;
@@ -318,6 +320,7 @@ export const CITIES: City[] = [
   
   // Bulgaria
   { name: "Sofia", country: "Bulgaria", countryCode: "BG", lat: 42.6977, lng: 23.3219, iataCode: "SOF" },
+  { name: "Burgas", country: "Bulgaria", countryCode: "BG", lat: 42.5696, lng: 27.5152, iataCode: "BOJ" },
   { name: "Varna", country: "Bulgaria", countryCode: "BG", lat: 43.2141, lng: 27.9147, iataCode: "VAR" },
   
   // Serbia
@@ -383,11 +386,25 @@ export function searchCities(query: string): City[] {
     .slice(0, 20);
 }
 
-// Get city by name (uses extended world cities when loaded)
+// Get city by IATA (CITIES first, then @nwpr/airport-codes at runtime)
 export function getCityByIATA(iataCode: string): City | undefined {
   if (!iataCode) return undefined;
-  const code = iataCode.toUpperCase();
-  return CITIES.find((city) => city.iataCode?.toUpperCase() === code);
+  const code = iataCode.toUpperCase().trim();
+  const fromCities = CITIES.find((city) => city.iataCode?.toUpperCase() === code);
+  if (fromCities) return fromCities;
+  // Runtime fallback: airports database (7,698 airports worldwide)
+  const airport = getAirportByIata(code);
+  if (airport?.latitude != null && airport?.longitude != null) {
+    return {
+      name: airport.city || airport.name || code,
+      country: airport.country || "",
+      countryCode: airport.countryCode || "",
+      lat: airport.latitude,
+      lng: airport.longitude,
+      iataCode: airport.iata || code,
+    };
+  }
+  return undefined;
 }
 
 export function getCityByName(name: string): City | undefined {

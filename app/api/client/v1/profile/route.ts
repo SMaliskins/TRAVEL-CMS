@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
+import { toTitleCaseForDisplay } from '@/utils/nameFormat'
 
 export async function GET(req: NextRequest) {
   try {
@@ -63,8 +64,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Fields allowed to update in party table (display_name, phone only)
+    // Standard format: first letter of each name part uppercase, rest lowercase
     const partyUpdates: Record<string, unknown> = {}
-    if (typeof body.displayName === 'string') partyUpdates.display_name = body.displayName
+    if (typeof body.displayName === 'string') partyUpdates.display_name = toTitleCaseForDisplay(body.displayName)
     if (typeof body.phone === 'string') partyUpdates.phone = body.phone
 
     if (Object.keys(partyUpdates).length > 0) {

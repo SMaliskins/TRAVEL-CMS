@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import DateRangePicker from "@/components/DateRangePicker";
+import "./modern-booking.css"; // Injecting the new premium design system
 
 type Tab = "search" | "logs" | "bookings";
 
@@ -329,7 +330,7 @@ export default function HotelsBookingPage() {
       if (s.markupPercent) setMarkupPercent(s.markupPercent);
       if (s.searchResults?.length) setSearchResults(s.searchResults);
     } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -521,32 +522,32 @@ export default function HotelsBookingPage() {
   }, [searchResults]);
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-[1800px] mx-auto space-y-4">
+    <div className="booking-modern-container">
+      <div className="max-w-[1400px] mx-auto space-y-4">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm px-6 py-4 flex items-center justify-between border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50">
-              <Hotel size={20} className="text-blue-600" />
+        <div className="booking-modern-header">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-sm shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+              <Hotel size={24} className="text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Hotels Booking</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Search rates, create offers with markup, manage bookings</p>
+              <h1 className="booking-header-title">Hotels Booking</h1>
+              <p className="booking-header-subtitle">Search rates, create offers with markup, manage bookings</p>
             </div>
           </div>
-          <button onClick={() => void loadOffers()} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
-            <RefreshCw size={14} /> Refresh
+          <button onClick={() => void loadOffers()} className="booking-glass-panel !py-2 !px-4 flex items-center gap-2 text-sm font-bold text-gray-700 hover:text-indigo-600 transition-colors cursor-pointer drop-shadow-sm" style={{ padding: '0.5rem 1rem' }}>
+            <RefreshCw size={16} /> Refresh
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-lg shadow-sm border border-gray-200 p-1">
+        <div className="booking-tabs-container">
           {([
             { id: "search", label: "Search & Offers", icon: <Search size={14} /> },
             { id: "logs", label: "Requests & Payments", icon: <FileText size={14} /> },
             { id: "bookings", label: "Bookings", icon: <Hotel size={14} /> },
           ] as const).map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-colors ${tab === t.id ? "bg-gray-900 text-white shadow-sm" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}>
+            <button key={t.id} onClick={() => setTab(t.id)} className={`booking-tab ${tab === t.id ? "active" : ""}`}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -554,40 +555,40 @@ export default function HotelsBookingPage() {
 
         {/* ==================== SEARCH TAB ==================== */}
         {tab === "search" && (
-          <div className="space-y-4">
-            {/* Compact search bar */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-3">
-              <div className="flex items-end gap-2 flex-wrap">
-                <div className="flex-1 min-w-[200px] relative" ref={suggestRef}>
-                  <label className="block text-xs text-gray-500 mb-0.5">Destination</label>
+          <div className="space-y-6">
+            {/* Modular Search Bar (Glassmorphism) */}
+            <div className="booking-glass-panel">
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="flex-1 min-w-[200px] relative booking-input-group" ref={suggestRef}>
+                  <label className="booking-label">Destination</label>
                   <div className="relative">
-                    <input type="text" value={destinationQuery} onChange={handleDestinationInput} onFocus={() => { if (destinationQuery.length >= 2) setSuggestOpen(true); }} placeholder="City, region, hotel..." className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pr-7" />
-                    {selectedRegion && <button onClick={clearRegion} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={13} /></button>}
-                    {suggestLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><Loader2 size={13} className="animate-spin text-blue-500" /></div>}
+                    <input type="text" value={destinationQuery} onChange={handleDestinationInput} onFocus={() => { if (destinationQuery.length >= 2) setSuggestOpen(true); }} placeholder="City, region, hotel..." className="booking-input pr-7" />
+                    {selectedRegion && <button onClick={clearRegion} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"><X size={14} /></button>}
+                    {suggestLoading && <div className="absolute right-2 top-1/2 -translate-y-1/2"><Loader2 size={13} className="animate-spin text-indigo-400" /></div>}
                     {suggestOpen && destinationQuery.length >= 2 && (
-                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-[300px] overflow-y-auto">
-                        {suggestLoading ? <div className="px-3 py-3 text-center text-sm text-gray-500">Searching...</div> : (regionSuggestions.length === 0 && hotelSuggestions.length === 0) ? <div className="px-3 py-3 text-center text-sm text-gray-500">No destinations found</div> : (
+                      <div className="absolute z-50 w-full mt-2 bg-[#1e293b] border border-[rgba(255,255,255,0.1)] rounded-lg shadow-2xl max-h-[300px] overflow-y-auto backdrop-blur-md">
+                        {suggestLoading ? <div className="px-3 py-3 text-center text-sm text-gray-400">Searching...</div> : (regionSuggestions.length === 0 && hotelSuggestions.length === 0) ? <div className="px-3 py-3 text-center text-sm text-gray-400">No destinations found</div> : (
                           <>
                             {hotelSuggestions.length > 0 && (
                               <>
-                                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-50">Hotels</div>
+                                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 bg-[#0f172a]/50">Hotels</div>
                                 {hotelSuggestions.map((h) => (
-                                  <button key={h.hid} type="button" onClick={() => { setSelectedRegion({ id: h.region_id, name: h.name, type: "hotel", hid: h.hid }); setDestinationQuery(h.name); setSuggestOpen(false); }} className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2 border-b border-gray-100 last:border-0">
-                                    <Hotel size={13} className="text-blue-400 flex-shrink-0" />
-                                    <div className="text-sm font-medium text-gray-900">{h.name}</div>
+                                  <button key={h.hid} type="button" onClick={() => { setSelectedRegion({ id: h.region_id, name: h.name, type: "hotel", hid: h.hid }); setDestinationQuery(h.name); setSuggestOpen(false); }} className="w-full px-3 py-2.5 text-left hover:bg-white/10 flex items-center gap-2 border-b border-white/5 last:border-0 transition-colors">
+                                    <Hotel size={13} className="text-indigo-400 flex-shrink-0" />
+                                    <div className="text-sm font-medium text-gray-200">{h.name}</div>
                                   </button>
                                 ))}
                               </>
                             )}
                             {regionSuggestions.length > 0 && (
                               <>
-                                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-50">Regions</div>
+                                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 bg-[#0f172a]/50">Regions</div>
                                 {regionSuggestions.map((r) => (
-                                  <button key={String(r.id)} type="button" onClick={() => selectRegion(r)} className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2 border-b border-gray-100 last:border-0">
+                                  <button key={String(r.id)} type="button" onClick={() => selectRegion(r)} className="w-full px-3 py-2.5 text-left hover:bg-white/10 flex items-center gap-2 border-b border-white/5 last:border-0 transition-colors">
                                     <MapPin size={13} className="text-gray-400 flex-shrink-0" />
                                     <div>
-                                      <div className="text-sm font-medium text-gray-900">{r.name}</div>
-                                      <div className="text-[11px] text-gray-500">{r.type}{r.country_code ? ` · ${r.country_code}` : ""}</div>
+                                      <div className="text-sm font-medium text-gray-200">{r.name}</div>
+                                      <div className="text-[11px] text-gray-400">{r.type}{r.country_code ? ` · ${r.country_code}` : ""}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -600,131 +601,149 @@ export default function HotelsBookingPage() {
                   </div>
                 </div>
 
-                <div className="w-[220px] [&_[data-calendar-dropdown]]:left-auto [&_[data-calendar-dropdown]]:right-0">
+                <div className="w-[240px] [&_[data-calendar-dropdown]]:left-auto [&_[data-calendar-dropdown]]:right-0 booking-input-group">
                   <DateRangePicker label="Dates" from={checkIn || undefined} to={checkOut || undefined} onChange={(from, to) => { setCheckIn(from ?? ""); setCheckOut(to ?? ""); }} />
                 </div>
-                {nights > 0 && <span className="text-xs text-gray-400 pb-1.5">{nights}n</span>}
+                {nights > 0 && <span className="text-xs text-[var(--booking-text-secondary)] pb-1.5">{nights}n</span>}
 
-                <div ref={guestsRef} className="relative w-[140px]">
-                  <label className="block text-xs text-gray-500 mb-0.5">Guests</label>
-                  <button type="button" onClick={() => setGuestsDropdownOpen(!guestsDropdownOpen)} className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-left text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <div ref={guestsRef} className="relative w-[160px] booking-input-group">
+                  <label className="booking-label">Guests</label>
+                  <button type="button" onClick={() => setGuestsDropdownOpen(!guestsDropdownOpen)} className="booking-input text-left flex justify-between items-center">
                     {adults} adl{childrenAges.length > 0 ? `, ${childrenAges.length} chd` : ""}
+                    <ChevronDown size={14} className="text-gray-400" />
                   </button>
                   {guestsDropdownOpen && (
-                    <div className="absolute z-50 left-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-2">
+                    <div className="absolute z-50 left-0 top-full mt-2 w-72 bg-[#1e293b] border border-[rgba(255,255,255,0.1)] rounded-xl shadow-2xl p-4 space-y-3 backdrop-blur-md">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-700">Adults</span>
-                        <div className="flex items-center gap-1.5">
-                          <button type="button" onClick={() => setAdults(Math.max(1, adults - 1))} className="h-6 w-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 flex items-center justify-center text-sm">−</button>
-                          <span className="w-5 text-center text-sm">{adults}</span>
-                          <button type="button" onClick={() => setAdults(Math.min(6, adults + 1))} className="h-6 w-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 flex items-center justify-center text-sm">+</button>
+                        <span className="text-sm font-medium text-gray-200">Adults</span>
+                        <div className="flex items-center gap-2 bg-[#0f172a] rounded-lg p-1">
+                          <button type="button" onClick={() => setAdults(Math.max(1, adults - 1))} className="h-7 w-7 rounded-md bg-white/5 hover:bg-white/10 text-gray-200 flex items-center justify-center transition-colors">−</button>
+                          <span className="w-6 text-center text-sm font-bold">{adults}</span>
+                          <button type="button" onClick={() => setAdults(Math.min(6, adults + 1))} className="h-7 w-7 rounded-md bg-white/5 hover:bg-white/10 text-gray-200 flex items-center justify-center transition-colors">+</button>
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-700">Children</span>
-                        <div className="flex items-center gap-1.5">
-                          <button type="button" onClick={() => setChildrenAges((p) => p.length > 0 ? p.slice(0, -1) : p)} className="h-6 w-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 flex items-center justify-center text-sm">−</button>
-                          <span className="w-5 text-center text-sm">{childrenAges.length}</span>
-                          <button type="button" onClick={() => setChildrenAges((p) => p.length < 4 ? [...p, 5] : p)} className="h-6 w-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 flex items-center justify-center text-sm">+</button>
+                        <span className="text-sm font-medium text-gray-200">Children</span>
+                        <div className="flex items-center gap-2 bg-[#0f172a] rounded-lg p-1">
+                          <button type="button" onClick={() => setChildrenAges((p) => p.length > 0 ? p.slice(0, -1) : p)} className="h-7 w-7 rounded-md bg-white/5 hover:bg-white/10 text-gray-200 flex items-center justify-center transition-colors">−</button>
+                          <span className="w-6 text-center text-sm font-bold">{childrenAges.length}</span>
+                          <button type="button" onClick={() => setChildrenAges((p) => p.length < 4 ? [...p, 5] : p)} className="h-7 w-7 rounded-md bg-white/5 hover:bg-white/10 text-gray-200 flex items-center justify-center transition-colors">+</button>
                         </div>
                       </div>
                       {childrenAges.length > 0 && (
-                        <div className="pt-1 border-t border-gray-100">
-                          <span className="text-[11px] text-gray-500">Ages</span>
-                          <div className="flex gap-1.5 mt-1 flex-wrap">
+                        <div className="pt-3 border-t border-white/10">
+                          <span className="text-xs text-gray-400 mb-2 block">Ages of children</span>
+                          <div className="flex gap-2 flex-wrap">
                             {childrenAges.map((age, i) => (
-                              <select key={i} value={age} onChange={(e) => { const n = [...childrenAges]; n[i] = Number(e.target.value); setChildrenAges(n); }} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs">
+                              <select key={i} value={age} onChange={(e) => { const n = [...childrenAges]; n[i] = Number(e.target.value); setChildrenAges(n); }} className="rounded-md bg-[#0f172a] border border-white/10 text-gray-200 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50">
                                 {Array.from({ length: 18 }, (_, a) => (<option key={a} value={a}>{a === 0 ? "<1" : a}</option>))}
                               </select>
                             ))}
                           </div>
                         </div>
                       )}
-                      <button type="button" onClick={() => setGuestsDropdownOpen(false)} className="w-full rounded bg-gray-900 py-1 text-xs font-medium text-white hover:bg-gray-800">Done</button>
+                      <button type="button" onClick={() => setGuestsDropdownOpen(false)} className="w-full mt-2 booking-btn-primary py-2">Done</button>
                     </div>
                   )}
                 </div>
 
-                <button onClick={() => void runSearch()} disabled={!canSearch || searching} className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                  {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                  Search
+                <button onClick={() => void runSearch()} disabled={!canSearch || searching} className="booking-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                  {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                  Find Rates
                 </button>
               </div>
             </div>
 
             {/* Results grouped by hotel */}
             {groupedResults.length > 0 && (
-              <div className="flex flex-col" style={{ height: "calc(100vh - 220px)" }}>
-                <div className="flex-shrink-0 bg-gray-50 py-2">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Results <span className="ml-2 text-sm font-normal text-gray-500">({groupedResults.length} hotel{groupedResults.length !== 1 ? "s" : ""}, {searchResults.length} rates)</span>
+              <div className="flex flex-col">
+                <div className="mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">
+                    Destinations found
+                    <span className="ml-3 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100 shadow-sm">
+                      {groupedResults.length} hotels • {searchResults.length} rates
+                    </span>
                   </h2>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-3 -mx-1 px-1">
-                {groupedResults.map((hotel) => (
-                  <div key={hotel.hid} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    {/* Hotel header */}
-                    <div className="flex gap-4 p-4 border-b border-gray-100">
-                      <ImageCarousel images={hotel.images} alt={hotel.hotelName} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-semibold text-gray-900 truncate">{hotel.hotelName}</h3>
-                          <Stars count={hotel.stars} />
+                <div className="booking-results-grid">
+                  {groupedResults.map((hotel) => (
+                    <div key={hotel.hid} className="booking-glass-panel booking-hotel-card">
+                      {/* Hotel header */}
+                      <div className="booking-hotel-header">
+                        <div className="booking-hotel-image-wrap">
+                          {hotel.images.length > 0 ? (
+                            <img src={hotel.images[0]} alt={hotel.hotelName} />
+                          ) : (
+                            <div className="w-full h-full bg-[#0f172a] flex items-center justify-center">
+                              <Hotel size={32} className="text-indigo-900/50" />
+                            </div>
+                          )}
                         </div>
-                        {hotel.address && (
-                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-                            <MapPin size={11} className="flex-shrink-0" />
-                            <span className="truncate">{hotel.address}</span>
+                        <div className="booking-hotel-info">
+                          <div className="flex items-center gap-3">
+                            <h3 className="booking-hotel-name">{hotel.hotelName}</h3>
+                            <div className="flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                              <Stars count={hotel.stars} />
+                            </div>
                           </div>
-                        )}
-                        <div className="mt-1 text-xs text-gray-400">
-                          {hotel.rates.length} rate{hotel.rates.length !== 1 ? "s" : ""} available
+                          {hotel.address && (
+                            <div className="booking-hotel-address mt-2">
+                              <MapPin size={14} className="text-indigo-400" />
+                              <span>{hotel.address}</span>
+                            </div>
+                          )}
+                          <div className="mt-3 inline-flex items-center bg-white/5 border border-white/10 rounded-full px-3 py-1 text-xs text-gray-300 font-medium w-max shadow-sm">
+                            {hotel.rates.length} rate{hotel.rates.length !== 1 ? "s" : ""} available
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Rate rows — table-like */}
-                    <div className="divide-y divide-gray-100">
-                      {/* Column header */}
-                      <div className="hidden md:grid grid-cols-[1fr_120px_180px_130px] gap-2 px-4 py-1.5 bg-gray-50 text-[11px] font-medium uppercase tracking-wider text-gray-500">
-                        <div>Room</div>
-                        <div>Meal</div>
-                        <div>Cancellation</div>
-                        <div className="text-right">Price</div>
+                      {/* Rate rows */}
+                      <div className="booking-rate-table">
+                        <div className="hidden md:grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-[#94a3b8]">
+                          <div>Room Details</div>
+                          <div>Meal Plan</div>
+                          <div>Cancellation Terms</div>
+                          <div className="text-right">Total Price</div>
+                        </div>
+                        {hotel.rates.map((r, idx) => {
+                          const globalIdx = searchResults.indexOf(r);
+                          const isSelected = selectedIdx === globalIdx;
+                          return (
+                            <div
+                              key={idx}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setSelectedIdx(globalIdx)}
+                              onKeyDown={(e) => { if (e.key === "Enter") setSelectedIdx(globalIdx); }}
+                              className={`booking-rate-row ${isSelected ? "selected" : ""}`}
+                            >
+                              {/* Room */}
+                              <div className="min-w-0 pr-4">
+                                <div className="booking-rate-room truncate">{r.roomName || "Standard Room"}</div>
+                                {r.beddingType && <div className="booking-rate-sub truncate text-indigo-300/80">{r.beddingType}</div>}
+                              </div>
+                              {/* Meal */}
+                              <div><MealInfo meal={r.meal} /></div>
+                              {/* Cancellation */}
+                              <div><CancellationInfo rate={r} /></div>
+                              {/* Price */}
+                              <div className="booking-rate-price-block">
+                                <div className="text-[10px] text-[var(--booking-text-tertiary)] uppercase tracking-wider mb-1 line-through decoration-[var(--booking-text-tertiary)] opacity-60 flex gap-1 items-center">
+                                  {/* Base Rate */}
+                                  {r.ratehawkAmount} {r.currency}
+                                </div>
+                                <div className="booking-rate-price font-bold text-xl drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)]">
+                                  {applyMarkup(r.ratehawkAmount)} <span className="text-xs text-[var(--booking-success)]/70 uppercase">{r.currency}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      {hotel.rates.map((r, idx) => {
-                        const globalIdx = searchResults.indexOf(r);
-                        const isSelected = selectedIdx === globalIdx;
-                        return (
-                          <div
-                            key={idx}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedIdx(globalIdx)}
-                            onKeyDown={(e) => { if (e.key === "Enter") setSelectedIdx(globalIdx); }}
-                            className={`w-full text-left px-4 py-2.5 md:grid md:grid-cols-[1fr_120px_180px_130px] md:gap-2 md:items-center flex flex-col gap-1 transition-colors cursor-pointer ${isSelected ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-gray-50"}`}
-                          >
-                            {/* Room */}
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium text-gray-900 truncate">{r.roomName || "Standard Room"}</div>
-                              {r.beddingType && <div className="text-[11px] text-gray-400 truncate">{r.beddingType}</div>}
-                            </div>
-                            {/* Meal */}
-                            <div><MealInfo meal={r.meal} /></div>
-                            {/* Cancellation */}
-                            <div><CancellationInfo rate={r} /></div>
-                            {/* Price */}
-                            <div className="text-right">
-                              <div className="text-[11px] text-gray-400">{r.ratehawkAmount} {r.currency}</div>
-                              <div className="text-sm font-bold text-gray-900">{applyMarkup(r.ratehawkAmount)} <span className="text-xs font-normal">{r.currency}</span></div>
-                            </div>
-                          </div>
-                        );
-                      })}
                     </div>
-                  </div>
-                ))}
+                  ))}
                 </div>
               </div>
             )}
@@ -738,61 +757,51 @@ export default function HotelsBookingPage() {
 
             {/* Create offer */}
             {selectedResult && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Create and send offer</h2>
-                <p className="text-xs text-gray-500 mb-4">
-                  Selected: <strong>{selectedResult.hotelName}</strong> — {selectedResult.roomName} — {applyMarkup(selectedResult.ratehawkAmount)} {selectedResult.currency}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Party ID <span className="text-gray-400 font-normal">(optional)</span></label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="UUID" value={clientPartyId} onChange={(e) => setClientPartyId(e.target.value)} />
+              <div className="booking-glass-panel fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-[1400px] z-40 border-indigo-500/30 shadow-[0_-10px_40px_rgba(0,0,0,0.4),_0_0_20px_rgba(99,102,241,0.2)] animate-[slideFadeUp_0.4s_ease-out_both]" style={{ padding: '1.5rem', width: 'calc(100% - 4rem)' }}>
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-t-xl" />
+
+                <div className="flex flex-col md:flex-row gap-6 items-center">
+                  <div className="flex-1 min-w-0 w-full mb-4 md:mb-0">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <Star className="text-indigo-400 h-5 w-5" fill="currentColor" />
+                      Compose Premium Offer
+                    </h2>
+                    <p className="text-sm text-gray-400 mt-1 truncate">
+                      <strong>{selectedResult.hotelName}</strong> • {selectedResult.roomName}
+                    </p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Full name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Email</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" type="email" placeholder="client@example.com" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      <Percent size={13} className="inline mr-1 -mt-0.5" />Markup %
-                    </label>
-                    <input type="number" min={0} max={100} value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
-                    <div className="relative">
-                      <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm appearance-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pr-8" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "online" | "invoice")}>
-                        <option value="online">Online Checkout (Stripe)</option>
-                        <option value="invoice">Invoice / Bank Transfer</option>
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+
+                  <div className="w-full md:w-auto grid grid-cols-2 md:grid-cols-4 gap-4 items-end flex-wrap">
+                    <div className="booking-input-group !mb-0 min-w-[140px]">
+                      <label className="booking-label">Client Name</label>
+                      <input className="booking-input !py-1.5" placeholder="Full name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+                    </div>
+                    <div className="booking-input-group !mb-0 min-w-[140px]">
+                      <label className="booking-label">
+                        <Percent size={11} className="inline mr-1 -mt-0.5 text-indigo-400" />Markup
+                      </label>
+                      <input type="number" min={0} max={100} value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} className="booking-input !py-1.5 focus:border-emerald-500 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.3)]" />
+                    </div>
+                    <div className="booking-input-group !mb-0 min-w-[160px]">
+                      <label className="booking-label">Gateway</label>
+                      <div className="relative">
+                        <select className="booking-input !py-1.5 appearance-none pr-8 bg-transparent" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "online" | "invoice")}>
+                          <option value="online" className="text-black">Online (Stripe)</option>
+                          <option value="invoice" className="text-black">Bank Transfer</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      </div>
+                    </div>
+                    <div className="w-full flex justify-end gap-3 mt-4 md:mt-0 col-span-2 md:col-span-1">
+                      <div className="flex flex-col items-end mr-3">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-widest">Final Price</div>
+                        <div className="text-xl font-extrabold text-[#10b981] drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]">{applyMarkup(selectedResult.ratehawkAmount)} <span className="text-xs uppercase">{selectedResult.currency}</span></div>
+                      </div>
+                      <button onClick={() => void createOffer()} className="booking-btn-success shadow-lg">
+                        <Send size={16} /> Send Offer
+                      </button>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Send Channel</label>
-                    <div className="relative">
-                      <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm appearance-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pr-8" value={sendChannel} onChange={(e) => setSendChannel(e.target.value as "app" | "email" | "both")}>
-                        <option value="both">App + Email</option>
-                        <option value="app">App only</option>
-                        <option value="email">Email only</option>
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-4">
-                  <button onClick={() => void createOffer()} className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors">
-                    <Send size={14} /> Create offer and send
-                  </button>
-                  {selectedResult && (
-                    <span className="text-sm text-gray-500">
-                      Cost: {selectedResult.ratehawkAmount} {selectedResult.currency} → Client: <strong>{applyMarkup(selectedResult.ratehawkAmount)} {selectedResult.currency}</strong> (+{markup}%)
-                    </span>
-                  )}
                 </div>
               </div>
             )}
@@ -802,107 +811,124 @@ export default function HotelsBookingPage() {
         {/* ==================== LOGS TAB ==================== */}
         {tab === "logs" && (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-                  <select className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                    <option value="all">All statuses</option>
-                    {["draft","sent","viewed","confirmed","payment_pending","paid","invoice_pending","booking_started","booking_confirmed","booking_failed","cancelled"].map((s) => (
-                      <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                    ))}
-                  </select>
+            <div className="booking-glass-panel p-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="booking-input-group !mb-0">
+                  <label className="booking-label">Status</label>
+                  <div className="relative">
+                    <select className="booking-input appearance-none pr-8 !py-2" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                      <option value="all" className="text-black">All statuses</option>
+                      {["draft", "sent", "viewed", "confirmed", "payment_pending", "paid", "invoice_pending", "booking_started", "booking_confirmed", "booking_failed", "cancelled"].map((s) => (
+                        <option key={s} value={s} className="text-black">{s.replace(/_/g, " ")}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Payment mode</label>
-                  <select className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" value={paymentModeFilter} onChange={(e) => setPaymentModeFilter(e.target.value)}>
-                    <option value="all">All</option>
-                    <option value="online">Online</option>
-                    <option value="invoice">Invoice</option>
-                  </select>
+                <div className="booking-input-group !mb-0">
+                  <label className="booking-label">Payment mode</label>
+                  <div className="relative">
+                    <select className="booking-input appearance-none pr-8 !py-2" value={paymentModeFilter} onChange={(e) => setPaymentModeFilter(e.target.value)}>
+                      <option value="all" className="text-black">All</option>
+                      <option value="online" className="text-black">Online</option>
+                      <option value="invoice" className="text-black">Invoice</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-                  <input className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" type="date" value={dateFromFilter} onChange={(e) => setDateFromFilter(e.target.value)} />
+                <div className="booking-input-group !mb-0">
+                  <label className="booking-label">From</label>
+                  <input className="booking-input !py-2 [color-scheme:dark]" type="date" value={dateFromFilter} onChange={(e) => setDateFromFilter(e.target.value)} />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                  <input className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" type="date" value={dateToFilter} onChange={(e) => setDateToFilter(e.target.value)} />
+                <div className="booking-input-group !mb-0">
+                  <label className="booking-label">To</label>
+                  <input className="booking-input !py-2 [color-scheme:dark]" type="date" value={dateToFilter} onChange={(e) => setDateToFilter(e.target.value)} />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Client</label>
-                  <input className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Name or email" value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} />
+                <div className="booking-input-group !mb-0">
+                  <label className="booking-label">Client</label>
+                  <input className="booking-input !py-2" placeholder="Name or email" value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} />
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Created</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Hotel</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Client</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Amount</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Tariff</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Status</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Payment</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {offersLoading && (
-                    <tr><td className="px-4 py-8 text-center text-gray-500" colSpan={8}><Loader2 size={20} className="animate-spin mx-auto mb-2 text-gray-400" />Loading offers...</td></tr>
-                  )}
-                  {!offersLoading && filteredOffers.map((o) => (
-                    <tr key={o.id} className={`cursor-pointer transition-colors ${selectedOfferId === o.id ? "bg-blue-50" : "hover:bg-gray-50"}`} onClick={() => { setSelectedOfferId(o.id); void loadEvents(o.id); }}>
-                      <td className="px-4 py-2 whitespace-nowrap text-gray-700">{formatDateDDMMYYYY(o.created_at)}</td>
-                      <td className="px-4 py-2 text-gray-900 font-medium">{o.hotel_name}</td>
-                      <td className="px-4 py-2 text-gray-700">{o.client_name || o.client_email || "—"}</td>
-                      <td className="px-4 py-2 text-gray-900 font-medium whitespace-nowrap">{o.client_amount} {o.currency}</td>
-                      <td className="px-4 py-2">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${o.tariff_type === "refundable" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-                          {o.tariff_type === "refundable" ? "REF" : "NON-REF"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2"><StatusBadge status={o.status} /></td>
-                      <td className="px-4 py-2 text-xs text-gray-500">{o.payment_mode} / {o.payment_status}</td>
-                      <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-1.5">
-                          <button className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors" onClick={() => void startPayment(o.id, o.payment_mode)}>
-                            <CreditCard size={12} /> Pay
-                          </button>
-                          {o.payment_mode === "invoice" && o.payment_status !== "paid" && (
-                            <button className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors" onClick={() => void triggerBookingAfterInvoice(o.id)}>
-                              <FileText size={12} /> Mark paid
-                            </button>
-                          )}
-                        </div>
-                      </td>
+            <div className="booking-glass-panel !p-0 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-black/5 bg-gray-100/50">
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Created</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Hotel</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Client</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Amount</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Tariff</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Status</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Payment</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Actions</th>
                     </tr>
-                  ))}
-                  {!offersLoading && filteredOffers.length === 0 && (
-                    <tr><td className="px-4 py-8 text-center text-gray-500" colSpan={8}>No offers matching filters.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-black/5 bg-transparent">
+                    {offersLoading && (
+                      <tr><td className="px-5 py-8 text-center text-indigo-600" colSpan={8}><Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-500" />Loading offers...</td></tr>
+                    )}
+                    {!offersLoading && filteredOffers.map((o) => (
+                      <tr key={o.id} className={`cursor-pointer transition-colors ${selectedOfferId === o.id ? "bg-indigo-50 shadow-[inset_2px_0_0_#6366f1]" : "hover:bg-black/5"}`} onClick={() => { setSelectedOfferId(o.id); void loadEvents(o.id); }}>
+                        <td className="px-5 py-3 whitespace-nowrap text-gray-600">{formatDateDDMMYYYY(o.created_at)}</td>
+                        <td className="px-5 py-3 text-gray-900 font-semibold">{o.hotel_name}</td>
+                        <td className="px-5 py-3 text-gray-600">{o.client_name || o.client_email || "—"}</td>
+                        <td className="px-5 py-3 text-emerald-600 font-bold whitespace-nowrap drop-shadow-[0_0_8px_rgba(16,185,129,0.1)]">{o.client_amount} <span className="text-xs uppercase font-normal text-emerald-600/70">{o.currency}</span></td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold border ${o.tariff_type === "refundable" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-red-50 border-red-200 text-red-700"}`}>
+                            {o.tariff_type === "refundable" ? "REFUNDABLE" : "NON-REF"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3"><StatusBadge status={o.status} /></td>
+                        <td className="px-5 py-3 text-xs text-gray-500">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-gray-700 capitalize">{o.payment_mode}</span>
+                            <span className="opacity-70">{o.payment_status}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2">
+                            <button className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-500 hover:text-white transition-all shadow-sm" onClick={() => void startPayment(o.id, o.payment_mode)}>
+                              <CreditCard size={14} /> Pay
+                            </button>
+                            {o.payment_mode === "invoice" && o.payment_status !== "paid" && (
+                              <button className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-500 hover:text-white transition-all shadow-sm" onClick={() => void triggerBookingAfterInvoice(o.id)}>
+                                <FileText size={14} /> Mark
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!offersLoading && filteredOffers.length === 0 && (
+                      <tr><td className="px-5 py-8 text-center text-gray-500" colSpan={8}>No offers matching filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {selectedOfferId && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Event timeline</h3>
+              <div className="booking-glass-panel mt-6">
+                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <FileText className="text-indigo-500" size={18} />
+                  Event Timeline
+                </h3>
                 {events.length === 0 ? (
-                  <p className="text-xs text-gray-500">No events logged yet.</p>
+                  <p className="text-sm text-gray-500 italic">No events logged yet.</p>
                 ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                  <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
                     {events.map((event) => (
-                      <div key={event.id} className="rounded-lg border border-gray-200 px-4 py-2.5 bg-gray-50">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-gray-800">{event.event_type.replace(/_/g, " ")}</span>
-                          <span className="text-xs text-gray-500">{formatDateDDMMYYYY(event.created_at)}</span>
+                      <div key={event.id} className="relative rounded-xl border border-black/5 bg-white/50 p-4 hover:bg-white/80 transition-colors group">
+                        <div className="absolute -left-[1px] top-4 bottom-4 w-[2px] bg-indigo-300 rounded-r-md group-hover:bg-indigo-500 transition-colors" />
+                        <div className="flex items-center justify-between mb-2 pl-2">
+                          <span className="text-sm font-bold text-gray-800">{event.event_type.replace(/_/g, " ")}</span>
+                          <span className="text-xs text-indigo-700 font-mono bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">{formatDateDDMMYYYY(event.created_at)}</span>
                         </div>
                         {Object.keys(event.event_payload).length > 0 && (
-                          <pre className="mt-1 text-[11px] text-gray-600 whitespace-pre-wrap">{JSON.stringify(event.event_payload, null, 2)}</pre>
+                          <pre className="mt-2 pl-2 text-[11px] text-gray-600 whitespace-pre-wrap font-mono leading-relaxed bg-gray-50/80 p-3 rounded-lg border border-gray-200 overflow-x-auto">{JSON.stringify(event.event_payload, null, 2)}</pre>
                         )}
                       </div>
                     ))}
@@ -915,51 +941,53 @@ export default function HotelsBookingPage() {
 
         {/* ==================== BOOKINGS TAB ==================== */}
         {tab === "bookings" && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { label: "Confirmed", status: "booking_confirmed", color: "bg-green-50 border-green-200 text-green-700" },
-                { label: "In Progress", status: "booking_started", color: "bg-purple-50 border-purple-200 text-purple-700" },
-                { label: "Failed", status: "booking_failed", color: "bg-red-50 border-red-200 text-red-700" },
+                { label: "Confirmed", status: "booking_confirmed", color: "from-emerald-900/40 to-emerald-800/20 border-emerald-500/30 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.1)]" },
+                { label: "In Progress", status: "booking_started", color: "from-indigo-900/40 to-indigo-800/20 border-indigo-500/30 text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.1)]" },
+                { label: "Failed", status: "booking_failed", color: "from-red-900/40 to-rose-800/20 border-rose-500/30 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.1)]" },
               ].map((item) => {
                 const count = offers.filter((o) => o.status === item.status).length;
                 return (
-                  <div key={item.status} className={`rounded-lg border p-5 ${item.color}`}>
-                    <div className="text-sm font-medium">{item.label}</div>
-                    <div className="text-3xl font-bold mt-1">{count}</div>
+                  <div key={item.status} className={`rounded-xl border bg-gradient-to-br p-6 backdrop-blur-md ${item.color} transform transition-all hover:scale-[1.02]`}>
+                    <div className="text-sm font-semibold uppercase tracking-wider opacity-90">{item.label}</div>
+                    <div className="text-4xl font-black mt-2 select-none">{count}</div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Hotel</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Client</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Dates</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Amount</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Status</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-700">Partner Order</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {offers.filter((o) => ["booking_confirmed", "booking_started", "booking_failed"].includes(o.status)).map((o) => (
-                    <tr key={o.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-900 font-medium">{o.hotel_name}</td>
-                      <td className="px-4 py-2 text-gray-700">{o.client_name || "—"}</td>
-                      <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{formatDateDDMMYYYY(o.check_in)} — {formatDateDDMMYYYY(o.check_out)}</td>
-                      <td className="px-4 py-2 text-gray-900 font-medium">{o.client_amount} {o.currency}</td>
-                      <td className="px-4 py-2"><StatusBadge status={o.status} /></td>
-                      <td className="px-4 py-2 text-xs text-gray-500 font-mono">{o.partner_order_id || "—"}</td>
+            <div className="booking-glass-panel !p-0 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-black/5 bg-gray-100/50">
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Hotel</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Client</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Dates</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Amount</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Status</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Partner Order</th>
                     </tr>
-                  ))}
-                  {offers.filter((o) => ["booking_confirmed", "booking_started", "booking_failed"].includes(o.status)).length === 0 && (
-                    <tr><td className="px-4 py-8 text-center text-gray-500" colSpan={6}>No bookings yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-black/5 bg-transparent">
+                    {offers.filter((o) => ["booking_confirmed", "booking_started", "booking_failed"].includes(o.status)).map((o) => (
+                      <tr key={o.id} className="hover:bg-black/5 transition-colors">
+                        <td className="px-5 py-4 text-gray-900 font-semibold">{o.hotel_name}</td>
+                        <td className="px-5 py-4 text-gray-600">{o.client_name || "—"}</td>
+                        <td className="px-5 py-4 text-gray-500 text-xs whitespace-nowrap bg-gray-200/50 rounded my-2 block w-max px-2 py-1"><span className="text-gray-900">{formatDateDDMMYYYY(o.check_in)}</span> <span className="mx-1 text-indigo-500">→</span> <span className="text-gray-900">{formatDateDDMMYYYY(o.check_out)}</span></td>
+                        <td className="px-5 py-4 text-emerald-600 font-bold drop-shadow-[0_0_8px_rgba(16,185,129,0.1)]">{o.client_amount} <span className="text-xs uppercase font-normal text-emerald-600/70">{o.currency}</span></td>
+                        <td className="px-5 py-4"><StatusBadge status={o.status} /></td>
+                        <td className="px-5 py-4 text-xs text-indigo-700 font-mono bg-indigo-50 border border-indigo-100 rounded px-2 py-1 select-all">{o.partner_order_id || "—"}</td>
+                      </tr>
+                    ))}
+                    {offers.filter((o) => ["booking_confirmed", "booking_started", "booking_failed"].includes(o.status)).length === 0 && (
+                      <tr><td className="px-5 py-12 text-center text-gray-500" colSpan={6}>No bookings yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

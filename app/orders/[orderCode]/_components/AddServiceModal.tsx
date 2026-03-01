@@ -7,7 +7,7 @@ import DateRangePicker from "@/components/DateRangePicker";
 import HotelSuggestInput from "@/components/HotelSuggestInput";
 import ClientMultiSelectDropdown from "@/components/ClientMultiSelectDropdown";
 import AddAccompanyingModal from "./AddAccompanyingModal";
-import { FlightSegment } from "@/components/FlightItineraryInput";
+import FlightItineraryInput, { FlightSegment } from "@/components/FlightItineraryInput";
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
@@ -297,6 +297,7 @@ export default function AddServiceModal({
   const [selectedCommissionIndex, setSelectedCommissionIndex] = useState<number>(-1);
   const [agentDiscountValue, setAgentDiscountValue] = useState("");
   const [agentDiscountType, setAgentDiscountType] = useState<"%" | "€">("%");
+  const [servicePriceLineItems, setServicePriceLineItems] = useState<{ description: string; amount: number; commissionable: boolean }[]>([]);
   
   // Track which field was last edited to determine calculation direction
   const pricingLastEditedRef = useRef<'cost' | 'marge' | 'sale' | 'agent' | 'commission' | null>(null);
@@ -480,6 +481,7 @@ export default function AddServiceModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [isAIParsing, setIsAIParsing] = useState(false);
+  const flightFileInputRef = useRef<HTMLInputElement>(null);
   // Tour (Package Tour) AI parsing
   const [showTourPasteInput, setShowTourPasteInput] = useState(false);
   const [tourPasteText, setTourPasteText] = useState("");
@@ -747,12 +749,30 @@ export default function AddServiceModal({
     }
   }, [clients, category]);
 
-  // Commission amount in € from selected commission (Tour): Cost * rate / 100
-  const getCommissionAmount = (cost: number): number => {
+  // Effective = Service Price (base) + line items. Line items ADD to Service Price.
+  const effectiveServicePrice = useMemo(() => {
+    const base = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    if (categoryType === "tour" && servicePriceLineItems.length > 0) {
+      const lineSum = servicePriceLineItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+      return Math.round((base + lineSum) * 100) / 100;
+    }
+    return base;
+  }, [categoryType, servicePriceLineItems, servicePrice]);
+
+  const commissionableCost = useMemo(() => {
+    const base = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    if (categoryType === "tour" && servicePriceLineItems.length > 0) {
+      const commissionableSum = servicePriceLineItems.filter((it) => it.commissionable).reduce((s, it) => s + (Number(it.amount) || 0), 0);
+      return Math.round((base + commissionableSum) * 100) / 100;
+    }
+    return effectiveServicePrice;
+  }, [categoryType, servicePriceLineItems, servicePrice, effectiveServicePrice]);
+
+  const getCommissionAmount = (baseCost: number): number => {
     if (categoryType !== "tour" || selectedCommissionIndex < 0 || !supplierCommissions[selectedCommissionIndex]) return 0;
     const rate = supplierCommissions[selectedCommissionIndex].rate;
     if (rate == null || rate <= 0) return 0;
-    return Math.round((cost * rate / 100) * 100) / 100;
+    return Math.round((baseCost * rate / 100) * 100) / 100;
   };
 
   // Agent discount amount in € (Tour)
@@ -765,12 +785,11 @@ export default function AddServiceModal({
   };
 
   // Tour: recalc only when user edits Pricing; skip on open (ref === null)
-  // Formulas: AgentDiscount = Cost - Sale, Sale = Cost - AgentDiscount, Margin = Sale - (Cost - Commission)
   useEffect(() => {
     if (categoryType !== "tour") return;
     if (!pricingLastEditedRef.current) return;
-    const cost = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
-    const commissionAmount = getCommissionAmount(cost);
+    const cost = effectiveServicePrice;
+    const commissionAmount = getCommissionAmount(commissionableCost);
     const netCost = Math.round((cost - commissionAmount) * 100) / 100;
 
     if (pricingLastEditedRef.current === "sale") {
@@ -779,15 +798,22 @@ export default function AddServiceModal({
       setAgentDiscountType("€");
       setAgentDiscountValue(discount.toFixed(2));
       setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
+      pricingLastEditedRef.current = null;
       return;
     }
-    // User edited cost, commission, or agent discount → recalc Sale and Margin
+    if (pricingLastEditedRef.current === "commission") {
+      const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+      setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
+      pricingLastEditedRef.current = null;
+      return;
+    }
+    // User edited cost or agent discount → recalc Sale and Margin
     const discountAmount = getAgentDiscountAmount(cost);
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
     setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
-  }, [categoryType, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
+  }, [categoryType, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
 
   // Non-Tour: when Client price changes, recalculate Margin = Total Client price - Service price.
   useEffect(() => {
@@ -1627,7 +1653,7 @@ export default function AddServiceModal({
         payerName,
         servicePrice: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.cost) || 0), 0) * 100) / 100
-          : parseFloat(servicePrice) || 0,
+          : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
         clientPrice: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
@@ -1766,8 +1792,12 @@ export default function AddServiceModal({
         const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
         payload.commissionName = comm?.name ?? null;
         payload.commissionRate = comm?.rate ?? null;
-        const cost = parseFloat(servicePrice) || 0;
-        payload.commissionAmount = comm?.rate != null && comm.rate > 0 ? Math.round((cost * comm.rate / 100) * 100) / 100 : null;
+        payload.commissionAmount = comm?.rate != null && comm.rate > 0 ? Math.round((commissionableCost * comm.rate / 100) * 100) / 100 : null;
+        payload.servicePriceLineItems = servicePriceLineItems.map((it) => ({
+          description: it.description.trim(),
+          amount: Number(it.amount) || 0,
+          commissionable: !!it.commissionable,
+        }));
         const discVal = parseFloat(agentDiscountValue);
         payload.agentDiscountValue = Number.isFinite(discVal) ? discVal : null;
         payload.agentDiscountType = agentDiscountValue.trim() ? agentDiscountType : null;
@@ -2035,10 +2065,33 @@ export default function AddServiceModal({
                   className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   autoFocus
                 />
+                <input
+                  ref={flightFileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.eml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      const dt = new DataTransfer();
+                      dt.items.add(f);
+                      handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
+                    }
+                    e.target.value = "";
+                  }}
+                />
                 {parseError && (
                   <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => flightFileInputRef.current?.click()}
+                    disabled={isLoadingPdf}
+                    className="px-4 py-1.5 text-sm border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    Attach PDF
+                  </button>
                   <button
                     type="button"
                     onClick={handleParseFlight}
@@ -2208,7 +2261,7 @@ export default function AddServiceModal({
           )}
 
           {/* Two-column layout: Left = BASIC INFO + CLIENTS & PAYER (hotel/flight) + Supplier/Preferences, Right = PARTIES (tour/other only) + PRICING + REFERENCES */}
-          <div className={`grid grid-cols-1 gap-3 ${categoryType === "flight" ? "md:grid-cols-[3fr_2fr]" : categoryType === "hotel" ? "md:grid-cols-[1.65fr_1fr]" : "md:grid-cols-3"}`}>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
             
             {/* Left column */}
             <div className={`space-y-3 ${categoryType === "hotel" ? "md:col-span-1" : ""}`}>
@@ -2532,7 +2585,7 @@ export default function AddServiceModal({
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-AYT 19.09-27.09" : "Description"}
+                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-BOJ" : "Description"}
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
@@ -2716,6 +2769,20 @@ export default function AddServiceModal({
                     </div>
                   </>
                 ) : (
+                  <>
+                {/* Ref Nr (booking ref) — for Tour, above Status in BASIC INFO */}
+                {categoryType === "tour" && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr (booking ref)</label>
+                    <input
+                      type="text"
+                      value={refNr}
+                      onChange={(e) => setRefNr(e.target.value)}
+                      placeholder="Booking ref"
+                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
                     <select
@@ -2728,6 +2795,7 @@ export default function AddServiceModal({
                       ))}
                     </select>
                   </div>
+                  </>
                 )}
               </div>
               )}
@@ -2859,83 +2927,23 @@ export default function AddServiceModal({
 
             {/* Flight Schedule — in the left column */}
             {categoryType === "flight" && addFlightScheduleBlock}
+            {/* Tour: Flight Information — parse document above or add/edit manually */}
+            {categoryType === "tour" && (
+              <div className="mt-3 p-3 rounded-lg border bg-sky-50/50 border-sky-100">
+                <h4 className="text-xs font-semibold uppercase tracking-wide mb-2 text-sky-600">FLIGHT INFORMATION</h4>
+                <p className="text-xs text-gray-500 mb-3">Parse document above, or add flight segments manually:</p>
+                <FlightItineraryInput
+                  segments={flightSegments}
+                  onSegmentsChange={(segs) => setFlightSegments(normalizeSegmentsArrivalYear(segs) as FlightSegment[])}
+                  readonly={false}
+                />
+              </div>
+            )}
             </div>
 
-            {/* Right side: for hotel/flight only PRICING; for tour/other also PARTIES */}
+            {/* Right side: PRICING → PARTIES → Booking Terms */}
             <RightWrapper {...rightWrapperProps}>
-              {(categoryType === "hotel" || categoryType === "flight") ? null : (
-              <div className="p-3 modal-section space-y-2">
-                <h4 className="modal-section-title">PARTIES</h4>
-
-                {/* Supplier — for tour/other */}
-                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect
-                    value={supplierPartyId}
-                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
-                    roleFilter="supplier"
-                    initialDisplayName={supplierName}
-                  />
-                </div>
-
-                {/* Tour / other: ClientMultiSelectDropdown + chips UI (hotel/flight have CLIENTS in left column) */}
-                  <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
-                    <div className="flex items-center justify-between mb-0.5">
-                      <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
-                      <ClientMultiSelectDropdown
-                        onAddClients={(toAdd) => setClients(prev => {
-                          const existing = prev.filter(c => c.id);
-                          const next = [...existing, ...toAdd];
-                          return next.length > 0 ? next : [{ id: null, name: "" }];
-                        })}
-                        existingClientIds={clients.map(c => c.id).filter((id): id is string => id !== null)}
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {clients.filter(c => c.id || c.name).map((client, index) => {
-                        const displayName = toTitleCaseForDisplay(client.name || (index === 0 ? defaultClientName : "") || "") || "-";
-                        return (
-                          <div key={client.id || index} className="flex items-center gap-1">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-sm">
-                              {displayName}
-                              {clients.filter(c => c.id || c.name).length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || ""));
-                                    if (idx >= 0) removeClient(idx);
-                                  }}
-                                  className="text-gray-400 hover:text-red-600"
-                                  aria-label={`Remove ${displayName}`}
-                                >
-                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {clients.filter(c => c.id || c.name).length === 0 && (
-                        <span className="text-xs text-gray-400">No clients — use &quot;+ Add from directory&quot; above</span>
-                      )}
-                    </div>
-                  </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect
-                    key={`payer-${payerPartyId || 'empty'}`}
-                    value={payerPartyId}
-                    onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
-                    initialDisplayName={payerName}
-                  />
-                </div>
-              </div>
-              )}
-
-            {/* Pricing, Refs, Booking Terms (same layout as Edit Service) */}
+            {/* PRICING first */}
             <div className="space-y-2">
               <div className="p-3 modal-section space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -2977,7 +2985,7 @@ export default function AddServiceModal({
                   )}
                 </div>
 
-                {/* Tour: Row1 Cost | Commission; Row2 Agent discount | Sale; Row3 Marge (calc) | VAT */}
+                {/* Tour: Row1 Cost | Commission; Row2 Agent discount | Sale; Line items; Row3 Marge | VAT */}
                 {categoryType === "tour" ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
@@ -3017,6 +3025,75 @@ export default function AddServiceModal({
                           ))}
                         </select>
                       </div>
+                    </div>
+                    <div className="border-t border-gray-100 pt-1.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-gray-600">Extra</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            pricingLastEditedRef.current = "cost";
+                            setServicePriceLineItems((prev) => [...prev, { description: "", amount: 0, commissionable: true }]);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                      {servicePriceLineItems.length > 0 && (
+                        <div className="space-y-1">
+                          {servicePriceLineItems.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 py-1.5 px-2 rounded bg-gray-50 border border-gray-100">
+                              <input
+                                type="text"
+                                placeholder="Description"
+                                value={item.description}
+                                onChange={(e) => {
+                                  pricingLastEditedRef.current = "cost";
+                                  setServicePriceLineItems((prev) => { const next = [...prev]; next[idx] = { ...next[idx], description: e.target.value }; return next; });
+                                }}
+                                className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-1 text-sm"
+                              />
+                              <div className="inline-flex shrink-0 rounded border border-gray-300 overflow-hidden">
+                                <span className="pl-1.5 py-1 text-slate-500 text-xs">{currencySymbol}</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.amount || ""}
+                                  onChange={(e) => {
+                                    pricingLastEditedRef.current = "cost";
+                                    const v = parseFloat(e.target.value) || 0;
+                                    setServicePriceLineItems((prev) => { const next = [...prev]; next[idx] = { ...next[idx], amount: v }; return next; });
+                                  }}
+                                  placeholder="0.00"
+                                  className="w-16 py-1 pr-1.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                />
+                              </div>
+                              <label className="flex shrink-0 items-center gap-1 text-xs text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={item.commissionable}
+                                  onChange={(e) => {
+                                    pricingLastEditedRef.current = "cost";
+                                    setServicePriceLineItems((prev) => { const next = [...prev]; next[idx] = { ...next[idx], commissionable: e.target.checked }; return next; });
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                Comm
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => { pricingLastEditedRef.current = "cost"; setServicePriceLineItems((prev) => prev.filter((_, i) => i !== idx)); }}
+                                className="shrink-0 text-red-500 hover:text-red-600 p-0.5"
+                                aria-label="Remove"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -3580,36 +3657,75 @@ export default function AddServiceModal({
                 )}
               </div>
 
-              {/* REFERENCES — for tour/other (flight refs moved to PARTIES in left column) */}
-              {categoryType !== "hotel" && categoryType !== "flight" && (
+              {/* PARTIES — under PRICING, for tour/other only */}
+              {(categoryType === "tour" || categoryType === "other") && (
               <div className="p-3 modal-section space-y-2">
-                <h4 className="modal-section-title">REFERENCES</h4>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">{categoryType === "tour" ? "Ref Nr (booking ref)" : "Ref Nr"}</label>
-                  <input
-                    type="text"
-                    value={refNr}
-                    onChange={(e) => setRefNr(e.target.value)}
-                    placeholder="Booking ref"
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"}`}
+                <h4 className="modal-section-title">PARTIES</h4>
+                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                  <PartySelect
+                    value={supplierPartyId}
+                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                    roleFilter="supplier"
+                    initialDisplayName={supplierName}
                   />
                 </div>
-                {showTicketNr && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ticket Nr</label>
-                    <input
-                      type="text"
-                      value={ticketNr}
-                      onChange={(e) => setTicketNr(e.target.value)}
-                      placeholder="555-1234567890"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
+                    <ClientMultiSelectDropdown
+                      onAddClients={(toAdd) => setClients(prev => {
+                        const existing = prev.filter(c => c.id);
+                        const next = [...existing, ...toAdd];
+                        return next.length > 0 ? next : [{ id: null, name: "" }];
+                      })}
+                      existingClientIds={clients.map(c => c.id).filter((id): id is string => id !== null)}
                     />
                   </div>
-                )}
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {clients.filter(c => c.id || c.name).map((client, index) => {
+                      const displayName = toTitleCaseForDisplay(client.name || (index === 0 ? defaultClientName : "") || "") || "-";
+                      return (
+                        <div key={client.id || index} className="flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-sm">
+                            {displayName}
+                            {clients.filter(c => c.id || c.name).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || ""));
+                                  if (idx >= 0) removeClient(idx);
+                                }}
+                                className="text-gray-400 hover:text-red-600"
+                                aria-label={`Remove ${displayName}`}
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {clients.filter(c => c.id || c.name).length === 0 && (
+                      <span className="text-xs text-gray-400">No clients — use &quot;+ Add from directory&quot; above</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
+                  <PartySelect
+                    key={`payer-${payerPartyId || 'empty'}`}
+                    value={payerPartyId}
+                    onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
+                    initialDisplayName={payerName}
+                  />
+                </div>
               </div>
               )}
 
-              {/* Booking Terms (hidden for Flight) - inside Column 3, same as Edit Service */}
+              {/* Booking Terms (hidden for Flight) */}
               {categoryType !== "flight" && (
               <div className="p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">Booking Terms</h4>
@@ -3745,178 +3861,6 @@ export default function AddServiceModal({
             </div>
           </RightWrapper>
           </div>
-
-          {/* Flight Schedule for Tour (Flight uses left column) */}
-          {categoryType === "tour" && flightSegments.length > 0 && (
-            <div className={`mt-3 p-3 rounded-lg border ${parseAttemptedButEmpty.has("flightSegments") ? "bg-red-50 border-red-200 ring-2 ring-red-300" : parsedFields.has("flightSegments") ? "bg-green-50 border-green-200 ring-2 ring-green-300" : "bg-sky-50 border-sky-200"}`}>
-              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${parseAttemptedButEmpty.has("flightSegments") ? "text-red-700" : parsedFields.has("flightSegments") ? "text-green-700" : "text-sky-700"}`}>Flight Schedule</h4>
-              <div className="space-y-2">
-                {flightSegments.map((seg, idx) => {
-                  // Calculate time between segments
-                  let gapInfo: { type: "layover" | "stay" | null; time: string; location: string } = { type: null, time: "", location: "" };
-                  
-                  if (idx > 0) {
-                    const prevSeg = flightSegments[idx - 1];
-                    const firstSeg = flightSegments[0];
-                    
-                    if (prevSeg.arrivalDate && prevSeg.arrivalTimeScheduled && seg.departureDate && seg.departureTimeScheduled) {
-                      // Account for timezone differences
-                      const prevArrTzOffset = getAirportTimezoneOffset(prevSeg.arrival);
-                      const currDepTzOffset = getAirportTimezoneOffset(seg.departure);
-                      
-                      const prevArrival = new Date(`${prevSeg.arrivalDate}T${prevSeg.arrivalTimeScheduled}`);
-                      const currDeparture = new Date(`${seg.departureDate}T${seg.departureTimeScheduled}`);
-                      
-                      // Convert to UTC for accurate comparison
-                      const prevArrivalUTC = prevArrival.getTime() - (prevArrTzOffset * 60 * 60 * 1000);
-                      const currDepartureUTC = currDeparture.getTime() - (currDepTzOffset * 60 * 60 * 1000);
-                      const diffMs = currDepartureUTC - prevArrivalUTC;
-                      
-                      if (diffMs > 0) {
-                        const totalMinutes = Math.floor(diffMs / (1000 * 60));
-                        const hours = Math.floor(totalMinutes / 60);
-                        const minutes = totalMinutes % 60;
-                        
-                        // Format for layover (short): "2h 30m"
-                        const shortTimeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-                        
-                        // Format for stay (with days): "3 day(s) 21h 55m"
-                        const days = Math.floor(hours / 24);
-                        const remainingHours = hours % 24;
-                        const longTimeStr = days > 0 
-                          ? `${days} day${days > 1 ? "s" : ""} ${remainingHours}h ${minutes}m`
-                          : shortTimeStr;
-                        
-                        // Check if this is a return leg (arriving back to origin)
-                        const isReturnLeg = seg.arrival === firstSeg.departure;
-                        
-                        // Layover: same airport connection, < 12 hours
-                        // Stay: different location OR >= 12 hours at same place
-                        if (prevSeg.arrival === seg.departure && hours < 12) {
-                          // Short connection at same airport = layover
-                          gapInfo = { type: "layover", time: shortTimeStr, location: prevSeg.arrivalCity || prevSeg.arrival };
-                        } else if (hours >= 6) {
-                          // Long gap = stay in destination city
-                          const city = prevSeg.arrivalCity || prevSeg.arrival;
-                          gapInfo = { type: "stay", time: longTimeStr, location: city };
-                        }
-                      }
-                    }
-                  }
-                  
-                  const formatDate = (dateStr: string) => (dateStr ? formatDateDDMMYYYY(dateStr) : "");
-                  
-                  return (
-                    <div key={seg.id || idx}>
-                      {/* Gap indicator: Layover or Stay */}
-                      {gapInfo.type === "layover" && (
-                        <div className="flex items-center justify-center py-1 text-xs text-amber-600">
-                          <span className="bg-amber-100 px-2 py-0.5 rounded">⏱ Layover: {gapInfo.time} in {gapInfo.location}</span>
-                        </div>
-                      )}
-                      {gapInfo.type === "stay" && (
-                        <div className="flex items-center justify-center py-1 text-xs text-green-600">
-                          <span className="bg-green-100 px-2 py-0.5 rounded inline-flex items-center gap-1"><Hotel size={12} /> Stay in {gapInfo.location}: {gapInfo.time}</span>
-                        </div>
-                      )}
-                      
-                      {/* Flight segment */}
-                      <div className="bg-white rounded-lg px-3 py-2 border border-sky-100">
-                        <div className="flex items-center gap-3 text-sm">
-                          <div className="flex flex-col items-center">
-                            <span className="font-semibold text-sky-700">{seg.flightNumber}</span>
-                            <span className="text-[10px] text-gray-400">{seg.airline}</span>
-                          </div>
-                          
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <div className="text-center min-w-[80px]">
-                                <div className="text-xs text-gray-400">{formatDate(seg.departureDate)}</div>
-                                <div className="font-medium">{seg.departure}</div>
-                                <div className="text-[10px] text-gray-500">
-                                  {seg.departureCity}{seg.departureCountry && `, ${seg.departureCountry}`}
-                                </div>
-                                <div className="text-sm font-semibold">{seg.departureTimeScheduled}</div>
-                                {seg.departureTerminal && <div className="text-[10px] text-gray-400">{seg.departureTerminal.toLowerCase().startsWith("terminal") ? seg.departureTerminal : `T${seg.departureTerminal}`}</div>}
-                              </div>
-                              
-                              <div className="flex-1 flex flex-col items-center px-2">
-                                <div className="text-[10px] text-gray-400">{seg.duration || "—"}</div>
-                                <div className="w-full h-px bg-gray-300 relative">
-                                  <span className="absolute left-1/2 -translate-x-1/2 -top-1 text-gray-400">✈</span>
-                                </div>
-                              </div>
-                              
-                              <div className="text-center min-w-[80px]">
-                                <div className="text-xs text-gray-400">{formatDate(segmentDisplayArrivalDate(seg))}</div>
-                                <div className="font-medium">{seg.arrival}</div>
-                                <div className="text-[10px] text-gray-500">
-                                  {seg.arrivalCity}{seg.arrivalCountry && `, ${seg.arrivalCountry}`}
-                                </div>
-                                <div className="text-sm font-semibold">{seg.arrivalTimeScheduled}</div>
-                                {seg.arrivalTerminal && <div className="text-[10px] text-gray-400">{seg.arrivalTerminal.toLowerCase().startsWith("terminal") ? seg.arrivalTerminal : `T${seg.arrivalTerminal}`}</div>}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-col items-end gap-1">
-                            {seg.cabinClass && (
-                              <span className="text-xs bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded capitalize">
-                                {seg.cabinClass.replace("_", " ")}
-                              </span>
-                            )}
-                            {seg.baggage && (
-                              <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                                🧳 {seg.baggage}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                
-                {/* Total travel time (with timezone adjustment) */}
-                {flightSegments.length > 0 && (
-                  <div className="text-xs text-gray-500 text-right pt-1">
-                    Total travel time: {(() => {
-                      const first = flightSegments[0];
-                      const last = flightSegments[flightSegments.length - 1];
-                      if (first.departureDate && first.departureTimeScheduled && last.arrivalDate && last.arrivalTimeScheduled) {
-                        // Get timezone offsets for departure and arrival airports
-                        const depTzOffset = getAirportTimezoneOffset(first.departure);
-                        const arrTzOffset = getAirportTimezoneOffset(last.arrival);
-                        
-                        // Create dates in local time
-                        const start = new Date(`${first.departureDate}T${first.departureTimeScheduled}`);
-                        const end = new Date(`${last.arrivalDate}T${last.arrivalTimeScheduled}`);
-                        
-                        // Adjust for timezone difference (convert both to UTC)
-                        // Local time - offset = UTC, so we subtract the offset
-                        const startUTC = start.getTime() - (depTzOffset * 60 * 60 * 1000);
-                        const endUTC = end.getTime() - (arrTzOffset * 60 * 60 * 1000);
-                        
-                        const diffMs = endUTC - startUTC;
-                        if (diffMs > 0) {
-                          const totalMinutes = Math.floor(diffMs / (1000 * 60));
-                          const days = Math.floor(totalMinutes / (24 * 60));
-                          const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-                          const minutes = totalMinutes % 60;
-                          const parts: string[] = [];
-                          if (days > 0) parts.push(`${days} day${days > 1 ? "s" : ""}`);
-                          if (hours > 0) parts.push(`${hours}h`);
-                          if (minutes > 0) parts.push(`${minutes}m`);
-                          return parts.join(", ") || "—";
-                        }
-                      }
-                      return "—";
-                    })()}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Category-specific fields - Hotel Details at top for hotel; show here only for non-hotel (e.g. Tour) */}
           {showHotelFields && categoryType !== "hotel" && (

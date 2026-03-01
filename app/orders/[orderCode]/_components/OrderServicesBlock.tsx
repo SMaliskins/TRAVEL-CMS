@@ -108,7 +108,12 @@ interface Service {
   hotelPhone?: string;
   hotelEmail?: string;
   hotelEarlyCheckIn?: boolean | null;
+  hotelEarlyCheckInTime?: string | null;
   hotelLateCheckIn?: boolean | null;
+  hotelLateCheckInTime?: string | null;
+  hotelRoomUpgrade?: boolean | null;
+  hotelLateCheckOut?: boolean | null;
+  hotelLateCheckOutTime?: string | null;
   hotelHigherFloor?: boolean | null;
   hotelKingSizeBed?: boolean | null;
   hotelHoneymooners?: boolean | null;
@@ -157,6 +162,8 @@ interface Service {
   commissionAmount?: number | null;
   agentDiscountValue?: number | null;
   agentDiscountType?: "%" | "€" | null;
+  /** Tour: Extra line items (Agent discount etc.) */
+  servicePriceLineItems?: { description: string; amount: number; commissionable: boolean }[];
 }
 
 // Fallback when API is unavailable (for "What service?" chooser)
@@ -1196,6 +1203,13 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           commissionAmount: (s.commissionAmount ?? s.commission_amount ?? null) as number | null,
           agentDiscountValue: (s.agentDiscountValue ?? s.agent_discount_value ?? null) as number | null,
           agentDiscountType: (s.agentDiscountType ?? s.agent_discount_type ?? null) as string | null,
+          servicePriceLineItems: Array.isArray(s.servicePriceLineItems ?? s.service_price_line_items)
+            ? ((s.servicePriceLineItems ?? s.service_price_line_items) as { description?: string; amount?: number; commissionable?: boolean }[]).map((it) => ({
+                description: String(it.description ?? ""),
+                amount: Number(it.amount ?? 0),
+                commissionable: !!it.commissionable,
+              }))
+            : [],
           // Tour/Hotel fields (must pass for Edit modal to display after save)
           hotelName: (s.hotelName ?? s.hotel_name ?? null) as string | null,
           hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
@@ -1212,7 +1226,12 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
           hotelEmail: (s.hotelEmail ?? s.hotel_email ?? null) as string | null,
           hotelEarlyCheckIn: (s.hotelEarlyCheckIn ?? s.hotel_early_check_in ?? null) as boolean | null,
+          hotelEarlyCheckInTime: (s.hotelEarlyCheckInTime ?? (s as { hotel_early_check_in_time?: string }).hotel_early_check_in_time ?? null) as string | null,
           hotelLateCheckIn: (s.hotelLateCheckIn ?? s.hotel_late_check_in ?? null) as boolean | null,
+          hotelLateCheckInTime: (s.hotelLateCheckInTime ?? (s as { hotel_late_check_in_time?: string }).hotel_late_check_in_time ?? null) as string | null,
+          hotelRoomUpgrade: (s.hotelRoomUpgrade ?? (s as { hotel_room_upgrade?: boolean }).hotel_room_upgrade ?? null) as boolean | null,
+          hotelLateCheckOut: (s.hotelLateCheckOut ?? (s as { hotel_late_check_out?: boolean }).hotel_late_check_out ?? null) as boolean | null,
+          hotelLateCheckOutTime: (s.hotelLateCheckOutTime ?? (s as { hotel_late_check_out_time?: string }).hotel_late_check_out_time ?? null) as string | null,
           hotelHigherFloor: (s.hotelHigherFloor ?? s.hotel_higher_floor ?? null) as boolean | null,
           hotelKingSizeBed: (s.hotelKingSizeBed ?? s.hotel_king_size_bed ?? null) as boolean | null,
           hotelHoneymooners: (s.hotelHoneymooners ?? s.hotel_honeymooners ?? null) as boolean | null,
@@ -1583,8 +1602,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      // Build duplicate payload with ALL fields
-      const duplicatePayload = {
+      // Build duplicate payload with ALL fields (including hotel, pricing, booking terms)
+      const duplicatePayload: Record<string, unknown> = {
         // Basic info with "(copy)" suffix
         serviceName: service.name + " (copy)",
         category: service.category,
@@ -1601,10 +1620,15 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         payerPartyId: service.payerPartyId || service.payer_party_id,
         payerName: service.payer !== "-" ? service.payer : null,
         
-        // Pricing
+        // Pricing (preserve quantity, hotelPricePer for correct totals)
         servicePrice: service.servicePrice,
         clientPrice: service.clientPrice,
-        vatRate: 0,
+        quantity: service.quantity ?? 1,
+        hotelPricePer: service.hotelPricePer ?? null,
+        serviceCurrency: service.serviceCurrency ?? null,
+        servicePriceForeign: service.servicePriceForeign ?? null,
+        exchangeRate: service.exchangeRate ?? null,
+        actuallyPaid: service.actuallyPaid ?? null,
         
         // Status - keep same status
         resStatus: service.resStatus,
@@ -1624,8 +1648,50 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         cancellationPenaltyAmount: service.cancellationPenaltyAmount,
         cancellationPenaltyPercent: service.cancellationPenaltyPercent,
         
-        // Travellers - copy assigned travellers
-        clients: service.assignedTravellerIds?.map(id => ({ partyId: id })) || [],
+        // Booking terms (payment deadlines, payment terms)
+        paymentDeadlineDeposit: service.paymentDeadlineDeposit ?? null,
+        paymentDeadlineFinal: service.paymentDeadlineFinal ?? null,
+        paymentTerms: service.paymentTerms ?? null,
+        
+        // Hotel fields - room, board, beds, preferences
+        hotelName: service.hotelName ?? null,
+        hotelStarRating: service.hotelStarRating ?? null,
+        hotelRoom: service.hotelRoom ?? null,
+        hotelBoard: service.hotelBoard ?? null,
+        hotelBedType: service.hotelBedType ?? null,
+        mealPlanText: service.mealPlanText ?? null,
+        hotelEarlyCheckIn: service.hotelEarlyCheckIn ?? null,
+        hotelEarlyCheckInTime: service.hotelEarlyCheckInTime ?? null,
+        hotelLateCheckIn: service.hotelLateCheckIn ?? null,
+        hotelLateCheckInTime: service.hotelLateCheckInTime ?? null,
+        hotelRoomUpgrade: service.hotelRoomUpgrade ?? null,
+        hotelLateCheckOut: service.hotelLateCheckOut ?? null,
+        hotelLateCheckOutTime: service.hotelLateCheckOutTime ?? null,
+        hotelHigherFloor: service.hotelHigherFloor ?? null,
+        hotelKingSizeBed: service.hotelKingSizeBed ?? null,
+        hotelHoneymooners: service.hotelHoneymooners ?? null,
+        hotelSilentRoom: service.hotelSilentRoom ?? null,
+        hotelRepeatGuests: service.hotelRepeatGuests ?? null,
+        hotelRoomsNextTo: service.hotelRoomsNextTo ?? null,
+        hotelParking: service.hotelParking ?? null,
+        hotelPreferencesFreeText: service.hotelPreferencesFreeText ?? null,
+        hotelAddress: service.hotelAddress ?? null,
+        hotelPhone: service.hotelPhone ?? null,
+        hotelEmail: service.hotelEmail ?? null,
+        additionalServices: service.additionalServices ?? null,
+        transferType: service.transferType ?? null,
+        supplierBookingType: service.supplierBookingType ?? null,
+        
+        // Tour commission / line items
+        commissionName: service.commissionName ?? null,
+        commissionRate: service.commissionRate ?? null,
+        commissionAmount: service.commissionAmount ?? null,
+        agentDiscountValue: service.agentDiscountValue ?? null,
+        agentDiscountType: service.agentDiscountType ?? null,
+        servicePriceLineItems: Array.isArray(service.servicePriceLineItems) && service.servicePriceLineItems.length > 0 ? service.servicePriceLineItems : undefined,
+        
+        // Travellers - copy assigned travellers (API expects travellerIds)
+        travellerIds: service.assignedTravellerIds || [],
       };
       
       console.log('[Duplicate] Sending payload:', duplicatePayload);
@@ -2311,7 +2377,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       {/* Edit Service Modal - simple inline editor */}
       {editServiceId && (
         <>
-          {console.log('🔍 Rendering EditServiceModalNew for service:', editServiceId)}
           <EditServiceModalNew
             service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
             orderCode={orderCode}
@@ -2327,9 +2392,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               return resolved.length > 0 ? resolved : undefined;
             })()}
             onClose={() => setEditServiceId(null)}
-            onServiceUpdated={(updated: Partial<Service> & { id: string }) => {
-              setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } as Service : s));
-              setEditServiceId(null);
+            onServiceUpdated={(updated: Partial<Service> & { id: string; _keepModalOpen?: boolean }) => {
+              const { _keepModalOpen, ...rest } = updated;
+              setServices(prev => prev.map(s => s.id === rest.id ? { ...s, ...rest } as Service : s));
+              if (!_keepModalOpen) setEditServiceId(null);
               fetchTravellers();
               // Refetch after short delay so backend has committed; noCache so Itinerary gets fresh dates
               setTimeout(() => fetchServices(true), 150);

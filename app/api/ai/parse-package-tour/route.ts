@@ -129,7 +129,19 @@ Return a JSON object with this structure:
 Rules:
 - detectedOperator: Name of tour operator as found in document
 - travellers: List ALL traveller names. Include name (full), firstName (given name), lastName (surname). Document may show "Surname FirstName" or "FirstName Surname" - parse correctly. For "Pricite Irina" (Latvian/Russian style: Surname FirstName) use firstName: "Irina", lastName: "Pricite"
-- direction: Derive from flight cities/airports. Format: "Country, City - Country, City" (e.g. "Latvia, Riga - Turkey, Antalya"). Use departureCountry+departureCity and arrivalCountry+arrivalCity from first/last segments. If country unknown, infer from city (Riga→Latvia, Antalya→Turkey).
+
+Tez Tour specific (Latvian "LĪGUMS Par tūrisma pakalpojumu sniegšanu", PAKALPOJUMU PROGRAMMA):
+- bookingRef: from "Rezervācijas Nr." or "Nr. XXXXX" in contract header
+- destination: "Ceļojuma galamērķis BULGARIA, NESSEBAR" → direction "Latvia, Riga - Bulgaria, Nessebar" (from–to: departure city first, then destination)
+- traveller: "Tūrists MRS. JANA BRJUHOVECKA (17.12.1967)" → name "Jana Brjuhovecka", firstName "Jana", lastName "Brjuhovecka"
+- flights: "Izlidošanas Datums... 09.06.2026 07:15/RIGA(RIX)-BURGAS(BOJ) INC/BT755/Economy" → segment with departure RIX, arrival BOJ, flightNumber "BT 755", airline "airBaltic" (BT = airBaltic, NOT Bulgaria Air). "Atlidošanas Datums... 16.06.2026 10:40/BURGAS(BOJ)INC-RIGA(RIX)/BT756/Economy" → return segment. Dates in DD.MM.YYYY, convert to YYYY-MM-DD. For RIX-BOJ/BOJ-RIX: duration typically 2h 40m
+- hotel: "Viesnīcas nosaukums/līmenis*/Numur tips/ēdināšana" e.g. "MIRAGE NESSEBAR 3*/Standard Sea View/SGL/BB" → hotelName "MIRAGE NESSEBAR", starRating "3*", roomType "Standard Sea View", mealPlan "BB". SGL=Single room
+- nights: "Nakšu skaits 7"
+- transfers: "Transfēri 09.06.2026 BURGAS(BOJ)INC-MIRAGENESSEBAR:G" — "G" means Group. Extract dates and route
+- pricing: "Visu pakalpojumu kopējā cena 702.2 EUR", "Apmaksai 702.2 EUR" → totalPrice
+- paymentTerms: "Maksājumu plāns saskaņā ar līguma punktu 5.1: 27.02.2026-140.44EUR, 19.05.2026-561.76EUR" (or similar) → first date+amount = deposit, last = final. Convert DD.MM.YYYY to YYYY-MM-DD
+- operator: "SIA Tez Tour", reg "Vienotais reģistrācijas Nr. 40003586306", license "T-2018-24"
+- direction: Format "from - to" (departure - arrival). E.g. "Latvia, Riga - Turkey, Antalya". Use departure city/country FIRST, then arrival. From first outbound segment: departure = from, arrival = to. If country unknown, infer (Riga→Latvia, Antalya→Turkey).
 - hotelName: Extract hotel name UP TO the star rating (*). E.g. "STARLIGHT RESORT HOTEL 5* Ultra All Inclusive" -> hotelName: "STARLIGHT RESORT HOTEL", starRating: "5*"
 - starRating: Category/star rating (5*, 4*, etc.)
 - roomType: Standard, Club Superior, Club Deluxe, etc.

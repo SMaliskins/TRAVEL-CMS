@@ -11,6 +11,7 @@ import TouristsMap from "@/components/dashboard/TouristsMap";
 import RecentlyCompletedList from "@/components/dashboard/RecentlyCompletedList";
 import CalendarWithDots from "@/components/dashboard/CalendarWithDots";
 import AIWindowPlaceholder from "@/components/dashboard/AIWindowPlaceholder";
+import "../hotels-booking/modern-booking.css";
 
 interface DashboardStatistics {
   ordersCount: number;
@@ -235,7 +236,7 @@ export default function DashboardPage() {
       }
 
       setEmail(data.user.email || null);
-      
+
       // Fetch user's first name via API (bypasses RLS)
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
@@ -250,7 +251,7 @@ export default function DashboardPage() {
           }
         } catch { /* fallback to email */ }
       }
-      
+
       setLoading(false);
     };
 
@@ -286,23 +287,25 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="bg-gray-50 p-6">
+    <div className="booking-modern-container">
       <div className="mx-auto max-w-[1800px] space-y-6">
         {/* Header with Period Selector */}
-        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-semibold text-gray-900">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
-            <PeriodSelector
-              value={period}
-              onChange={handlePeriodChange}
-              startDate={periodStart}
-              endDate={periodEnd}
-            />
+        <div className="booking-modern-header relative !mb-0 !overflow-visible">
+          <div className="flex items-center justify-between w-full">
+            <h1 className="booking-header-title">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
+            <div className="relative z-40">
+              <PeriodSelector
+                value={period}
+                onChange={handlePeriodChange}
+                startDate={periodStart}
+                endDate={periodEnd}
+              />
+            </div>
           </div>
         </div>
 
         {/* Statistic Cards */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 relative z-0">
           <StatisticCard
             title="Orders"
             value={statistics?.ordersCount || 0}
@@ -310,9 +313,9 @@ export default function DashboardPage() {
             changePercent={
               previousYear
                 ? calculateChangePercent(
-                    statistics?.ordersCount || 0,
-                    previousYear.ordersCount
-                  )
+                  statistics?.ordersCount || 0,
+                  previousYear.ordersCount
+                )
                 : undefined
             }
           />
@@ -323,9 +326,9 @@ export default function DashboardPage() {
             changePercent={
               previousYear
                 ? calculateChangePercent(
-                    statistics?.activeBookings || 0,
-                    previousYear.activeBookings
-                  )
+                  statistics?.activeBookings || 0,
+                  previousYear.activeBookings
+                )
                 : undefined
             }
           />
@@ -336,9 +339,9 @@ export default function DashboardPage() {
             changePercent={
               previousYear
                 ? calculateChangePercent(
-                    statistics?.revenue || 0,
-                    previousYear.revenue
-                  )
+                  statistics?.revenue || 0,
+                  previousYear.revenue
+                )
                 : undefined
             }
             onClick={() => router.push("/analytics/orders")}
@@ -351,7 +354,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Chart and Target Row */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <ProfitOrdersChart data={chartData} />
           </div>
@@ -366,7 +369,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Map and Calendar Row */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <TouristsMap locations={touristLocations} />
           <CalendarWithDots events={calendarEvents} />
         </div>

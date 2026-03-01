@@ -4,6 +4,7 @@ import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
 import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 import { normalizePhoneForSave } from "@/utils/phone";
+import { formatNameForDb } from "@/utils/nameFormat";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -72,8 +73,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const firstNameTrimmed = (data.firstName ?? "").toString().trim();
-    const lastNameTrimmed = (data.lastName ?? "").toString().trim();
+    const firstNameTrimmed = formatNameForDb((data.firstName ?? "").toString());
+    const lastNameTrimmed = formatNameForDb((data.lastName ?? "").toString());
     const companyNameTrimmed = (data.companyName ?? "").toString().trim();
 
     if (partyType === "person") {
@@ -133,9 +134,12 @@ export async function POST(request: NextRequest) {
       supplier_documents: Array.isArray(data.supplierExtras?.documents) && data.supplierExtras.documents.length > 0 ? data.supplierExtras.documents : null,
       // Supplier commissions
       supplier_commissions: data.supplierExtras?.commissions || null,
-      // Corporate accounts / Loyalty cards
+      // Corporate accounts / Loyalty cards / Bank accounts
       corporate_accounts: data.corporateAccounts && data.corporateAccounts.length > 0 ? data.corporateAccounts : null,
       loyalty_cards: data.loyaltyCards && data.loyaltyCards.length > 0 ? data.loyaltyCards : null,
+      bank_accounts: data.bankAccounts && data.bankAccounts.length > 0
+        ? data.bankAccounts.map((a) => ({ bank_name: (a.bankName || "").trim(), iban: (a.iban || "").trim(), swift: (a.swift || "").trim() })).filter((a) => a.bank_name || a.iban)
+        : null,
     };
 
     const { data: party, error: partyError } = await supabaseAdmin
@@ -166,6 +170,7 @@ export async function POST(request: NextRequest) {
         title: data.title || null,
         first_name: firstNameTrimmed,
         last_name: lastNameTrimmed,
+        gender: data.gender || null,
         dob: data.dob || null,
         personal_code: data.personalCode || null,
         citizenship: data.citizenship || null,
@@ -197,6 +202,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
+      const firstBank = data.bankAccounts && data.bankAccounts.length > 0 ? data.bankAccounts[0] : null;
       const companyData: any = {
         party_id: partyId,
         company_name: companyNameTrimmed,
@@ -205,9 +211,9 @@ export async function POST(request: NextRequest) {
         vat_number: data.vatNumber || null,
         legal_address: data.legalAddress || null,
         actual_address: data.actualAddress || null,
-        bank_name: data.bankName || null,
-        iban: data.iban || null,
-        swift: data.swift || null,
+        bank_name: firstBank?.bankName?.trim() || data.bankName || null,
+        iban: firstBank?.iban?.trim() || data.iban || null,
+        swift: firstBank?.swift?.trim() || data.swift || null,
         contact_person: data.contactPerson || null,
       };
 

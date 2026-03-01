@@ -252,7 +252,7 @@ export default function PeriodSelector({
       {/* Dropdown Button - Shopify Style */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+        className="flex items-center gap-2 booking-glass-panel !py-2 !px-4 !rounded-lg text-sm font-medium text-gray-700 hover:scale-[1.02] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all border-none"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -288,7 +288,7 @@ export default function PeriodSelector({
 
       {/* Dropdown Menu - Shopify Style with Calendar */}
       {isOpen && (
-        <div className={`absolute ${dropdownAlign === "left" ? "left-0" : "right-0"} mt-2 rounded-lg border border-gray-200 bg-white shadow-lg z-[999]`}>
+        <div className={`absolute ${dropdownAlign === "left" ? "left-0" : "right-0"} mt-2 rounded-xl border border-gray-200/50 bg-white/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-[9999]`}>
           <div className="flex">
             {/* Left Panel - Period Options */}
             <div className="w-48 border-r border-gray-200 py-2">
@@ -296,9 +296,8 @@ export default function PeriodSelector({
                 <button
                   key={period}
                   onClick={() => handlePeriodChange(period)}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${
-                    value === period ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                  }`}
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${value === period ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                    }`}
                 >
                   <span>{getPeriodLabel(period)}</span>
                   {value === period && !showCalendar && (

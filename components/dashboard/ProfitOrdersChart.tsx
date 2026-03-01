@@ -23,8 +23,8 @@ export default function ProfitOrdersChart({
 
   if (!data || data.length === 0) {
     return (
-      <div className={`rounded-lg bg-gray-50 p-6 shadow-sm ${className}`}>
-        <h3 className="mb-4 text-lg font-semibold text-gray-900">
+      <div className={`booking-glass-panel !p-6 ${className}`}>
+        <h3 className="mb-4 text-lg font-bold text-gray-900">
           Profit & Orders
         </h3>
         <div className="flex h-64 items-center justify-center text-gray-500">
@@ -119,13 +119,13 @@ export default function ProfitOrdersChart({
         // Subsequent segments: use cubic bezier for smooth transition
         const xPrev = getX(startIndex + i - 2);
         const yPrev = values[i - 2];
-        
+
         // Control points for smooth curve
         const cp1X = x0 + (x0 - xPrev) * 0.3;
         const cp1Y = y0 + (y0 - yPrev) * 0.3;
         const cp2X = x0 + (x1 - x0) * 0.3;
         const cp2Y = y0 + (y1 - y0) * 0.3;
-        
+
         path += ` C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${x1} ${y1}`;
       }
     }
@@ -178,12 +178,12 @@ export default function ProfitOrdersChart({
   // Forecast area paths (more transparent)
   const forecastProfitAreaPath = forecastProfitPath
     ? forecastProfitPath +
-      ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(currentDateIndex)} ${chartHeight - chartPadding.bottom} Z`
+    ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(currentDateIndex)} ${chartHeight - chartPadding.bottom} Z`
     : "";
 
   const forecastOrdersAreaPath = forecastOrdersPath
     ? forecastOrdersPath +
-      ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(currentDateIndex)} ${chartHeight - chartPadding.bottom} Z`
+    ` L ${getX(data.length - 1)} ${chartHeight - chartPadding.bottom} L ${getX(currentDateIndex)} ${chartHeight - chartPadding.bottom} Z`
     : "";
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -208,9 +208,9 @@ export default function ProfitOrdersChart({
   const currentDateX = currentDateIndex >= 0 ? getX(currentDateIndex) : null;
 
   return (
-    <div className={`rounded-lg bg-gray-50 p-6 shadow-sm ${className}`}>
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Profit & Orders</h3>
+    <div className={`booking-glass-panel !p-6 ${className}`}>
+      <div className="mb-6 flex items-center justify-between">
+        <h3 className="text-xl font-bold text-gray-900 tracking-tight">Profit & Orders</h3>
       </div>
       <div className="relative">
         <svg

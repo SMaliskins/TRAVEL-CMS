@@ -45,30 +45,32 @@ export default function StatisticCard({
 
   return (
     <div
-      className={`rounded-lg bg-white p-6 shadow-sm ${onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""} ${className}`}
+      className={`booking-glass-panel !p-5 ${onClick ? "cursor-pointer" : ""} ${className}`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-          <p className="mt-2 text-3xl font-bold text-gray-900">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">{title}</h3>
+          <p className="mt-1 text-3xl font-black text-gray-900">
             {formatValue(value)}
           </p>
           {previousValue !== undefined && (
             <div className="mt-2 space-y-1">
-              <p className="text-xs text-gray-500">
-                Last year: {formatValue(previousValue)}
+              <p className="text-xs font-medium text-gray-500">
+                Last year: <span className="text-gray-700">{formatValue(previousValue)}</span>
               </p>
               {changePercent !== undefined && changePercent !== null && (
-                <p className={`text-xs font-medium ${changeDisplay.color}`}>
+                <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${changeDisplay.color} ${changeDisplay.color.includes('green') ? 'bg-green-50' : 'bg-red-50'}`}>
                   {changeDisplay.text}
-                </p>
+                </div>
               )}
             </div>
           )}
         </div>
         {icon && (
-          <div className="ml-4 flex-shrink-0 text-gray-400">{icon}</div>
+          <div className="ml-3 flex-shrink-0 h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100 shadow-inner text-indigo-500">
+            {icon}
+          </div>
         )}
       </div>
     </div>

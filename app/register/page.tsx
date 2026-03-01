@@ -37,16 +37,9 @@ export default function RegisterPage() {
     { id: "enterprise", name: "Enterprise", price: 299, description: "Unlimited, all features" },
   ];
 
-  const roles = [
-    { id: "supervisor", name: "Supervisor", description: "Full access" },
-    { id: "manager", name: "Manager", description: "Manage team" },
-    { id: "finance", name: "Finance", description: "Financial operations" },
-    { id: "agent", name: "Agent", description: "Standard access" },
-    { id: "subagent", name: "Subagent", description: "Limited access" },
-  ];
 
   const addUser = () => {
-    setUsers([...users, { name: "", email: "", role: "agent" }]);
+    setUsers([...users, { name: "", email: "", role: "supervisor" }]);
   };
 
   const removeUser = (index: number) => {
@@ -348,7 +341,7 @@ export default function RegisterPage() {
               </div>
 
               <p className="text-sm text-gray-500">
-                At least one Supervisor is required. They will manage your account.
+                All team members will be Supervisors. They will manage your account.
               </p>
 
               <div className="space-y-4">
@@ -366,7 +359,7 @@ export default function RegisterPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <input
                         type="text"
                         value={user.name}
@@ -381,17 +374,6 @@ export default function RegisterPage() {
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="Email"
                       />
-                      <select
-                        value={user.role}
-                        onChange={(e) => updateUser(index, "role", e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        {roles.map((role) => (
-                          <option key={role.id} value={role.id}>
-                            {role.name}
-                          </option>
-                        ))}
-                      </select>
                     </div>
                   </div>
                 ))}

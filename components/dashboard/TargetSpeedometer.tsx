@@ -56,7 +56,7 @@ export default function TargetSpeedometer({
   // Generate tick marks
   const tickMarks = [];
   const tickLabels = [0, 25, 50, 75, 100, 120];
-  
+
   for (let i = 0; i <= 12; i++) {
     const tickPct = (i / 12) * 120;
     const tickAngle = startAngle + (tickPct / 120) * angleRange;
@@ -67,8 +67,8 @@ export default function TargetSpeedometer({
     const x2 = centerX + tickOuterRadius * Math.cos(toRadians(180 - tickAngle));
     const y2 = centerY - tickOuterRadius * Math.sin(toRadians(180 - tickAngle));
 
-    const isMajor = tickPct === 0 || tickPct === 50 ||  tickPct === 100 || tickPct === 120;
-    
+    const isMajor = tickPct === 0 || tickPct === 50 || tickPct === 100 || tickPct === 120;
+
     tickMarks.push(
       <line
         key={`tick-${i}`}
@@ -88,7 +88,7 @@ export default function TargetSpeedometer({
     const labelRadius = radius + 20;
     const labelX = centerX + labelRadius * Math.cos(toRadians(180 - tickAngle));
     const labelY = centerY - labelRadius * Math.sin(toRadians(180 - tickAngle));
-    
+
     tickMarks.push(
       <text
         key={`label-${pct}`}
@@ -127,8 +127,8 @@ export default function TargetSpeedometer({
   };
 
   return (
-    <div className={`rounded-lg bg-white p-6 shadow-sm ${className}`}>
-      <h3 className="mb-4 text-lg font-semibold text-gray-900">Target</h3>
+    <div className={`booking-glass-panel !p-6 ${className}`}>
+      <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">Target</h3>
       <div className="flex flex-col items-center">
         <div className="relative" style={{ width: size + 40, height: size * 0.65 + 20 }}>
           <svg width={size + 40} height={size * 0.65 + 20} style={{ filter: `drop-shadow(0 0 8px ${gradient.glow}20)` }}>
@@ -155,9 +155,8 @@ export default function TargetSpeedometer({
 
             {/* Progress arc */}
             <path
-              d={`M ${centerX - radius} ${centerY} A ${radius} ${radius} 0 ${clampedForAngle > 60 ? 1 : 0} 1 ${
-                centerX + radius * Math.cos(toRadians(180 - currentAngle))
-              } ${centerY - radius * Math.sin(toRadians(180 - currentAngle))}`}
+              d={`M ${centerX - radius} ${centerY} A ${radius} ${radius} 0 ${clampedForAngle > 60 ? 1 : 0} 1 ${centerX + radius * Math.cos(toRadians(180 - currentAngle))
+                } ${centerY - radius * Math.sin(toRadians(180 - currentAngle))}`}
               fill="none"
               stroke="url(#speedometerGradient)"
               strokeWidth="16"

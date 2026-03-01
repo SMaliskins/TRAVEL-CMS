@@ -7,6 +7,7 @@ import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { ClientsByCitizenshipPie } from "@/components/directory/ClientsByCitizenshipPie";
 import DirectoryMergeModal from "@/components/DirectoryMergeModal";
 import { formatPhoneForDisplay } from "@/utils/phone";
+import "../hotels-booking/modern-booking.css";
 
 // Role colors for badges
 const roleColors: Record<string, string> = {
@@ -47,6 +48,8 @@ export default function DirectoryPage() {
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const [syncLanguagesLoading, setSyncLanguagesLoading] = useState(false);
   const [syncLanguagesResult, setSyncLanguagesResult] = useState<{ updated: number; skipped: number } | null>(null);
+  const [syncFormatNameLoading, setSyncFormatNameLoading] = useState(false);
+  const [syncFormatNameResult, setSyncFormatNameResult] = useState<{ updated: number; skipped: number } | null>(null);
 
   const limit = 50;
   const totalPages = Math.ceil(total / limit) || 1;
@@ -168,11 +171,11 @@ export default function DirectoryPage() {
 
       const result = await response.json();
       setImportSuccess({ imported: result.imported || 0, failed: result.failed || 0 });
-      
+
       if (result.errors && result.errors.length > 0) {
         setImportError(result.errors.slice(0, 3).join('; '));
       }
-      
+
       // Reload stats after import
       const statsResponse = await fetchWithAuth("/api/directory/statistics");
       if (statsResponse.ok) {
@@ -270,31 +273,62 @@ export default function DirectoryPage() {
     }
   };
 
+  const handleSyncFormatName = async () => {
+    setShowActionsMenu(false);
+    setSyncFormatNameLoading(true);
+    setSyncFormatNameResult(null);
+    try {
+      const response = await fetchWithAuth("/api/directory/sync-format-names", { method: "POST" });
+      const data = await response.json();
+      if (response.ok) {
+        setSyncFormatNameResult({ updated: data.updated ?? 0, skipped: data.skipped ?? 0 });
+        loadRecords(searchQuery, selectedRole, page, showArchiveView ? "archived" : "active");
+      } else {
+        alert(data.error || "Failed to sync name format");
+      }
+    } catch (err) {
+      console.error("Sync format name error:", err);
+      alert("Failed to sync name format");
+    } finally {
+      setSyncFormatNameLoading(false);
+    }
+  };
+
   // Auto-clear sync result after 5s
   useEffect(() => {
     if (!syncLanguagesResult) return;
     const t = setTimeout(() => setSyncLanguagesResult(null), 5000);
     return () => clearTimeout(t);
   }, [syncLanguagesResult]);
+  useEffect(() => {
+    if (!syncFormatNameResult) return;
+    const t = setTimeout(() => setSyncFormatNameResult(null), 5000);
+    return () => clearTimeout(t);
+  }, [syncFormatNameResult]);
 
   return (
-    <div className="bg-gray-50 min-h-screen p-6">
+    <div className="booking-modern-container">
       <div className="mx-auto max-w-[1400px] space-y-6">
         {syncLanguagesResult && (
           <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
             Languages synced: {syncLanguagesResult.updated} updated, {syncLanguagesResult.skipped} skipped (already set or unknown country).
           </div>
         )}
+        {syncFormatNameResult && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            Name format synced: {syncFormatNameResult.updated} updated, {syncFormatNameResult.skipped} skipped (already correct).
+          </div>
+        )}
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
-          <div className="flex items-center justify-between">
+        <div className="booking-modern-header !mb-0">
+          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-semibold text-gray-900">Directory</h1>
+              <h1 className="booking-header-title">Directory</h1>
               {showArchiveView ? (
                 <button
                   type="button"
                   onClick={closeArchiveView}
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                  className="booking-glass-panel !py-2 !px-4 flex items-center gap-2 text-sm font-bold text-gray-700 hover:text-indigo-600 transition-colors drop-shadow-sm cursor-pointer"
                   aria-label="Back to contacts"
                 >
                   ← Back to contacts
@@ -304,7 +338,7 @@ export default function DirectoryPage() {
                   <button
                     type="button"
                     onClick={() => setShowActionsMenu((v) => !v)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                    className="booking-glass-panel !py-2 !px-4 flex items-center gap-2 text-sm font-bold text-gray-700 hover:text-indigo-600 transition-colors drop-shadow-sm cursor-pointer"
                     aria-label="Actions menu"
                     aria-expanded={showActionsMenu ? "true" : "false"}
                     aria-haspopup="true"
@@ -315,11 +349,11 @@ export default function DirectoryPage() {
                     </svg>
                   </button>
                   {showActionsMenu && (
-                    <div className="absolute left-0 top-full z-20 mt-1 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                    <div className="absolute left-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-white/40 bg-white/80 backdrop-blur-md py-2 shadow-xl">
                       <button
                         type="button"
                         onClick={() => { setShowMergeModal(true); setShowActionsMenu(false); }}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm font-medium text-gray-700 hover:bg-indigo-50/80 hover:text-indigo-600 transition-colors"
                       >
                         <span aria-hidden>⇄</span>
                         Merge
@@ -327,14 +361,14 @@ export default function DirectoryPage() {
                       <button
                         type="button"
                         onClick={openArchiveView}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-amber-800 hover:bg-amber-50"
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm font-medium text-amber-700 hover:bg-amber-50/80 transition-colors"
                       >
                         Archive
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowImportModal(true); setShowActionsMenu(false); }}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm font-medium text-gray-700 hover:bg-indigo-50/80 hover:text-indigo-600 transition-colors"
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -345,12 +379,23 @@ export default function DirectoryPage() {
                         type="button"
                         onClick={handleSyncLanguages}
                         disabled={syncLanguagesLoading}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm font-medium text-gray-700 hover:bg-indigo-50/80 hover:text-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
                         </svg>
                         {syncLanguagesLoading ? "Syncing…" : "Sync languages from passports"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSyncFormatName}
+                        disabled={syncFormatNameLoading}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm font-medium text-gray-700 hover:bg-indigo-50/80 hover:text-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                        </svg>
+                        {syncFormatNameLoading ? "Syncing…" : "Sync format name"}
                       </button>
                     </div>
                   )}
@@ -368,12 +413,12 @@ export default function DirectoryPage() {
                   placeholder="Search by name, email, phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-80 rounded-lg border border-gray-300 pl-10 pr-4 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="booking-input !py-2 !pl-10 !pr-10 w-80 shadow-sm"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                     aria-label="Clear search"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -384,7 +429,7 @@ export default function DirectoryPage() {
               </div>
               <button
                 onClick={() => router.push("/directory/new")}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+                className="booking-btn-primary shadow-md"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -412,23 +457,23 @@ export default function DirectoryPage() {
 
         {/* Statistics Dashboard (hidden in archive view) */}
         {!showArchiveView && (
-        <div className="space-y-6">
+          <div className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Clients Card */}
-              <div 
+              <div
                 onClick={() => handleRoleClick("client")}
-                className={`bg-white rounded-lg shadow-sm p-6 cursor-pointer transition-all hover:shadow-md ${selectedRole === "client" ? "ring-2 ring-blue-500" : ""}`}
+                className={`booking-glass-panel !p-6 cursor-pointer transform transition-all hover:scale-[1.02] ${selectedRole === "client" ? "ring-2 ring-indigo-500" : ""}`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-500">Clients</p>
-                    <p className="text-3xl font-bold text-blue-600">
+                    <p className="text-sm font-semibold uppercase tracking-wider text-gray-500">Clients</p>
+                    <p className="text-4xl font-black text-gray-900 mt-1">
                       {statsLoading ? "..." : stats?.totals.clients || 0}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-14 w-14 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100 shadow-inner">
+                    <svg className="h-7 w-7 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
@@ -436,19 +481,19 @@ export default function DirectoryPage() {
               </div>
 
               {/* Suppliers Card */}
-              <div 
+              <div
                 onClick={() => handleRoleClick("supplier")}
-                className={`bg-white rounded-lg shadow-sm p-6 cursor-pointer transition-all hover:shadow-md ${selectedRole === "supplier" ? "ring-2 ring-green-500" : ""}`}
+                className={`booking-glass-panel !p-6 cursor-pointer transform transition-all hover:scale-[1.02] ${selectedRole === "supplier" ? "ring-2 ring-emerald-500" : ""}`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-500">Suppliers</p>
-                    <p className="text-3xl font-bold text-green-600">
+                    <p className="text-sm font-semibold uppercase tracking-wider text-gray-500">Suppliers</p>
+                    <p className="text-4xl font-black text-gray-900 mt-1">
                       {statsLoading ? "..." : stats?.totals.suppliers || 0}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
-                    <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-14 w-14 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100 shadow-inner">
+                    <svg className="h-7 w-7 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                   </div>
@@ -456,19 +501,19 @@ export default function DirectoryPage() {
               </div>
 
               {/* Subagents Card */}
-              <div 
+              <div
                 onClick={() => handleRoleClick("subagent")}
-                className={`bg-white rounded-lg shadow-sm p-6 cursor-pointer transition-all hover:shadow-md ${selectedRole === "subagent" ? "ring-2 ring-purple-500" : ""}`}
+                className={`booking-glass-panel !p-6 cursor-pointer transform transition-all hover:scale-[1.02] ${selectedRole === "subagent" ? "ring-2 ring-purple-500" : ""}`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-500">Subagents</p>
-                    <p className="text-3xl font-bold text-purple-600">
+                    <p className="text-sm font-semibold uppercase tracking-wider text-gray-500">Subagents</p>
+                    <p className="text-4xl font-black text-gray-900 mt-1">
                       {statsLoading ? "..." : stats?.totals.subagents || 0}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
-                    <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-14 w-14 rounded-full bg-purple-50 flex items-center justify-center border border-purple-100 shadow-inner">
+                    <svg className="h-7 w-7 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
@@ -479,10 +524,10 @@ export default function DirectoryPage() {
             {/* Detailed Statistics */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Clients by Nationality - Pie chart */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Clients by Nationality</h3>
+              <div className="booking-glass-panel">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Clients by Nationality</h3>
                 {statsLoading ? (
-                  <p className="text-gray-500">Loading...</p>
+                  <p className="text-gray-500 italic">Loading...</p>
                 ) : stats?.clientsByNationality && stats.clientsByNationality.length > 0 ? (
                   <ClientsByCitizenshipPie
                     data={stats.clientsByNationality.map(({ country, count }) => ({
@@ -497,16 +542,16 @@ export default function DirectoryPage() {
               </div>
 
               {/* Suppliers by Country */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Suppliers by Country</h3>
+              <div className="booking-glass-panel">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Suppliers by Country</h3>
                 {statsLoading ? (
-                  <p className="text-gray-500">Loading...</p>
+                  <p className="text-gray-500 italic">Loading...</p>
                 ) : stats?.suppliersByCountry && stats.suppliersByCountry.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {stats.suppliersByCountry.slice(0, 8).map((item) => (
-                      <div key={item.country} className="flex items-center justify-between">
-                        <span className="text-sm text-gray-700">{item.country || "Unknown"}</span>
-                        <span className="text-sm font-medium text-gray-900">{item.count}</span>
+                      <div key={item.country} className="flex items-center justify-between py-1 border-b border-black/5 last:border-0">
+                        <span className="text-sm font-medium text-gray-600">{item.country || "Unknown"}</span>
+                        <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">{item.count}</span>
                       </div>
                     ))}
                   </div>
@@ -515,7 +560,7 @@ export default function DirectoryPage() {
                 )}
               </div>
             </div>
-        </div>
+          </div>
         )}
 
         {/* Records table - 50 per page, always visible */}
@@ -578,14 +623,14 @@ export default function DirectoryPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {records.map((record, index) => {
-                  const displayName = record.type === "person" 
+                  const displayName = record.type === "person"
                     ? `${record.firstName || ""} ${record.lastName || ""}`.trim() || "N/A"
                     : record.companyName || "N/A";
                   const recordWithExtras = record as DirectoryRecord & { displayId?: string; avatarUrl?: string; companyAvatarUrl?: string };
-                  
+
                   return (
-                    <tr 
-                      key={record.id} 
+                    <tr
+                      key={record.id}
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => router.push(`/directory/${record.id}`)}
                     >
@@ -691,7 +736,7 @@ export default function DirectoryPage() {
                   Example: Type,First Name,Last Name,Email,Phone,Roles,Country
                 </div>
               </div>
-              
+
               {importError && (
                 <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3">
                   <p className="text-sm text-red-700">{importError}</p>

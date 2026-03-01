@@ -45,6 +45,12 @@ export interface LoyaltyCard {
   cardCode: string;
 }
 
+export interface BankAccount {
+  bankName: string;
+  iban: string;
+  swift?: string;
+}
+
 export interface DirectoryRecord {
   id: string;
   displayId?: number; // Sequential ID (00001, 00002, ...)
@@ -84,6 +90,8 @@ export interface DirectoryRecord {
   bankName?: string;
   iban?: string;
   swift?: string;
+  /** Multiple bank accounts for Supplier, Subagent, Client */
+  bankAccounts?: BankAccount[];
   contactPerson?: string;
   /** Languages of correspondence (e.g. ["en", "lv", "ru"]) */
   correspondenceLanguages?: string[];

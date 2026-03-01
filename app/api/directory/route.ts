@@ -58,6 +58,20 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.avatarUrl = row.avatar_url || undefined;
   }
 
+  // Bank accounts (party level)
+  if (row.bank_accounts && Array.isArray(row.bank_accounts) && row.bank_accounts.length > 0) {
+    record.bankAccounts = row.bank_accounts.map((a: { bank_name?: string; bankName?: string; iban?: string; swift?: string }) => ({
+      bankName: a.bank_name || a.bankName || "",
+      iban: a.iban || "",
+      swift: a.swift || "",
+    })).filter((a: { bankName: string; iban: string }) => a.bankName?.trim() || a.iban?.trim());
+  } else if (row.bank_name || row.iban || row.swift) {
+    record.bankAccounts = [{ bankName: row.bank_name || "", iban: row.iban || "", swift: row.swift || "" }];
+    record.bankName = row.bank_name || undefined;
+    record.iban = row.iban || undefined;
+    record.swift = row.swift || undefined;
+  }
+
   // Company fields
   if (row.party_type === "company") {
     record.companyName = row.company_name || row.display_name || undefined;
@@ -66,9 +80,9 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.vatNumber = row.vat_number || undefined;
     record.legalAddress = row.legal_address || undefined;
     record.actualAddress = row.actual_address || undefined;
-    record.bankName = row.bank_name || undefined;
-    record.iban = row.iban || undefined;
-    record.swift = row.swift || undefined;
+    if (!record.bankName) record.bankName = row.bank_name || undefined;
+    if (!record.iban) record.iban = row.iban || undefined;
+    if (!record.swift) record.swift = row.swift || undefined;
     record.contactPerson = row.contact_person || undefined;
   }
 
@@ -132,7 +146,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build base query – select only columns needed for list (avoids heavy payload)
-    const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country";
+    const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country,bank_accounts";
     let query = supabaseAdmin
       .from("party")
       .select(partyColumns, { count: "exact" });

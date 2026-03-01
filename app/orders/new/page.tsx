@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { DirectoryProvider } from "@/lib/directory/directoryStore";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
@@ -50,6 +50,7 @@ function getUserFullName(user: any): { fullName: string; initials: string } {
 
 function NewOrderForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   // Form state
   const [clientPartyId, setClientPartyId] = useState<string | null>(null);
@@ -110,6 +111,16 @@ function NewOrderForm() {
     };
     fetchUser();
   }, []);
+
+  // Pre-fill client from URL (e.g. from directory card "Create order")
+  useEffect(() => {
+    const clientId = searchParams.get("clientId");
+    const clientName = searchParams.get("clientName");
+    if (clientId) {
+      setClientPartyId(clientId);
+      setClientDisplayName(clientName ? decodeURIComponent(clientName) : "");
+    }
+  }, [searchParams]);
 
   // Track dirty state
   useEffect(() => {
@@ -360,6 +371,7 @@ function NewOrderForm() {
                   }}
                   error={validationErrors.clientPartyId}
                   required
+                  initialDisplayName={clientDisplayName}
                 />
               </div>
 

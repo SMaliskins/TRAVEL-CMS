@@ -1,0 +1,7 @@
+# Airline & Flight Reference
+
+## Airline codes
+- **BT** = airBaltic (Riga-based, NOT Bulgaria Air which is FB)
+
+## Flight duration reference (for parsing/validation)
+- **airBaltic RIX–BOJ–RIX** (Riga–Burgas–Riga): **2h 40m** per leg

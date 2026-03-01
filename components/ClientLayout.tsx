@@ -11,35 +11,35 @@ import BugReportOverlay from "./BugReportOverlay";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  
+
   // Pages that should not show sidebar/topbar (exact match for / to avoid matching all paths)
   const hideLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login") || pathname?.startsWith("/devlog");
 
   return (
     <ToastProvider>
-    <UrlModalProvider>
-    <AuthGuard>
-      {hideLayout ? (
-        // Login page - no sidebar/topbar, no padding
-        <main className="min-h-screen">
-          {children}
-        </main>
-      ) : (
-        // All other pages - show sidebar/topbar with proper padding
-        <>
-          <Sidebar />
-          <TopBar />
-          <div id="main-content-wrapper" className="min-h-screen pl-[72px] pt-14 transition-all duration-200">
-            <TabBar />
-            <main>
+      <UrlModalProvider>
+        <AuthGuard>
+          {hideLayout ? (
+            // Login page - no sidebar/topbar, no padding
+            <main className="min-h-screen">
               {children}
             </main>
-          </div>
-        </>
-      )}
-    </AuthGuard>
-    <BugReportOverlay />
-    </UrlModalProvider>
+          ) : (
+            // All other pages - show sidebar/topbar with proper padding
+            <>
+              <Sidebar />
+              <TopBar />
+              <div id="main-content-wrapper" className="min-h-screen pl-[72px] pt-14 transition-all duration-200">
+                <TabBar />
+                <main className="relative z-0 flex-1">
+                  {children}
+                </main>
+              </div>
+            </>
+          )}
+        </AuthGuard>
+        <BugReportOverlay />
+      </UrlModalProvider>
     </ToastProvider>
   );
 }

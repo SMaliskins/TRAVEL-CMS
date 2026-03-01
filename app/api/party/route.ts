@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { toTitleCaseForDisplay } from "@/utils/nameFormat";
 
 async function getCurrentUser(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -94,12 +95,17 @@ export async function POST(request: NextRequest) {
 
     console.log("[API /party] Creating party:", display_name, party_type);
 
+    // Standard format: first letter of each name part uppercase, rest lowercase
+    const displayNameFormatted = party_type === "person"
+      ? toTitleCaseForDisplay(String(display_name))
+      : String(display_name).trim();
+
     // Create party
     const { data: newParty, error } = await supabaseAdmin
       .from("party")
       .insert({
         company_id: companyId,
-        display_name,
+        display_name: displayNameFormatted,
         party_type,
         email: email || null,
         phone: phone || null,
