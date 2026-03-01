@@ -570,7 +570,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         address.trim() !== (initialValues.legalAddress || "").trim() ||
         actualAddress.trim() !== (initialValues.actualAddress || "").trim() ||
         (() => {
-          const a = bankAccounts.map((x) => ({ b: x.bankName.trim(), i: x.iban.trim(), s: x.swift.trim() }));
+          const a = bankAccounts.map((x) => ({ b: (x.bankName || "").trim(), i: (x.iban || "").trim(), s: (x.swift || "").trim() }));
           const init = (initialValues.bankAccounts as BankAccount[] | undefined) || [];
           const b = init.map((x) => ({ b: (x.bankName || "").trim(), i: (x.iban || "").trim(), s: (x.swift || "").trim() }));
           return a.length !== b.length || a.some((v, i) => v.b !== b[i]?.b || v.i !== b[i]?.i || v.s !== b[i]?.s);

@@ -167,7 +167,7 @@ interface EditServiceModalProps {
   service: Service;
   orderCode: string;
   onClose: () => void;
-  onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
+  onServiceUpdated: (updated: Partial<Service> & { id: string; _keepModalOpen?: boolean }) => void;
   /** Company default currency from Company Settings / Regional Settings / Currency */
   companyCurrencyCode?: string;
   initialClients?: ClientEntry[];
