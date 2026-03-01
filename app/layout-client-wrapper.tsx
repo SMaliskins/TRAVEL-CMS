@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSidebar } from "@/hooks/useSidebar";
 import { UserProvider } from "@/contexts/UserContext";
 import { TabsProvider } from "@/contexts/TabsContext";
+import { ModalOverlayProvider } from "@/contexts/ModalOverlayContext";
 import { CompanySettingsProvider } from "@/contexts/CompanySettingsContext";
 
 const RAIL_WIDTH = 72;
@@ -63,7 +64,9 @@ export default function LayoutClientWrapper({
   return (
     <UserProvider>
       <CompanySettingsProvider>
-        <TabsProvider>{children}</TabsProvider>
+        <TabsProvider>
+        <ModalOverlayProvider>{children}</ModalOverlayProvider>
+      </TabsProvider>
       </CompanySettingsProvider>
     </UserProvider>
   );

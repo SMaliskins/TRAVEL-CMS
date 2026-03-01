@@ -23,6 +23,8 @@ interface ClientMultiSelectDropdownProps {
   existingClientIds: (string | null)[];
   placeholder?: string;
   className?: string;
+  /** Order travellers to suggest first */
+  orderTravellers?: { id: string; firstName?: string; lastName?: string }[];
 }
 
 export default function ClientMultiSelectDropdown({
@@ -30,6 +32,7 @@ export default function ClientMultiSelectDropdown({
   existingClientIds,
   placeholder = "Add accompanying persons...",
   className = "",
+  orderTravellers = [],
 }: ClientMultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -46,9 +49,29 @@ export default function ClientMultiSelectDropdown({
   } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const travellerParties: Party[] = orderTravellers.map((t) => {
+    const dn = [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id;
+    return {
+      id: t.id,
+      display_name: dn,
+      first_name: t.firstName,
+      last_name: t.lastName,
+    };
+  });
+
   const searchParties = useCallback(async (query: string) => {
+    const q = query.trim().toLowerCase();
+    const matchingTravellers = q.length === 0
+      ? travellerParties
+      : travellerParties.filter(
+          (p) =>
+            (p.display_name || "").toLowerCase().includes(q) ||
+            (p.first_name || "").toLowerCase().includes(q) ||
+            (p.last_name || "").toLowerCase().includes(q)
+        );
+
     if (query.length < 2) {
-      setParties([]);
+      setParties(matchingTravellers);
       return;
     }
     setLoading(true);
@@ -62,23 +85,26 @@ export default function ClientMultiSelectDropdown({
       if (response.ok) {
         const data = await response.json();
         const results = data.data || data.records || [];
-        setParties(results.map((r: Record<string, unknown>) => ({
+        const apiParties: Party[] = results.map((r: Record<string, unknown>) => ({
           id: r.id as string,
           display_name: (r.displayName as string) || (r.display_name as string) ||
             [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
             (r.companyName as string) || (r.company_name as string) || "",
           first_name: (r.firstName as string) || (r.first_name as string),
           last_name: (r.lastName as string) || (r.last_name as string),
-        })));
+        }));
+        const apiIds = new Set(apiParties.map((p) => p.id));
+        const deduped = matchingTravellers.filter((p) => !apiIds.has(p.id));
+        setParties([...deduped, ...apiParties]);
       } else {
-        setParties([]);
+        setParties(matchingTravellers);
       }
     } catch {
-      setParties([]);
+      setParties(matchingTravellers);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [orderTravellers]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -197,8 +223,8 @@ export default function ClientMultiSelectDropdown({
             {loading && (
               <div className="px-3 py-4 text-sm text-gray-500 text-center">Searching...</div>
             )}
-            {!loading && search.length < 2 && (
-              <div className="px-3 py-4 text-sm text-gray-500 text-center">Type 2+ characters</div>
+            {!loading && search.length < 2 && parties.length === 0 && (
+              <div className="px-3 py-4 text-sm text-gray-500 text-center">Type 2+ characters or pick a traveller above</div>
             )}
             {!loading && search.length >= 2 && parties.length === 0 && (
               <div className="px-3 py-4 text-sm text-center space-y-2">

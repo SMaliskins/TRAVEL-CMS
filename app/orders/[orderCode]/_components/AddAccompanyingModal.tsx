@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
 
 interface OrderTraveller {
@@ -25,6 +26,7 @@ export default function AddAccompanyingModal({
   onAddClients,
   onClose,
 }: AddAccompanyingModalProps) {
+  useModalOverlay();
   const [orderTravellers, setOrderTravellers] = useState<OrderTraveller[]>([]);
   const [loadingOrder, setLoadingOrder] = useState(true);
   const [showAddSearch, setShowAddSearch] = useState(false);

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
 
 interface Traveller {
@@ -61,6 +62,7 @@ export default function AssignedTravellersModal({
   orderCode,
   onClose,
 }: AssignedTravellersModalProps) {
+  useModalOverlay();
   const [draggedTravellerId, setDraggedTravellerId] = useState<string | null>(
     null
   );

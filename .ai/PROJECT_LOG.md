@@ -5,6 +5,25 @@
 
 ---
 
+### 📅 [2026-03-01] | Air Baltic invoice parser
+**Agent:** Code Writer
+**Task:** Parse Air Baltic airline tickets from Latvian invoice PDFs
+**Status:** SUCCESS
+
+**Actions:**
+- Added `isAirBalticInvoiceFormat()` — detect Latvian labels (Rezervācijas numurs, Biļetes numurs, etc.)
+- Added `parseAirBalticInvoiceSegments()` — parse `S 09/05 15:30 Rīga 19:15 Antālija BT715 Economy FLEX` format
+- Added `parseAirBalticInvoicePassengers()` — parse `K-dze LARISA GURARIJA 657-2423595985` format
+- Extended `getIATAFromCity()` with `normalizeCityForLookup()` and Latvian city variants (rīga, antālija)
+- Invoice branch in `parseAirBaltic()` returns `ParseResult` with segments, passengers, bookingRef, totalPrice
+- Test script `scripts/test-airbaltic-invoice.mjs` — PASS with reference PDF text
+
+**Result:** Air Baltic invoice text (pasted or from PDF) parses correctly; 2 segments RIX↔AYT, 2 passengers, booking 9YOOTU, total EUR 681.96.
+
+**Next Step:** Manual QA in Add Service modal (paste invoice text into flight parser).
+
+---
+
 ### 📅 [2026-02-19] | Invoice number reservation (Create Invoice)
 **Агент:** Code Writer
 **Задача:** Reserve invoice number on Create Invoice; release on abandon; cancelled ≠ pool

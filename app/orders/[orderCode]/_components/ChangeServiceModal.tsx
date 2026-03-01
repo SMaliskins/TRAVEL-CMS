@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { parseFlightBooking, getAirportTimezoneOffset } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
 
 interface Service {
@@ -43,6 +44,7 @@ export default function ChangeServiceModal({
   onClose,
   onChangeConfirmed,
 }: ChangeServiceModalProps) {
+  useModalOverlay();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   

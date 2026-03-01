@@ -158,7 +158,7 @@ interface TimelineService {
   boardingPasses?: BoardingPass[]; // Uploaded boarding passes
   baggage?: string; // Baggage info: "personal", "personal+cabin", "personal+cabin+1bag", etc.
   transferType?: string | null;
-  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string }[];
+  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string; linkedSegmentIndex?: number }[];
   transferMode?: string | null;
   vehicleClass?: string | null;
   splitGroupId?: string | null;
@@ -279,7 +279,7 @@ interface TimelineEvent {
   transferHotelAddress?: string;
   transferInfo?: string;
   /** Standalone transfer: routes from transfer_routes JSONB */
-  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string }[];
+  transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string; linkedSegmentIndex?: number }[];
   transferVehicleClass?: string;
   transferMode?: string;
   transferFlightNumber?: string;
@@ -415,16 +415,28 @@ function getTravellerSurnamesFromIds(
   return [...new Set(surnames)].join(", ");
 }
 
+// Normalize hotel name for grouping (strip " (copy)" suffix so identical dates merge into one)
+function normalizeHotelNameForGroup(name: string): string {
+  return String(name ?? "").replace(/\s*\(copy\)\s*$/i, "").trim() || "Hotel";
+}
+
 // Pre-merge duplicate services (split or identical content) — collect all traveller IDs, tickets, BPs
+// For Hotel: group by normalized name + identical dates → one entry, Room 1 - X, Room 2 - Y
 function mergeDuplicateServices(services: TimelineService[], travellers: Traveller[]): TimelineService[] {
   const groupMap = new Map<string, TimelineService>();
 
   for (const service of services) {
     if (service.resStatus === "cancelled") continue;
 
-    const key =
-      service.splitGroupId ||
-      `${service.category}|${service.name}|${service.dateFrom}|${service.dateTo}`;
+    let key: string;
+    if (service.splitGroupId) {
+      key = service.splitGroupId;
+    } else if (service.category === "Hotel") {
+      const normName = normalizeHotelNameForGroup(service.name);
+      key = `Hotel|${normName}|${service.dateFrom}|${service.dateTo}`;
+    } else {
+      key = `${service.category}|${service.name}|${service.dateFrom}|${service.dateTo}`;
+    }
 
     const existing = groupMap.get(key);
     if (existing) {
@@ -452,7 +464,11 @@ function mergeDuplicateServices(services: TimelineService[], travellers: Travell
         }
       }
     } else {
-      groupMap.set(key, { ...service });
+      const entry = { ...service };
+      if (service.category === "Hotel" && service.name) {
+        entry.name = normalizeHotelNameForGroup(service.name);
+      }
+      groupMap.set(key, entry);
     }
   }
 
@@ -483,8 +499,17 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
 
   for (const service of services) {
     const icon = categoryIcons[service.category] || categoryIcons.Other;
-    const travellerSurnames = getTravellerSurnamesFromIds(service.assignedTravellerIds || [], travellers);
-    
+    const travellerIds = service.assignedTravellerIds || [];
+    const travellerSurnames = getTravellerSurnamesFromIds(travellerIds, travellers);
+    // For merged hotels with multiple travellers: Room 1 - Surname, Room 2 - Surname
+    const hotelRoomSurnames: string[] =
+      service.category === "Hotel" && travellerIds.length > 1
+        ? travellerIds.map((tid, i) => {
+            const t = travellers.find((t0) => t0.id === tid);
+            return `Room ${i + 1} - ${t?.lastName ?? "—"}`;
+          })
+        : [];
+
     if (service.category === "Hotel") {
       const hotelKey = `${service.name}|${service.dateFrom}|${service.dateTo}`;
       if (seenHotelKeys.has(hotelKey)) continue;
@@ -498,7 +523,8 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
         title: `Check-in 13:00-14:00: ${service.name}`,
         sortOrder: 50,
         serviceId: service.id,
-        travellerSurnames: travellerSurnames || undefined,
+        hotelRoomSurnames: hotelRoomSurnames.length > 0 ? hotelRoomSurnames : undefined,
+        travellerSurnames: hotelRoomSurnames.length > 0 ? undefined : (travellerSurnames || undefined),
         hotelAddress: service.hotelAddress,
         hotelPhone: service.hotelPhone,
       });
@@ -511,7 +537,8 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
           title: `Check-out 11:00-12:00: ${service.name}`,
           sortOrder: 10,
           serviceId: service.id,
-          travellerSurnames: travellerSurnames || undefined,
+          hotelRoomSurnames: hotelRoomSurnames.length > 0 ? hotelRoomSurnames : undefined,
+          travellerSurnames: hotelRoomSurnames.length > 0 ? undefined : (travellerSurnames || undefined),
           hotelAddress: service.hotelAddress,
           hotelPhone: service.hotelPhone,
         });
@@ -699,19 +726,31 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
 
       const routes = Array.isArray(service.transferRoutes) ? service.transferRoutes : [];
       if (routes.length > 0) {
-        for (const route of routes) {
-          const isFromAirport = route.pickupType === "airport";
-          const isToAirport = route.dropoffType === "airport";
+        for (let ri = 0; ri < routes.length; ri++) {
+          const route = routes[ri];
+          const isFromAirport = route.pickupType === "airport" || !!route.pickupMeta?.iata || /^[A-Z]{3}\s+Airport$/i.test(route.pickup || "");
+          const isToAirport = route.dropoffType === "airport" || !!route.dropoffMeta?.iata || /^[A-Z]{3}\s+Airport$/i.test(route.dropoff || "");
           const isInbound = isFromAirport;
-          const airportCode = isFromAirport
-            ? (route.pickupMeta?.iata || "")
-            : (route.dropoffMeta?.iata || "");
+          const routeDate = (isInbound || !service.dateTo || service.dateTo === service.dateFrom)
+            ? service.dateFrom
+            : service.dateTo;
+          let airportCode = isFromAirport ? (route.pickupMeta?.iata || "") : (route.dropoffMeta?.iata || "");
+          if (!airportCode) {
+            const text = isFromAirport ? route.pickup : route.dropoff;
+            const m = text?.match(/^([A-Z]{3})\s+Airport$/i);
+            if (m) airportCode = m[1].toUpperCase();
+          }
+          if (!airportCode && route.linkedFlightId != null && route.linkedSegmentIndex != null) {
+            const flightSvc = services.find((s) => s.id === route.linkedFlightId);
+            const seg = flightSvc?.flightSegments?.[route.linkedSegmentIndex] as { arrival?: string; departure?: string } | undefined;
+            if (seg) airportCode = (isFromAirport ? seg.arrival : seg.departure)?.trim() || "";
+          }
           const hotelOrPlace = isFromAirport ? (route.dropoff || "") : (route.pickup || "");
           const linkedFlight = route.linkedFlightId ? flightNumberById.get(route.linkedFlightId) : undefined;
 
           events.push({
-            id: `${service.id}-route-${routes.indexOf(route)}`,
-            date: service.dateFrom,
+            id: `${service.id}-route-${ri}`,
+            date: routeDate,
             type: isInbound ? 'transfer_inbound' : 'transfer_outbound',
             icon,
             title: service.name,
@@ -1006,9 +1045,9 @@ export default function ItineraryTimeline({
   }
 
   return (
-    <div>
-      {/* Sticky header - outside the card so it sticks to viewport */}
-      <div className="sticky z-10 bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 py-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-4 before:bg-gray-50 before:-mx-px" style={{ top: stickyTopOffset }}>
+    <div className="relative">
+      {/* Sticky header — sticks at tabs (Services/Finance/etc), content scrolls under it */}
+      <div className="sticky z-[60] bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 py-2 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.06)]" style={{ top: stickyTopOffset }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarRange size={18} strokeWidth={1.6} className="text-gray-500" />
@@ -1050,8 +1089,8 @@ export default function ItineraryTimeline({
         </div>
       </div>
 
-      {/* Timeline card body */}
-      <div className="rounded-b-lg bg-white shadow-sm border border-t-0 border-gray-200">
+      {/* Timeline card body — z-0 so it stays below sticky header when scrolling */}
+      <div className="relative z-0 rounded-b-lg bg-white shadow-sm border border-t-0 border-gray-200">
       <div className="p-3 space-y-3">
         {sortedDates.map((dateKey) => {
           const dayEvents = groupedByDate[dateKey];
@@ -1135,7 +1174,8 @@ export default function ItineraryTimeline({
                         const airportCity = event.arrivalCity || "";
                         const hotelName = event.transferHotelName || "Hotel";
                         const hotelShort = hotelName.length > 14 ? hotelName.slice(0, 14) + "…" : hotelName;
-                        const routeData = event.transferRoutes?.[0];
+                        const routeIdx = (() => { const m = event.id.match(/-route-(\d+)$/); return m ? parseInt(m[1], 10) : 0; })();
+                        const routeData = event.transferRoutes?.[routeIdx];
                         const hasRouteDistance = routeData?.distanceKm != null;
                         const distInfo = hasRouteDistance ? null : (transferDistances[event.id] || event.transferInfo);
                         const isApprox = distInfo?.startsWith("≈");
@@ -1153,6 +1193,14 @@ export default function ItineraryTimeline({
                           : distParts ? `~${distParts[2]} min` : null;
                         const flightNr = event.transferFlightNumber;
                         const pickupTime = event.transferPickupTime;
+                        const durationMin = routeData?.durationMin;
+                        const estimatedArrivalTime = pickupTime && durationMin != null
+                          ? (() => {
+                              const [h, m] = pickupTime.split(":").map(Number);
+                              const totalMin = (h * 60 + m) + durationMin;
+                              return `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+                            })()
+                          : null;
 
                         return (
                           <div className="flex items-stretch gap-2 min-w-0">
@@ -1173,11 +1221,12 @@ export default function ItineraryTimeline({
                                 </div>
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
-                                    {/* FROM */}
-                                    <div className="text-center min-w-[70px]">
-                                      <div className="text-xs text-gray-400">{pickupTime || formatDateShort(event.date)}</div>
+                                    {/* FROM — same structure as flight: date, code/name, city, time */}
+                                    <div className="text-center min-w-[80px]">
+                                      <div className="text-xs text-gray-400">{formatDateShort(event.date)}</div>
                                       <div className="font-medium">{isInbound ? airportCode : hotelShort}</div>
                                       <div className="text-[10px] text-gray-500">{isInbound ? airportCity : "Hotel"}</div>
+                                      <div className="text-sm font-semibold">{pickupTime || "—"}</div>
                                     </div>
                                     {/* ARROW with car icon + distance + time */}
                                     <div className="flex-1 flex flex-col items-center justify-center px-2 gap-0.5">
@@ -1197,11 +1246,12 @@ export default function ItineraryTimeline({
                                         </span>
                                       </div>
                                     </div>
-                                    {/* TO */}
-                                    <div className="text-center min-w-[70px]">
+                                    {/* TO — same structure as flight */}
+                                    <div className="text-center min-w-[80px]">
                                       <div className="text-xs text-gray-400">{formatDateShort(event.date)}</div>
                                       <div className="font-medium">{isInbound ? hotelShort : airportCode}</div>
                                       <div className="text-[10px] text-gray-500">{isInbound ? "Hotel" : airportCity}</div>
+                                      <div className="text-sm font-semibold">{estimatedArrivalTime || "—"}</div>
                                     </div>
                                   </div>
                                 </div>

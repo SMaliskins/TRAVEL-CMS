@@ -8,13 +8,14 @@
 export interface SmartHint {
   id: string;
   type: 'warning' | 'suggestion' | 'question';
-  category: 'transfer' | 'visa' | 'insurance' | 'connection' | 'upgrade' | 'seats' | 'meals';
+  category: 'transfer' | 'visa' | 'insurance' | 'connection' | 'upgrade' | 'seats' | 'meals' | 'linked_services';
   message: string;
   priority: number; // 1 = high, 2 = medium, 3 = low
   action?: {
     label: string;
-    serviceCategory: string; // For quick service creation
+    serviceCategory?: string; // For quick service creation
     prefillData?: Record<string, unknown>;
+    editServiceId?: string; // Open edit modal for this service (e.g. to link services)
   };
   afterServiceId: string; // Show after this service
   relatedServiceIds?: string[]; // Services this hint relates to
@@ -42,6 +43,7 @@ export interface ServiceForHint {
   name: string;
   resStatus: string;
   flightSegments?: FlightSegment[];
+  transferRoutes?: { linkedFlightId?: string }[];
 }
 
 type OrderSource = 'TA' | 'TO' | 'CORP' | 'NON';
@@ -183,7 +185,32 @@ export function generateSmartHints(
   const transfers = sortedServices.filter(s => s.category === 'Transfer');
   const insurances = sortedServices.filter(s => s.category === 'Insurance');
   const visas = sortedServices.filter(s => s.category === 'Visa');
-  
+
+  // --- LINKED SERVICES HINT ---
+  // Transfer exists + flights/hotels exist + transfer routes are not (fully) linked
+  for (const transfer of transfers) {
+    if (flights.length === 0 && hotels.length === 0) continue;
+    const routes = transfer.transferRoutes || [];
+    if (routes.length === 0) continue;
+    const unlinkedCount = routes.filter(r => !r.linkedFlightId).length;
+    if (unlinkedCount > 0) {
+      hints.push({
+        id: `linked-services-${transfer.id}`,
+        type: 'suggestion',
+        category: 'linked_services',
+        message: 'Potential linked services detected (flight, hotel, or Meet & Greet). We recommend opening the Transfer to link them.',
+        priority: 1,
+        action: {
+          label: 'Open Transfer',
+          editServiceId: transfer.id,
+        },
+        afterServiceId: transfer.id,
+        relatedServiceIds: [transfer.id],
+      });
+      break; // One hint per order for linked services
+    }
+  }
+
   // --- TRANSFER HINTS ---
   // Check if there's a flight and hotel but no transfer
   if (flights.length > 0 && hotels.length > 0 && transfers.length === 0) {

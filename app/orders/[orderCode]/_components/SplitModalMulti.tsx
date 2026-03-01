@@ -18,6 +18,7 @@ interface Service {
   supplierName?: string;
   serviceName?: string;
   clientPartyId?: string;
+  assignedTravellerIds?: string[];
 }
 
 interface Party {
@@ -32,6 +33,7 @@ interface SplitPart {
   serviceAmount: number;
   payerName: string;
   payerPartyId?: string;
+  travellerIds?: string[];
 }
 
 interface ServiceSplitConfig {
@@ -136,6 +138,9 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     services.forEach(service => {
       if (!splitConfigs[service.id]) {
         const originalPayer = parties.find(p => p.id === service.payerPartyId);
+        const travellerIds = service.assignedTravellerIds || [];
+        const t0 = travellerIds.slice(0, Math.ceil(travellerIds.length / 2));
+        const t1 = travellerIds.slice(Math.ceil(travellerIds.length / 2));
         initialConfigs[service.id] = {
           numParts: 2,
           parts: [
@@ -144,12 +149,14 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
               serviceAmount: service.servicePrice / 2,
               payerName: originalPayer?.display_name || service.payer || "",
               payerPartyId: service.payerPartyId,
+              travellerIds: t0,
             },
             {
               clientAmount: service.clientPrice / 2,
               serviceAmount: service.servicePrice / 2,
               payerName: "",
               payerPartyId: undefined,
+              travellerIds: t1,
             },
           ],
         };
@@ -179,17 +186,25 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     const currentConfig = splitConfigs[serviceId];
     const pricePerPartClient = service.clientPrice / numParts;
     const pricePerPartService = service.servicePrice / numParts;
+    const travellerIds = service.assignedTravellerIds || [];
+    const perPart = Math.floor(travellerIds.length / numParts) || 1;
     
-    const newParts: SplitPart[] = Array(numParts).fill(null).map((_, idx) => ({
-      clientAmount: idx === numParts - 1 
-        ? service.clientPrice - pricePerPartClient * (numParts - 1)
-        : pricePerPartClient,
-      serviceAmount: idx === numParts - 1
-        ? service.servicePrice - pricePerPartService * (numParts - 1)
-        : pricePerPartService,
-      payerName: currentConfig?.parts[idx]?.payerName || "",
-      payerPartyId: currentConfig?.parts[idx]?.payerPartyId,
-    }));
+    const newParts: SplitPart[] = Array(numParts).fill(null).map((_, idx) => {
+      const start = Math.min(idx * perPart, travellerIds.length);
+      const end = idx === numParts - 1 ? travellerIds.length : Math.min(start + perPart, travellerIds.length);
+      const partTravellerIds = travellerIds.slice(start, end);
+      return {
+        clientAmount: idx === numParts - 1 
+          ? service.clientPrice - pricePerPartClient * (numParts - 1)
+          : pricePerPartClient,
+        serviceAmount: idx === numParts - 1
+          ? service.servicePrice - pricePerPartService * (numParts - 1)
+          : pricePerPartService,
+        payerName: currentConfig?.parts[idx]?.payerName || "",
+        payerPartyId: currentConfig?.parts[idx]?.payerPartyId,
+        travellerIds: partTravellerIds,
+      };
+    });
 
     setSplitConfigs(prev => ({
       ...prev,
@@ -228,6 +243,9 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     const totalService = config.parts.reduce((s, p) => s + p.serviceAmount, 0);
     const remainingClient = Math.max(0, service.clientPrice - totalClient);
     const remainingService = Math.max(0, service.servicePrice - totalService);
+    const assignedIds = service.assignedTravellerIds || [];
+    const usedCount = config.parts.reduce((s, p) => s + (p.travellerIds?.length || 0), 0);
+    const newPartTravellerIds = assignedIds.slice(usedCount);
     
     const newParts = [
       ...config.parts,
@@ -236,6 +254,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
         serviceAmount: remainingService,
         payerName: "",
         payerPartyId: undefined,
+        travellerIds: newPartTravellerIds,
       },
     ];
 
@@ -371,6 +390,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
               serviceAmount: part.serviceAmount,
               payerName: part.payerName,
               payerPartyId: part.payerPartyId,
+              travellerIds: part.travellerIds || [],
             }))
           })
         });

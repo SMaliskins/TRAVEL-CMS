@@ -15,7 +15,9 @@ import { formatDateDDMMYYYY, formatDateShort, segmentDisplayArrivalDate, normali
 import { toTitleCaseForDisplay } from "@/utils/nameFormat";
 import DateInput from "@/components/DateInput";
 import type { SupplierCommission } from "@/lib/types/directory";
-import { Hotel } from "lucide-react";
+import { Hotel, Link2, Sparkles } from "lucide-react";
+import LinkedServicesModal from "./LinkedServicesModal";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -40,6 +42,7 @@ interface TransferRouteData {
   distanceKm?: number;
   durationMin?: number;
   linkedFlightId?: string;
+  linkedSegmentIndex?: number;
 }
 
 interface LocationSuggestionAdd {
@@ -61,9 +64,14 @@ interface AddServiceModalProps {
   initialCategoryType?: string | null;
   initialCategoryName?: string | null;
   initialVatRate?: number | null;
+  /** Transfer type chosen from popup (One way / Return / By hour) for correct Linked Services suggestions */
+  initialTransferBookingType?: "one_way" | "return" | "by_hour" | null;
   /** Company default currency from Company Settings / Regional Settings / Currency */
   companyCurrencyCode?: string;
   flightServices?: { id: string; name: string; flightSegments: FlightSegment[] }[];
+  hotelServices?: { id: string; hotelName?: string; dateFrom?: string; dateTo?: string }[];
+  /** Order travellers to suggest first for Client, Payer, Supplier */
+  orderTravellers?: { id: string; firstName?: string; lastName?: string }[];
   onClose: () => void;
   onServiceAdded: (service: ServiceData) => void;
 }
@@ -187,6 +195,9 @@ const RES_STATUS_OPTIONS: { value: ServiceData["resStatus"]; label: string }[] =
 
 const VALID_CATEGORY_TYPES: CategoryType[] = ["flight", "hotel", "transfer", "tour", "insurance", "visa", "rent_a_car", "cruise", "other"];
 
+/** Categories that show Basic Info + Parties tabs (CLIENTS & PAYER, Supplier) */
+const CATEGORIES_WITH_PARTIES_TAB: CategoryType[] = ["tour", "other", "transfer", "visa", "insurance", "rent_a_car", "cruise"];
+
 function getCurrencySymbol(code: string): string {
   const c = (code || "EUR").trim().toUpperCase() || "EUR";
   try {
@@ -207,11 +218,15 @@ export default function AddServiceModal({
   initialCategoryType,
   initialCategoryName,
   initialVatRate,
+  initialTransferBookingType,
   companyCurrencyCode = "EUR",
   flightServices = [],
+  hotelServices = [],
+  orderTravellers = [],
   onClose, 
   onServiceAdded 
 }: AddServiceModalProps) {
+  useModalOverlay();
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
   const categoryLocked = !!initialCategoryId;
   console.log('🚀 AddServiceModal mounted with:', {
@@ -359,7 +374,9 @@ export default function AddServiceModal({
     { id: crypto.randomUUID(), pickup: "", pickupType: "address", dropoff: "", dropoffType: "address" },
   ]);
   const [transferMode, setTransferMode] = useState("individual");
-  const [transferBookingType, setTransferBookingType] = useState<"one_way" | "by_hour">("one_way");
+  const [transferBookingType, setTransferBookingType] = useState<"one_way" | "by_hour" | "return">(
+    initialTransferBookingType === "return" || initialTransferBookingType === "by_hour" ? initialTransferBookingType : "one_way"
+  );
   const [transferHours, setTransferHours] = useState<number>(2);
   const [chauffeurNotes, setChauffeurNotes] = useState("");
   const [vehicleClass, setVehicleClass] = useState("");
@@ -371,6 +388,11 @@ export default function AddServiceModal({
   const [locationResultsAdd, setLocationResultsAdd] = useState<Record<string, LocationSuggestionAdd[]>>({});
   const [activeLocationFieldAdd, setActiveLocationFieldAdd] = useState<string | null>(null);
   const locationDebounceRefAdd = useRef<Record<string, NodeJS.Timeout>>({});
+  const [showLinkedServicesModal, setShowLinkedServicesModal] = useState(false);
+  const [showLinkedHint, setShowLinkedHint] = useState(false);
+  const [expandedRouteIdsAdd, setExpandedRouteIdsAdd] = useState<Set<string>>(new Set());
+  const linkedServicesAutoOpenedRef = useRef(false);
+  const [basicInfoTab, setBasicInfoTab] = useState<"basic" | "parties">("basic");
 
   const searchLocationsAdd = useCallback(async (fieldKey: string, query: string) => {
     if (query.length < 2) { setLocationResultsAdd(prev => ({ ...prev, [fieldKey]: [] })); return; }
@@ -388,88 +410,122 @@ export default function AddServiceModal({
   }, [searchLocationsAdd]);
 
   const selectLocationAdd = useCallback((routeId: string, field: "pickup" | "dropoff", suggestion: LocationSuggestionAdd) => {
+    const displayValue = suggestion.type === "airport" && suggestion.meta?.iata
+      ? `${suggestion.meta.iata} Airport`
+      : suggestion.label;
     setTransferRoutes(prev => prev.map(r => {
       if (r.id !== routeId) return r;
-      return { ...r, [field]: suggestion.label, [`${field}Type`]: suggestion.type, [`${field}Meta`]: suggestion.meta };
+      return { ...r, [field]: displayValue, [`${field}Type`]: suggestion.type, [`${field}Meta`]: suggestion.meta };
     }));
     const fieldKey = `${routeId}-${field}`;
-    setLocationQueryAdd(prev => ({ ...prev, [fieldKey]: suggestion.label }));
+    setLocationQueryAdd(prev => ({ ...prev, [fieldKey]: displayValue }));
     setLocationResultsAdd(prev => ({ ...prev, [fieldKey]: [] }));
     setActiveLocationFieldAdd(null);
   }, []);
 
   const addTransferRouteAdd = useCallback(() => {
-    setTransferRoutes(prev => [...prev, { id: crypto.randomUUID(), pickup: "", pickupType: "address", dropoff: "", dropoffType: "address" }]);
+    const newId = crypto.randomUUID();
+    setTransferRoutes(prev => [...prev, { id: newId, pickup: "", pickupType: "address", dropoff: "", dropoffType: "address" }]);
+    // Route 3+ starts collapsed — do NOT add to expandedRouteIdsAdd
+  }, []);
+
+  const toggleRouteExpandedAdd = useCallback((routeId: string) => {
+    setExpandedRouteIdsAdd(prev => {
+      const next = new Set(prev);
+      if (next.has(routeId)) next.delete(routeId);
+      else next.add(routeId);
+      return next;
+    });
   }, []);
 
   const removeTransferRouteAdd = useCallback((routeId: string) => {
-    setTransferRoutes(prev => prev.length > 1 ? prev.filter(r => r.id !== routeId) : prev);
-  }, []);
+    setTransferRoutes(prev => {
+      const minRoutes = transferBookingType === "return" ? 2 : 1;
+      return prev.length > minRoutes ? prev.filter(r => r.id !== routeId) : prev;
+    });
+  }, [transferBookingType]);
 
   const updateRouteFieldAdd = useCallback((routeId: string, field: string, value: unknown) => {
     setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, [field]: value } : r));
   }, []);
 
-  // Auto-calculate distance
+  // Helper: get airport IATA from route (meta, linked flight segment, or "AYT Airport" text)
+  const getAirportIataForRouteAdd = useCallback((route: TransferRouteData, isPickupAirport: boolean): string | undefined => {
+    const meta = isPickupAirport ? route.pickupMeta : route.dropoffMeta;
+    if (meta?.iata) return meta.iata;
+    const text = isPickupAirport ? route.pickup : route.dropoff;
+    const match = text?.match(/^([A-Z]{3})\s+Airport$/i);
+    if (match) return match[1].toUpperCase();
+    if (!route.linkedFlightId || route.linkedSegmentIndex == null) return undefined;
+    const fs = flightServices.find((f) => f.id === route.linkedFlightId);
+    const seg = fs?.flightSegments?.[route.linkedSegmentIndex] as unknown as { arrival?: string; departure?: string } | undefined;
+    if (!seg) return undefined;
+    return (isPickupAirport ? seg.arrival : seg.departure)?.trim() || undefined;
+  }, [flightServices]);
+
+  // Auto-calculate distance: airport ↔ hotel (use specific airport IATA for correct distance)
   useEffect(() => {
     transferRoutes.forEach(async (route) => {
       if (route.distanceKm != null) return;
       const pMeta = route.pickupMeta;
       const dMeta = route.dropoffMeta;
-      if (!pMeta || !dMeta) return;
-      if (pMeta.iata && (dMeta.lat != null || route.dropoff)) {
-        try {
-          const params = new URLSearchParams({ airport: pMeta.iata });
-          if (dMeta.lat != null && dMeta.lon != null) {
-            params.set("lat", String(dMeta.lat));
-            params.set("lon", String(dMeta.lon));
-          }
-          params.set("address", route.dropoff);
-          const res = await fetch(`/api/geo/transfer-distance?${params}`);
-          const json = await res.json();
-          if (json.data) setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, distanceKm: json.data.distanceKm, durationMin: json.data.durationMin } : r));
-        } catch {}
-      } else if (dMeta.iata && (pMeta.lat != null || route.pickup)) {
-        try {
-          const params = new URLSearchParams({ airport: dMeta.iata });
-          if (pMeta.lat != null && pMeta.lon != null) {
-            params.set("lat", String(pMeta.lat));
-            params.set("lon", String(pMeta.lon));
-          }
-          params.set("address", route.pickup);
-          const res = await fetch(`/api/geo/transfer-distance?${params}`);
-          const json = await res.json();
-          if (json.data) setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, distanceKm: json.data.distanceKm, durationMin: json.data.durationMin } : r));
-        } catch {}
+      const pickupIsAirport = route.pickupType === "airport" || !!pMeta?.iata || /^[A-Z]{3}\s+Airport$/i.test(route.pickup || "");
+      const dropoffIsAirport = route.dropoffType === "airport" || !!dMeta?.iata || /^[A-Z]{3}\s+Airport$/i.test(route.dropoff || "");
+      const airportIata = pickupIsAirport
+        ? (pMeta?.iata || getAirportIataForRouteAdd(route, true))
+        : dropoffIsAirport
+          ? (dMeta?.iata || getAirportIataForRouteAdd(route, false))
+          : undefined;
+      const hotelAddress = pickupIsAirport ? route.dropoff : dropoffIsAirport ? route.pickup : undefined;
+      const hotelLat = pickupIsAirport ? dMeta?.lat : pMeta?.lat;
+      const hotelLon = pickupIsAirport ? dMeta?.lon : pMeta?.lon;
+      if (!airportIata || !hotelAddress) return;
+      try {
+        const params = new URLSearchParams({ airport: airportIata, address: hotelAddress });
+        if (hotelLat != null && hotelLon != null) {
+          params.set("lat", String(hotelLat));
+          params.set("lon", String(hotelLon));
+        }
+        const res = await fetch(`/api/geo/transfer-distance?${params}`);
+        const json = await res.json();
+        if (json.data) {
+        const dist = json.data.distanceKm;
+        const dur = json.data.durationMin;
+        setTransferRoutes(prev => prev.map(r => {
+          if (r.id === route.id) return { ...r, distanceKm: dist, durationMin: dur };
+          if (prev.length === 2 && r.pickup === route.dropoff && r.dropoff === route.pickup) return { ...r, distanceKm: dist, durationMin: dur };
+          return r;
+        }));
       }
+      } catch {}
     });
-  }, [transferRoutes]);
+  }, [transferRoutes, getAirportIataForRouteAdd]);
 
-  const suggestPickupTimeAdd = useCallback((routeId: string, flightServiceId: string) => {
+  const suggestPickupTimeAdd = useCallback((routeId: string, flightServiceId: string, segmentIndex?: number) => {
     const fs = flightServices.find(f => f.id === flightServiceId);
     if (!fs || !fs.flightSegments?.length) return;
     const route = transferRoutes.find(r => r.id === routeId);
     if (!route || route.pickupTime) return;
+    const segIdx = segmentIndex ?? route.linkedSegmentIndex ?? 0;
+    const seg = fs.flightSegments[segIdx] as unknown as Record<string, string> | undefined;
+    if (!seg) return;
     const isPickupAirport = route.pickupMeta?.iata || route.pickupType === "airport";
     const isDropoffAirport = route.dropoffMeta?.iata || route.dropoffType === "airport";
-    for (const seg of fs.flightSegments) {
-      const s = seg as unknown as Record<string, string>;
-      if (isPickupAirport && s.arrivalTimeScheduled) {
-        const [h, m] = s.arrivalTimeScheduled.split(":").map(Number);
-        const totalMin = h * 60 + m + 45;
-        const suggestedTime = `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
-        setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
-        return;
-      }
-      if (isDropoffAirport && s.departureTimeScheduled) {
-        const [h, m] = s.departureTimeScheduled.split(":").map(Number);
-        const durationBuffer = route.durationMin || 60;
-        const totalMin = h * 60 + m - 120 - durationBuffer;
-        const adj = totalMin < 0 ? totalMin + 1440 : totalMin;
-        const suggestedTime = `${String(Math.floor(adj / 60) % 24).padStart(2, "0")}:${String(adj % 60).padStart(2, "0")}`;
-        setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
-        return;
-      }
+    if (isPickupAirport && seg.arrivalTimeScheduled) {
+      const [h, m] = seg.arrivalTimeScheduled.split(":").map(Number);
+      const totalMin = h * 60 + m + 45;
+      const suggestedTime = `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+      setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
+      return;
+    }
+    if (isDropoffAirport && seg.departureTimeScheduled) {
+      const [h, m] = seg.departureTimeScheduled.split(":").map(Number);
+      const durationBuffer = route.durationMin || 60;
+      const totalMin = h * 60 + m - 120 - durationBuffer;
+      const adj = totalMin < 0 ? totalMin + 1440 : totalMin;
+      const suggestedTime = `${String(Math.floor(adj / 60) % 24).padStart(2, "0")}:${String(adj % 60).padStart(2, "0")}`;
+      setTransferRoutes(prev => prev.map(r => r.id === routeId ? { ...r, pickupTime: suggestedTime } : r));
+      return;
     }
   }, [flightServices, transferRoutes]);
 
@@ -482,6 +538,15 @@ export default function AddServiceModal({
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [isAIParsing, setIsAIParsing] = useState(false);
   const flightFileInputRef = useRef<HTMLInputElement>(null);
+  const flightPasteTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (showPasteInput && categoryType === "flight") {
+      const t = setTimeout(() => flightPasteTextareaRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [showPasteInput, categoryType]);
+
   // Tour (Package Tour) AI parsing
   const [showTourPasteInput, setShowTourPasteInput] = useState(false);
   const [tourPasteText, setTourPasteText] = useState("");
@@ -815,9 +880,10 @@ export default function AddServiceModal({
     pricingLastEditedRef.current = null;
   }, [categoryType, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
 
-  // Non-Tour: when Client price changes, recalculate Margin = Total Client price - Service price.
+  // Non-Tour: when Sale (Client price) changes, recalculate Marge = Sale - Cost.
   useEffect(() => {
     if (categoryType === "tour") return;
+    if (pricingLastEditedRef.current === "cost" || pricingLastEditedRef.current === "marge") return;
     const totalClient = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
     const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
@@ -826,9 +892,24 @@ export default function AddServiceModal({
     const marginPerNight = units > 0 ? Math.round((totalMargin / units) * 100) / 100 : 0;
     const newMarge = isHotelPerNight ? marginPerNight.toFixed(2) : totalMargin.toFixed(2);
     setMarge(newMarge);
+    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, clientPrice, priceUnits]);
 
-  // Non-Tour: when user edits Margin, recalculate Total Client price = Margin + Service price.
+  // Non-Tour: when Cost changes, recalculate Sale = Cost + Marge.
+  useEffect(() => {
+    if (categoryType === "tour") return;
+    if (pricingLastEditedRef.current !== "cost") return;
+    const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
+    const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
+    const units = isHotelPerNight && priceUnits >= 1 ? priceUnits : 1;
+    const margeVal = Math.round((parseFloat(marge) || 0) * 100) / 100;
+    const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
+    const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
+    setClientPrice(totalClient.toFixed(2));
+    pricingLastEditedRef.current = null;
+  }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
+
+  // Non-Tour: when user edits Marge, recalculate Sale = Cost + Marge.
   useEffect(() => {
     if (categoryType === "tour") return;
     if (pricingLastEditedRef.current !== "marge") return;
@@ -932,7 +1013,60 @@ export default function AddServiceModal({
   const showTicketNr = categoryType === "flight";
   const showHotelFields = categoryType === "hotel";
   const showTransferFields = categoryType === "transfer";
-  
+  const isMeetAndGreet = (category || "").toLowerCase().includes("meet") && (category || "").toLowerCase().includes("greet");
+  const showMeetAndGreetLinkedFields = isMeetAndGreet && ((flightServices?.length ?? 0) > 0);
+  const mgRoutes = useMemo(() => [{
+    id: "mg",
+    pickup: "",
+    pickupType: "address" as const,
+    dropoff: "",
+    dropoffType: "address" as const,
+    linkedFlightId: linkedFlightId || undefined,
+  }], [linkedFlightId]);
+
+  // Transfer: sync dates by booking type — Return: from order; One way/By hour: single date (first from order)
+  useEffect(() => {
+    if (!showTransferFields) return;
+    if (transferBookingType === "return") {
+      if (orderDateFrom) setDateFrom(orderDateFrom);
+      if (orderDateTo) setDateTo(orderDateTo);
+    } else {
+      const first = orderDateFrom || dateFrom || "";
+      if (first) {
+        setDateFrom(first);
+        setDateTo(first);
+      }
+    }
+  }, [showTransferFields, transferBookingType, orderDateFrom, orderDateTo]); // init on transfer type change
+
+  // Transfer Return: when opened with initialTransferBookingType="return", ensure 2 routes (Route 2 = reverse of Route 1)
+  useEffect(() => {
+    if (!showTransferFields || transferBookingType !== "return" || transferRoutes.length !== 1) return;
+    const r = transferRoutes[0];
+    setTransferRoutes(prev => [...prev, {
+      id: crypto.randomUUID(),
+      pickup: r.dropoff,
+      pickupType: r.dropoffType || "address",
+      dropoff: r.pickup,
+      dropoffType: r.pickupType || "address",
+      pickupMeta: r.dropoffMeta,
+      dropoffMeta: r.pickupMeta,
+      distanceKm: r.distanceKm,
+      durationMin: r.durationMin,
+    }]);
+  }, [showTransferFields, transferBookingType]); // only on mount / type change
+
+  // Auto-open Linked Services after 2s when adding Transfer and there are flights/hotels to link
+  useEffect(() => {
+    if (!showTransferFields || linkedServicesAutoOpenedRef.current || ((flightServices?.length ?? 0) === 0 && (hotelServices?.length ?? 0) === 0)) return;
+    const hintTimer = setTimeout(() => setShowLinkedHint(true), 1000);
+    const modalTimer = setTimeout(() => {
+      linkedServicesAutoOpenedRef.current = true;
+      setShowLinkedServicesModal(true);
+    }, 2000);
+    return () => { clearTimeout(hintTimer); clearTimeout(modalTimer); };
+  }, [showTransferFields, flightServices?.length, hotelServices?.length]);
+
   // Auto-generate service name (route) from flight segments — full city names, format: "date city - city / date city - city"
   useEffect(() => {
     if (categoryType === "flight" && flightSegments.length > 0) {
@@ -1209,12 +1343,16 @@ export default function AddServiceModal({
           body: formData,
         });
         
+        const data = await response.json();
+        
         if (!response.ok) {
-          throw new Error('Failed to parse PDF');
+          const msg = (data?.error as string) || 'Failed to read PDF. Try copying text manually.';
+          setParseError(msg);
+          return;
         }
         
-        const { text } = await response.json();
-        setPasteText(text);
+        const { text } = data;
+        setPasteText(text || '');
         setShowPasteInput(true);
       } catch (error) {
         console.error('PDF parsing error:', error);
@@ -1657,7 +1795,7 @@ export default function AddServiceModal({
         clientPrice: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
-        quantity: categoryType === "flight" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
+        quantity: categoryType === "flight" || categoryType === "tour" || categoryType === "transfer" || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
         pricingPerClient: categoryType === "flight" && pricingPerClient.length > 0
           ? clients.filter(c => c.id || c.name).map((c, i) => ({
               partyId: c.id ?? null,
@@ -1734,6 +1872,9 @@ export default function AddServiceModal({
         payload.driverName = driverName || null;
         payload.driverPhone = driverPhone || null;
         payload.driverNotes = driverNotes || null;
+      }
+      if (isMeetAndGreet && linkedFlightId) {
+        payload.linkedFlightId = linkedFlightId;
       }
       
       // Add flight-specific fields (Flight category and Package Tour can have flight schedule)
@@ -1967,7 +2108,7 @@ export default function AddServiceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-future-overlay">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-future-container" style={modalStyle}>
+      <div className="w-full max-w-4xl max-h-[90vh] min-h-0 overflow-y-auto modal-future-container" style={modalStyle}>
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none shadow-sm" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-100 to-sky-50 shadow-sm">
@@ -2011,6 +2152,13 @@ export default function AddServiceModal({
                     const dt = new DataTransfer();
                     dt.items.add(f);
                     handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
+                    return;
+                  }
+                  const text = e.clipboardData?.getData?.("text/plain");
+                  if (text?.trim()) {
+                    e.preventDefault();
+                    setShowPasteInput(true);
+                    setPasteText(text.trim());
                   }
                 }}
                 onKeyDown={(e) => {
@@ -2048,6 +2196,7 @@ export default function AddServiceModal({
                   Paste Amadeus ITR or airline confirmation
                 </div>
                 <textarea
+                  ref={flightPasteTextareaRef}
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
                   onPaste={(e) => {
@@ -2060,10 +2209,11 @@ export default function AddServiceModal({
                       handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
                     }
                   }}
-                  placeholder="Paste Amadeus ITR, email, or PDF text here. Or paste file (Ctrl+V)."
+                  placeholder="Paste Amadeus ITR, airline confirmation, or PDF text here. Or paste file (Ctrl+V)."
                   rows={6}
                   className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   autoFocus
+                  tabIndex={0}
                 />
                 <input
                   ref={flightFileInputRef}
@@ -2435,7 +2585,9 @@ export default function AddServiceModal({
                         key={`payer-${payerPartyId || "empty"}`}
                         value={payerPartyId}
                         onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
+                        roleFilter=""
                         initialDisplayName={payerName}
+                        prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
                       />
                     </div>
                   </div>
@@ -2464,6 +2616,7 @@ export default function AddServiceModal({
                           onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
                           roleFilter="supplier"
                           initialDisplayName={supplierName || hotelName}
+                          prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
                         />
                       </div>
                     </div>
@@ -2553,8 +2706,16 @@ export default function AddServiceModal({
 
                 </div>
               ) : (
-              <div className="p-3 modal-section space-y-2">
-                <h4 className="modal-section-title">BASIC INFO</h4>
+              <div className="space-y-0">
+                {CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && (
+                  <div className="rounded-lg border border-gray-200 overflow-hidden bg-gradient-to-br from-white to-slate-50 shadow-sm" style={{ boxShadow: "0 1px 3px 0 rgba(15, 23, 42, 0.04)" }}>
+                    <div className="flex border-b border-slate-200/60 bg-slate-100/80" role="tablist">
+                      <button type="button" role="tab" aria-selected={basicInfoTab === "basic"} onClick={() => setBasicInfoTab("basic")} className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${basicInfoTab === "basic" ? "bg-white text-gray-900 shadow-sm border-b-2 border-transparent -mb-px" : "text-gray-600 hover:text-gray-700"}`}>Basic Info</button>
+                      <button type="button" role="tab" aria-selected={basicInfoTab === "parties"} onClick={() => setBasicInfoTab("parties")} className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${basicInfoTab === "parties" ? "bg-white text-gray-900 shadow-sm font-semibold border-b-2 border-transparent -mb-px" : "text-gray-600 hover:text-gray-700"}`}>Parties</button>
+                    </div>
+                {(basicInfoTab === "basic" || !CATEGORIES_WITH_PARTIES_TAB.includes(categoryType)) && (
+              <div className={`p-3 space-y-2 ${CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) ? "" : "modal-section"}`}>
+                {!CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && <h4 className="modal-section-title">BASIC INFO</h4>}
                 
                 {!categoryLocked && (
                 <div>
@@ -2576,6 +2737,48 @@ export default function AddServiceModal({
                   </select>
                 </div>
                 )}
+
+                {categoryType === "transfer" && (
+                <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
+                  <label className="block text-xs font-semibold text-gray-700 mb-2">Transfer type</label>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="transferBookingTypeAdd" value="one_way" checked={transferBookingType === "one_way"} onChange={() => {
+                        setTransferBookingType("one_way");
+                        setDateTo(dateFrom || orderDateFrom || dateTo || "");
+                      }} className="accent-emerald-600" />
+                      <span className="text-sm">One way</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="transferBookingTypeAdd" value="return" checked={transferBookingType === "return"} onChange={() => {
+                        setTransferBookingType("return");
+                        setDateFrom(orderDateFrom || dateFrom || "");
+                        setDateTo(orderDateTo || dateTo || dateFrom || "");
+                        if (transferRoutes.length === 1) {
+                          const r = transferRoutes[0];
+                          setTransferRoutes(prev => [...prev, {
+                            id: crypto.randomUUID(),
+                            pickup: r.dropoff,
+                            pickupType: r.dropoffType || "address",
+                            dropoff: r.pickup,
+                            dropoffType: r.pickupType || "address",
+                            pickupMeta: r.dropoffMeta,
+                            dropoffMeta: r.pickupMeta,
+                          }]);
+                        }
+                      }} className="accent-emerald-600" />
+                      <span className="text-sm">Return Transfer</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" name="transferBookingTypeAdd" value="by_hour" checked={transferBookingType === "by_hour"} onChange={() => {
+                        setTransferBookingType("by_hour");
+                        setDateTo(dateFrom || orderDateFrom || dateTo || "");
+                      }} className="accent-emerald-600" />
+                      <span className="text-sm">By the hour</span>
+                    </label>
+                  </div>
+                </div>
+                )}
                 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
@@ -2585,7 +2788,7 @@ export default function AddServiceModal({
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-BOJ" : "Description"}
+                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-BOJ" : categoryType === "visa" ? "Visa to Turkey" : (category || "").toLowerCase().includes("meet") && (category || "").toLowerCase().includes("greet") ? "Airport name, arrival/departure/transfer" : "e.g. Airport - Hotel - Airport, Hotel - Hotel, Train Station - Hotel"}
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
@@ -2629,6 +2832,27 @@ export default function AddServiceModal({
                       </select>
                     </div>
                   </div>
+                ) : categoryType === "transfer" ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
+                      {(transferBookingType === "return") ? (
+                        <DateRangePicker
+                          label=""
+                          from={dateFrom}
+                          to={dateTo}
+                          onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                          triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
+                        />
+                      ) : (
+                        <DateInput
+                          value={dateFrom || orderDateFrom || ""}
+                          onChange={(v) => { setDateFrom(v); setDateTo(v); }}
+                          className={parseAttemptedButEmpty.has("dateFrom") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("dateFrom") ? "ring-2 ring-green-300 border-green-400" : undefined}
+                        />
+                      )}
+                    </div>
+                  </>
                 ) : (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
@@ -2639,6 +2863,21 @@ export default function AddServiceModal({
                       onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
                       triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                     />
+                  </div>
+                )}
+
+                {/* Meet & Greet: Linked Services when flights exist */}
+                {showMeetAndGreetLinkedFields && (
+                  <div className="flex items-center justify-between p-2 rounded-lg border border-emerald-200 bg-emerald-50/50">
+                    <span className="text-xs text-emerald-800">Link to airport arrival/departure</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowLinkedServicesModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Linked Services
+                    </button>
                   </div>
                 )}
                 
@@ -2799,6 +3038,46 @@ export default function AddServiceModal({
                 )}
               </div>
               )}
+                {basicInfoTab === "parties" && CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && (
+              <div className="p-3 space-y-2">
+                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                  <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))} />
+                </div>
+                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
+                    <ClientMultiSelectDropdown onAddClients={(toAdd) => setClients(prev => { const existing = prev.filter(c => c.id); const next = [...existing, ...toAdd]; return next.length > 0 ? next : [{ id: null, name: "" }]; })} existingClientIds={clients.map(c => c.id).filter((id): id is string => id !== null)} orderTravellers={orderTravellers} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {clients.filter(c => c.id || c.name).map((client, index) => {
+                      const displayName = toTitleCaseForDisplay(client.name || (index === 0 ? defaultClientName : "") || "") || "-";
+                      return (
+                        <div key={client.id || index} className="flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-sm">
+                            {displayName}
+                            {clients.filter(c => c.id || c.name).length > 1 && (
+                              <button type="button" onClick={() => { const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || "")); if (idx >= 0) removeClient(idx); }} className="text-gray-400 hover:text-red-600" aria-label={`Remove ${displayName}`}>
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {clients.filter(c => c.id || c.name).length === 0 && <span className="text-xs text-gray-400">No clients — use &quot;+ Add from directory&quot; above</span>}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
+                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))} />
+                </div>
+              </div>
+                )}
+                  </div>
+                )}
+              </div>
+              )}
 
             {/* CLIENT & PAYER — under BASIC INFO for flight */}
             {categoryType === "flight" && (
@@ -2859,7 +3138,9 @@ export default function AddServiceModal({
                     key={`payer-${payerPartyId || "empty"}`}
                     value={payerPartyId}
                     onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
+                    roleFilter=""
                     initialDisplayName={payerName}
+                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
                   />
                 </div>
               </div>
@@ -2875,6 +3156,7 @@ export default function AddServiceModal({
                     onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
                     roleFilter="supplier"
                     initialDisplayName={supplierName}
+                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
@@ -3270,7 +3552,7 @@ export default function AddServiceModal({
                       </table>
                     </div>
                     <div className="flex flex-wrap items-end gap-2 border-t border-gray-200 pt-2">
-                      <span className="text-xs font-medium text-gray-600 mr-1">Apply to all:</span>
+                      <span className="text-xs font-medium text-gray-600 mr-1">Bulk Price:</span>
                       <input type="number" step="0.01" min="0" placeholder="Cost" id="apply-cost"
                         className="w-20 rounded border border-gray-300 px-2 py-1 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                       <input type="number" step="0.01" placeholder="Marge" id="apply-marge"
@@ -3283,14 +3565,23 @@ export default function AddServiceModal({
                           const costEl = document.getElementById("apply-cost") as HTMLInputElement;
                           const margeEl = document.getElementById("apply-marge") as HTMLInputElement;
                           const saleEl = document.getElementById("apply-sale") as HTMLInputElement;
-                          const cost = costEl?.value ?? "";
-                          const marge = margeEl?.value ?? "";
-                          const sale = saleEl?.value ?? "";
-                          setPricingPerClient(prev => prev.map(() => ({ cost, marge, sale })));
+                          const costStr = costEl?.value?.trim() ?? "";
+                          const margeStr = margeEl?.value?.trim() ?? "";
+                          const saleStr = saleEl?.value?.trim() ?? "";
+                          const cost = parseFloat(costStr) || 0;
+                          const marge = parseFloat(margeStr) || 0;
+                          let sale = parseFloat(saleStr) || 0;
+                          if (!sale && (cost || marge)) sale = Math.round((cost + marge) * 100) / 100;
+                          setPricingPerClient(prev => prev.map((p) => {
+                            const c = costStr ? String(cost) : (p.cost ?? "");
+                            const m = margeStr ? String(marge) : (p.marge ?? "");
+                            const s = saleStr ? String(sale) : (sale ? String(sale) : (p.sale ?? ""));
+                            return { cost: c, marge: m, sale: s };
+                          }));
                         }}
                         className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
-                        Apply to all
+                        Apply for all clients
                       </button>
                     </div>
                     {(() => {
@@ -3536,7 +3827,7 @@ export default function AddServiceModal({
                       </div>
                     </div>
                     )}
-                      {(categoryType as string) !== "hotel" && (
+                      {(categoryType as string) !== "hotel" && (categoryType as string) !== "transfer" && (categoryType as string) !== "other" && (categoryType as string) !== "visa" && (
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm text-slate-600 shrink-0">Units</span>
                           <input
@@ -3657,105 +3948,27 @@ export default function AddServiceModal({
                 )}
               </div>
 
-              {/* PARTIES — under PRICING, for tour/other only */}
-              {(categoryType === "tour" || categoryType === "other") && (
-              <div className="p-3 modal-section space-y-2">
-                <h4 className="modal-section-title">PARTIES</h4>
-                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect
-                    value={supplierPartyId}
-                    onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
-                    roleFilter="supplier"
-                    initialDisplayName={supplierName}
-                  />
-                </div>
-                <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <label className="text-xs font-medium text-gray-600">Client{clients.length > 1 ? "s" : ""}</label>
-                    <ClientMultiSelectDropdown
-                      onAddClients={(toAdd) => setClients(prev => {
-                        const existing = prev.filter(c => c.id);
-                        const next = [...existing, ...toAdd];
-                        return next.length > 0 ? next : [{ id: null, name: "" }];
-                      })}
-                      existingClientIds={clients.map(c => c.id).filter((id): id is string => id !== null)}
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {clients.filter(c => c.id || c.name).map((client, index) => {
-                      const displayName = toTitleCaseForDisplay(client.name || (index === 0 ? defaultClientName : "") || "") || "-";
-                      return (
-                        <div key={client.id || index} className="flex items-center gap-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-sm">
-                            {displayName}
-                            {clients.filter(c => c.id || c.name).length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || ""));
-                                  if (idx >= 0) removeClient(idx);
-                                }}
-                                className="text-gray-400 hover:text-red-600"
-                                aria-label={`Remove ${displayName}`}
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            )}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {clients.filter(c => c.id || c.name).length === 0 && (
-                      <span className="text-xs text-gray-400">No clients — use &quot;+ Add from directory&quot; above</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect
-                    key={`payer-${payerPartyId || 'empty'}`}
-                    value={payerPartyId}
-                    onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
-                    initialDisplayName={payerName}
-                  />
-                </div>
-              </div>
-              )}
+              {/* PARTIES moved to left column as tab (tour/other/transfer) */}
 
-              {/* Booking Terms (hidden for Flight) */}
-              {categoryType !== "flight" && (
-              <div className="p-3 modal-section space-y-2">
+              {/* Booking Terms for hotel, tour, other — in right column (NOT for Transfer; Transfer has it at bottom) */}
+              {categoryType !== "flight" && categoryType !== "transfer" && (
+              <div className="mt-3 p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">Booking Terms</h4>
-                
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Price Type - only for Tour */}
                   {categoryType === "tour" && (
                     <div className="sm:col-span-2 min-w-0">
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Price Type</label>
-                      <select
-                        value={priceType}
-                        onChange={(e) => setPriceType(e.target.value as "ebd" | "regular" | "spo")}
-                        className="w-full min-w-[10rem] rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      >
+                      <select value={priceType} onChange={(e) => setPriceType(e.target.value as "ebd" | "regular" | "spo")} className="w-full min-w-[10rem] rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white">
                         <option value="regular">Regular</option>
                         <option value="ebd">Early Booking (EBD)</option>
                         <option value="spo">Special Offer (SPO)</option>
                       </select>
                     </div>
                   )}
-                  
-                  {/* Refund Policy - hidden for Tour */}
                   {categoryType !== "tour" && (
                     <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
-                      <select
-                        value={refundPolicy}
-                        onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      >
+                      <select value={refundPolicy} onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")} className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white">
                         <option value="non_ref">Non-refundable</option>
                         <option value="refundable">Refundable (with conditions)</option>
                         <option value="fully_ref">Fully Refundable</option>
@@ -3763,96 +3976,46 @@ export default function AddServiceModal({
                     </div>
                   )}
                 </div>
-                
-                {/* Cancellation/Refund details - hidden for Tour */}
                 {categoryType !== "tour" && refundPolicy === "refundable" && (
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
-                      <DateInput
-                        value={freeCancellationUntil}
-                        onChange={setFreeCancellationUntil}
-                      />
+                      <DateInput value={freeCancellationUntil} onChange={setFreeCancellationUntil} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty EUR</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={cancellationPenaltyAmount}
-                        onChange={(e) => setCancellationPenaltyAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      />
+                      <input type="number" min="0" step="0.01" value={cancellationPenaltyAmount} onChange={(e) => setCancellationPenaltyAmount(e.target.value)} placeholder="0.00" className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={cancellationPenaltyPercent}
-                        onChange={(e) => setCancellationPenaltyPercent(e.target.value)}
-                        placeholder="0"
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                      />
+                      <input type="number" min="0" max="100" value={cancellationPenaltyPercent} onChange={(e) => setCancellationPenaltyPercent(e.target.value)} placeholder="0" className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white" />
                     </div>
                   </div>
                 )}
-                
-                {/* Payment Deadlines - Tour (2x2) or Other */}
                 <div className="border-t border-gray-200 pt-2 mt-2">
                   {categoryType === "tour" ? (
                     <div className="grid grid-cols-2 gap-3">
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit Due</label>
-                        <DateInput
-                          value={paymentDeadlineDeposit}
-                          onChange={setPaymentDeadlineDeposit}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                        />
+                        <DateInput value={paymentDeadlineDeposit} onChange={setPaymentDeadlineDeposit} className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`} />
                       </div>
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={depositPercent}
-                          onChange={(e) => setDepositPercent(e.target.value)}
-                          placeholder="10"
-                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("depositPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                        />
+                        <input type="number" min="0" max="100" value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} placeholder="10" className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("depositPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`} />
                       </div>
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Final Due</label>
-                        <DateInput
-                          value={paymentDeadlineFinal}
-                          onChange={setPaymentDeadlineFinal}
-                          className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                        />
+                        <DateInput value={paymentDeadlineFinal} onChange={setPaymentDeadlineFinal} className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`} />
                       </div>
                       <div className="min-w-0">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Final %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={finalPercent}
-                          onChange={(e) => setFinalPercent(e.target.value)}
-                          placeholder="90"
-                          className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("finalPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                        />
+                        <input type="number" min="0" max="100" value={finalPercent} onChange={(e) => setFinalPercent(e.target.value)} placeholder="90" className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("finalPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`} />
                       </div>
                     </div>
                   ) : (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
-                      <DateInput
-                        value={paymentDeadlineFinal}
-                        onChange={setPaymentDeadlineFinal}
-                      />
+                      <DateInput value={paymentDeadlineFinal} onChange={setPaymentDeadlineFinal} />
                     </div>
                   )}
                 </div>
@@ -4000,22 +4163,27 @@ export default function AddServiceModal({
           )}
 
           {showTransferFields && (
-            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
-              <h4 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Transfer Details</h4>
-
-              {/* Row 1: Booking type */}
-              <div className="flex gap-4">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" name="transferBookingTypeAdd" value="one_way" checked={transferBookingType === "one_way"} onChange={() => setTransferBookingType("one_way")} className="accent-emerald-600" />
-                  <span className="text-sm">One way</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" name="transferBookingTypeAdd" value="by_hour" checked={transferBookingType === "by_hour"} onChange={() => setTransferBookingType("by_hour")} className="accent-emerald-600" />
-                  <span className="text-sm">By the hour</span>
-                </label>
+            <div className="mt-3 p-3 modal-section space-y-3 relative">
+              {showLinkedHint && (
+                <div className="absolute -top-1 -right-1 z-10 animate-pulse">
+                  <div className="rounded-full bg-amber-100/90 p-1.5 shadow-[0_0_12px_rgba(245,158,11,0.5)]">
+                    <Sparkles className="w-4 h-4 text-amber-500" strokeWidth={2} />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <h4 className="modal-section-title">Transfer Details</h4>
+                <button
+                  type="button"
+                  onClick={() => setShowLinkedServicesModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Linked Services
+                </button>
               </div>
 
-              {/* Row 2: Mode, Vehicle class, Details */}
+              {/* Mode, Vehicle class, Details */}
               <div className="grid grid-cols-4 gap-2">
                 <div>
                   <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Mode</label>
@@ -4046,14 +4214,27 @@ export default function AddServiceModal({
               </div>
 
               {/* Routes */}
-              {transferRoutes.map((route, idx) => (
+              {transferRoutes.map((route, idx) => {
+                const isRoute3Plus = transferBookingType === "return" ? idx >= 2 : idx >= 1;
+                const isExpanded = !isRoute3Plus || expandedRouteIdsAdd.has(route.id);
+                const routeLabel = transferBookingType === "return" && transferRoutes.length === 2 ? (idx === 0 ? "Outbound" : "Return") : `Route ${idx + 1}`;
+                return (
                 <div key={route.id} className="p-2 bg-white rounded-lg border border-emerald-200 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-emerald-600 uppercase">Route {idx + 1}</span>
+                    {isRoute3Plus ? (
+                      <button type="button" onClick={() => toggleRouteExpandedAdd(route.id)} className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 uppercase hover:text-emerald-800">
+                        <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        {routeLabel}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-emerald-600 uppercase">{routeLabel}</span>
+                    )}
                     {transferRoutes.length > 1 && (
                       <button type="button" onClick={() => removeTransferRouteAdd(route.id)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
                     )}
                   </div>
+                  {isExpanded && (
+                  <>
                   <div className="relative">
                     <label className="block text-[10px] font-medium text-gray-500 mb-0.5">From</label>
                     <input type="text" value={locationQueryAdd[`${route.id}-pickup`] ?? route.pickup} onChange={e => { handleLocationInputAdd(`${route.id}-pickup`, e.target.value); updateRouteFieldAdd(route.id, "pickup", e.target.value); }} onFocus={() => setActiveLocationFieldAdd(`${route.id}-pickup`)} onBlur={() => setTimeout(() => setActiveLocationFieldAdd(null), 200)} placeholder="Airport, hotel, address..." className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
@@ -4068,7 +4249,7 @@ export default function AddServiceModal({
                       </div>
                     )}
                   </div>
-                  {transferBookingType === "one_way" ? (
+                  {(transferBookingType === "one_way" || transferBookingType === "return") ? (
                     <div className="relative">
                       <label className="block text-[10px] font-medium text-gray-500 mb-0.5">To</label>
                       <input type="text" value={locationQueryAdd[`${route.id}-dropoff`] ?? route.dropoff} onChange={e => { handleLocationInputAdd(`${route.id}-dropoff`, e.target.value); updateRouteFieldAdd(route.id, "dropoff", e.target.value); }} onFocus={() => setActiveLocationFieldAdd(`${route.id}-dropoff`)} onBlur={() => setTimeout(() => setActiveLocationFieldAdd(null), 200)} placeholder="Airport, hotel, address..." className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
@@ -4096,7 +4277,7 @@ export default function AddServiceModal({
                       <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pickup Time</label>
                       <input type="time" value={route.pickupTime || ""} onChange={e => updateRouteFieldAdd(route.id, "pickupTime", e.target.value)} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white" />
                     </div>
-                    {transferBookingType === "one_way" && (
+                    {(transferBookingType === "one_way" || transferBookingType === "return") && (
                       <>
                         <div>
                           <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Distance</label>
@@ -4112,14 +4293,44 @@ export default function AddServiceModal({
                   {flightServices.length > 0 && (
                     <div>
                       <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Flight Number</label>
-                      <select value={route.linkedFlightId || ""} onChange={e => { const fid = e.target.value || undefined; updateRouteFieldAdd(route.id, "linkedFlightId", fid); if (fid) suggestPickupTimeAdd(route.id, fid); }} className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white">
+                      <select
+                        value={route.linkedFlightId != null && (route.linkedSegmentIndex ?? 0) >= 0 ? `${route.linkedFlightId}|${route.linkedSegmentIndex ?? 0}` : ""}
+                        onChange={e => {
+                          const raw = e.target.value;
+                          if (!raw) {
+                            setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, linkedFlightId: undefined, linkedSegmentIndex: undefined } : r));
+                            return;
+                          }
+                          const [fid, segIdxStr] = raw.split("|");
+                          const segIdx = parseInt(segIdxStr || "0", 10);
+                          setTransferRoutes(prev => prev.map(r => r.id === route.id ? { ...r, linkedFlightId: fid, linkedSegmentIndex: segIdx } : r));
+                          if (fid) suggestPickupTimeAdd(route.id, fid, segIdx);
+                        }}
+                        className="w-full rounded-lg border border-emerald-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                      >
                         <option value="">No linked flight</option>
-                        {flightServices.map(f => {
+                        {flightServices.flatMap(f => {
                           const segs = f.flightSegments || [];
-                          const label = segs.length > 0
-                            ? segs.map(s => { const r = s as unknown as Record<string, string>; return `${r.flightNumber || ""} ${r.departureCity || ""}→${r.arrivalCity || ""}`; }).join(", ")
-                            : f.name;
-                          return <option key={f.id} value={f.id}>{label}</option>;
+                          const pickupIata = (route.pickupMeta?.iata ?? "").trim().toUpperCase();
+                          const dropoffIata = (route.dropoffMeta?.iata ?? "").trim().toUpperCase();
+                          const pickupIsAirport = route.pickupType === "airport" || !!route.pickupMeta?.iata;
+                          const dropoffIsAirport = route.dropoffType === "airport" || !!route.dropoffMeta?.iata;
+                          const filtered = segs.filter((s) => {
+                            const r = s as unknown as Record<string, string>;
+                            const arr = (r.arrival ?? "").trim().toUpperCase();
+                            const dep = (r.departure ?? "").trim().toUpperCase();
+                            if (pickupIsAirport && pickupIata && arr === pickupIata) return true;
+                            if (dropoffIsAirport && dropoffIata && dep === dropoffIata) return true;
+                            if (!pickupIata && !dropoffIata) return true;
+                            return false;
+                          });
+                          const toShow = filtered.length > 0 ? filtered : segs;
+                          return toShow.map((s) => {
+                            const origIdx = segs.indexOf(s);
+                            const r = s as unknown as Record<string, string>;
+                            const label = `${r.flightNumber || ""} ${r.departure || ""}→${r.arrival || ""}`.trim() || f.name;
+                            return <option key={`${f.id}-${origIdx}`} value={`${f.id}|${origIdx}`}>{label}</option>;
+                          });
                         })}
                       </select>
                       {route.linkedFlightId && route.pickupTime && (
@@ -4129,8 +4340,11 @@ export default function AddServiceModal({
                       )}
                     </div>
                   )}
+                  </>
+                  )}
                 </div>
-              ))}
+              );
+              })}
 
               <button type="button" onClick={addTransferRouteAdd} className="text-sm text-emerald-600 hover:text-emerald-800 font-medium">
                 + Add route
@@ -4159,6 +4373,167 @@ export default function AddServiceModal({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Booking Terms — at bottom ONLY for Transfer (hotel/tour/other keep it in right column) */}
+          {categoryType === "transfer" && (
+          <div className="mt-3 p-3 modal-section space-y-2">
+            <h4 className="modal-section-title">Booking Terms</h4>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Price Type - only for Tour */}
+              {categoryType === "tour" && (
+                <div className="sm:col-span-2 min-w-0">
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Price Type</label>
+                  <select
+                    value={priceType}
+                    onChange={(e) => setPriceType(e.target.value as "ebd" | "regular" | "spo")}
+                    className="w-full min-w-[10rem] rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="regular">Regular</option>
+                    <option value="ebd">Early Booking (EBD)</option>
+                    <option value="spo">Special Offer (SPO)</option>
+                  </select>
+                </div>
+              )}
+              
+              {/* Refund Policy - hidden for Tour */}
+              {categoryType !== "tour" && (
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Refund Policy</label>
+                  <select
+                    value={refundPolicy}
+                    onChange={(e) => setRefundPolicy(e.target.value as "non_ref" | "refundable" | "fully_ref")}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="non_ref">Non-refundable</option>
+                    <option value="refundable">Refundable (with conditions)</option>
+                    <option value="fully_ref">Fully Refundable</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            
+            {/* Cancellation/Refund details - hidden for Tour */}
+            {categoryType !== "tour" && refundPolicy === "refundable" && (
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Free cancel until</label>
+                  <DateInput
+                    value={freeCancellationUntil}
+                    onChange={setFreeCancellationUntil}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty EUR</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={cancellationPenaltyAmount}
+                    onChange={(e) => setCancellationPenaltyAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Penalty %</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={cancellationPenaltyPercent}
+                    onChange={(e) => setCancellationPenaltyPercent(e.target.value)}
+                    placeholder="0"
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Payment Deadlines - Tour (2x2) or Other */}
+            <div className="border-t border-gray-200 pt-2 mt-2">
+              {categoryType === "tour" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="min-w-0">
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit Due</label>
+                    <DateInput
+                      value={paymentDeadlineDeposit}
+                      onChange={setPaymentDeadlineDeposit}
+                      className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineDeposit") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineDeposit") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Deposit %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={depositPercent}
+                      onChange={(e) => setDepositPercent(e.target.value)}
+                      placeholder="10"
+                      className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("depositPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("depositPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Final Due</label>
+                    <DateInput
+                      value={paymentDeadlineFinal}
+                      onChange={setPaymentDeadlineFinal}
+                      className={`w-full min-w-[120px] rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("paymentDeadlineFinal") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("paymentDeadlineFinal") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Final %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={finalPercent}
+                      onChange={(e) => setFinalPercent(e.target.value)}
+                      placeholder="90"
+                      className={`w-full min-w-[4rem] rounded-lg border px-2.5 py-1.5 text-sm bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("finalPercent") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("finalPercent") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Payment Deadline</label>
+                  <DateInput
+                    value={paymentDeadlineFinal}
+                    onChange={setPaymentDeadlineFinal}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+
+          {showTransferFields && showLinkedServicesModal && (
+            <LinkedServicesModal
+              flightServices={flightServices}
+              hotelServices={hotelServices}
+              transferRoutes={transferRoutes}
+              onApply={(routes) => setTransferRoutes(routes as TransferRouteData[])}
+              onClose={() => setShowLinkedServicesModal(false)}
+              suggestPickupTime={suggestPickupTimeAdd}
+              transferBookingType={transferBookingType}
+            />
+          )}
+          {showMeetAndGreetLinkedFields && showLinkedServicesModal && (
+            <LinkedServicesModal
+              flightServices={flightServices}
+              hotelServices={hotelServices ?? []}
+              transferRoutes={mgRoutes}
+              onApply={(routes) => {
+                const r0 = routes[0];
+                if (r0?.linkedFlightId) setLinkedFlightId(r0.linkedFlightId);
+                else if (!r0?.linkedFlightId) setLinkedFlightId(null);
+                setShowLinkedServicesModal(false);
+              }}
+              onClose={() => setShowLinkedServicesModal(false)}
+              transferBookingType="one_way"
+            />
           )}
 
           {/* Actions - Sticky Footer (hidden for Hotel — buttons are in left column) */}

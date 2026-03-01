@@ -132,6 +132,9 @@ interface Service {
   transferRoutes?: { pickup: string; pickupType?: string; pickupMeta?: { iata?: string }; dropoff: string; dropoffType?: string; dropoffMeta?: { iata?: string }; pickupTime?: string; distanceKm?: number; durationMin?: number; bookingType?: string; hours?: number; linkedFlightId?: string }[];
   transferMode?: string | null;
   vehicleClass?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverNotes?: string | null;
   // Flight-specific
   flightSegments?: FlightSegment[];
   boardingPasses?: { id: string; fileName: string; fileUrl: string; clientId: string; clientName: string; uploadedAt: string }[];
@@ -232,6 +235,69 @@ function ChooseServiceTypeModal({
   );
 }
 
+function TransferTypeChooserPopup({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (type: "one_way" | "return" | "by_hour") => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-xl bg-white shadow-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Transfer type</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            aria-label="Close"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">Choose type so we can suggest Linked Services correctly.</p>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => onSelect("one_way")}
+            className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
+          >
+            One way
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect("return")}
+            className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
+          >
+            Return Transfer
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect("by_hour")}
+            className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
+          >
+            By the hour
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function toTitleCase(str: string): string {
   return str
     .trim()
@@ -310,6 +376,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [addServiceCategoryType, setAddServiceCategoryType] = useState<string | null>(null);
   const [addServiceCategoryName, setAddServiceCategoryName] = useState<string | null>(null);
   const [addServiceCategoryVatRate, setAddServiceCategoryVatRate] = useState<number | null>(null);
+  const [addServiceTransferBookingType, setAddServiceTransferBookingType] = useState<"one_way" | "return" | "by_hour" | null>(null);
+  const [showTransferTypePopup, setShowTransferTypePopup] = useState(false);
   const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
   const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
@@ -325,6 +393,12 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   
   // Traveller filter for itinerary tabs
   const [selectedTravellerId, setSelectedTravellerId] = useState<string | null>(null);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterSupplier, setFilterSupplier] = useState("");
+  const [filterClient, setFilterClient] = useState("");
+  const [filterPayer, setFilterPayer] = useState("");
+  const filterMenuRef = React.useRef<HTMLDivElement>(null);
   const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
 
   useImperativeHandle(ref, () => ({
@@ -336,16 +410,45 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       }
     },
   }), [serviceCategories]);
-  
-  // Filter services based on cancelled filter and selected traveller
+
+  const getDisplayClient = useCallback((s: Service) =>
+    (s.assignedTravellerIds?.length && orderTravellers.length)
+      ? orderTravellers.filter((t) => s.assignedTravellerIds!.includes(t.id)).map((t) => `${(t.firstName || "").trim()} ${(t.lastName || "").trim()}`.trim()).filter(Boolean).join(", ") || s.client
+      : s.client,
+  [orderTravellers]);
+
+  // Filter services based on cancelled, traveller, and column filters
   const visibleServices = useMemo(() => {
     return services.filter(s => {
       if (hideCancelled && s.resStatus === 'cancelled') return false;
       if (selectedTravellerId && !s.assignedTravellerIds.includes(selectedTravellerId)) return false;
+      if (filterCategory && s.category !== filterCategory) return false;
+      if (filterSupplier && s.supplier !== filterSupplier) return false;
+      if (filterClient && getDisplayClient(s) !== filterClient) return false;
+      if (filterPayer && s.payer !== filterPayer) return false;
       return true;
     });
-  }, [services, hideCancelled, selectedTravellerId]);
-  
+  }, [services, hideCancelled, selectedTravellerId, filterCategory, filterSupplier, filterClient, filterPayer, getDisplayClient]);
+
+  const filterOptions = useMemo(() => {
+    const categories = [...new Set(services.map(s => s.category).filter(Boolean))].sort();
+    const suppliers = [...new Set(services.map(s => s.supplier).filter(s => s && s !== "-"))].sort();
+    const clients = [...new Set(services.map(s => getDisplayClient(s)).filter(Boolean))].sort();
+    const payers = [...new Set(services.map(s => s.payer).filter(s => s && s !== "-"))].sort();
+    return { categories, suppliers, clients, payers };
+  }, [services, getDisplayClient]);
+
+  const hasActiveFilters = !!(filterCategory || filterSupplier || filterClient || filterPayer);
+  const clearFilters = () => { setFilterCategory(""); setFilterSupplier(""); setFilterClient(""); setFilterPayer(""); };
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (filterMenuOpen && filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) setFilterMenuOpen(false);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [filterMenuOpen]);
+
   // Get visible services without invoice for "select all" functionality (excluding cancelled)
   const visibleServicesWithoutInvoice = useMemo(() => {
     return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
@@ -1081,7 +1184,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       dateTo: s.dateTo,
       name: s.name,
       resStatus: s.resStatus,
-      flightSegments: s.flightSegments, // Include flight segments for connection time calculation
+      flightSegments: s.flightSegments,
+      transferRoutes: s.transferRoutes,
     }));
     
     const allHints = generateSmartHints(servicesForHint, orderSource);
@@ -1095,16 +1199,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     return smartHints.filter(h => h.afterServiceId === serviceId);
   };
   
-  // Handle hint action (open add service modal with prefill)
+  // Handle hint action (open add service modal or edit modal)
   const handleHintAction = (hint: SmartHint) => {
-    if (hint.action) {
-      // For now just open the add service modal
-      // In future, could prefill with hint.action.prefillData
-      if (serviceCategories.length > 0) {
-        setShowChooseCategoryModal(true);
-      } else {
-        setPendingOpenChooseModal(true);
-      }
+    if (!hint.action) return;
+    if (hint.action.editServiceId) {
+      setEditServiceId(hint.action.editServiceId);
+      return;
+    }
+    if (serviceCategories.length > 0) {
+      setShowChooseCategoryModal(true);
+    } else {
+      setPendingOpenChooseModal(true);
     }
   };
   
@@ -1221,6 +1326,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           transferRoutes: (Array.isArray(s.transferRoutes ?? s.transfer_routes) ? (s.transferRoutes ?? s.transfer_routes) : []) as Service["transferRoutes"],
           transferMode: (s.transferMode ?? s.transfer_mode ?? null) as string | null,
           vehicleClass: (s.vehicleClass ?? s.vehicle_class ?? null) as string | null,
+          pickupLocation: (s.pickupLocation ?? (s as { pickup_location?: string }).pickup_location ?? null) as string | null,
+          dropoffLocation: (s.dropoffLocation ?? (s as { dropoff_location?: string }).dropoff_location ?? null) as string | null,
+          pickupTime: (s.pickupTime ?? (s as { pickup_time?: string }).pickup_time ?? null) as string | null,
+          estimatedDuration: (s.estimatedDuration ?? (s as { estimated_duration?: string }).estimated_duration ?? null) as string | null,
+          linkedFlightId: (s.linkedFlightId ?? (s as { linked_flight_id?: string }).linked_flight_id ?? null) as string | null,
+          driverName: (s.driverName ?? (s as { driver_name?: string }).driver_name ?? null) as string | null,
+          driverPhone: (s.driverPhone ?? (s as { driver_phone?: string }).driver_phone ?? null) as string | null,
+          driverNotes: (s.driverNotes ?? (s as { driver_notes?: string }).driver_notes ?? null) as string | null,
           additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
           hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
           hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
@@ -1852,6 +1965,61 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             <span className="text-xs text-gray-500">({visibleServices.length}{hideCancelled && services.length > visibleServices.length ? ` of ${services.length}` : ""})</span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Filter menu */}
+            <div className="relative" ref={filterMenuRef}>
+              <button
+                onClick={() => setFilterMenuOpen(o => !o)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                  hasActiveFilters ? "bg-blue-100 text-blue-700 hover:bg-blue-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+                title="Filter by Category, Supplier, Client, Payer"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filter{hasActiveFilters ? ` (${[filterCategory, filterSupplier, filterClient, filterPayer].filter(Boolean).length})` : ""}
+              </button>
+              {filterMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-white rounded-lg border border-gray-200 shadow-lg py-2 px-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-700">Filter by</span>
+                    {hasActiveFilters && (
+                      <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">Clear</button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Category</label>
+                      <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
+                        <option value="">All</option>
+                        {filterOptions.categories.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Supplier</label>
+                      <select value={filterSupplier} onChange={(e) => setFilterSupplier(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
+                        <option value="">All</option>
+                        {filterOptions.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Client</label>
+                      <select value={filterClient} onChange={(e) => setFilterClient(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
+                        <option value="">All</option>
+                        {filterOptions.clients.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Payer</label>
+                      <select value={filterPayer} onChange={(e) => setFilterPayer(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
+                        <option value="">All</option>
+                        {filterOptions.payers.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             {/* Hide Cancelled toggle */}
             <button
               onClick={toggleHideCancelled}
@@ -1989,6 +2157,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                         // Calculate color and connector for split groups
                         const splitGroupColor = service.splitGroupId ? getSplitGroupColor(service.splitGroupId) : null;
 
+                        // CLIENT: prefer traveller names (matches Edit modal) when available, else service.client
+                        const displayClientName = (service.assignedTravellerIds?.length && orderTravellers.length)
+                          ? orderTravellers
+                              .filter((t) => service.assignedTravellerIds!.includes(t.id))
+                              .map((t) => `${(t.firstName || "").trim()} ${(t.lastName || "").trim()}`.trim())
+                              .filter(Boolean)
+                              .join(", ") || service.client
+                          : service.client;
+                        const displayClientPartyId = (service.assignedTravellerIds?.length && orderTravellers.length)
+                          ? orderTravellers.find((t) => service.assignedTravellerIds!.includes(t.id))?.id ?? service.clientPartyId
+                          : service.clientPartyId;
 
                         const rowDelay = serviceRowIndex++ * 40;
                         return (
@@ -2083,17 +2262,18 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {service.supplier}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm leading-tight ${service.clientPartyId && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm leading-tight ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
-                                if ((e.ctrlKey || e.metaKey) && service.clientPartyId) {
+                                const partyId = displayClientPartyId ?? service.clientPartyId;
+                                if ((e.ctrlKey || e.metaKey) && partyId) {
                                   e.preventDefault();
-                                  router.push(`/directory/${service.clientPartyId}`);
+                                  router.push(`/directory/${partyId}`);
                                 }
                               }}
-                              onMouseEnter={() => service.clientPartyId && setHoveredPartyId(`client-${service.id}`)}
+                              onMouseEnter={() => (displayClientPartyId ?? service.clientPartyId) && setHoveredPartyId(`client-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              {service.client}
+                              {displayClientName}
                             </td>
                             <td 
                               className={`px-2 py-1 text-sm leading-tight ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
@@ -2238,11 +2418,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             </tbody>
           </table>
         </div>
-      </div>
-        )}
 
-        {/* Itinerary Timeline + Map - side by side */}
-        <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
+        {/* Itinerary Timeline — attached under Services; header z-[60] so scrolling content goes under, not over */}
+        <div className="border-t border-gray-200 bg-white">
+          <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
           <div className="lg:col-span-2">
             <ItineraryTimeline
               services={visibleServices.map(s => ({
@@ -2319,6 +2498,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             )}
           </div>
         </div>
+        </div>
+      </div>
+        )}
+
       </div>
 
       {selectedService && (
@@ -2343,9 +2526,31 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             setAddServiceCategoryName(category?.name ?? null);
             setAddServiceCategoryVatRate(category?.vat_rate ?? null);
             setShowChooseCategoryModal(false);
-            setTimeout(() => setShowAddModal(true), 0);
+            const type = (category?.type ?? "").toString().toLowerCase();
+            if (type === "transfer") {
+              setShowTransferTypePopup(true);
+            } else {
+              setTimeout(() => setShowAddModal(true), 0);
+            }
           }}
           onClose={() => setShowChooseCategoryModal(false)}
+        />
+      )}
+
+      {showTransferTypePopup && (
+        <TransferTypeChooserPopup
+          onSelect={(transferType) => {
+            setAddServiceTransferBookingType(transferType);
+            setShowTransferTypePopup(false);
+            setTimeout(() => setShowAddModal(true), 0);
+          }}
+          onClose={() => {
+            setShowTransferTypePopup(false);
+            setAddServiceCategoryId(null);
+            setAddServiceCategoryType(null);
+            setAddServiceCategoryName(null);
+            setAddServiceCategoryVatRate(null);
+          }}
         />
       )}
 
@@ -2361,13 +2566,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           initialCategoryType={addServiceCategoryType ?? undefined}
           initialCategoryName={addServiceCategoryName ?? undefined}
           initialVatRate={addServiceCategoryVatRate ?? undefined}
-          flightServices={services.filter(s => (s.categoryType || "").toLowerCase() === "flight").map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
+          initialTransferBookingType={addServiceTransferBookingType ?? undefined}
+          flightServices={services.filter(s => (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase() === "flight").map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
+          hotelServices={services.filter(s => { const t = (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase(); return t === "hotel" || (t === "tour" && !!(s as { hotelName?: string }).hotelName); }).map(s => ({ id: s.id, hotelName: (s as { hotelName?: string }).hotelName || s.name, dateFrom: s.dateFrom ?? undefined, dateTo: s.dateTo ?? undefined }))}
+          orderTravellers={orderTravellers}
           onClose={() => {
             setShowAddModal(false);
             setAddServiceCategoryId(null);
             setAddServiceCategoryType(null);
             setAddServiceCategoryName(null);
             setAddServiceCategoryVatRate(null);
+            setAddServiceTransferBookingType(null);
           }}
           onServiceAdded={handleServiceAdded}
         />
@@ -2380,8 +2589,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           <EditServiceModalNew
             service={services.find(s => s.id === editServiceId)! as React.ComponentProps<typeof EditServiceModalNew>['service']}
             orderCode={orderCode}
+            orderDateFrom={orderDateFrom}
+            orderDateTo={orderDateTo}
             companyCurrencyCode={companyCurrencyCode}
-            flightServices={services.filter(s => (s.categoryType || "").toLowerCase() === "flight" && s.id !== editServiceId).map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
+            flightServices={services.filter(s => (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase() === "flight" && s.id !== editServiceId).map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
+            hotelServices={services.filter(s => { const t = (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase(); return t === "hotel" || (t === "tour" && !!(s as { hotelName?: string }).hotelName); }).map(s => ({ id: s.id, hotelName: (s as { hotelName?: string }).hotelName || s.name, dateFrom: s.dateFrom ?? undefined, dateTo: s.dateTo ?? undefined }))}
             initialClients={(() => {
               const svc = services.find(s => s.id === editServiceId);
               if (!svc) return undefined;
@@ -2391,6 +2603,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 .map(t => ({ id: t!.id, name: `${t!.firstName || ""} ${t!.lastName || ""}`.trim() || t!.id }));
               return resolved.length > 0 ? resolved : undefined;
             })()}
+            orderTravellers={orderTravellers}
             onClose={() => setEditServiceId(null)}
             onServiceUpdated={(updated: Partial<Service> & { id: string; _keepModalOpen?: boolean }) => {
               const { _keepModalOpen, ...rest } = updated;

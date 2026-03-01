@@ -652,12 +652,35 @@ function parseLufthansa(text: string): ParseResult | null {
   };
 }
 
+// Normalize city name for lookup (strip diacritics for Latvian etc.)
+function normalizeCityForLookup(city: string): string {
+  return city
+    .toLowerCase()
+    .trim()
+    .replace(/[āăàáâãäå]/gi, "a")
+    .replace(/[ēèéêë]/gi, "e")
+    .replace(/[īìíîï]/gi, "i")
+    .replace(/[ōòóôõö]/gi, "o")
+    .replace(/[ūùúûü]/gi, "u")
+    .replace(/[ņ]/gi, "n")
+    .replace(/[ķ]/gi, "k")
+    .replace(/[ļ]/gi, "l")
+    .replace(/[ģ]/gi, "g")
+    .replace(/[č]/gi, "c")
+    .replace(/[š]/gi, "s")
+    .replace(/[ž]/gi, "z")
+    .replace(/[ŗ]/gi, "r");
+}
+
 // Helper to get IATA code from city name
 function getIATAFromCity(city: string): string {
+  const normalized = normalizeCityForLookup(city);
   const cityMap: Record<string, string> = {
-    // Baltic States
+    // Baltic States (including Latvian variants)
     "tallinn": "TLL",
+    "tallina": "TLL",
     "riga": "RIX",
+    "rīga": "RIX",
     "vilnius": "VNO",
     "kaunas": "KUN",
     "palanga": "PLQ",
@@ -805,6 +828,8 @@ function getIATAFromCity(city: string): string {
     "istanbul": "IST",
     "ankara": "ESB",
     "antalya": "AYT",
+    "antalija": "AYT",
+    "antālija": "AYT",
     "izmir": "ADB",
     "bodrum": "BJV",
     "dubai": "DXB",
@@ -924,7 +949,7 @@ function getIATAFromCity(city: string): string {
     "wellington": "WLG",
     "fiji": "NAN",
   };
-  return cityMap[city.toLowerCase().trim()] || "";
+  return cityMap[normalized] || cityMap[city.toLowerCase().trim()] || "";
 }
 
 // Helper to get city name from IATA code
@@ -1360,35 +1385,166 @@ function parseKLM(text: string): ParseResult | null {
 // ============================================
 // AIRBALTIC (BT)
 // ============================================
+
+// Detect Air Baltic invoice format (Latvian labels, city names)
+function isAirBalticInvoiceFormat(text: string): boolean {
+  return !!(
+    text.match(/Rezervācijas numurs:/i) ||
+    text.match(/Rēķina numurs:/i) ||
+    text.match(/Biļetes numurs/i) ||
+    (text.includes("AIR BALTIC CORPORATION") && text.match(/BT\d{3,4}\s+Economy/i))
+  );
+}
+
+// Parse segment lines: S 09/05 15:30 Rīga 19:15 Antālija BT715 Economy FLEX, P
+function parseAirBalticInvoiceSegments(text: string, bookingYear: string): ParsedSegment[] {
+  const segments: ParsedSegment[] = [];
+  // Match: [S|O] DD/MM HH:mm City HH:mm City BT### Economy FLEX
+  const segmentPattern = /[SO]\s+(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})\s+([A-Za-zāčēģīķļņōŗšūžĀČĒĢĪĶĻŅŌŖŠŪŽ\s]+?)\s+(\d{1,2}):(\d{2})\s+([A-Za-zāčēģīķļņōŗšūžĀČĒĢĪĶĻŅŌŖŠŪŽ\s]+?)\s+BT(\d{3,4})/gi;
+  let m;
+  let idx = 0;
+  while ((m = segmentPattern.exec(text)) !== null) {
+    const depDay = m[1].padStart(2, "0");
+    const depMonth = m[2].padStart(2, "0");
+    const depH = m[3].padStart(2, "0");
+    const depM = m[4];
+    const depCity = m[5].trim();
+    const arrH = m[6].padStart(2, "0");
+    const arrM = m[7];
+    const arrCity = m[8].trim();
+    const flightNum = m[9];
+
+    const depDate = `${bookingYear}-${depMonth}-${depDay}`;
+    let arrDate = depDate;
+    const depMinutes = parseInt(depH) * 60 + parseInt(depM);
+    const arrMinutes = parseInt(arrH) * 60 + parseInt(arrM);
+    if (arrMinutes < depMinutes) {
+      const next = new Date(`${depDate}T12:00:00`);
+      next.setDate(next.getDate() + 1);
+      arrDate = next.toISOString().slice(0, 10);
+    }
+
+    const depCode = getIATAFromCity(depCity);
+    const arrCode = getIATAFromCity(arrCity);
+    if (!depCode || !arrCode) continue;
+
+    let duration: string | undefined;
+    if (depDate === arrDate) {
+      let durationMins = arrMinutes - depMinutes;
+      if (durationMins < 0) durationMins += 24 * 60;
+      const hours = Math.floor(durationMins / 60);
+      const mins = durationMins % 60;
+      duration = `${hours}h ${mins.toString().padStart(2, "0")}m`;
+    } else {
+      const depMs = new Date(`${depDate}T${depH}:${depM}:00`).getTime();
+      const arrMs = new Date(`${arrDate}T${arrH}:${arrM}:00`).getTime();
+      const durationMins = Math.round((arrMs - depMs) / 60000);
+      const hours = Math.floor(durationMins / 60);
+      const mins = durationMins % 60;
+      duration = `${hours}h ${mins.toString().padStart(2, "0")}m`;
+    }
+
+    segments.push({
+      id: `seg-${Date.now()}-${idx}`,
+      flightNumber: `BT${flightNum}`,
+      airline: "airBaltic",
+      departure: depCode,
+      departureCity: depCity || undefined,
+      arrival: arrCode,
+      arrivalCity: arrCity || undefined,
+      departureDate: depDate,
+      departureTimeScheduled: `${depH}:${depM}`,
+      arrivalDate: arrDate,
+      arrivalTimeScheduled: `${arrH}:${arrM}`,
+      duration,
+      cabinClass: "economy",
+      bookingRef: undefined,
+    });
+    idx++;
+  }
+  return segments;
+}
+
+// Parse passengers: K-dze LARISA GURARIJA 657-2423595985
+function parseAirBalticInvoicePassengers(text: string): ParsedPassenger[] {
+  const passengers: ParsedPassenger[] = [];
+  const passengerPattern = /K-dze\s+([A-Za-z\s\u00C0-\u024F]+?)\s+(\d{3}-\d{10})/gi;
+  let m;
+  while ((m = passengerPattern.exec(text)) !== null) {
+    const name = m[1].trim().replace(/\s+/g, " ");
+    const ticketNumber = m[2];
+    if (name) {
+      passengers.push({ name, ticketNumber });
+    }
+  }
+  return passengers;
+}
+
 function parseAirBaltic(text: string): ParseResult | null {
-  if (!text.includes("airBaltic") && !text.match(/BT\s?\d{3,4}/i)) {
+  if (!text.includes("airBaltic") && !text.includes("AIR BALTIC") && !text.match(/BT\s?\d{3,4}/i)) {
     return null;
   }
   // Skip Amadeus PNR/GDS format — let parseAmadeus handle it
   if (text.match(/RP\/[A-Z0-9]+\//) || text.match(/\d\s+[A-Z]{2}\s*\d{3,4}\s+[A-Z]\s+\d{1,2}[A-Z]{3}\s+\d\s+[A-Z]{6}\s+HK/)) {
     return null;
   }
-  
+
+  // Air Baltic invoice format (Latvian)
+  if (isAirBalticInvoiceFormat(text)) {
+    const bookingRefMatch = text.match(/Rezervācijas numurs:\s*([A-Z0-9]{6})/i);
+    const bookingDateMatch = text.match(/Rezervēšanas datums:\s*(\d{1,2}\.\d{1,2}\.\d{4})/i);
+    const totalPriceMatch = text.match(/Kopā\s+EUR\s+([\d.,]+)/i);
+
+    const bookingYear = bookingDateMatch
+      ? (parseDate(bookingDateMatch[1]) || "").slice(0, 4)
+      : String(new Date().getFullYear());
+
+    const invoiceSegments = parseAirBalticInvoiceSegments(text, bookingYear);
+    const passengers = parseAirBalticInvoicePassengers(text);
+    const ticketNumbers = passengers.map((p) => p.ticketNumber).filter(Boolean) as string[];
+
+    if (invoiceSegments.length > 0) {
+      return {
+        success: true,
+        segments: invoiceSegments,
+        booking: {
+          bookingRef: bookingRefMatch?.[1] || "",
+          airline: "airBaltic",
+          totalPrice: totalPriceMatch ? parseFloat(totalPriceMatch[1].replace(",", ".")) : null,
+          currency: "EUR",
+          ticketNumbers,
+          passengers: passengers.length > 0 ? passengers : undefined,
+          cabinClass: "economy",
+          refundPolicy: detectRefundPolicy(text),
+          baggage: parseBaggage(text, "economy"),
+          passengerName: passengers.length === 1 ? passengers[0].name : undefined,
+        },
+        parser: "airbaltic_invoice",
+      };
+    }
+  }
+
+  // Generic Air Baltic format (IATA routes)
   const bookingRefMatch = text.match(/(?:Booking\s+reference|Reservation)[\s:]+([A-Z0-9]{6})/i);
   const ticketMatch = text.match(/(?:Ticket|E-ticket)[\s:]+(\d{13})/i);
   const priceMatch = text.match(/(?:Total|Amount)[\s:]+(?:EUR|€)\s*([\d.,]+)/i);
-  
+
   const flightPattern = /BT\s?(\d{3,4})/gi;
   const segments: ParsedSegment[] = [];
   let flightMatch;
   const matches: string[] = [];
-  
+
   while ((flightMatch = flightPattern.exec(text)) !== null) {
     matches.push(flightMatch[1]);
   }
-  
+
   const routePattern = /([A-Z]{3})\s*[-–→]\s*([A-Z]{3})/g;
   const routes: { from: string; to: string }[] = [];
   let routeMatch;
   while ((routeMatch = routePattern.exec(text)) !== null) {
     routes.push({ from: routeMatch[1], to: routeMatch[2] });
   }
-  
+
   const datePattern = /(\d{1,2}[.\/]\d{1,2}[.\/]\d{4}|\d{1,2}\s+\w+\s+\d{4})/g;
   const dates: string[] = [];
   let dateMatch;
@@ -1396,14 +1552,14 @@ function parseAirBaltic(text: string): ParseResult | null {
     const parsed = parseDate(dateMatch[1]);
     if (parsed) dates.push(parsed);
   }
-  
+
   const timePattern = /(\d{1,2}:\d{2})/g;
   const times: string[] = [];
   let timeMatch;
   while ((timeMatch = timePattern.exec(text)) !== null) {
     times.push(timeMatch[1]);
   }
-  
+
   for (let i = 0; i < matches.length; i++) {
     const route = routes[i] || { from: "", to: "" };
     segments.push({
@@ -1420,9 +1576,9 @@ function parseAirBaltic(text: string): ParseResult | null {
       bookingRef: bookingRefMatch?.[1],
     });
   }
-  
+
   if (segments.length === 0) return null;
-  
+
   return {
     success: true,
     segments,

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface Service {
   id: string;
@@ -35,6 +36,7 @@ interface MergeServicesModalProps {
 }
 
 export default function MergeServicesModal({ services, orderCode, onClose, onSuccess }: MergeServicesModalProps) {
+  useModalOverlay();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parties, setParties] = useState<Party[]>([]);

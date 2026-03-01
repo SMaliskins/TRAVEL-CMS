@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTabs, Tab } from "@/contexts/TabsContext";
+import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
 
@@ -289,8 +290,10 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
 
 export default function TabBar() {
   const { tabs, activeTabId, setActiveTab, closeTab, closeAllTabs } = useTabs();
+  const modalOverlay = useModalOverlayContext();
+  const isModalOpen = (modalOverlay?.modalCount ?? 0) > 0;
 
-  if (tabs.length === 0) {
+  if (tabs.length === 0 || isModalOpen) {
     return null;
   }
 

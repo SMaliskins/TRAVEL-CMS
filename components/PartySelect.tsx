@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
 
 interface Party {
@@ -20,6 +21,8 @@ interface PartySelectProps {
   roleFilter?: string;
   /** Initial display name to show without API fetch */
   initialDisplayName?: string;
+  /** Order travellers to suggest first (Client/Payer in service forms) */
+  prioritizedParties?: { id: string; display_name?: string; firstName?: string; lastName?: string }[];
 }
 
 export default function PartySelect({ 
@@ -29,6 +32,7 @@ export default function PartySelect({
   required,
   roleFilter = "client",
   initialDisplayName = "",
+  prioritizedParties = [],
 }: PartySelectProps) {
   // Initialize inputValue with initialDisplayName if provided
   const [inputValue, setInputValue] = useState(initialDisplayName);
@@ -58,6 +62,7 @@ export default function PartySelect({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [wasCleared, setWasCleared] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number; openUpward?: boolean } | null>(null);
 
   // Update inputValue when initialDisplayName changes (e.g., after async load)
   // But don't restore if user manually cleared the field
@@ -67,10 +72,31 @@ export default function PartySelect({
     }
   }, [initialDisplayName, inputValue, wasCleared]);
 
+  // Map prioritized parties to Party format
+  const prioritizedAsParties: Party[] = prioritizedParties.map((p) => {
+    const dn = p.display_name || [p.firstName, p.lastName].filter(Boolean).join(" ") || p.id;
+    return {
+      id: p.id,
+      display_name: dn,
+      first_name: p.firstName,
+      last_name: p.lastName,
+    };
+  });
+
   // Search parties
   const searchParties = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setParties([]);
+    const q = query.trim().toLowerCase();
+    // Prioritized parties (travellers): show matching even with < 2 chars
+    const matchingPrioritized = q.length === 0
+      ? prioritizedAsParties
+      : prioritizedAsParties.filter((p) =>
+          (p.display_name || "").toLowerCase().includes(q) ||
+          (p.first_name || "").toLowerCase().includes(q) ||
+          (p.last_name || "").toLowerCase().includes(q)
+        );
+
+    if (q.length < 2) {
+      setParties(matchingPrioritized);
       setShowCreateOption(false);
       return;
     }
@@ -79,36 +105,29 @@ export default function PartySelect({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      // Build query params with role filter
-      const params = new URLSearchParams({
-        search: query,
-        limit: "10",
-      });
-      if (roleFilter) {
-        params.set("role", roleFilter);
-      }
+      const params = new URLSearchParams({ search: query, limit: "10" });
+      if (roleFilter) params.set("role", roleFilter);
       
       const response = await fetch(`/api/directory?${params.toString()}`, {
-        headers: {
-          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}) },
         credentials: "include",
       });
 
       if (response.ok) {
         const data = await response.json();
         const results = data.data || data.records || data.parties || [];
-        
-        const transformedResults: Party[] = results.map((r: Record<string, unknown>) => ({
+        const apiParties: Party[] = results.map((r: Record<string, unknown>) => ({
           id: r.id as string,
           display_name: (r.displayName as string) || (r.display_name as string) || 
                        [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
-                       (r.companyName as string) || (r.company_name as string) || 
-                       (r.name as string) || "",
+                       (r.companyName as string) || (r.company_name as string) || (r.name as string) || "",
           first_name: (r.firstName as string) || (r.first_name as string),
           last_name: (r.lastName as string) || (r.last_name as string),
           party_type: (r.type as string) || (r.party_type as string),
         }));
+        const apiIds = new Set(apiParties.map((p) => p.id));
+        const dedupedPrioritized = matchingPrioritized.filter((p) => !apiIds.has(p.id));
+        const transformedResults = [...dedupedPrioritized, ...apiParties];
         
         setParties(transformedResults);
         
@@ -117,17 +136,17 @@ export default function PartySelect({
         );
         setShowCreateOption(!exactMatch && query.length >= 2);
       } else {
-        setParties([]);
+        setParties(matchingPrioritized);
         setShowCreateOption(query.length >= 2);
       }
     } catch (err) {
       console.error("Party search error:", err);
-      setParties([]);
+      setParties(matchingPrioritized);
       setShowCreateOption(query.length >= 2);
     } finally {
       setIsLoading(false);
     }
-  }, [roleFilter]);
+  }, [roleFilter, prioritizedParties]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -329,6 +348,36 @@ export default function PartySelect({
     }
   }, [value, selectedParty, initialDisplayName]);
 
+  const DROPDOWN_MAX_H = 240;
+  const updateDropdownPosition = useCallback(() => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < DROPDOWN_MAX_H && rect.top > spaceBelow;
+      setDropdownStyle({
+        top: openUpward ? rect.top - DROPDOWN_MAX_H - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        openUpward,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && (inputValue.length >= 2 || parties.length > 0 || isLoading) && !showCreateForm) {
+      updateDropdownPosition();
+      const onScrollOrResize = () => updateDropdownPosition();
+      window.addEventListener("scroll", onScrollOrResize, true);
+      window.addEventListener("resize", onScrollOrResize);
+      return () => {
+        window.removeEventListener("scroll", onScrollOrResize, true);
+        window.removeEventListener("resize", onScrollOrResize);
+      };
+    } else {
+      setDropdownStyle(null);
+    }
+  }, [isOpen, inputValue.length, parties.length, isLoading, showCreateForm, updateDropdownPosition]);
+
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -388,11 +437,17 @@ export default function PartySelect({
         )}
       </div>
 
-      {/* Dropdown */}
-      {isOpen && (inputValue.length >= 2 || parties.length > 0) && !showCreateForm && (
+      {/* Dropdown — render via portal so it's not clipped by modal overflow */}
+      {isOpen && (inputValue.length >= 2 || parties.length > 0 || isLoading) && !showCreateForm && dropdownStyle && typeof document !== "undefined" && createPortal(
         <div
           ref={dropdownRef}
-          className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-60 overflow-y-auto"
+          className="fixed z-[99999] rounded-lg border border-gray-200 bg-white shadow-xl max-h-[min(400px,calc(100vh-120px))] overflow-y-auto"
+          style={{
+            top: dropdownStyle.top,
+            left: dropdownStyle.left,
+            width: Math.max(dropdownStyle.width, 200),
+            minWidth: 200,
+          }}
         >
           {isLoading && (
             <div className="px-3 py-2 text-sm text-gray-500">Searching...</div>
@@ -425,12 +480,21 @@ export default function PartySelect({
               <span className="font-medium">+ Create &quot;{inputValue}&quot;</span>
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Create Form Modal */}
-      {showCreateForm && (
-        <div className="absolute z-50 mt-1 w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-lg p-4 max-h-[80vh] overflow-y-auto">
+      {/* Create Form — centered modal so fully visible */}
+      {showCreateForm && typeof document !== "undefined" && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/30"
+          onClick={(e) => e.target === e.currentTarget && handleCancelCreate()}
+        >
+          <div
+            className="bg-white rounded-lg border border-gray-200 shadow-xl p-4 w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
           <h4 className="font-medium text-sm mb-3">
             {roleFilter === "supplier" ? "Create New Supplier" : "Create New Client"}
           </h4>
@@ -572,7 +636,9 @@ export default function PartySelect({
               {isCreating ? "Creating..." : "Save"}
             </button>
           </div>
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}

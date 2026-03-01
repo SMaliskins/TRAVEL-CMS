@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 interface Service {
@@ -83,6 +84,7 @@ export default function SplitServiceModal({
   onClose,
   onSuccess,
 }: SplitServiceModalProps) {
+  useModalOverlay();
   console.log("[SplitModal INIT] Service:", {
     id: service.id,
     name: service.name,
@@ -205,12 +207,14 @@ export default function SplitServiceModal({
         });
         if (servicesRes.ok) {
           const servicesData = await servicesRes.json();
+          const payerIds = (servicesData.services || []).map((s: any) => s.payer_party_id).filter(Boolean);
+          const clientIds = (servicesData.services || []).map((s: any) => s.client_party_id).filter(Boolean);
           orderPartyIds = [
             ...new Set([
               orderData.order?.client_party_id,
-              ...servicesData.services
-                .map((s: any) => s.payer_party_id)
-                .filter(Boolean),
+              ...payerIds,
+              ...clientIds,
+              ...orderTravellers.map((t) => t.id).filter(Boolean),
             ]),
           ].filter(Boolean) as string[];
         }

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:passport": "node scripts/test-passport-parser.mjs",
+    "test:airbaltic": "node scripts/test-airbaltic-invoice.mjs",
     "generate:cities": "node scripts/generate-world-cities.mjs"
   },
   "dependencies": {

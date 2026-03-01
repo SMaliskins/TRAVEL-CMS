@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 
 interface Service {
@@ -36,6 +37,7 @@ export default function CancelServiceModal({
   onClose,
   onCancellationConfirmed,
 }: CancelServiceModalProps) {
+  useModalOverlay();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   

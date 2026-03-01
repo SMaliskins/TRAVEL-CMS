@@ -91,17 +91,27 @@ export default function OrderPage({
   const [pendingAction, setPendingAction] = useState<"service" | null>(null);
 
   useEffect(() => {
-    if (!stickyHeaderRef.current) return;
+    const headerEl = stickyHeaderRef.current;
+    if (!headerEl) return;
     const STICKY_TOP = 92;
     const measure = () => {
-      const el = stickyHeaderRef.current;
-      if (el) setStickyHeaderBottom(STICKY_TOP + el.offsetHeight);
+      const h = stickyHeaderRef.current;
+      if (!h) return;
+      const rect = h.getBoundingClientRect();
+      const bottom = rect.top <= STICKY_TOP + 5 ? rect.bottom : STICKY_TOP + h.offsetHeight;
+      setStickyHeaderBottom(Math.round(bottom));
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(stickyHeaderRef.current);
-    return () => ro.disconnect();
-  }, []);
+    ro.observe(headerEl);
+    window.addEventListener("scroll", measure, { passive: true });
+    const t = setTimeout(measure, 150);
+    return () => {
+      clearTimeout(t);
+      ro.disconnect();
+      window.removeEventListener("scroll", measure);
+    };
+  }, [activeTab]);
 
   // Fire pending action once Services tab mounts and ref becomes available
   useEffect(() => {

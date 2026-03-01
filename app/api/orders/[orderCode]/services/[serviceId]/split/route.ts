@@ -136,6 +136,8 @@ export async function POST(
       pickup_time: originalService.pickup_time,
       estimated_duration: originalService.estimated_duration,
       linked_flight_id: originalService.linked_flight_id,
+      transfer_routes: (originalService as { transfer_routes?: unknown }).transfer_routes,
+      transfer_mode: (originalService as { transfer_mode?: string | null }).transfer_mode,
       // Amendment
       parent_service_id: originalService.parent_service_id,
       service_type: originalService.service_type,
@@ -149,19 +151,59 @@ export async function POST(
       agent_discount_type: originalService.agent_discount_type,
     };
 
-    const newServices = parts.map((part, index) => ({
-      ...baseFields,
-      client_price: part.amount,
-      service_price: getServicePrice(part),
-      payer_party_id: part.payerPartyId || originalService.payer_party_id,
-      payer_name: part.payerName || originalService.payer_name,
-      split_group_id: splitGroupId,
-      split_index: index + 1,
-      split_total: parts.length,
-      notes: originalService.notes
-        ? `${originalService.notes}\n[Split from original service - Payer: ${part.payerName}]`
-        : `[Split from original service - Payer: ${part.payerName}]`,
-    }));
+    // Resolve client_party_id and client_name per part: payer takes precedence, else first traveller
+    const partyIdsToLookup = new Set<string>();
+    parts.forEach((part) => {
+      if (part.payerPartyId) {
+        partyIdsToLookup.add(part.payerPartyId);
+      } else if (part.travellerIds && part.travellerIds.length > 0) {
+        partyIdsToLookup.add(part.travellerIds[0]);
+      }
+    });
+    let partyNames: Record<string, string> = {};
+    if (partyIdsToLookup.size > 0) {
+      const { data: parties } = await supabaseAdmin
+        .from("party")
+        .select("id, display_name")
+        .in("id", Array.from(partyIdsToLookup));
+      (parties || []).forEach((p) => {
+        partyNames[p.id] = (p as { display_name?: string }).display_name || "";
+      });
+    }
+
+    const getClientForPart = (part: SplitPart) => {
+      const payerId = (part.payerPartyId && String(part.payerPartyId).trim()) || null;
+      if (payerId) {
+        const name = (part.payerName && part.payerName.trim()) || partyNames[payerId] || "";
+        return { client_party_id: payerId, client_name: name };
+      }
+      if (part.travellerIds && part.travellerIds.length > 0) {
+        const pid = part.travellerIds[0];
+        return { client_party_id: pid, client_name: partyNames[pid] ?? "" };
+      }
+      return {
+        client_party_id: originalService.client_party_id,
+        client_name: originalService.client_name,
+      };
+    };
+
+    const newServices = parts.map((part, index) => {
+      const client = getClientForPart(part);
+      return {
+        ...baseFields,
+        ...client,
+        client_price: part.amount,
+        service_price: getServicePrice(part),
+        payer_party_id: part.payerPartyId || originalService.payer_party_id,
+        payer_name: part.payerName || originalService.payer_name,
+        split_group_id: splitGroupId,
+        split_index: index + 1,
+        split_total: parts.length,
+        notes: originalService.notes
+          ? `${originalService.notes}\n[Split from original service - Payer: ${part.payerName}]`
+          : `[Split from original service - Payer: ${part.payerName}]`,
+      };
+    });
 
     const { data: createdServices, error: insertError } = await supabaseAdmin
       .from("order_services")
