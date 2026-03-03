@@ -8,6 +8,7 @@ import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBa
 import OrderServicesBlock, { OrderServicesBlockHandle } from "./_components/OrderServicesBlock";
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
+import OrderDocumentsTab from "./_components/OrderDocumentsTab";
 import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
@@ -1245,58 +1246,25 @@ export default function OrderPage({
           </div>
 
           {/* B) Tabs + Action Buttons */}
-          <nav className="-mb-px flex items-center border-t border-gray-200/60 mt-1">
-            <div className="flex space-x-5">
-              <button
-                onClick={() => setActiveTab("client")}
-                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                  activeTab === "client"
-                    ? "border-black text-black"
-                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                Services
-              </button>
-              <button
-                onClick={() => setActiveTab("finance")}
-                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                  activeTab === "finance"
-                    ? "border-black text-black"
-                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                Finance
-              </button>
-              <button
-                onClick={() => setActiveTab("documents")}
-                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                  activeTab === "documents"
-                    ? "border-black text-black"
-                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                Documents
-              </button>
-              <button
-                onClick={() => setActiveTab("communication")}
-                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                  activeTab === "communication"
-                    ? "border-black text-black"
-                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                Communication
-              </button>
-              <button
-                onClick={() => setActiveTab("log")}
-                className={`whitespace-nowrap border-b-2 px-1 py-2 text-sm font-medium ${
-                  activeTab === "log"
-                    ? "border-black text-black"
-                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                Log
-              </button>
+          <nav className="-mb-px flex items-center justify-between border-t border-gray-200/60 mt-1">
+            <div className="flex flex-1 gap-1 pt-2">
+              {(["client", "finance", "documents", "communication", "log"] as const).map((tab) => {
+                const labels: Record<typeof tab, string> = { client: "Services", finance: "Finance", documents: "Documents", communication: "Communication", log: "Log" };
+                const isActive = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-gray-900 text-white shadow-sm"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800"
+                    }`}
+                  >
+                    {labels[tab]}
+                  </button>
+                );
+              })}
             </div>
             <div className="ml-auto flex items-center gap-2 py-1">
               <button
@@ -1431,12 +1399,9 @@ export default function OrderPage({
             </div>
           )}
 
-          {activeTab === "documents" && (
+          {activeTab === "documents" && orderCode && (
             <div className="rounded-lg bg-white p-6 shadow-sm">
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">
-                Documents
-              </h2>
-              <p className="text-gray-600">Coming next</p>
+              <OrderDocumentsTab orderCode={orderCode} />
             </div>
           )}
 

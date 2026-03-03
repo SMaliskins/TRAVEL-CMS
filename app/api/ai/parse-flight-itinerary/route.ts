@@ -28,17 +28,12 @@ async function getAuthInfo(request: NextRequest): Promise<{ userId: string; comp
   return { userId, companyId: profile.company_id };
 }
 
-// Dynamic import for pdf-parse to avoid ESM issues
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdf = require("pdf-parse");
-    const data = await pdf(buffer);
-    return data.text || "";
-  } catch (err) {
-    console.error("PDF extraction error:", err);
-    throw err;
-  }
+  const { extractText } = await import("unpdf");
+  const uint8Array = new Uint8Array(buffer);
+  const pdfData = await extractText(uint8Array);
+  const raw = Array.isArray(pdfData?.text) ? pdfData.text.join("\n") : (pdfData?.text || "");
+  return typeof raw === "string" ? raw : "";
 }
 
 /**
@@ -192,7 +187,7 @@ export async function POST(request: NextRequest) {
       
       if (isPDF) {
         inputType = "pdf";
-        // Extract text from PDF using pdf-parse
+        // Extract text from PDF using unpdf
         try {
           const buffer = await file.arrayBuffer();
           textContent = await extractPdfText(Buffer.from(buffer));

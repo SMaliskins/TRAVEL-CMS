@@ -21,12 +21,26 @@ async function getOrderAndVerify(
   companyId: string | null
 ): Promise<{ orderId: string; companyId: string } | { error: Response }> {
   const code = decodeURIComponent(orderCode);
-  const { data: order, error } = await supabaseAdmin
-    .from("orders")
-    .select("id, company_id")
-    .eq("order_code", code)
-    .single();
-  if (error || !order) return { error: NextResponse.json({ error: "Order not found" }, { status: 404 }) };
+  let order: { id: string; company_id: string } | null = null;
+  let error: { message?: string } | null = null;
+  try {
+    const res = await supabaseAdmin.from("orders").select("id, company_id").eq("order_code", code).single();
+    order = res.data;
+    error = res.error;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(msg)) {
+      return { error: NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 }) };
+    }
+    throw e;
+  }
+  if (error || !order) {
+    const isNetwork = /fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(error?.message || "");
+    if (isNetwork) {
+      return { error: NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 }) };
+    }
+    return { error: NextResponse.json({ error: "Order not found" }, { status: 404 }) };
+  }
   if (companyId && order.company_id !== companyId)
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   return { orderId: order.id, companyId: order.company_id };
@@ -66,11 +80,14 @@ export async function GET(
 
     const { data: docs, error } = await supabaseAdmin
       .from("order_documents")
-      .select("id, document_type, file_name, file_path, file_size, mime_type, created_at")
+      .select("id, document_type, file_name, file_path, file_size, mime_type, created_at, amount, currency, invoice_number, supplier_name, invoice_date, parsed_amount, parsed_currency, parsed_invoice_number, parsed_supplier, parsed_invoice_date")
       .eq("order_id", orderResult.orderId)
       .order("created_at", { ascending: false });
 
     if (error) {
+      if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(error.message || "")) {
+        return NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 });
+      }
       console.error("[Documents] GET error:", error);
       return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 });
     }
@@ -85,7 +102,11 @@ export async function GET(
     );
 
     return NextResponse.json({ documents: withUrls });
-  } catch (e) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(msg)) {
+      return NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 });
+    }
     console.error("[Documents] GET:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -128,6 +149,10 @@ export async function POST(
       .upload(filePath, buffer, { contentType: file.type || "application/pdf", upsert: false });
 
     if (uploadErr) {
+      const isNetworkErr = /fetch failed|ECONNREFUSED|ETIMEDOUT|network/i.test(uploadErr.message || "");
+      if (isNetworkErr) {
+        return NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 });
+      }
       if (uploadErr.message?.includes("not found")) {
         await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
           public: false,
@@ -162,8 +187,17 @@ export async function POST(
       .single();
 
     if (insertErr) {
+      const isNetworkErr = /fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(insertErr.message || "");
+      if (isNetworkErr) {
+        return NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 });
+      }
       console.error("[Documents] Insert error:", insertErr);
-      return NextResponse.json({ error: "Failed to save document" }, { status: 500 });
+      const hint = /does not exist|relation/.test(insertErr.message || "")
+        ? ". Run migration add_order_documents.sql"
+        : "";
+      return NextResponse.json({
+        error: `Failed to save document${hint}`,
+      }, { status: 500 });
     }
 
     const { data: signed } = await supabaseAdmin.storage
@@ -172,7 +206,11 @@ export async function POST(
     return NextResponse.json({
       document: { ...doc, download_url: signed?.signedUrl || null },
     });
-  } catch (e) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(msg)) {
+      return NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 });
+    }
     console.error("[Documents] POST:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

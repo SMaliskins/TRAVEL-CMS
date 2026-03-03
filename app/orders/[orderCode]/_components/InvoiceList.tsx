@@ -94,22 +94,30 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     try {
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`);
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Failed to load invoices:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-        throw new Error(errorData.error || `Failed to load invoices: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        let rawMsg = typeof errorData?.error === "string" ? errorData.error : "";
+        // Treat Supabase fetch/network errors as connection failure
+        if (/fetch failed|TypeError|ECONNREFUSED|ETIMEDOUT/i.test(rawMsg)) {
+          rawMsg = "Database connection failed. Please try again later.";
+        } else if (!rawMsg || /^[{}[\]]+$/.test(rawMsg.trim())) {
+          rawMsg = response.status === 503
+            ? "Database connection failed. Please try again later."
+            : response.status === 404
+              ? "Order not found."
+              : `Failed to load invoices (${response.status})`;
+        }
+        console.error("Failed to load invoices:", { status: response.status, statusText: response.statusText, error: errorData });
+        throw new Error(rawMsg);
       }
       const data = await response.json();
       const list = data.invoices || [];
       setInvoices(list);
       setPaymentSummary(data.paymentSummary || null);
       return list;
-    } catch (error: any) {
-      console.error('Error loading invoices:', error);
-      alert(`Failed to load invoices: ${error.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error loading invoices:", error);
+      showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load invoices: ${msg}`);
       return [];
     } finally {
       setLoading(false);

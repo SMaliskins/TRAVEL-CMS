@@ -1358,17 +1358,24 @@ export default function ItineraryTimeline({
                                     }
                                   }}
                                 />
-                                <div
-                                  onClick={() => bpFileInputRefs.current[event.id]?.click()}
-                                  className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-all border-2 ${
-                                    uploadingServiceId === event.serviceId
-                                      ? "bg-gray-200 text-gray-400 border-gray-300"
-                                      : "bg-orange-50 text-orange-600 border-orange-200 border-dashed hover:bg-orange-100 hover:border-orange-300"
-                                  }`}
-                                  title="Add boarding pass(es) — select one or several files (PDF, image, .pkpass)"
-                                >
-                                  {uploadingServiceId === event.serviceId ? "⏳ Uploading..." : "📋 +BP"}
-                                </div>
+                                {(() => {
+                                  const hasBPs = event.boardingPasses && event.boardingPasses.filter(bp => bp.flightNumber === event.flightNumber).length > 0;
+                                  return (
+                                    <div
+                                      onClick={() => bpFileInputRefs.current[event.id]?.click()}
+                                      className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-all border-2 ${
+                                        uploadingServiceId === event.serviceId
+                                          ? "bg-gray-200 text-gray-400 border-gray-300"
+                                          : hasBPs
+                                            ? "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
+                                            : "bg-orange-50 text-orange-600 border-orange-200 border-dashed hover:bg-orange-100 hover:border-orange-300"
+                                      }`}
+                                      title={hasBPs ? "Boarding passes uploaded — click to add more" : "Add boarding pass(es) — select one or several files (PDF, image, .pkpass)"}
+                                    >
+                                      {uploadingServiceId === event.serviceId ? "⏳ Uploading..." : hasBPs ? "📋 BP ✓" : "📋 +BP"}
+                                    </div>
+                                  );
+                                })()}
                                 {event.boardingPasses && event.boardingPasses.filter(bp => bp.flightNumber === event.flightNumber).length > 0 && (
                                   <div className="relative" ref={bpMenuServiceId === event.serviceId ? bpMenuRef : undefined}>
                                     <button

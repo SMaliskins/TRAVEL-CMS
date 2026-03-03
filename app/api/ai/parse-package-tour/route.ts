@@ -218,21 +218,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // PDF: try pdf-parse for Anthropic (text). If that fails, fallback to OpenAI (GPT-4o supports PDF natively)
+    // PDF: try unpdf for text. If that fails or empty, fallback to OpenAI (GPT-4o supports PDF natively)
     if (pdfBase64) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require("pdf-parse");
+        const { extractText } = await import("unpdf");
         const buffer = Buffer.from(pdfBase64, "base64");
-        const pdfData = await pdfParse(buffer);
-        const raw = (pdfData.text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+        const uint8Array = new Uint8Array(buffer);
+        const pdfData = await extractText(uint8Array);
+        const rawText = Array.isArray(pdfData?.text) ? pdfData.text.join("\n") : (pdfData?.text || "");
+        const raw = (typeof rawText === "string" ? rawText : "")
+          .replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
         if (raw && raw.length >= 10) {
           textContent = raw;
           pdfBase64 = null; // use Anthropic with text
         }
         // else keep pdfBase64 for OpenAI fallback below
       } catch (pdfErr) {
-        console.error("pdf-parse failed:", pdfErr);
+        console.error("unpdf failed:", pdfErr);
         // keep pdfBase64 for OpenAI fallback below
       }
     }

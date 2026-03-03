@@ -24,17 +24,38 @@ export async function GET(
     const count = countParam ? Math.min(Math.max(1, parseInt(countParam, 10)), 100) : 1;
 
     // Get order ID from order_code
-    const { data: order, error: orderError } = await supabaseAdmin
-      .from("orders")
-      .select("id, company_id")
-      .eq("order_code", orderCode)
-      .single();
+    let order: { id: string; company_id: string } | null = null;
+    let orderError: { message?: string; code?: string } | null = null;
+    try {
+      const result = await supabaseAdmin
+        .from("orders")
+        .select("id, company_id")
+        .eq("order_code", orderCode)
+        .single();
+      order = result.data;
+      orderError = result.error;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Invoices API] Supabase connection error:", msg);
+      return NextResponse.json(
+        { error: "Database connection failed. Please check Supabase configuration and network.", orderCode },
+        { status: 503 }
+      );
+    }
 
     if (orderError) {
+      const isNetworkError = /fetch failed|ECONNREFUSED|ETIMEDOUT|network/i.test(orderError.message || "");
+      if (isNetworkError) {
+        console.error("[Invoices API] Supabase network error:", orderError.message);
+        return NextResponse.json(
+          { error: "Database connection failed. Please check your network and Supabase status.", orderCode },
+          { status: 503 }
+        );
+      }
       console.error("[Invoices API] Error finding order:", orderError);
       console.error("[Invoices API] Order code searched:", orderCode);
       return NextResponse.json(
-        { error: `Order not found: ${orderError.message}`, orderCode },
+        { error: "Order not found", orderCode },
         { status: 404 }
       );
     }

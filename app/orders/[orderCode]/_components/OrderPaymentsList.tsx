@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Pencil, Ban, Plus, Landmark, Banknote, CreditCard } from "lucide-react";
 import AddPaymentModal, { type EditPaymentData } from "@/app/finances/payments/_components/AddPaymentModal";
@@ -43,6 +44,7 @@ const METHOD_STYLE: Record<string, string> = {
 };
 
 export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }: OrderPaymentsListProps) {
+  const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -56,16 +58,23 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
       const res = await fetch(`/api/finances/payments?orderId=${encodeURIComponent(orderId)}`, {
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to load payments");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData.error || `Failed to load payments (${res.status})`;
+        showToast("error", msg);
+        return;
+      }
       const data = await res.json();
       const orderPayments = (data.data || []).filter((p: Payment) => p.order_id === orderId);
       setPayments(orderPayments);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load payments";
       console.error("Error loading payments:", err);
+      showToast("error", msg);
     } finally {
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, showToast]);
 
   const loadPaymentSummary = useCallback(async () => {
     try {
