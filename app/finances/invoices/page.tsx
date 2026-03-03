@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import { FileDown, CheckCircle } from "lucide-react";
 
@@ -37,6 +38,7 @@ export default function FinancesInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [activeOnly, setActiveOnly] = useState(true);
   const [period, setPeriod] = useState<PeriodType>("currentMonth");
   const [dateFrom, setDateFrom] = useState(() => {
     const now = new Date();
@@ -79,6 +81,9 @@ export default function FinancesInvoicesPage() {
         if (filterStatus !== 'all') {
           filtered = filtered.filter((inv: Invoice) => inv.status === filterStatus);
         }
+        if (activeOnly) {
+          filtered = filtered.filter((inv: Invoice) => inv.status !== 'cancelled');
+        }
         
         setInvoices(filtered);
       }
@@ -87,7 +92,7 @@ export default function FinancesInvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, dateFrom, dateTo, router]);
+  }, [filterStatus, activeOnly, dateFrom, dateTo, router]);
 
   useEffect(() => {
     loadInvoices();
@@ -201,6 +206,15 @@ export default function FinancesInvoicesPage() {
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={activeOnly}
+            onChange={(e) => setActiveOnly(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-700">Active only</span>
+        </label>
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-700">Status:</span>
           {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
@@ -256,7 +270,7 @@ export default function FinancesInvoicesPage() {
                   <td className="px-4 py-3 text-gray-600">
                     {invoice.order_code ? (
                       <button
-                        onClick={() => router.push(`/orders/${invoice.order_code}`)}
+                        onClick={() => router.push(`/orders/${orderCodeToSlug(invoice.order_code)}`)}
                         className="text-blue-600 hover:text-blue-700 hover:underline"
                       >
                         {invoice.order_code}

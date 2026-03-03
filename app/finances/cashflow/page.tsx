@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 
 interface CashPayment {
@@ -195,7 +196,7 @@ export default function CashFlowPage() {
                         {p.order_code ? (
                           <button
                             onClick={() =>
-                              router.push(`/orders/${p.order_code}`)
+                              router.push(`/orders/${orderCodeToSlug(p.order_code)}`)
                             }
                             className="text-blue-600 hover:underline font-medium"
                           >

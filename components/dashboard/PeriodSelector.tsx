@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import RangeCalendar from "@/components/RangeCalendar";
 
-export type PeriodType = "currentMonth" | "lastMonth" | "last3Months" | "last6Months" | "lastYear" | "custom";
+export type PeriodType = "currentMonth" | "lastMonth" | "lastMonthRolling" | "last3Months" | "last6Months" | "lastYear" | "custom";
 
 interface PeriodSelectorProps {
   value: PeriodType;
@@ -69,6 +69,18 @@ export default function PeriodSelector({
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         endDate = new Date(now.getFullYear(), now.getMonth(), 0);
         break;
+      case "lastMonthRolling": {
+        const day = now.getDate();
+        const targetMonth = now.getMonth() - 1;
+        const targetYear = now.getFullYear();
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? targetYear - 1 : targetYear;
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        startDate = new Date(actualYear, actualMonth, safeDay);
+        endDate = new Date(now);
+        break;
+      }
       case "last3Months": {
         const day = now.getDate() === 1 ? 1 : now.getDate();
         const targetMonth = now.getMonth() - 3;
@@ -155,6 +167,8 @@ export default function PeriodSelector({
         return "Current month";
       case "lastMonth":
         return "Last month";
+      case "lastMonthRolling":
+        return "Last month (rolling)";
       case "last3Months":
         return "Last 3 months";
       case "last6Months":
@@ -194,6 +208,18 @@ export default function PeriodSelector({
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         endDate = new Date(now.getFullYear(), now.getMonth(), 0);
         break;
+      case "lastMonthRolling": {
+        const day = now.getDate();
+        const targetMonth = now.getMonth() - 1;
+        const targetYear = now.getFullYear();
+        const actualMonth = targetMonth < 0 ? targetMonth + 12 : targetMonth;
+        const actualYear = targetMonth < 0 ? targetYear - 1 : targetYear;
+        const lastDayOfMonth = new Date(actualYear, actualMonth + 1, 0).getDate();
+        const safeDay = Math.min(day, lastDayOfMonth);
+        startDate = new Date(actualYear, actualMonth, safeDay);
+        endDate = new Date(now);
+        break;
+      }
       case "last3Months": {
         const day = now.getDate() === 1 ? 1 : now.getDate();
         const targetMonth = now.getMonth() - 3;
@@ -245,7 +271,7 @@ export default function PeriodSelector({
     return `${formatDisplay(startDate)} – ${formatDisplay(endDate)}`;
   };
 
-  const periods: PeriodType[] = ["currentMonth", "lastMonth", "last3Months", "last6Months", "lastYear", "custom"];
+  const periods: PeriodType[] = ["currentMonth", "lastMonth", "lastMonthRolling", "last3Months", "last6Months", "lastYear", "custom"];
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
