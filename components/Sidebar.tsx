@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { roleHasPermission } from "@/lib/auth/permissions";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -60,6 +62,7 @@ const modeLabels: Record<SidebarMode, string> = {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const userRole = useCurrentUserRole();
   const {
     mode,
     setMode,
@@ -171,10 +174,23 @@ export default function Sidebar() {
     return pathname === item.href || pathname?.startsWith(item.href + "/");
   };
 
+  // Filter nav items by role permissions (Finances visible for finance/manager/supervisor/agent)
+  const visibleNavItems = navConfig.filter((item) => {
+    if (item.name === "Finances") {
+      // Show while loading to avoid flash; hide only when we know user lacks permission
+      if (userRole === null) return true;
+      return (
+        roleHasPermission(userRole, "invoices.view") ||
+        roleHasPermission(userRole, "payments.view")
+      );
+    }
+    return true;
+  });
+
   // Helper function to render navigation items
   const renderNavItems = (options: { showTooltip?: boolean; onItemClick?: () => void }) => {
     const { showTooltip = false, onItemClick } = options;
-    return navConfig.map((item, idx) => {
+    return visibleNavItems.map((item, idx) => {
       const hasChildren = item.children && item.children.length > 0;
       const isActive = hasChildren
         ? isParentActive(item)
