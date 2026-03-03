@@ -133,13 +133,11 @@ export default function DirectoryDetailPage() {
       }, 2000);
 
       if (closeAfterSave) {
-        // Delay only if there were changes (to show green border effect)
+        const dirUrl = getDirectoryUrl();
         if (hadChanges) {
-          setTimeout(() => {
-            router.push("/directory");
-          }, 1000);
+          setTimeout(() => router.push(dirUrl), 1000);
         } else {
-          router.push("/directory");
+          router.push(dirUrl);
         }
       }
     } catch (error: unknown) {
@@ -152,17 +150,26 @@ export default function DirectoryDetailPage() {
     }
   };
 
+  const getDirectoryUrl = () => {
+    const y = typeof window !== "undefined" ? sessionStorage.getItem("directory.scrollY") : null;
+    if (y) {
+      sessionStorage.removeItem("directory.scrollY");
+      return `/directory?scroll=${y}`;
+    }
+    return "/directory";
+  };
+
   const handleCancel = () => {
     if (isDirty) {
       setShowCancelConfirm(true);
     } else {
-      router.push("/directory");
+      router.push(getDirectoryUrl());
     }
   };
 
   const handleConfirmCancel = () => {
     setShowCancelConfirm(false);
-    router.push("/directory");
+    router.push(getDirectoryUrl());
   };
 
   const handleSave = () => {

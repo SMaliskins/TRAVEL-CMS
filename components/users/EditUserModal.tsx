@@ -77,6 +77,7 @@ export default function EditUserModal({
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPermissions, setShowPermissions] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -156,6 +157,7 @@ export default function EditUserModal({
           avatarUrl: avatarUrl || null,
           roleId,
           isActive,
+          ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
         }),
       });
 
@@ -166,6 +168,7 @@ export default function EditUserModal({
       }
 
       onSuccess();
+      setNewPassword("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update user");
     } finally {
@@ -296,6 +299,21 @@ export default function EditUserModal({
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                New password
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                placeholder="Leave empty to keep current"
+                autoComplete="new-password"
+              />
+              <p className="mt-1 text-xs text-gray-500">Min 8 characters. Saved only when you click Save Changes.</p>
             </div>
 
             <div>

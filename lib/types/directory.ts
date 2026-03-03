@@ -69,6 +69,14 @@ export interface DirectoryRecord {
   personalCode?: string;
   citizenship?: string;
   
+  // Person preferences (travel)
+  /** Seat preference: window | aisle */
+  seatPreference?: "window" | "aisle" | null;
+  /** Dietary/meal preference */
+  mealPreference?: "standard" | "vegan" | "vegetarian" | "halal" | "kosher" | "gluten_free" | "lactose_free" | "diabetic" | "child" | "other" | null;
+  /** Free-text notes for preferences (special requests, allergies, etc.) */
+  preferencesNotes?: string | null;
+
   // Passport fields
   passportNumber?: string;
   passportIssueDate?: string;

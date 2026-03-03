@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useDirectoryStore } from "@/lib/directory/directoryStore";
 import DirectoryForm, { DirectoryFormHandle } from "@/components/DirectoryForm";
@@ -9,6 +9,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 
 export default function NewDirectoryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { createRecord } = useDirectoryStore();
   const [isFormValid, setIsFormValid] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -44,13 +45,12 @@ export default function NewDirectoryPage() {
       }, 2000);
 
       if (closeAfterSave) {
-        // Delay only if there were changes (to show green border effect)
+        const scroll = searchParams.get("scroll");
+        const dirUrl = scroll ? `/directory?scroll=${scroll}` : "/directory";
         if (hadChanges) {
-          setTimeout(() => {
-            router.push("/directory");
-          }, 1000);
+          setTimeout(() => router.push(dirUrl), 1000);
         } else {
-          router.push("/directory");
+          router.push(dirUrl);
         }
       } else {
         // Redirect to edit page after creation
@@ -72,17 +72,22 @@ export default function NewDirectoryPage() {
     }
   };
 
+  const getDirectoryUrl = () => {
+    const scroll = searchParams.get("scroll");
+    return scroll ? `/directory?scroll=${scroll}` : "/directory";
+  };
+
   const handleCancel = () => {
     if (isDirty) {
       setShowCancelConfirm(true);
     } else {
-      router.push("/directory");
+      router.push(getDirectoryUrl());
     }
   };
 
   const handleConfirmCancel = () => {
     setShowCancelConfirm(false);
-    router.push("/directory");
+    router.push(getDirectoryUrl());
   };
 
   const handleSave = () => {

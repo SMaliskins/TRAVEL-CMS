@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { parseMrzToPassportData } from "@/lib/passport/parseMrz";
 
 /**
  * AI-powered passport parsing
@@ -55,16 +56,30 @@ Return a JSON object with this structure:
     "nationality": "LV",
     "personalCode": "123456-12345",
     "gender": "male",
-    "isAlienPassport": false
+    "isAlienPassport": false,
+    "mrzLine1": "P<LVTEMPLATE<<JOHN<DOE<<<<<<<<<<<<<<<<<<<<<<<<<<",
+    "mrzLine2": "AB12345670LV1101014M3001018<<<<<<<<<<<<<<04"
   }
 }
+
+CRITICAL — Date of birth (dob):
+- European format DD.MM.YYYY means day.month.year (e.g. 07.09.2011 = 7 September 2011 → 2011-09-07).
+- Look for the field labeled "Date of birth" / "Dzimšanas datums" / "Dzimšanas datums/Date of birth/Date de naissance" / "Date de naissance" — extract EXACTLY the value shown there.
+- NEVER swap day and month. 07.09 = 7 Sept, 27.04 = 27 April.
+- If the date is unclear or ambiguous, omit dob rather than guess.
+- Always output YYYY-MM-DD (ISO).
+
+MRZ (Machine Readable Zone):
+- If the passport has MRZ at the bottom (2 lines of ~44 chars, A-Z 0-9 <), copy them EXACTLY as printed into mrzLine1 and mrzLine2. Used for reliable DOB and expiry extraction. Omit if not visible.
+
+Date of issue (passportIssueDate) and Date of expiry (passportExpiryDate):
+- Look for "Izdošanas datums/Date of issue", "Derīga līdz/Date of expiry", "Date de validité". European DD.MM.YYYY — convert to YYYY-MM-DD. NEVER swap day and month.
 
 Rules:
 - Dates in YYYY-MM-DD format (always year-month-day). European passports use DD.MM.YYYY — convert to YYYY-MM-DD. Example: 15.03.2028 → 2028-03-15 (March 15, not day 15 of month 3). NEVER swap month and day.
 - passportIssuingCountry: full country name in English (e.g. "Latvia", "United States", "Ukraine", "United Kingdom"), NOT a 2-letter code. This is used for statistics.
 - passportFullName, firstName, lastName: First letter of each word UPPERCASE, rest lowercase. CRITICAL — preserve EXACT diacritics from the human-readable zone (NOT MRZ). Latvian: ā, č, ē, ģ, ī, ķ, ļ, ņ, š, ū, ž. Example: Pavloviča, Žaklīna — NEVER write Pavlovica, Zaklina. Copy characters exactly as printed on the passport.
 - Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), Estonian, Latvian, etc. Parse Cyrillic names correctly and output in Latin with Title Case.
-- dob is the date of birth from the passport.
 - nationality: 2-letter ISO country code is acceptable.
 - personalCode: ALWAYS extract if present. National personal ID / personal code. Look for: "Personal No.", "Personal code", "Isikukood" (Estonia), "Personas kods" (Latvia), "Asmens kodas" (Lithuania), "Record No.", "Запис N", or any numeric ID field. Copy exactly as shown (with or without hyphen). Omit only if truly not on the document.
 - gender: Extract when present. Output "male" or "female" only. Look for: "Sex", "Gender", "Dzimums" (Latvian), "Стать" (Ukrainian), M/F, Male/Female, Vīrietis/Sieviete (LV), Чол./Жін. (UA). Omit if not on the document.
@@ -157,6 +172,23 @@ function mergePassports(primary: PassportData, secondary: PassportData): Passpor
     }
   }
   return merged;
+}
+
+/** Apply MRZ as primary source for DOB and expiry (most reliable) */
+function applyMrzOverrides(
+  passport: PassportData,
+  mrzLine1?: string,
+  mrzLine2?: string
+): PassportData {
+  if (!mrzLine1 || !mrzLine2) return passport;
+  const mrzText = `${mrzLine1.trim()}\n${mrzLine2.trim()}`;
+  const mrz = parseMrzToPassportData(mrzText);
+  if (!mrz) return passport;
+  return {
+    ...passport,
+    dob: mrz.dob ?? passport.dob,
+    passportExpiryDate: mrz.passportExpiryDate ?? passport.passportExpiryDate,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -315,12 +347,17 @@ export async function POST(request: NextRequest) {
       const content = data.choices?.[0]?.message?.content || "";
 
       let openaiPassport: PassportData | null = null;
+      let mrzLine1: string | undefined;
+      let mrzLine2: string | undefined;
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
-          openaiPassport = normalizePassport(raw || {});
+          const r = raw || {};
+          mrzLine1 = typeof r.mrzLine1 === "string" ? r.mrzLine1.trim() : undefined;
+          mrzLine2 = typeof r.mrzLine2 === "string" ? r.mrzLine2.trim() : undefined;
+          openaiPassport = normalizePassport(r);
         }
       } catch (parseErr) {
         console.error("Failed to parse OpenAI response:", parseErr, "Content:", content);
@@ -350,7 +387,10 @@ export async function POST(request: NextRequest) {
           if (jsonMatch2?.[0]) {
             const parsed = JSON.parse(jsonMatch2[0]);
             const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
-            anthropicPassport = normalizePassport(raw || {});
+            const r = raw || {};
+            if (!mrzLine1 && typeof r.mrzLine1 === "string") mrzLine1 = r.mrzLine1.trim();
+            if (!mrzLine2 && typeof r.mrzLine2 === "string") mrzLine2 = r.mrzLine2.trim();
+            anthropicPassport = normalizePassport(r);
           }
         } catch (anthErr) {
           console.warn("Anthropic second pass failed:", anthErr);
@@ -358,13 +398,15 @@ export async function POST(request: NextRequest) {
       }
 
       // Merge: prefer OpenAI as primary, fill gaps from Anthropic
-      const finalPassport = openaiPassport
+      let finalPassport = openaiPassport
         ? anthropicPassport
           ? mergePassports(openaiPassport, anthropicPassport)
           : openaiPassport
         : anthropicPassport;
 
+      // MRZ as primary source for DOB and expiry
       if (finalPassport) {
+        finalPassport = applyMrzOverrides(finalPassport, mrzLine1, mrzLine2);
         return NextResponse.json({ passport: finalPassport });
       }
 

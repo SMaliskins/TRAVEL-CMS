@@ -58,6 +58,9 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.nationality = row.nationality || undefined;
     record.avatarUrl = row.avatar_url || undefined;
     record.isAlienPassport = row.is_alien_passport === true;
+    record.seatPreference = row.seat_preference === "window" || row.seat_preference === "aisle" ? row.seat_preference : undefined;
+    record.mealPreference = row.meal_preference || undefined;
+    record.preferencesNotes = row.preferences_notes || undefined;
   }
 
   // Bank accounts (party level; for Supplier, Subagent, Client)
@@ -673,8 +676,9 @@ export async function PUT(
                               updates.passportExpiryDate !== undefined || updates.passportIssuingCountry !== undefined ||
                               updates.passportFullName !== undefined || updates.nationality !== undefined ||
                               updates.avatarUrl !== undefined || updates.isAlienPassport !== undefined;
+    const hasPreferenceFields = updates.seatPreference !== undefined || updates.mealPreference !== undefined || updates.preferencesNotes !== undefined;
     
-    if (partyType !== "company" && (partyType === "person" || hasPersonFields || hasPassportFields)) {
+    if (partyType !== "company" && (partyType === "person" || hasPersonFields || hasPassportFields || hasPreferenceFields)) {
       const personUpdates: Record<string, unknown> = {};
       if (updates.title !== undefined) personUpdates.title = updates.title;
       if (updates.firstName !== undefined && updates.firstName !== null && String(updates.firstName).trim() !== "") {
@@ -695,6 +699,9 @@ export async function PUT(
       if (updates.passportFullName !== undefined) personUpdates.passport_full_name = updates.passportFullName || null;
       if (updates.avatarUrl !== undefined) personUpdates.avatar_url = updates.avatarUrl || null;
       if (updates.isAlienPassport !== undefined) personUpdates.is_alien_passport = updates.isAlienPassport === true;
+      if (updates.seatPreference !== undefined) personUpdates.seat_preference = updates.seatPreference || null;
+      if (updates.mealPreference !== undefined) personUpdates.meal_preference = updates.mealPreference || null;
+      if (updates.preferencesNotes !== undefined) personUpdates.preferences_notes = updates.preferencesNotes?.trim() || null;
 
       // Nationality - only include if migration has been run (column exists)
       // If column doesn't exist, we'll retry without it

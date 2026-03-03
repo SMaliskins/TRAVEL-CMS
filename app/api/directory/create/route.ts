@@ -183,6 +183,9 @@ export async function POST(request: NextRequest) {
         passport_full_name: data.passportFullName || null,
         nationality: data.nationality || null,
         avatar_url: data.avatarUrl || null,
+        seat_preference: data.seatPreference || null,
+        meal_preference: data.mealPreference || null,
+        preferences_notes: data.preferencesNotes?.trim() || null,
         // Person client languages
         correspondence_languages: Array.isArray(data.correspondenceLanguages) && data.correspondenceLanguages.length > 0 ? data.correspondenceLanguages : ["en"],
         invoice_language: data.invoiceLanguage || "en",

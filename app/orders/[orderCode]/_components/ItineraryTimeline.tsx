@@ -1336,7 +1336,7 @@ export default function ItineraryTimeline({
                                   </div>
                                 )}
                                 <input
-                                  ref={el => { if (event.serviceId) bpFileInputRefs.current[event.serviceId] = el; }}
+                                  ref={el => { if (event.id) bpFileInputRefs.current[event.id] = el; }}
                                   type="file"
                                   multiple
                                   accept=".pdf,.png,.jpg,.jpeg,.gif,.pkpass"
@@ -1359,7 +1359,7 @@ export default function ItineraryTimeline({
                                   }}
                                 />
                                 <div
-                                  onClick={() => bpFileInputRefs.current[event.serviceId!]?.click()}
+                                  onClick={() => bpFileInputRefs.current[event.id]?.click()}
                                   className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-all border-2 ${
                                     uploadingServiceId === event.serviceId
                                       ? "bg-gray-200 text-gray-400 border-gray-300"

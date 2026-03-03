@@ -2460,9 +2460,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 formData.append("clientId", clientId);
                 formData.append("clientName", clientName);
                 formData.append("flightNumber", flightNumber);
-                const response = await fetch(`/api/services/${serviceId}/boarding-passes`, { method: "POST", body: formData });
-                if (response.ok) fetchServices();
-                else { const err = await response.json(); alert(err.error || "Failed to upload boarding pass"); }
+                try {
+                  const response = await fetch(`/api/services/${serviceId}/boarding-passes`, { method: "POST", body: formData });
+                  if (response.ok) fetchServices();
+                  else {
+                    const err = await response.json().catch(() => ({}));
+                    alert(err.error || `Upload failed (${response.status})`);
+                  }
+                } catch (e) {
+                  console.error("BP upload error:", e);
+                  alert("Network error. Check console for details.");
+                }
               }}
               onViewBoardingPass={(pass) => setContentModal({ url: pass.fileUrl, title: pass.fileName || "Boarding pass" })}
               onDeleteBoardingPass={async (serviceId, passId) => {

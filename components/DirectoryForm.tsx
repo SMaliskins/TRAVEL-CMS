@@ -23,7 +23,7 @@ import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { BANK_LIST } from "@/lib/constants/banks";
-import { Check, X, Plus } from "lucide-react";
+import { Check, X, Plus, PanelLeft, Columns } from "lucide-react";
 
 function getZodiacSign(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -172,39 +172,27 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Fetch statistics when client role is active in edit mode
     const fetchStats = React.useCallback(async () => {
       if (mode === "edit" && record?.id && roles.includes("client")) {
-        console.log('[DirectoryForm] Fetching stats for:', record.id);
         setStatsLoading(true);
         try {
-          // Add cache buster to force fresh data
-          const response = await fetch(`/api/directory/${record.id}/stats?t=${Date.now()}`);
-          console.log('[DirectoryForm] Stats API response:', response.status);
+          const response = await fetchWithAuth(`/api/directory/${record.id}/stats?t=${Date.now()}`);
           if (response.ok) {
             const data = await response.json();
-            console.log('[DirectoryForm] Stats data received:', data);
             setStats(data);
           } else {
-            console.error("Failed to fetch stats:", response.statusText);
+            setStats(null);
           }
-        } catch (error) {
-          console.error("Error fetching stats:", error);
+        } catch {
+          setStats(null);
         } finally {
           setStatsLoading(false);
         }
       } else {
-        console.log('[DirectoryForm] Not fetching stats - condition not met');
         setStats(null);
       }
     }, [mode, record?.id, roles]);
 
     // Fetch stats on component mount and whenever record changes (each time card opens)
     useEffect(() => {
-      console.log('[DirectoryForm] Stats useEffect triggered - component mounted/record changed', {
-        mode,
-        recordId: record?.id,
-        roles,
-        hasClientRole: roles.includes("client")
-      });
-      
       fetchStats();
     }, [fetchStats, record]);
     
@@ -239,6 +227,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [gender, setGender] = useState(record?.gender || "");
     const [personalCode, setPersonalCode] = useState(record?.personalCode || "");
     const [dob, setDob] = useState(record?.dob || "");
+
+    // Person preferences (seat, meal, notes)
+    const [seatPreference, setSeatPreference] = useState<"window" | "aisle" | null>(record?.seatPreference ?? null);
+    const [mealPreference, setMealPreference] = useState<DirectoryRecord["mealPreference"]>(record?.mealPreference ?? null);
+    const [preferencesNotes, setPreferencesNotes] = useState(record?.preferencesNotes ?? "");
 
     // Passport fields
     const [passportData, setPassportData] = useState<PassportData>({
@@ -448,6 +441,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           personalCode: record.personalCode || undefined,
           isAlienPassport: record.isAlienPassport,
         });
+        setSeatPreference(record.seatPreference ?? null);
+        setMealPreference(record.mealPreference ?? null);
+        setPreferencesNotes(record.preferencesNotes ?? "");
         if (record.supplierExtras) {
           setServiceAreas(record.supplierExtras.serviceAreas || []);
           setSupplierServiceDescription(record.supplierExtras.serviceDescription || "");
@@ -526,6 +522,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         nationality: record.nationality,
         avatarUrl: record.avatarUrl,
         isAlienPassport: record.isAlienPassport,
+        seatPreference: record.seatPreference,
+        mealPreference: record.mealPreference,
+        preferencesNotes: record.preferencesNotes,
         corporateAccounts: record.corporateAccounts,
         loyaltyCards: record.loyaltyCards,
       };
@@ -584,7 +583,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         invoiceLanguage !== (initialValues.invoiceLanguage || "en") ||
         (record?.companyAvatarUrl || "") !== (initialValues.companyAvatarUrl || "") ||
         (passportData.avatarUrl || "") !== (initialValues.avatarUrl || "") ||
-        (passportData.isAlienPassport ?? false) !== (initialValues.isAlienPassport ?? false)
+        (passportData.isAlienPassport ?? false) !== (initialValues.isAlienPassport ?? false) ||
+        (seatPreference ?? "") !== (initialValues.seatPreference ?? "") ||
+        (mealPreference ?? "") !== (initialValues.mealPreference ?? "") ||
+        (preferencesNotes ?? "").trim() !== (initialValues.preferencesNotes ?? "").trim()
       ) {
         return true;
       }
@@ -745,6 +747,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.nationality = passportData.nationality || undefined;
         formData.avatarUrl = passportData.avatarUrl || undefined;
         formData.isAlienPassport = passportData.isAlienPassport;
+        formData.seatPreference = seatPreference || undefined;
+        formData.mealPreference = mealPreference || undefined;
+        formData.preferencesNotes = preferencesNotes.trim() || undefined;
         // dob is already set above, but update from passport if provided
         if (passportData.dob) {
           formData.dob = passportData.dob;
@@ -1777,6 +1782,92 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     }}
                     readonly={false}
                   />
+                </div>
+              )}
+
+              {/* Preferences - person only: seat (window/aisle) + meal (dietary) */}
+              {displayType === "person" && (
+                <div className="md:col-span-2 mt-4 pt-4 border-t border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Preferences</h3>
+                  <div className="space-y-4">
+                    {/* Seat preference - Window / Aisle with icons */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Seat preference</label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSeatPreference(seatPreference === "window" ? null : "window");
+                            markFieldDirty("seatPreference");
+                          }}
+                          className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-lg border-2 transition-colors ${
+                            seatPreference === "window"
+                              ? "border-blue-600 bg-blue-50 text-blue-700"
+                              : "border-gray-200 bg-white hover:border-gray-300 text-gray-600"
+                          }`}
+                        >
+                          <PanelLeft size={28} strokeWidth={1.5} />
+                          <span className="text-sm font-medium">Window</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSeatPreference(seatPreference === "aisle" ? null : "aisle");
+                            markFieldDirty("seatPreference");
+                          }}
+                          className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-lg border-2 transition-colors ${
+                            seatPreference === "aisle"
+                              ? "border-blue-600 bg-blue-50 text-blue-700"
+                              : "border-gray-200 bg-white hover:border-gray-300 text-gray-600"
+                          }`}
+                        >
+                          <Columns size={28} strokeWidth={1.5} />
+                          <span className="text-sm font-medium">Aisle</span>
+                        </button>
+                      </div>
+                    </div>
+                    {/* Meal / dietary preference */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Meal / dietary preference</label>
+                      <select
+                        value={mealPreference || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMealPreference(v ? (v as DirectoryRecord["mealPreference"]) : null);
+                          markFieldDirty("mealPreference");
+                        }}
+                        className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        aria-label="Meal preference"
+                      >
+                        <option value="">No preference</option>
+                        <option value="standard">Standard</option>
+                        <option value="vegetarian">Vegetarian</option>
+                        <option value="vegan">Vegan</option>
+                        <option value="halal">Halal</option>
+                        <option value="kosher">Kosher</option>
+                        <option value="gluten_free">Gluten-free</option>
+                        <option value="lactose_free">Lactose-free</option>
+                        <option value="diabetic">Diabetic</option>
+                        <option value="child">Child meal</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    {/* Free-text notes */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Notes</label>
+                      <textarea
+                        value={preferencesNotes}
+                        onChange={(e) => {
+                          setPreferencesNotes(e.target.value);
+                          markFieldDirty("preferencesNotes");
+                        }}
+                        placeholder="Special requests, allergies, other notes..."
+                        rows={3}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white resize-none"
+                        aria-label="Preferences notes"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 

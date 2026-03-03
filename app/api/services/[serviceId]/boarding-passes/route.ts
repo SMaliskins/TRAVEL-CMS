@@ -11,12 +11,13 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 const BUCKET_NAME = "boarding-passes";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for wallet files
 const ALLOWED_TYPES = [
-  "application/pdf", 
-  "image/png", 
-  "image/jpeg", 
+  "application/pdf",
+  "application/x-pdf", // Some browsers/systems use this for PDF
+  "image/png",
+  "image/jpeg",
   "image/jpg",
   "application/vnd.apple.pkpass", // Apple Wallet
-  "application/octet-stream", // Some systems send pkpass as this
+  "application/octet-stream", // Fallback for unknown/PDF on some systems
 ];
 
 interface BoardingPass {
@@ -88,9 +89,9 @@ export async function POST(
     }
 
     // Validate file type - check both MIME type and extension
-    const ext = file.name.split(".").pop()?.toLowerCase();
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
     const allowedExtensions = ["pdf", "png", "jpg", "jpeg", "pkpass"];
-    if (!ALLOWED_TYPES.includes(file.type) && !allowedExtensions.includes(ext || "")) {
+    if (!ALLOWED_TYPES.includes(file.type) && !allowedExtensions.includes(ext)) {
       return NextResponse.json({ 
         error: "Invalid file type. Allowed: PDF, PNG, JPG, Apple Wallet (.pkpass)" 
       }, { status: 400 });
@@ -99,7 +100,7 @@ export async function POST(
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json({ 
-        error: "File too large. Maximum size: 5MB" 
+        error: "File too large. Maximum size: 10MB" 
       }, { status: 400 });
     }
 
@@ -124,11 +125,14 @@ export async function POST(
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Ensure valid contentType (some browsers send empty for PDF)
+    const contentType = file.type || (ext === "pdf" ? "application/pdf" : "application/octet-stream");
+
     // Upload to Supabase Storage
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
       .upload(filePath, buffer, {
-        contentType: file.type,
+        contentType,
         upsert: false,
       });
 
@@ -147,7 +151,7 @@ export async function POST(
         const { error: retryError } = await supabaseAdmin.storage
           .from(BUCKET_NAME)
           .upload(filePath, buffer, {
-            contentType: file.type,
+            contentType,
             upsert: false,
           });
         
