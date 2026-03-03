@@ -6,6 +6,15 @@ import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { Plane, Eye, EyeOff, Loader2 } from "lucide-react";
 
+const LOGIN_VIDEOS = [
+  "/Vid/856382-hd_1920_1080_30fps.mp4",
+  "/Vid/856486-hd_1920_1080_30fps.mp4",
+  "/Vid/856813-hd_1920_1080_30fps.mp4",
+  "/Vid/2325093-hd_1920_1080_25fps.mp4",
+  "/Vid/3125396-uhd_3840_2160_25fps.mp4",
+  "/Vid/3130284-uhd_3840_2160_30fps.mp4",
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -58,20 +67,25 @@ export default function LoginPage() {
   };
 
   const [mounted, setMounted] = useState(false);
+  const [videoSrc, setVideoSrc] = useState(
+    () => LOGIN_VIDEOS[Math.floor(Math.random() * LOGIN_VIDEOS.length)]
+  );
   useEffect(() => setMounted(true), []);
 
   return (
     <div className="flex min-h-screen overflow-hidden">
       {/* Left panel — branding with video background */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-blue-900">
+        {/* Видео на заднем фоне — random при каждой загрузке */}
         <video
           autoPlay
           loop
           muted
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
+          onError={() => setVideoSrc(LOGIN_VIDEOS[0])}
         >
-          <source src="/Vid/856486-hd_1920_1080_30fps.mp4" type="video/mp4" />
+          <source src={videoSrc} type="video/mp4" />
         </video>
         <div
           className="absolute inset-0"

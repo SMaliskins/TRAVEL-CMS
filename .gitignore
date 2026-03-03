@@ -43,8 +43,9 @@ next-env.d.ts
 venv/
 *.bak
 
-# Exclude DNK.mp4 from repo (login uses background.mp4 or other videos)
+# Exclude large/optional videos from repo (>100MB GitHub limit)
 public/Vid/DNK.mp4
+public/Vid/11910917_1920_1080_24fps.mp4
 
 *.bak
 *.bak*
