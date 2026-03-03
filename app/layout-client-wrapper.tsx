@@ -6,6 +6,7 @@ import { useSidebar } from "@/hooks/useSidebar";
 import { UserProvider } from "@/contexts/UserContext";
 import { TabsProvider } from "@/contexts/TabsContext";
 import { ModalOverlayProvider } from "@/contexts/ModalOverlayContext";
+import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { CompanySettingsProvider } from "@/contexts/CompanySettingsContext";
 
 const RAIL_WIDTH = 72;
@@ -64,9 +65,11 @@ export default function LayoutClientWrapper({
   return (
     <UserProvider>
       <CompanySettingsProvider>
-        <TabsProvider>
-        <ModalOverlayProvider>{children}</ModalOverlayProvider>
-      </TabsProvider>
+        <NavigationHistoryProvider>
+          <TabsProvider>
+            <ModalOverlayProvider>{children}</ModalOverlayProvider>
+          </TabsProvider>
+        </NavigationHistoryProvider>
       </CompanySettingsProvider>
     </UserProvider>
   );

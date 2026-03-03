@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useClock } from "@/hooks/useClock";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/contexts/UserContext";
@@ -17,6 +18,7 @@ export default function TopBar() {
   const router = useRouter();
   
   const { prefs, isMounted: prefsMounted } = useUserPreferences();
+  const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory();
   const now = useClock();
   const { profile } = useUser();
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
@@ -120,8 +122,33 @@ export default function TopBar() {
   return (
     <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 bg-white">
       <div className="flex h-full items-center gap-4 px-4">
-        {/* Left side - Company Logo */}
+        {/* Left side - Nav + Company Logo */}
         <div className="flex flex-shrink-0 items-center gap-2">
+          {/* Back / Forward */}
+          <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50">
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={!canGoBack}
+              className="flex h-8 w-8 items-center justify-center rounded-l-lg text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Back"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={goForward}
+              disabled={!canGoForward}
+              className="flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-gray-200 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Forward"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
           {companyLogo && (
             <img 
               src={companyLogo} 

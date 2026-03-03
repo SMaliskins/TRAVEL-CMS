@@ -39,24 +39,39 @@ const METHOD_STYLES: Record<string, string> = {
   card: "bg-purple-100 text-purple-700",
 };
 
+const PAYMENTS_STORAGE_KEY = "travelcms.finances.payments.filters";
+
+function loadPaymentsFilters() {
+  if (typeof window === "undefined") return null;
+  try {
+    const s = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    if (s) return JSON.parse(s) as { filterMethod: string; period: PeriodType; filterDateFrom: string; filterDateTo: string };
+  } catch {}
+  return null;
+}
+
+function savePaymentsFilters(f: { filterMethod: string; period: PeriodType; filterDateFrom: string; filterDateTo: string }) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(f));
+  } catch {}
+}
+
 export default function PaymentsPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const [filterMethod, setFilterMethod] = useState<string>("all");
-  const [period, setPeriod] = useState<PeriodType>("currentMonth");
+  const [filterMethod, setFilterMethod] = useState<string>(() => loadPaymentsFilters()?.filterMethod ?? "all");
+  const [period, setPeriod] = useState<PeriodType>(() => loadPaymentsFilters()?.period ?? "currentMonth");
   const [filterDateFrom, setFilterDateFrom] = useState(() => {
+    const s = loadPaymentsFilters();
+    if (s?.filterDateFrom) return s.filterDateFrom;
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}-01`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   });
-  const [filterDateTo, setFilterDateTo] = useState(() => {
-    const now = new Date();
-    return now.toISOString().slice(0, 10);
-  });
+  const [filterDateTo, setFilterDateTo] = useState(() => loadPaymentsFilters()?.filterDateTo ?? new Date().toISOString().slice(0, 10));
 
   const handlePeriodChange = (newPeriod: PeriodType, startDate?: string, endDate?: string) => {
     setPeriod(newPeriod);
@@ -65,6 +80,10 @@ export default function PaymentsPage() {
       setFilterDateTo(endDate);
     }
   };
+
+  useEffect(() => {
+    savePaymentsFilters({ filterMethod, period, filterDateFrom, filterDateTo });
+  }, [filterMethod, period, filterDateFrom, filterDateTo]);
 
   const loadPayments = useCallback(async () => {
     try {

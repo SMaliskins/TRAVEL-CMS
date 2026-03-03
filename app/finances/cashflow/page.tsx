@@ -29,22 +29,40 @@ interface DailyReport {
 
 type Tab = "cash" | "bank";
 
+const CASHFLOW_STORAGE_KEY = "travelcms.finances.cashflow.filters";
+
+function loadCashflowFilters() {
+  if (typeof window === "undefined") return null;
+  try {
+    const s = localStorage.getItem(CASHFLOW_STORAGE_KEY);
+    if (s) return JSON.parse(s) as { tab: Tab; period: PeriodType; dateFrom: string; dateTo: string };
+  } catch {}
+  return null;
+}
+
+function saveCashflowFilters(f: { tab: Tab; period: PeriodType; dateFrom: string; dateTo: string }) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(f));
+  } catch {}
+}
+
 export default function CashFlowPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("cash");
+  const [tab, setTab] = useState<Tab>(() => loadCashflowFilters()?.tab ?? "cash");
   const [dailyReport, setDailyReport] = useState<DailyReport[]>([]);
   const [allPayments, setAllPayments] = useState<CashPayment[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
 
-  const [period, setPeriod] = useState<PeriodType>("currentMonth");
+  const [period, setPeriod] = useState<PeriodType>(() => loadCashflowFilters()?.period ?? "currentMonth");
   const [dateFrom, setDateFrom] = useState(() => {
+    const s = loadCashflowFilters();
+    if (s?.dateFrom) return s.dateFrom;
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}-01`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(() => loadCashflowFilters()?.dateTo ?? new Date().toISOString().slice(0, 10));
 
   const handlePeriodChange = (newPeriod: PeriodType, startDate?: string, endDate?: string) => {
     setPeriod(newPeriod);
@@ -53,6 +71,10 @@ export default function CashFlowPage() {
       setDateTo(endDate);
     }
   };
+
+  useEffect(() => {
+    saveCashflowFilters({ tab, period, dateFrom, dateTo });
+  }, [tab, period, dateFrom, dateTo]);
 
   const loadData = useCallback(async () => {
     try {

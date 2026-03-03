@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
-import { FileDown, CheckCircle } from "lucide-react";
+import { FileDown, CheckCircle, Download } from "lucide-react";
 
 interface Invoice {
   id: string;
@@ -33,20 +33,53 @@ interface Invoice {
   }>;
 }
 
+interface UploadedDoc {
+  id: string;
+  file_name: string;
+  order_code: string | null;
+  created_at: string;
+  download_url: string | null;
+}
+
+const STORAGE_KEY = "travelcms.finances.invoices.filters";
+
+function loadFilters() {
+  if (typeof window === "undefined") return null;
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) return JSON.parse(s) as { filterStatus: string; activeOnly: boolean; period: PeriodType; dateFrom: string; dateTo: string };
+  } catch {}
+  return null;
+}
+
+function saveFilters(f: { filterStatus: string; activeOnly: boolean; period: PeriodType; dateFrom: string; dateTo: string }) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(f));
+  } catch {}
+}
+
 export default function FinancesInvoicesPage() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [activeOnly, setActiveOnly] = useState(true);
-  const [period, setPeriod] = useState<PeriodType>("currentMonth");
+  const [filterStatus, setFilterStatus] = useState<string>(() => loadFilters()?.filterStatus ?? "all");
+  const [activeOnly, setActiveOnly] = useState(() => loadFilters()?.activeOnly ?? true);
+  const [period, setPeriod] = useState<PeriodType>(() => loadFilters()?.period ?? "currentMonth");
   const [dateFrom, setDateFrom] = useState(() => {
+    const stored = loadFilters();
+    if (stored?.dateFrom) return stored.dateFrom;
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, "0");
     return `${y}-${m}-01`;
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(() => {
+    const stored = loadFilters();
+    if (stored?.dateTo) return stored.dateTo;
+    return new Date().toISOString().slice(0, 10);
+  });
 
   const handlePeriodChange = (newPeriod: PeriodType, startDate?: string, endDate?: string) => {
     setPeriod(newPeriod);
@@ -55,6 +88,10 @@ export default function FinancesInvoicesPage() {
       setDateTo(endDate);
     }
   };
+
+  useEffect(() => {
+    saveFilters({ filterStatus, activeOnly, period, dateFrom, dateTo });
+  }, [filterStatus, activeOnly, period, dateFrom, dateTo]);
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -68,24 +105,32 @@ export default function FinancesInvoicesPage() {
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
 
-      const response = await fetch(`/api/finances/invoices?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const [invRes, docRes] = await Promise.all([
+        fetch(`/api/finances/invoices?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }),
+        fetch(`/api/finances/uploaded-documents?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (invRes.ok) {
+        const data = await invRes.json();
         let filtered = data.invoices || [];
-        
         if (filterStatus !== 'all') {
           filtered = filtered.filter((inv: Invoice) => inv.status === filterStatus);
         }
         if (activeOnly) {
           filtered = filtered.filter((inv: Invoice) => inv.status !== 'cancelled');
         }
-        
         setInvoices(filtered);
+      }
+
+      if (docRes.ok) {
+        const docData = await docRes.json();
+        setUploadedDocs(docData.documents || []);
+      } else {
+        setUploadedDocs([]);
       }
     } catch (error) {
       console.error('Error loading invoices:', error);
@@ -309,6 +354,57 @@ export default function FinancesInvoicesPage() {
           </tbody>
         </table>
       </div>
+
+      {uploadedDocs.length > 0 && (
+        <div className="mt-8">
+          <h3 className="mb-3 text-base font-semibold text-gray-900">Uploaded invoices</h3>
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">File</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Order</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Uploaded</th>
+                  <th className="px-4 py-2 text-right font-semibold text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {uploadedDocs.map((doc) => (
+                  <tr key={doc.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-900">{doc.file_name}</td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {doc.order_code ? (
+                        <button
+                          onClick={() => router.push(`/orders/${orderCodeToSlug(doc.order_code!)}`)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {doc.order_code}
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">{formatDateDDMMYYYY(doc.created_at)}</td>
+                    <td className="px-4 py-2 text-right">
+                      {doc.download_url && (
+                        <a
+                          href={doc.download_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <Download size={14} />
+                          Download
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

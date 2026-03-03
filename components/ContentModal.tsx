@@ -2,6 +2,7 @@
 
 import React, { useRef, useCallback, useEffect, useState } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 
 export interface ContentModalProps {
   isOpen: boolean;
@@ -28,8 +29,15 @@ export default function ContentModal({
 }: ContentModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const modalCtx = useModalOverlayContext();
 
   useEscapeKey(onClose, isOpen);
+
+  useEffect(() => {
+    if (!modalCtx || !isOpen) return;
+    const unregister = modalCtx.registerModal();
+    return () => unregister();
+  }, [modalCtx, isOpen]);
 
   useEffect(() => {
     if (!htmlContent || !htmlContent.trim()) {
