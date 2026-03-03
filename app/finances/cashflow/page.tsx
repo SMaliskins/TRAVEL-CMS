@@ -196,7 +196,7 @@ export default function CashFlowPage() {
                         {p.order_code ? (
                           <button
                             onClick={() =>
-                              router.push(`/orders/${orderCodeToSlug(p.order_code)}`)
+                              router.push(`/orders/${orderCodeToSlug(p.order_code!)}`)
                             }
                             className="text-blue-600 hover:underline font-medium"
                           >
