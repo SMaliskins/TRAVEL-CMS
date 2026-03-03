@@ -270,7 +270,7 @@ export default function FinancesInvoicesPage() {
                   <td className="px-4 py-3 text-gray-600">
                     {invoice.order_code ? (
                       <button
-                        onClick={() => router.push(`/orders/${orderCodeToSlug(invoice.order_code)}`)}
+                        onClick={() => router.push(`/orders/${orderCodeToSlug(invoice.order_code!)}`)}
                         className="text-blue-600 hover:text-blue-700 hover:underline"
                       >
                         {invoice.order_code}
