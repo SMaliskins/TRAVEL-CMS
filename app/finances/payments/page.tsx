@@ -245,7 +245,7 @@ export default function PaymentsPage() {
                   <td className="px-4 py-3">
                     {p.order_code ? (
                       <button
-                        onClick={() => router.push(`/orders/${orderCodeToSlug(p.order_code)}`)}
+                        onClick={() => router.push(`/orders/${orderCodeToSlug(p.order_code!)}`)}
                         className="text-blue-600 hover:text-blue-700 hover:underline font-medium"
                       >
                         {p.order_code}
