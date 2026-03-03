@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useDraggableModal } from "@/hooks/useDraggableModal";
 import { useDateFormat } from "@/contexts/CompanySettingsContext";
+import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, type DateFormatPattern } from "@/utils/dateFormat";
 import PartySelect from "@/components/PartySelect";
 import { Landmark, Banknote, CreditCard } from "lucide-react";
@@ -100,6 +101,13 @@ export default function AddPaymentModal({
   const orderSearchRef = useRef<HTMLInputElement>(null);
   const orderDropdownRef = useRef<HTMLDivElement>(null);
   const { modalStyle, onHeaderMouseDown, resetPosition } = useDraggableModal();
+  const modalOverlay = useModalOverlayContext();
+
+  useEffect(() => {
+    if (!modalOverlay || !open) return;
+    const unregister = modalOverlay.registerModal();
+    return unregister;
+  }, [modalOverlay, open]);
 
   useEffect(() => {
     if (!open) return;

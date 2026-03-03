@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatDateDDMMYYYY, parseDisplayToIso } from "@/utils/dateFormat";
 import { useDateFormat } from "@/contexts/CompanySettingsContext";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { useToast } from "@/contexts/ToastContext";
 import { Check, X } from "lucide-react";
@@ -89,6 +90,8 @@ export default function InvoiceCreator({
   onClose,
   onSuccess,
 }: InvoiceCreatorProps) {
+  useModalOverlay();
+
   // Check if we have multiple payers
   const hasMultiplePayers = servicesByPayer && servicesByPayer.size > 1;
   

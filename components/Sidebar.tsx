@@ -179,9 +179,10 @@ export default function Sidebar() {
     if (item.name === "Finances") {
       // Show while loading to avoid flash; hide only when we know user lacks permission
       if (userRole === null) return true;
+      const roleKey = (userRole || "").toLowerCase();
       return (
-        roleHasPermission(userRole, "invoices.view") ||
-        roleHasPermission(userRole, "payments.view")
+        roleHasPermission(roleKey, "invoices.view") ||
+        roleHasPermission(roleKey, "payments.view")
       );
     }
     return true;

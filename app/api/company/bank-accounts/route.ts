@@ -13,9 +13,15 @@ async function getCompanyId(request: NextRequest) {
     .from("profiles")
     .select("company_id")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
+  if (profile?.company_id) return profile.company_id as string;
 
-  return profile?.company_id ?? null;
+  const { data: userProfile } = await supabaseAdmin
+    .from("user_profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  return (userProfile?.company_id as string) ?? null;
 }
 
 export async function GET(request: NextRequest) {

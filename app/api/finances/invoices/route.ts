@@ -17,14 +17,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get company_id from profile
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // Get company_id from profile (try profiles first, then user_profiles as fallback)
+    let companyId: string | null = null;
+    const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("company_id")
       .eq("user_id", user.id)
-      .single();
-
-    if (profileError || !profile?.company_id) {
+      .maybeSingle();
+    if (profile?.company_id) {
+      companyId = profile.company_id as string;
+    }
+    if (!companyId) {
+      const { data: userProfile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      companyId = userProfile?.company_id as string | null;
+    }
+    if (!companyId) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
@@ -46,7 +57,7 @@ export async function GET(request: NextRequest) {
           line_total
         )
       `)
-      .eq("company_id", profile.company_id)
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
     if (dateFrom) query = query.gte("invoice_date", dateFrom);

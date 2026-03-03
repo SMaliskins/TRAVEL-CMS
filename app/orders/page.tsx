@@ -9,7 +9,7 @@ import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
 import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus } from "lucide-react";
-import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
+import { getCityByName } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -332,21 +332,28 @@ function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
     return item.split(';').map(sub => {
       const s = sub.trim();
       if (!s) return null;
+      // Format "XX City" (country code + city) — e.g. TR Tekirova, BG Nesebar
+      const codeCityMatch = s.match(/^([A-Za-z]{2})\s+(.+)$/);
+      if (codeCityMatch) {
+        const code = codeCityMatch[1].toUpperCase();
+        const city = codeCityMatch[2].trim();
+        return { city, countryCode: code };
+      }
       const cityName = s.split(',')[0]?.trim() || s;
       const cityData = getCityByName(cityName);
       if (cityData?.countryCode) {
-        return { city: cityData.name, flag: countryCodeToFlag(cityData.countryCode) };
+        return { city: cityData.name, countryCode: cityData.countryCode };
       }
       const match = s.match(/^(.+),\s*([^,]+)$/);
       if (match) {
         const city = match[1].trim();
         const country = match[2].trim();
-        const flag = getCountryFlag(country);
-        return { city, flag };
+        const iso = countryToISO[country.trim()];
+        return { city, countryCode: iso || null };
       }
-      return { city: s, flag: null };
+      return { city: s, countryCode: null };
     }).filter(Boolean);
-  }) as { city: string; flag: string | null }[];
+  }) as { city: string; countryCode: string | null }[];
 
   if (parsed.length === 0) return <span className="text-gray-400">—</span>;
 
@@ -354,7 +361,13 @@ function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
     <span className="inline-flex items-center gap-1 flex-wrap">
       {parsed.map((item, i) => (
         <span key={i} className="inline-flex items-center">
-          {item.flag && <span className="mr-0.5">{item.flag}</span>}
+          {item.countryCode && (
+            <span
+              className={`fi fi-${item.countryCode.toLowerCase()} mr-0.5 inline-block h-3.5 w-[1.375rem] shrink-0 rounded-sm overflow-hidden bg-cover bg-center`}
+              title={item.city}
+              aria-hidden
+            />
+          )}
           <span>{item.city}</span>
           {i < parsed.length - 1 && <span className="text-gray-300 mx-1">,</span>}
         </span>

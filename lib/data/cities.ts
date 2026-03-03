@@ -12,6 +12,30 @@ export interface City {
   iataCode?: string; // Airport code if applicable
 }
 
+// ISO 3166-1 alpha-2 to country name (for "XX City" format parsing)
+export const ISO_TO_COUNTRY: Record<string, string> = {
+  TR: "Turkey", BG: "Bulgaria", UZ: "Uzbekistan", SE: "Sweden", LV: "Latvia",
+  ES: "Spain", EG: "Egypt", IT: "Italy", FR: "France", DE: "Germany", AE: "UAE",
+  GR: "Greece", PT: "Portugal", NL: "Netherlands", CH: "Switzerland", AT: "Austria",
+  CZ: "Czech Republic", BE: "Belgium", TH: "Thailand", MV: "Maldives", HR: "Croatia",
+  ME: "Montenegro", CY: "Cyprus", MA: "Morocco", TN: "Tunisia", LK: "Sri Lanka",
+  ID: "Indonesia", MX: "Mexico", DO: "Dominican Republic", CU: "Cuba", US: "USA",
+  IN: "India", JP: "Japan", CN: "China", KR: "South Korea", AU: "Australia",
+  NZ: "New Zealand", BR: "Brazil", AR: "Argentina", CA: "Canada", NO: "Norway",
+  FI: "Finland", DK: "Denmark", IS: "Iceland", IE: "Ireland", PL: "Poland",
+  HU: "Hungary", RO: "Romania", GE: "Georgia", AM: "Armenia", AZ: "Azerbaijan",
+  IL: "Israel", JO: "Jordan", OM: "Oman", QA: "Qatar", BH: "Bahrain", SA: "Saudi Arabia",
+  KW: "Kuwait", TZ: "Tanzania", KE: "Kenya", ZA: "South Africa", MU: "Mauritius",
+  SC: "Seychelles", MT: "Malta", EE: "Estonia", LT: "Lithuania", SG: "Singapore",
+  MY: "Malaysia", VN: "Vietnam", PH: "Philippines", KH: "Cambodia", KZ: "Kazakhstan",
+  KG: "Kyrgyzstan", TJ: "Tajikistan", TM: "Turkmenistan", GB: "United Kingdom",
+};
+
+// Reverse map: country name -> ISO code (for "City, Country" format when getCityByName fails)
+export const COUNTRY_TO_ISO: Record<string, string> = Object.fromEntries(
+  Object.entries(ISO_TO_COUNTRY).map(([iso, name]) => [name, iso])
+);
+
 // Convert ISO country code to flag emoji
 export function countryCodeToFlag(countryCode: string): string {
   if (!countryCode || countryCode.length !== 2) return "🏳️";

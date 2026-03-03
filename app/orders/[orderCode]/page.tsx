@@ -12,7 +12,7 @@ import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
-import { getCityByName, countryCodeToFlag, loadWorldCities } from "@/lib/data/cities";
+import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUNTRY_TO_ISO } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Plus } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
@@ -203,12 +203,21 @@ export default function OrderPage({
             returnCity = cityData || { name: cityName };
           }
         } else if (part.trim()) {
-          // Destinations
+          // Destinations — support "XX City" (e.g. TR Tekirova) and "City, Country"
           destinations = part.split(";").map(item => {
-            const cityName = item.trim().split(",")[0]?.trim() || "";
+            const s = item.trim();
+            const codeCityMatch = s.match(/^([A-Za-z]{2})\s+(.+)$/);
+            if (codeCityMatch) {
+              const code = codeCityMatch[1].toUpperCase();
+              const cityName = codeCityMatch[2].trim();
+              const cityData = getCityByName(cityName);
+              const country = cityData?.country || ISO_TO_COUNTRY[code] || "";
+              return { name: cityName, countryCode: code, country };
+            }
+            const cityName = s.split(",")[0]?.trim() || "";
             const cityData = getCityByName(cityName);
             return cityData || (cityName ? { name: cityName } : null);
-          }).filter(Boolean) as { name: string; countryCode?: string }[];
+          }).filter(Boolean) as { name: string; countryCode?: string; country?: string }[];
         }
       }
     } else {
@@ -852,13 +861,22 @@ export default function OrderPage({
                               if (!cityName) continue;
                               const cityData = getCityByName(cityName);
                               const countryName = cityData?.country || (city as Record<string, unknown>).country as string || "Unknown";
-                              const countryCode = city.countryCode || cityData?.countryCode;
+                              let countryCode = (city as { countryCode?: string }).countryCode || cityData?.countryCode;
+                              if (!countryCode && countryName !== "Unknown") {
+                                countryCode = COUNTRY_TO_ISO[countryName] || undefined;
+                              }
                               if (!countryCities[countryName]) countryCities[countryName] = { countryCode, cities: [] };
                               if (!countryCities[countryName].cities.includes(cityName)) countryCities[countryName].cities.push(cityName);
                             }
                             return Object.entries(countryCities).map(([country, data], idx) => (
                               <span key={country} className="flex items-center text-sm font-semibold text-gray-900">
-                                {data.countryCode && <span className="mr-1">{countryCodeToFlag(data.countryCode)}</span>}
+                                {data.countryCode && (
+                                  <span
+                                    className={`fi fi-${data.countryCode.toLowerCase()} mr-1 inline-block h-4 w-5 shrink-0 rounded-sm overflow-hidden bg-cover bg-center`}
+                                    title={country}
+                                    aria-hidden
+                                  />
+                                )}
                                 {country} ({data.cities.join(", ")})
                                 {idx < Object.keys(countryCities).length - 1 && <span className="text-gray-400 mx-1">/</span>}
                               </span>
