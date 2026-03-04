@@ -21,13 +21,23 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Update invoice status to 'processed'
+    const { data: invoice, error: fetchError } = await supabaseAdmin
+      .from("invoices")
+      .select("id, total, status")
+      .eq("id", invoiceId)
+      .maybeSingle();
+
+    if (fetchError || !invoice) {
+      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from("invoices")
       .update({
         status: 'processed',
         processed_by: user.id,
         processed_at: new Date().toISOString(),
+        processed_total: invoice.total,
       })
       .eq("id", invoiceId);
 

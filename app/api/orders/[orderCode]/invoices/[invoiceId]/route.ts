@@ -43,7 +43,7 @@ export async function PATCH(
     };
 
     if (status !== undefined) {
-      const validStatuses = ["draft", "sent", "paid", "cancelled", "overdue", "issued", "issued_sent", "processed", "replaced"];
+      const validStatuses = ["draft", "sent", "paid", "cancelled", "overdue", "issued", "issued_sent", "processed", "replaced", "amended"];
       if (!validStatuses.includes(status)) {
         return NextResponse.json(
           { error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` },
@@ -57,8 +57,11 @@ export async function PATCH(
     }
 
     if (invoice_date !== undefined) {
-      const d = normalizeDate(invoice_date);
-      if (d) updatePayload.invoice_date = d;
+      const isLocked = existingInvoice.status === 'processed' || existingInvoice.status === 'amended';
+      if (!isLocked) {
+        const d = normalizeDate(invoice_date);
+        if (d) updatePayload.invoice_date = d;
+      }
     }
     if (due_date !== undefined) updatePayload.due_date = normalizeDate(due_date);
     if (deposit_date !== undefined) updatePayload.deposit_date = normalizeDate(deposit_date);

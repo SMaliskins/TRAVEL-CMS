@@ -366,7 +366,7 @@ export default function AddPaymentModal({
           amount: parseFloat(amount),
           currency,
           paid_at: paidAt,
-          account_id: accountId || null,
+          account_id: method === "cash" ? null : (accountId || null),
           payer_name: payerName || payerSearch || null,
           payer_party_id: payerPartyId || null,
           note: note || null,
@@ -632,38 +632,40 @@ export default function AddPaymentModal({
             </div>
           </div>
 
-          {/* Account */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-0.5">
-              Credit to Account
-            </label>
-            {bankAccounts.length === 0 ? (
-              <p className="text-xs text-gray-500 italic">
-                No bank accounts configured.{" "}
-                <a
-                  href="/settings/company"
-                  className="text-blue-600 hover:underline"
+          {/* Credit to Account — only for Bank/Card */}
+          {method !== "cash" && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-0.5">
+                Credit to Account
+              </label>
+              {bankAccounts.length === 0 ? (
+                <p className="text-xs text-gray-500 italic">
+                  No bank accounts configured.{" "}
+                  <a
+                    href="/settings/company"
+                    className="text-blue-600 hover:underline"
+                  >
+                    Add in Settings &rarr; Financial
+                  </a>
+                </p>
+              ) : (
+                <select
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  Add in Settings &rarr; Financial
-                </a>
-              </p>
-            ) : (
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">-- Select account --</option>
-                {bankAccounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.account_name}
-                    {acc.bank_name ? ` (${acc.bank_name})` : ""}
-                    {acc.iban ? ` -- ${acc.iban}` : ""}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+                  <option value="">-- Select account --</option>
+                  {bankAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.account_name}
+                      {acc.bank_name ? ` (${acc.bank_name})` : ""}
+                      {acc.iban ? ` -- ${acc.iban}` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           {/* Payer - from Directory with create option */}
           <div>

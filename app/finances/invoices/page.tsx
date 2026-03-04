@@ -13,7 +13,7 @@ interface Invoice {
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'processed';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'processed' | 'amended';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -23,6 +23,7 @@ interface Invoice {
   notes: string | null;
   processed_by?: string | null;
   processed_at?: string | null;
+  processed_total?: number | null;
   invoice_items: Array<{
     id: string;
     service_name: string;
@@ -209,22 +210,24 @@ export default function FinancesInvoicesPage() {
   const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
 
   const getStatusBadge = (status: Invoice['status']) => {
-    const styles = {
+    const styles: Record<string, string> = {
       draft: 'bg-gray-100 text-gray-700',
       sent: 'bg-blue-100 text-blue-700',
       paid: 'bg-green-100 text-green-700',
       cancelled: 'bg-red-100 text-red-700',
       overdue: 'bg-orange-100 text-orange-700',
       processed: 'bg-purple-100 text-purple-700',
+      amended: 'bg-amber-100 text-amber-800 border border-amber-300',
     };
 
-    const labels = {
+    const labels: Record<string, string> = {
       draft: 'Draft',
       sent: 'Sent',
       paid: 'Paid',
       cancelled: 'Cancelled',
       overdue: 'Overdue',
       processed: 'Processed',
+      amended: 'Amended',
     };
 
     return (
@@ -262,7 +265,7 @@ export default function FinancesInvoicesPage() {
         </label>
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-700">Status:</span>
-          {['all', 'draft', 'sent', 'paid', 'overdue', 'processed'].map((status) => (
+          {['all', 'draft', 'sent', 'paid', 'overdue', 'processed', 'amended'].map((status) => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
@@ -295,6 +298,7 @@ export default function FinancesInvoicesPage() {
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Payer</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Order</th>
               <th className="px-4 py-3 text-right font-semibold text-gray-700">Amount</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Change</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
             </tr>
@@ -302,54 +306,77 @@ export default function FinancesInvoicesPage() {
           <tbody className="divide-y divide-gray-200">
             {invoices.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   No invoices found
                 </td>
               </tr>
             ) : (
-              invoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{invoice.invoice_number}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatDate(invoice.invoice_date)}</td>
-                  <td className="px-4 py-3 text-gray-600">{invoice.payer_name || "-"}</td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {invoice.order_code ? (
-                      <button
-                        onClick={() => router.push(`/orders/${orderCodeToSlug(invoice.order_code!)}`)}
-                        className="text-blue-600 hover:text-blue-700 hover:underline"
-                      >
-                        {invoice.order_code}
-                      </button>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                    {formatCurrency(invoice.total)}
-                  </td>
-                  <td className="px-4 py-3">{getStatusBadge(invoice.status)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => handleExportPDF(invoice.id, invoice.order_code)}
-                        className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                        title="Export PDF"
-                      >
-                        <FileDown size={15} />
-                      </button>
-                      {invoice.status !== 'processed' && (
+              invoices.map((invoice) => {
+                const isAmended = invoice.status === 'amended';
+                const prevTotal = invoice.processed_total != null ? Number(invoice.processed_total) : null;
+                const diff = isAmended && prevTotal != null ? invoice.total - prevTotal : null;
+                return (
+                  <tr key={invoice.id} className={`hover:bg-gray-50 ${isAmended ? 'bg-amber-50/50' : ''}`}>
+                    <td className="px-4 py-3 font-medium text-gray-900">{invoice.invoice_number}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatDate(invoice.invoice_date)}</td>
+                    <td className="px-4 py-3 text-gray-600">{invoice.payer_name || "-"}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {invoice.order_code ? (
                         <button
-                          onClick={() => handleMarkProcessed(invoice.id)}
-                          className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors"
-                          title="Mark as processed"
+                          onClick={() => router.push(`/orders/${orderCodeToSlug(invoice.order_code!)}`)}
+                          className="text-blue-600 hover:text-blue-700 hover:underline"
                         >
-                          <CheckCircle size={15} />
+                          {invoice.order_code}
                         </button>
+                      ) : (
+                        "-"
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                      {formatCurrency(invoice.total)}
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs">
+                      {isAmended && prevTotal != null ? (
+                        <span className="inline-flex flex-col items-center gap-0.5">
+                          <span className="text-gray-400 line-through">{formatCurrency(prevTotal)}</span>
+                          <span className={diff! > 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                            {diff! > 0 ? '+' : ''}{formatCurrency(diff!)}
+                          </span>
+                        </span>
+                      ) : invoice.status === 'processed' ? (
+                        <span className="text-green-600 text-xs">✓</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">{getStatusBadge(invoice.status)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleExportPDF(invoice.id, invoice.order_code)}
+                          className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                          title="Export PDF"
+                        >
+                          <FileDown size={15} />
+                        </button>
+                        {invoice.status !== 'processed' && invoice.status !== 'cancelled' && (
+                          <button
+                            onClick={() => handleMarkProcessed(invoice.id)}
+                            className={`p-1.5 rounded transition-colors ${
+                              isAmended
+                                ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                                : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                            }`}
+                            title={isAmended ? 'Re-process (amount changed)' : 'Mark as processed'}
+                          >
+                            <CheckCircle size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

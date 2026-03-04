@@ -29,21 +29,30 @@ async function recalcInvoiceTotals(invoiceId: string) {
   const subtotal = (items || []).reduce((sum, i) => sum + Number(i.line_total || 0), 0);
   const { data: inv } = await supabaseAdmin
     .from("invoices")
-    .select("tax_rate")
+    .select("tax_rate, status, processed_total")
     .eq("id", invoiceId)
     .single();
   const taxRate = Number(inv?.tax_rate ?? 0) || 0;
   const taxAmount = Math.round(subtotal * (taxRate / 100) * 100) / 100;
   const total = Math.round((subtotal + taxAmount) * 100) / 100;
 
+  const updatePayload: Record<string, unknown> = {
+    subtotal,
+    tax_amount: taxAmount,
+    total,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (inv?.status === "processed" && inv.processed_total != null) {
+    const processedTotal = Math.round(Number(inv.processed_total) * 100) / 100;
+    if (total !== processedTotal) {
+      updatePayload.status = "amended";
+    }
+  }
+
   await supabaseAdmin
     .from("invoices")
-    .update({
-      subtotal,
-      tax_amount: taxAmount,
-      total,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", invoiceId);
 }
 

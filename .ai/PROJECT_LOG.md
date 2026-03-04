@@ -5,6 +5,41 @@
 
 ---
 
+### 📅 [2026-03-04] | Invoice Finance workflow — Processed / Amended
+**Agent:** Code Writer
+**Task:** Invoice processing workflow between Finance and users
+**Status:** SUCCESS
+
+**Actions:**
+- Migration `add_invoice_amended_workflow.sql`: `processed_total` column, `amended` status added to constraint, ensure `processed_by`/`processed_at` exist
+- API `process/route.ts`: saves `processed_total` = current total when marking as processed
+- API `items/[itemId]/route.ts`: `recalcInvoiceTotals()` auto-sets status to `amended` if total changes on a `processed` invoice (descriptions-only changes keep `processed`)
+- API `invoices/[invoiceId]/route.ts`: locks `invoice_date` for `processed`/`amended` invoices; `amended` added to valid statuses
+- Finances invoices page: `amended` filter, badge (amber), "Change" column showing old→new amount diff, re-process button
+- Order InvoiceList: `amended` status in badges/labels/colors, locked invoice_date field, purple info banner for processed invoices
+
+**Result:** Finance marks invoices as processed; if amount changes, auto-flags as "amended" with diff visible to Finance. Descriptions-only edits don't disturb Finance.
+
+**Next Step:** Run migration `add_invoice_amended_workflow.sql` in Supabase.
+
+---
+
+### 📅 [2026-03-04] | Cash Flow Z-Report calendar
+**Agent:** Code Writer
+**Task:** Z-Report calendar for selected period (max 3 months), daily cash figures and green button
+**Status:** SUCCESS
+
+**Actions:**
+- Z-Report (Cash) tab: calendar by month (Mon–Sun grid), max 3 months; each day: if total > 0 show amount + green button (scroll to day detail), else empty
+- Period for Z-Report capped to 93 days in API request and calendar range
+- "Daily details" section with id per day for scroll target; Bank Movements tab unchanged (list view)
+
+**Result:** Calendar shows daily cash; green button scrolls to day details. Language: EN (labels).
+
+**Next Step:** —
+
+---
+
 ### 📅 [2026-03-01] | Air Baltic invoice parser
 **Agent:** Code Writer
 **Task:** Parse Air Baltic airline tickets from Latvian invoice PDFs

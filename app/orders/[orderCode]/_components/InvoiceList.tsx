@@ -12,7 +12,7 @@ interface Invoice {
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'issued' | 'issued_sent' | 'processed' | 'replaced';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'issued' | 'issued_sent' | 'processed' | 'replaced' | 'amended';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -188,6 +188,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       issued_sent: 'bg-blue-100 text-blue-700 border-blue-300',
       processed: 'bg-emerald-100 text-emerald-700 border-emerald-300',
       replaced: 'bg-amber-100 text-amber-700 border-amber-300',
+      amended: 'bg-amber-100 text-amber-800 border-amber-400',
     };
 
     const labels: Record<Invoice['status'], string> = {
@@ -200,6 +201,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       issued_sent: 'Issued & Sent',
       processed: 'Processed',
       replaced: 'Replaced',
+      amended: 'Amended',
     };
 
     return (
@@ -615,6 +617,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       issued_sent: 'Sent',
       processed: 'Processed',
       replaced: 'Replaced',
+      amended: 'Amended',
     };
     return labels[status] || status;
   };
@@ -630,6 +633,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       issued_sent: 'text-blue-600',
       processed: 'text-purple-600',
       replaced: 'text-amber-600',
+      amended: 'text-amber-700',
     };
     return colors[status] || 'text-gray-600';
   };
@@ -683,11 +687,17 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Invoice date</label>
-                  <DateInput
-                    value={editDatesForm.invoice_date}
-                    onChange={(iso) => setEditDatesForm((prev) => ({ ...prev, invoice_date: iso }))}
-                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                  />
+                  {editingLinesInvoice.status === 'processed' || editingLinesInvoice.status === 'amended' ? (
+                    <div className="w-full rounded border border-gray-200 bg-gray-100 px-2 py-1.5 text-sm text-gray-600 cursor-not-allowed" title="Locked — invoice already processed by Finance">
+                      {formatDate(editDatesForm.invoice_date)}
+                    </div>
+                  ) : (
+                    <DateInput
+                      value={editDatesForm.invoice_date}
+                      onChange={(iso) => setEditDatesForm((prev) => ({ ...prev, invoice_date: iso }))}
+                      className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    />
+                  )}
                 </div>
                 {(editingLinesInvoice.deposit_amount != null && Number(editingLinesInvoice.deposit_amount) > 0) && (
                 <div>
@@ -840,6 +850,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     </button>
                   </div>
                 </div>
+              ) : (editingLinesInvoice.status === 'processed' || editingLinesInvoice.status === 'amended') ? (
+                <p className="text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg p-2 mt-2">
+                  This invoice has been processed by Finance. Invoice number and date are locked.
+                  You can edit descriptions (Service, Client, Dates). If the total amount needs to change, Finance will be notified automatically.
+                </p>
               ) : (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
                   Issued invoice: you can edit Dates, Service, and Client and save. To change the total amount, cancel and re-issue a new invoice.
