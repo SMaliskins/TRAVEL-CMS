@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface Service {
@@ -47,6 +48,7 @@ export default function MergeServicesModal({ services, orderCode, onClose, onSuc
   const [payerPartyId, setPayerPartyId] = useState<string | undefined>(services[0]?.payerPartyId);
   
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   // Check if all services have the same supplier
   const suppliers = [...new Set(services.map(s => s.supplierPartyId).filter(Boolean))];
@@ -168,7 +170,7 @@ export default function MergeServicesModal({ services, orderCode, onClose, onSuc
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div ref={trapRef} className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-purple-50">
           <h2 className="text-xl font-semibold text-gray-900">

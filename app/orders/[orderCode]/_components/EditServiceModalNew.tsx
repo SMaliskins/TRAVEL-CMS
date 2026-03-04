@@ -8,6 +8,7 @@ import FlightItineraryInput, { FlightSegment } from '@/components/FlightItinerar
 import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { formatDateDDMMYYYY, formatDateShort, segmentDisplayArrivalDate, normalizeSegmentsArrivalYear, normalizeSegmentsWithCalendar, nightsBetween } from '@/utils/dateFormat';
 import { toTitleCaseForDisplay } from '@/utils/nameFormat';
 import DateInput from '@/components/DateInput';
@@ -84,6 +85,7 @@ interface Service {
   paymentTerms?: string | null;
   // Hotel-specific
   hotelName?: string;
+  hotelHid?: number | null;
   hotelAddress?: string;
   hotelPhone?: string;
   hotelEmail?: string;
@@ -445,14 +447,22 @@ export default function EditServiceModalNew({
   const [hotelStarRating, setHotelStarRating] = useState(service.hotelStarRating || "");
   const [transferType, setTransferType] = useState(service.transferType || "");
   const [additionalServices, setAdditionalServices] = useState(service.additionalServices || "");
-  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">(
-    (service.hotelBoard as any) || "room_only"
-  );
+  const initHotelBoard = (): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
+    const saved = (service.hotelBoard as string)?.trim();
+    if (!saved) return "room_only";
+    const enumKeys = ["room_only", "breakfast", "half_board", "full_board", "all_inclusive", "uai"] as const;
+    if (enumKeys.includes(saved as any)) return saved as typeof enumKeys[number];
+    const byLabel = Object.entries(BOARD_LABELS).find(([, l]) => l === saved);
+    if (byLabel) return byLabel[0] as typeof enumKeys[number];
+    const mapped = { BB: "breakfast", HB: "half_board", FB: "full_board", RO: "room_only", AI: "all_inclusive", UAI: "uai" }[saved.toUpperCase()];
+    return (mapped as typeof enumKeys[number]) || "room_only";
+  };
+  const [hotelBoard, setHotelBoard] = useState<"room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai">(() => initHotelBoard());
   /** Room types from Ratehawk for selected hotel — click to choose */
   const [hotelRoomOptions, setHotelRoomOptions] = useState<string[]>([]);
   /** Meal types from Ratehawk rate search for selected hotel */
   const [hotelMealOptions, setHotelMealOptions] = useState<string[]>([]);
-  const [hotelHid, setHotelHid] = useState<number | null>(null);
+  const [hotelHid, setHotelHid] = useState<number | null>((service as { hotelHid?: number | null }).hotelHid ?? null);
   const [mealPlanText, setMealPlanText] = useState<string>(() => {
     const saved = (service as { mealPlanText?: string }).mealPlanText?.trim();
     if (saved) {
@@ -1226,12 +1236,16 @@ export default function EditServiceModalNew({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const roomOptionsForDropdown = useMemo(() => [...new Set([...hotelRoomOptions, ...customRooms])], [hotelRoomOptions, customRooms]);
+  const roomOptionsForDropdown = useMemo(
+    () => [...new Set([hotelRoom, ...hotelRoomOptions, ...customRooms].filter(Boolean))],
+    [hotelRoom, hotelRoomOptions, customRooms]
+  );
   const filteredRoomOptions = useMemo(() => {
     const q = hotelRoom.trim().toLowerCase();
     if (!q) return roomOptionsForDropdown;
     return roomOptionsForDropdown.filter((opt) => opt.toLowerCase().includes(q));
   }, [roomOptionsForDropdown, hotelRoom]);
+  const defaultBoardOptions = useMemo(() => Object.values(BOARD_LABELS), []);
   const boardOptionsForDropdown = useMemo(() => {
     if (hotelMealOptions.length > 0) {
       const rhCodeToLabel: Record<string, string> = {
@@ -1258,8 +1272,8 @@ export default function EditServiceModalNew({
       const mapped = hotelMealOptions.map((c) => rhCodeToLabel[c] ?? rhCodeToLabel[c.toUpperCase()] ?? c);
       return [...new Set([...mapped, ...customBoards])];
     }
-    return [...new Set([...customBoards])];
-  }, [hotelMealOptions, customBoards]);
+    return [...new Set([...defaultBoardOptions, ...customBoards])];
+  }, [hotelMealOptions, customBoards, defaultBoardOptions]);
 
   // Map meal plan abbreviation to hotel_board (AI and UAI are different: AI = All Inclusive, UAI = Ultra All Inclusive)
   const mapMealPlanToBoard = (plan: string): "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive" | "uai" => {
@@ -1673,6 +1687,7 @@ export default function EditServiceModalNew({
   // ESC key handler
   useEscapeKey(onClose);
   const { modalStyle, onHeaderMouseDown } = useDraggableModal();
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
   
   // Sync cabinClass with flight segments - when user manually changes cabinClass in dropdown, update all segments
   // Use ref to track manual user changes (not from parsing or initial load)
@@ -2083,6 +2098,7 @@ export default function EditServiceModalNew({
       // Add hotel-specific fields
       if (showHotelFields) {
         payload.hotel_name = hotelName;
+        payload.hotel_hid = hotelHid ?? undefined;
         payload.hotel_address = hotelAddress;
         payload.hotel_phone = hotelPhone;
         payload.hotel_email = hotelEmail;
@@ -2121,6 +2137,7 @@ export default function EditServiceModalNew({
       // Add Tour-specific fields (Package Tour)
       if (categoryType === "tour") {
         payload.hotel_name = hotelName || null;
+        payload.hotel_hid = hotelHid ?? undefined;
         payload.hotel_address = hotelAddress || null;
         payload.hotel_phone = hotelPhone || null;
         payload.hotel_star_rating = hotelStarRating || null;
@@ -2456,7 +2473,7 @@ export default function EditServiceModalNew({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-future-overlay">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-future-container" style={modalStyle}>
+      <div ref={trapRef} className="w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-future-container" style={modalStyle}>
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded bg-[#E6FAE6]">

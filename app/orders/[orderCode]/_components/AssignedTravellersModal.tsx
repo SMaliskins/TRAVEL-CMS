@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -84,6 +85,7 @@ export default function AssignedTravellersModal({
 
   // ESC key handler
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   // Fetch suggested travellers from API
   const fetchSuggestedTravellers = useCallback(async () => {
@@ -657,7 +659,7 @@ export default function AssignedTravellersModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col">
+      <div ref={trapRef} className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col">
         {/* Header */}
         <div className="border-b border-gray-200 px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between">

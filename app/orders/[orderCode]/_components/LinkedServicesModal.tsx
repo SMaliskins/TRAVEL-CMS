@@ -5,6 +5,7 @@ import { Link2, Plane, Hotel, Car } from "lucide-react";
 import type { FlightSegment } from "@/components/FlightItineraryInput";
 import { formatDateShort } from "@/utils/dateFormat";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 function suggestPickupTimeFromFlight(
   flight: FlightServiceRef,
@@ -80,6 +81,7 @@ export default function LinkedServicesModal({
   transferBookingType,
 }: LinkedServicesModalProps) {
   useModalOverlay();
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
   const isOneWay = transferBookingType === "one_way";
 
   type BlockId = "flight" | "transfer" | "hotel";
@@ -272,7 +274,7 @@ export default function LinkedServicesModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+      <div ref={trapRef} className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Link2 className="w-5 h-5 text-emerald-600" />

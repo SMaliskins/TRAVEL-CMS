@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { roleHasPermission } from "@/lib/auth/permissions";
 import {
@@ -78,6 +79,7 @@ export default function Sidebar() {
     isClient,
   } = useSidebar();
 
+  const mobileTrapRef = useFocusTrap<HTMLElement>(isMobileMenuOpen);
   const [isDesktop, setIsDesktop] = useState(true);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -332,7 +334,7 @@ export default function Sidebar() {
               className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
               onClick={() => setIsMobileMenuOpen(false)}
             />
-            <aside className="fixed left-0 top-0 z-50 h-screen w-64 border-r border-gray-200 bg-white lg:hidden">
+            <aside ref={mobileTrapRef} className="fixed left-0 top-0 z-50 h-screen w-64 border-r border-gray-200 bg-white lg:hidden">
               <div className="flex h-full flex-col">
                 <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4">
                   <div className="font-semibold text-gray-900">Travel CMS</div>

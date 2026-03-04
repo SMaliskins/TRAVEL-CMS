@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import RangeCalendar from "./RangeCalendar";
 import { formatDateRange } from "@/utils/dateFormat";
 
@@ -23,7 +24,9 @@ export default function DateRangePicker({
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [tempStart, setTempStart] = useState<string | undefined>(() => from);
   const [tempEnd, setTempEnd] = useState<string | undefined>(() => to);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
 
   // Initialize temp values when props change (but only if calendar is closed)
@@ -53,6 +56,13 @@ export default function DateRangePicker({
     document.addEventListener("keydown", handleEscape, true); // Use capture phase
     return () => document.removeEventListener("keydown", handleEscape, true);
   }, [isCalendarOpen, from, to]);
+
+  // Update dropdown position when opening (for portal)
+  useEffect(() => {
+    if (!isCalendarOpen || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setDropdownPosition({ top: rect.bottom + 4, left: rect.left });
+  }, [isCalendarOpen]);
 
   // Close calendar on click outside
   useEffect(() => {
@@ -114,10 +124,49 @@ export default function DateRangePicker({
 
   const displayValue = formatDateRange(from, to, true);
 
+  const calendarContent = isCalendarOpen && (
+    <div
+      ref={calendarRef}
+      data-calendar-dropdown
+      className="fixed z-[9999] w-[680px] rounded-lg border border-gray-200 bg-white p-4 shadow-lg"
+      style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <RangeCalendar
+        startDate={tempStart}
+        endDate={tempEnd}
+        onDateSelect={handleDateSelect}
+        onClear={handleClear}
+        autoCloseOnRangeComplete={true}
+      />
+      <div className="mt-4 flex justify-end gap-2 border-t border-gray-200 pt-4">
+        <button
+          type="button"
+          onClick={() => {
+            setTempStart(from);
+            setTempEnd(to);
+            setIsCalendarOpen(false);
+          }}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleApply}
+          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          Apply
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div ref={containerRef} className="relative">
-      <label className="mb-1 block text-xs text-gray-600">{label}</label>
+      {label ? <label className="mb-1 block text-xs text-gray-600">{label}</label> : null}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsCalendarOpen(!isCalendarOpen)}
         className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-left text-sm focus:border-black focus:outline-none ${triggerClassName ?? ""}`}
@@ -125,42 +174,7 @@ export default function DateRangePicker({
         {displayValue}
       </button>
 
-      {isCalendarOpen && (
-        <div
-          ref={calendarRef}
-          data-calendar-dropdown
-          className="absolute left-0 top-full z-50 mt-1 w-[680px] rounded-lg border border-gray-200 bg-white p-4 shadow-lg"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <RangeCalendar
-            startDate={tempStart}
-            endDate={tempEnd}
-            onDateSelect={handleDateSelect}
-            onClear={handleClear}
-            autoCloseOnRangeComplete={true}
-          />
-          <div className="mt-4 flex justify-end gap-2 border-t border-gray-200 pt-4">
-            <button
-              type="button"
-              onClick={() => {
-                setTempStart(from);
-                setTempEnd(to);
-                setIsCalendarOpen(false);
-              }}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleApply}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-      )}
+      {typeof document !== "undefined" && createPortal(calendarContent, document.body)}
     </div>
   );
 }

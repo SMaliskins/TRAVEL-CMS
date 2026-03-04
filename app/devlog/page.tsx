@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Bug, ExternalLink, Check, XCircle, Eye, Clock, Loader2, RefreshCw, LogOut } from "lucide-react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { supabase } from "@/lib/supabaseClient";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useRouter } from "next/navigation";
 
 interface DevLogEntry {
@@ -39,6 +41,8 @@ export default function DevLogStandalone() {
   const [resolutionNote, setResolutionNote] = useState("");
   const [updating, setUpdating] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const detailTrapRef = useFocusTrap<HTMLDivElement>(!!selected);
+  useModalOverlay(!!selected);
 
   useEffect(() => {
     (async () => {
@@ -287,7 +291,7 @@ export default function DevLogStandalone() {
       {/* Detail modal */}
       {selected && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/70" onClick={() => setSelected(null)}>
-          <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div ref={detailTrapRef} className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
               <div>
                 <h3 className="font-semibold text-gray-100 flex items-center gap-2">

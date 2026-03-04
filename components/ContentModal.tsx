@@ -3,6 +3,7 @@
 import React, { useRef, useCallback, useEffect, useState } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 export interface ContentModalProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export default function ContentModal({
   const modalCtx = useModalOverlayContext();
 
   useEscapeKey(onClose, isOpen);
+  const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
 
   useEffect(() => {
     if (!modalCtx || !isOpen) return;
@@ -80,6 +82,7 @@ export default function ContentModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
       <div
+        ref={trapRef}
         className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl"
         role="dialog"
         aria-modal="true"

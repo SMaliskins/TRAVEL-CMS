@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useDraggableModal } from "@/hooks/useDraggableModal";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useDateFormat } from "@/contexts/CompanySettingsContext";
 import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, type DateFormatPattern } from "@/utils/dateFormat";
@@ -101,6 +102,7 @@ export default function AddPaymentModal({
   const orderSearchRef = useRef<HTMLInputElement>(null);
   const orderDropdownRef = useRef<HTMLDivElement>(null);
   const { modalStyle, onHeaderMouseDown, resetPosition } = useDraggableModal();
+  const trapRef = useFocusTrap<HTMLDivElement>(open);
   const modalOverlay = useModalOverlayContext();
 
   useEffect(() => {
@@ -394,7 +396,7 @@ export default function AddPaymentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md bg-white rounded-lg shadow-xl" style={modalStyle}>
+      <div ref={trapRef} className="relative z-10 w-full max-w-md bg-white rounded-lg shadow-xl" style={modalStyle}>
         <div className="flex items-center justify-between border-b px-4 py-2.5 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <h2 className="text-sm font-semibold text-gray-900">{editPayment ? "Edit Payment" : "Add Payment"}</h2>
           <button

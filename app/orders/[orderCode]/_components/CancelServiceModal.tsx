@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 
@@ -47,6 +48,7 @@ export default function CancelServiceModal({
   const [clientPrice, setClientPrice] = useState<string>('0');
   
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
   
   // Auto-calculate client price based on refund and fee
   useEffect(() => {
@@ -148,7 +150,7 @@ export default function CancelServiceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+      <div ref={trapRef} className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">

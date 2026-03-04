@@ -49,6 +49,8 @@ import {
 import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
 import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/smartHints";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface Traveller {
   id: string;
@@ -97,6 +99,7 @@ interface Service {
   splitGroupId?: string | null;
   // Hotel-specific
   hotelName?: string;
+  hotelHid?: number | null;
   hotelStarRating?: string | null;
   hotelRoom?: string | null;
   hotelBoard?: string | null;
@@ -191,6 +194,8 @@ function ChooseServiceTypeModal({
   onSelect: (categoryId: string, category?: { id: string; name: string; type?: string; vat_rate?: number }) => void;
   onClose: () => void;
 }) {
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -202,6 +207,7 @@ function ChooseServiceTypeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
+        ref={trapRef}
         className="w-full max-w-md rounded-xl bg-white shadow-xl p-4"
         onClick={(e) => e.stopPropagation()}
       >
@@ -242,6 +248,8 @@ function TransferTypeChooserPopup({
   onSelect: (type: "one_way" | "return" | "by_hour") => void;
   onClose: () => void;
 }) {
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -253,6 +261,7 @@ function TransferTypeChooserPopup({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
+        ref={trapRef}
         className="w-full max-w-md rounded-xl bg-white shadow-xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
@@ -1317,6 +1326,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             : [],
           // Tour/Hotel fields (must pass for Edit modal to display after save)
           hotelName: (s.hotelName ?? s.hotel_name ?? null) as string | null,
+          hotelHid: (s.hotelHid ?? (s as { hotel_hid?: number }).hotel_hid ?? null) as number | null,
           hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
           hotelRoom: (s.hotelRoom ?? s.hotel_room ?? null) as string | null,
           hotelBoard: (s.hotelBoard ?? s.hotel_board ?? null) as string | null,

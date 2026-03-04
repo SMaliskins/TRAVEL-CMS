@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
@@ -131,6 +132,7 @@ export default function SplitServiceModal({
 
   // ESC key handler
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   // Fetch suggested travellers (often with main client in other orders)
   useEffect(() => {
@@ -441,7 +443,7 @@ const handleSplit = async () => {
   return (
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-        <div className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div ref={trapRef} className="w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="mb-6 flex items-start justify-between">
             <div>
               <h2 className="text-xl font-semibold text-gray-900">Split Service</h2>

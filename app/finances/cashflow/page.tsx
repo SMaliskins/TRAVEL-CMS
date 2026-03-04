@@ -342,11 +342,7 @@ export default function CashFlowPage() {
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
                       Payer
                     </th>
-                    {tab === "bank" && (
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                        Account
-                      </th>
-                    )}
+                    
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
                       Note
                     </th>
@@ -375,11 +371,7 @@ export default function CashFlowPage() {
                       <td className="px-4 py-2 text-gray-600">
                         {p.payer_name || p.order_client || "-"}
                       </td>
-                      {tab === "bank" && (
-                        <td className="px-4 py-2 text-gray-600 text-xs">
-                          {p.account_name || "-"}
-                        </td>
-                      )}
+                      
                       <td className="px-4 py-2 text-gray-500 text-xs max-w-[200px] truncate">
                         {p.note || "-"}
                       </td>

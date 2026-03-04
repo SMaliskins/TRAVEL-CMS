@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface Party {
   id: string;
@@ -44,6 +46,8 @@ export default function PartySelect({
   
   // Create form state
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const createFormTrapRef = useFocusTrap<HTMLDivElement>(showCreateForm);
+  useModalOverlay(showCreateForm);
   const [createType, setCreateType] = useState<"person" | "company">("person");
   const [createFirstName, setCreateFirstName] = useState("");
   const [createLastName, setCreateLastName] = useState("");
@@ -492,6 +496,7 @@ export default function PartySelect({
           onClick={(e) => e.target === e.currentTarget && handleCancelCreate()}
         >
           <div
+            ref={createFormTrapRef}
             className="bg-white rounded-lg border border-gray-200 shadow-xl p-4 w-full max-w-md max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >

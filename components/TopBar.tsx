@@ -4,11 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
+import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { useClock } from "@/hooks/useClock";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/contexts/UserContext";
-import TopBarProgress from "./TopBarProgress";
-import TopBarSearch from "./TopBarSearch";
 
 export default function TopBar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -119,6 +118,10 @@ export default function TopBar() {
     }
   }, [isDropdownOpen]);
 
+  const modalOverlay = useModalOverlayContext();
+  const isModalOpen = (modalOverlay?.modalCount ?? 0) > 0;
+  if (isModalOpen) return null;
+
   return (
     <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 bg-white">
       <div className="flex h-full items-center gap-4 px-4">
@@ -166,17 +169,8 @@ export default function TopBar() {
           ) : null}
         </div>
         
-        {/* Center - Progress widget */}
-        <div className="flex flex-1 items-center justify-center">
-          <TopBarProgress />
-        </div>
-        
-        {/* Right side - Search and controls */}
-        <div className="flex flex-shrink-0 items-center justify-end gap-2">
-          {/* Multi-Search */}
-          <div className="max-w-md">
-            <TopBarSearch />
-          </div>
+        {/* Right side - Controls */}
+        <div className="flex flex-1 flex-shrink-0 items-center justify-end gap-2">
 
           {/* Icons */}
           <div className="flex items-center gap-2">

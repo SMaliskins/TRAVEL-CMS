@@ -132,6 +132,27 @@ export async function GET(
       }
     }
 
+    // Enrich hotel services with contacts from hotel_contact_overrides when order_services has hotel_hid
+    const hotelHids = [...new Set((services || []).map((s: { hotel_hid?: number | null }) => (s as { hotel_hid?: number }).hotel_hid).filter((hid): hid is number => hid != null))];
+    let contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }> = {};
+    if (hotelHids.length > 0 && companyId) {
+      const { data: overrides } = await supabaseAdmin
+        .from("hotel_contact_overrides")
+        .select("hotel_hid, address, phone, email")
+        .eq("company_id", companyId)
+        .in("hotel_hid", hotelHids);
+      if (overrides) {
+        contactOverridesMap = overrides.reduce((acc, o) => {
+          acc[o.hotel_hid] = {
+            address: o.address?.trim() || undefined,
+            phone: o.phone?.trim() || undefined,
+            email: o.email?.trim() || undefined,
+          };
+          return acc;
+        }, {} as Record<number, { address?: string; phone?: string; email?: string }>);
+      }
+    }
+
     // Map to API format (flight for Itinerary; Tour/hotel/terms for Edit)
     type Row = typeof services extends (infer R)[] ? R : never;
     const mappedServices = (services || []).map(s => {
@@ -221,15 +242,16 @@ export async function GET(
         cabinClass: row.cabin_class ?? "economy",
         // Tour / Hotel / terms (for Edit modal)
         hotelName: row.hotel_name ?? null,
+        hotelHid: (row as { hotel_hid?: number | null }).hotel_hid ?? null,
         hotelStarRating: row.hotel_star_rating ?? null,
         hotelRoom: row.hotel_room ?? null,
         hotelBoard: row.hotel_board ?? null,
         mealPlanText: row.meal_plan_text ?? null,
         transferType: row.transfer_type ?? null,
         additionalServices: row.additional_services ?? null,
-        hotelAddress: row.hotel_address ?? null,
-        hotelPhone: row.hotel_phone ?? null,
-        hotelEmail: row.hotel_email ?? null,
+        hotelAddress: (row.hotel_address?.trim() || contactOverridesMap[(row as { hotel_hid?: number }).hotel_hid as number]?.address) ?? null,
+        hotelPhone: (row.hotel_phone?.trim() || contactOverridesMap[(row as { hotel_hid?: number }).hotel_hid as number]?.phone) ?? null,
+        hotelEmail: (row.hotel_email?.trim() || contactOverridesMap[(row as { hotel_hid?: number }).hotel_hid as number]?.email) ?? null,
         hotelBedType: row.hotel_bed_type ?? null,
         hotelEarlyCheckIn: row.hotel_early_check_in ?? null,
         hotelLateCheckIn: row.hotel_late_check_in ?? null,
@@ -353,6 +375,7 @@ export async function POST(
 
     // Hotel / Package Tour fields (camelCase from frontend → snake_case for DB)
     if (body.hotelName !== undefined) serviceData.hotel_name = body.hotelName || null;
+    if (body.hotelHid !== undefined && body.hotelHid != null) serviceData.hotel_hid = body.hotelHid;
     if (body.hotelStarRating !== undefined) serviceData.hotel_star_rating = body.hotelStarRating || null;
     if (body.hotelRoom !== undefined) serviceData.hotel_room = body.hotelRoom || null;
     if (body.hotelBoard !== undefined) serviceData.hotel_board = body.hotelBoard || null;

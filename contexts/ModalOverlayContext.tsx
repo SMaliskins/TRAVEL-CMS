@@ -31,17 +31,22 @@ export function useModalOverlayContext() {
   return ctx;
 }
 
-/** Call in overlay modals (Edit, Add, LinkedServices, etc.) so TabBar hides while modal is open */
-export function useModalOverlay() {
+/** Call in overlay modals (Edit, Add, LinkedServices, etc.) so TabBar hides while modal is open.
+ *  Pass `active` = false to skip registration (e.g. when modal is mounted but hidden via isOpen prop). */
+export function useModalOverlay(active: boolean = true) {
   const ctx = useContext(ModalOverlayContext);
   const unregisterRef = React.useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
-    if (!ctx) return;
+    if (!ctx || !active) {
+      unregisterRef.current?.();
+      unregisterRef.current = null;
+      return;
+    }
     unregisterRef.current = ctx.registerModal();
     return () => {
       unregisterRef.current?.();
       unregisterRef.current = null;
     };
-  }, [ctx]);
+  }, [ctx, active]);
 }

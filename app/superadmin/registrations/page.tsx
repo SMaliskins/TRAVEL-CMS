@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface Registration {
   id: string;
@@ -33,6 +35,8 @@ export default function RegistrationsPage() {
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const regTrapRef = useFocusTrap<HTMLDivElement>(!!selectedRegistration);
+  useModalOverlay(!!selectedRegistration);
 
   useEffect(() => {
     loadRegistrations();
@@ -209,7 +213,7 @@ export default function RegistrationsPage() {
       {/* Detail Modal */}
       {selectedRegistration && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div ref={regTrapRef} className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-900">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -36,6 +37,7 @@ export default function AddAccompanyingModal({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   const existingSet = new Set(existingClientIds.filter((id): id is string => id != null));
 
@@ -126,9 +128,15 @@ export default function AddAccompanyingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col">
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-accompanying-title"
+        className="w-full max-w-lg max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col"
+      >
         <div className="border-b border-gray-200 px-6 py-4 flex-shrink-0 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Add accompanying persons</h2>
+          <h2 id="add-accompanying-title" className="text-lg font-semibold text-gray-900">Add accompanying persons</h2>
           <button
             type="button"
             onClick={onClose}

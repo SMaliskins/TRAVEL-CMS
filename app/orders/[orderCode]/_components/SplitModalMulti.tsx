@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface Service {
   id: string;
@@ -56,6 +58,8 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
   const [error, setError] = useState<string | null>(null);
 
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
 
   // Fetch parties list
   useEffect(() => {
@@ -412,7 +416,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div ref={trapRef} className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-amber-50">
           <h2 className="text-xl font-semibold text-gray-900">

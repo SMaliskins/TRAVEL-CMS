@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ContentModal from "@/components/ContentModal";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface BoardingPass {
   id: string;
@@ -45,6 +47,8 @@ export default function BoardingPassUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
 
   // Find ALL passes for this client AND this flight
   const clientPasses = existingPasses.filter(
@@ -353,7 +357,7 @@ export default function BoardingPassUpload({
         {/* Preview Modal */}
         {showPreview && previewPass && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]" onClick={() => setShowPreview(false)}>
-            <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-auto m-4" onClick={e => e.stopPropagation()}>
+            <div ref={trapRef} className="bg-white rounded-lg shadow-xl max-w-4xl max-h-[90vh] overflow-auto m-4" onClick={e => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span>{getFileIcon(previewPass)}</span>

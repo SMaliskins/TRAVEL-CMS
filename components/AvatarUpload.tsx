@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 interface AvatarUploadProps {
   avatarUrl: string | undefined;
@@ -21,6 +23,8 @@ export default function AvatarUpload({
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
 
   const sizeClass = size === "sm" ? "h-12 w-12 text-lg" : size === "md" ? "h-14 w-14 text-xl" : "h-16 w-16 text-2xl";
 
@@ -153,6 +157,7 @@ export default function AvatarUpload({
           onClick={() => !showDeleteConfirm && setShowModal(false)}
         >
           <div
+            ref={trapRef}
             className="relative bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-sm"
             onClick={(e) => e.stopPropagation()}
           >

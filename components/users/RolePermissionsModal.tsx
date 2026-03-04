@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { getRoleDisplayName } from "@/lib/auth/roles";
 
@@ -176,6 +178,8 @@ const ROLES = ["subagent", "agent", "finance", "manager", "supervisor"];
 
 export default function RolePermissionsModal({ onClose }: RolePermissionsModalProps) {
   useEscapeKey(onClose, true);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
   const { prefs } = useUserPreferences();
   const lang = prefs.language === "ru" ? "ru" : "en";
 
@@ -252,7 +256,7 @@ export default function RolePermissionsModal({ onClose }: RolePermissionsModalPr
           {tooltip.text}
         </div>
       )}
-      <div className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white shadow-xl">
+      <div ref={trapRef} className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white shadow-xl">
         <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-6 py-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">

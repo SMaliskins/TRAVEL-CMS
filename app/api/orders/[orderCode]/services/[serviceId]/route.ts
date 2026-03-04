@@ -86,6 +86,8 @@ export async function PATCH(
 
     // Tour / Hotel / terms (Edit modal sends snake_case)
     if (body.hotel_name !== undefined) updates.hotel_name = body.hotel_name;
+    if (body.hotel_hid !== undefined) updates.hotel_hid = body.hotel_hid;
+    if (body.hotelHid !== undefined) updates.hotel_hid = body.hotelHid;
     if (body.hotel_star_rating !== undefined) updates.hotel_star_rating = body.hotel_star_rating;
     if (body.hotel_room !== undefined) updates.hotel_room = body.hotel_room;
     if (body.hotel_board !== undefined) updates.hotel_board = body.hotel_board;

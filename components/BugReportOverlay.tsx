@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, X, Send, Loader2 } from "lucide-react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
 
 type Phase = "idle" | "source" | "selecting" | "commenting";
@@ -27,6 +29,8 @@ export default function BugReportOverlay() {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const pasteInputRef = useRef<HTMLTextAreaElement>(null);
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
+  const trapRef = useFocusTrap<HTMLDivElement>(phase === "source" || phase === "commenting");
+  useModalOverlay(phase === "source" || phase === "commenting");
   const dragStateRef = useRef<{
     dragging: boolean;
     startX: number;
@@ -565,6 +569,7 @@ export default function BugReportOverlay() {
       {phase === "source" && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50">
           <div
+            ref={trapRef}
             className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
             style={{ transform: `translate(${modalOffset.x}px, ${modalOffset.y}px)` }}
           >
@@ -637,6 +642,7 @@ export default function BugReportOverlay() {
       {phase === "commenting" && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50">
           <div
+            ref={trapRef}
             className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
             style={{ transform: `translate(${modalOffset.x}px, ${modalOffset.y}px)` }}
           >

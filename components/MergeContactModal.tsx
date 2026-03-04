@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 
@@ -60,6 +62,9 @@ export default function MergeContactModal({
     return () => clearTimeout(timer);
   }, [searchQuery, searchContacts]);
 
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
+
   const handleMerge = async () => {
     if (!selectedTarget) return;
     setMerging(true);
@@ -97,7 +102,7 @@ export default function MergeContactModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div ref={trapRef} className="w-full max-w-lg rounded-xl bg-white shadow-xl">
         <div className="border-b border-gray-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Merge contact</h2>
           <p className="mt-1 text-sm text-gray-500">

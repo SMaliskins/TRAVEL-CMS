@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { parseFlightBooking, getAirportTimezoneOffset } from '@/lib/flights/airlineParsers';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
 
@@ -76,6 +77,7 @@ export default function ChangeServiceModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   useEscapeKey(onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
   
   // Auto-calculate logic for Change Fee, Marge, and Client Price
   useEffect(() => {
@@ -466,7 +468,7 @@ export default function ChangeServiceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+      <div ref={trapRef} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">

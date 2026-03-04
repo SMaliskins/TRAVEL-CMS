@@ -5,6 +5,8 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
 import DateInput from "@/components/DateInput";
 import { useToast } from "@/contexts/ToastContext";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { Eye, FileDown, Mail, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 
 interface Invoice {
@@ -67,6 +69,10 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
   const [printPreviewTitle, setPrintPreviewTitle] = useState<string | null>(null);
   const [editingLinesInvoice, setEditingLinesInvoice] = useState<Invoice | null>(null);
+  const cancelTrapRef = useFocusTrap<HTMLDivElement>(!!cancelConfirm);
+  const editTrapRef = useFocusTrap<HTMLDivElement>(!!editingLinesInvoice);
+  const actionsTrapRef = useFocusTrap<HTMLDivElement>(!!openActionsInvoiceId);
+  useModalOverlay(!!cancelConfirm || !!editingLinesInvoice || !!openActionsInvoiceId);
   const [editingLinesItems, setEditingLinesItems] = useState<Array<{
     id: string;
     service_name: string;
@@ -642,7 +648,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     <div className="space-y-4 relative">
       {cancelConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
+          <div ref={cancelTrapRef} className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
             <p id="cancel-invoice-title" className="text-gray-900 mb-4">{cancelConfirm.message}</p>
             <div className="flex justify-end gap-2">
               <button
@@ -672,6 +678,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
           onClick={closeEditLines}
         >
           <div
+            ref={editTrapRef}
             className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1062,6 +1069,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             onClick={closeActionsModal}
           >
             <div
+              ref={actionsTrapRef}
               className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-4"
               onClick={(e) => e.stopPropagation()}
             >

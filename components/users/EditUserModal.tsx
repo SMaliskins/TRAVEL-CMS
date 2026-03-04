@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { getRoleDisplayName } from "@/lib/auth/roles";
 import RoleBadge from "./RoleBadge";
@@ -125,6 +127,8 @@ export default function EditUserModal({
   };
 
   useEscapeKey(onClose, true);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  useModalOverlay();
   const { prefs } = useUserPreferences();
 
   const isSelf = user.id === currentUserId;
@@ -215,7 +219,7 @@ export default function EditUserModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-xl">
+      <div ref={trapRef} className="mx-4 w-full max-w-md rounded-lg bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Edit User</h3>

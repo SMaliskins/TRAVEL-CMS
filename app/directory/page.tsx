@@ -8,6 +8,8 @@ import { ClientsByCitizenshipPie } from "@/components/directory/ClientsByCitizen
 import DirectoryMergeModal from "@/components/DirectoryMergeModal";
 import { formatPhoneForDisplay } from "@/utils/phone";
 import "../hotels-booking/modern-booking.css";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 // Role colors for badges
 const roleColors: Record<string, string> = {
@@ -50,6 +52,8 @@ export default function DirectoryPage() {
   const [syncLanguagesResult, setSyncLanguagesResult] = useState<{ updated: number; skipped: number } | null>(null);
   const [syncFormatNameLoading, setSyncFormatNameLoading] = useState(false);
   const [syncFormatNameResult, setSyncFormatNameResult] = useState<{ updated: number; skipped: number } | null>(null);
+  const importTrapRef = useFocusTrap<HTMLDivElement>(showImportModal);
+  useModalOverlay(showImportModal);
 
   const limit = 50;
   const totalPages = Math.ceil(total / limit) || 1;
@@ -763,7 +767,7 @@ export default function DirectoryPage() {
         {/* Import CSV Modal */}
         {showImportModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <div ref={importTrapRef} className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
               <h3 className="mb-2 text-lg font-semibold text-gray-900">Import Contacts from CSV</h3>
               <p className="mb-4 text-sm text-gray-600">
                 Upload a CSV file with contacts. Expected columns:

@@ -11,6 +11,7 @@ import FlightItineraryInput, { FlightSegment } from "@/components/FlightItinerar
 import { parseFlightBooking, getAirportTimezoneOffset } from "@/lib/flights/airlineParsers";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { formatDateDDMMYYYY, formatDateShort, segmentDisplayArrivalDate, normalizeSegmentsArrivalYear, nightsBetween } from "@/utils/dateFormat";
 import { toTitleCaseForDisplay } from "@/utils/nameFormat";
 import DateInput from "@/components/DateInput";
@@ -591,6 +592,7 @@ export default function AddServiceModal({
     if (!q) return roomOptionsForDropdown;
     return roomOptionsForDropdown.filter((opt) => opt.toLowerCase().includes(q));
   }, [roomOptionsForDropdown, hotelRoom]);
+  const defaultBoardOptions = useMemo(() => Object.values(BOARD_LABELS), []);
   const boardOptionsForDropdown = useMemo(() => {
     if (hotelMealOptions.length > 0) {
       const rhCodeToLabel: Record<string, string> = {
@@ -617,8 +619,8 @@ export default function AddServiceModal({
       const mapped = hotelMealOptions.map((c) => rhCodeToLabel[c] ?? rhCodeToLabel[c.toUpperCase()] ?? c);
       return [...new Set([...mapped, ...customBoards])];
     }
-    return [...new Set([...customBoards])];
-  }, [hotelMealOptions, customBoards]);
+    return [...new Set([...defaultBoardOptions, ...customBoards])];
+  }, [hotelMealOptions, customBoards, defaultBoardOptions]);
   const [transferType, setTransferType] = useState("");
   const [additionalServices, setAdditionalServices] = useState("");
   
@@ -946,6 +948,7 @@ export default function AddServiceModal({
   // ESC key handler
   useEscapeKey(onClose);
   const { modalStyle, onHeaderMouseDown } = useDraggableModal();
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   // Close room/board dropdowns on outside click
   useEffect(() => {
@@ -1820,6 +1823,7 @@ export default function AddServiceModal({
       // Add hotel-specific fields (same as Edit Service)
       if (showHotelFields) {
         payload.hotelName = hotelName || null;
+        if (hotelHid != null) payload.hotelHid = hotelHid;
         payload.hotelAddress = hotelAddress || null;
         payload.hotelPhone = hotelPhone || null;
         payload.hotelEmail = hotelEmail || null;
@@ -1922,6 +1926,7 @@ export default function AddServiceModal({
       // Tour (Package Tour): hotel fields + commission + agent discount
       if (categoryType === "tour") {
         payload.hotelName = hotelName || null;
+        if (hotelHid != null) payload.hotelHid = hotelHid;
         payload.hotelAddress = hotelAddress || null;
         payload.hotelPhone = hotelPhone || null;
         payload.hotelStarRating = hotelStarRating || null;
@@ -2108,7 +2113,7 @@ export default function AddServiceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-future-overlay">
-      <div className="w-full max-w-4xl max-h-[90vh] min-h-0 overflow-y-auto modal-future-container" style={modalStyle}>
+      <div ref={trapRef} className="w-full max-w-4xl max-h-[90vh] min-h-0 overflow-y-auto modal-future-container" style={modalStyle}>
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none shadow-sm" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-100 to-sky-50 shadow-sm">
