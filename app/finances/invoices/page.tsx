@@ -213,6 +213,11 @@ export default function FinancesInvoicesPage() {
 
   const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
 
+  const getShortNumber = (invoiceNumber: string): string => {
+    const parts = invoiceNumber.split('-');
+    return parts[parts.length - 1] || invoiceNumber;
+  };
+
   const getStatusBadge = (status: Invoice['status']) => {
     const styles: Record<string, string> = {
       draft: 'bg-gray-100 text-gray-700',
@@ -286,6 +291,7 @@ export default function FinancesInvoicesPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.invoiceNo")}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.date")}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.payer")}</th>
@@ -299,7 +305,7 @@ export default function FinancesInvoicesPage() {
           <tbody className="divide-y divide-gray-200">
             {invoices.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
                   {t(lang, "invoices.noInvoices")}
                 </td>
               </tr>
@@ -310,6 +316,7 @@ export default function FinancesInvoicesPage() {
                 const diff = isAmended && prevTotal != null ? invoice.total - prevTotal : null;
                 return (
                   <tr key={invoice.id} className={`hover:bg-gray-50 ${isAmended ? 'bg-amber-50/50' : ''}`}>
+                    <td className="px-4 py-3 text-gray-500">{getShortNumber(invoice.invoice_number)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{invoice.invoice_number}</td>
                     <td className="px-4 py-3 text-gray-600">{formatDate(invoice.invoice_date)}</td>
                     <td className="px-4 py-3 text-gray-600">{invoice.payer_name || "-"}</td>

@@ -32,11 +32,27 @@ interface Service {
   hotelBoard?: string | null;
   hotelStarRating?: string | null;
   mealPlanText?: string | null;
+  cabinClass?: string | null;
+  flightSegments?: { airline?: string }[] | null;
 }
 
-/** Same string as the "Name" column in the services list (never Direction). */
+/** Same string as the "Name" column in the services list, enriched with cabin class + airline for flights. */
 function getServiceDisplayNameForInvoice(s: Service): string {
-  return getServiceDisplayName(s, s.name);
+  const base = getServiceDisplayName(s, s.name);
+  const catType = s.categoryType || getCategoryTypeFromName(s.category);
+  if (catType !== "flight") return base;
+
+  const details: string[] = [];
+  const cabinLabels: Record<string, string> = { economy: "economy", premium_economy: "premium economy", business: "business", first: "first class" };
+  if (s.cabinClass && cabinLabels[s.cabinClass]) details.push(cabinLabels[s.cabinClass]);
+
+  const airlines = (s.flightSegments || [])
+    .map(seg => seg.airline?.trim())
+    .filter((a): a is string => !!a);
+  const uniqueAirlines = [...new Set(airlines)];
+  if (uniqueAirlines.length > 0) details.push(uniqueAirlines.join(", "));
+
+  return details.length > 0 ? `${base} (${details.join(", ")})` : base;
 }
 
 interface InvoiceCreatorProps {
@@ -438,7 +454,7 @@ export default function InvoiceCreator({
   useEffect(() => {
     const nextFromServices = currentServices.map(s => {
       const catType = s.categoryType || getCategoryTypeFromName(s.category);
-      const catLabel = getCategoryLabel(catType, effectiveInvoiceLanguage);
+      const catLabel = catType === "other" ? (s.category || "") : getCategoryLabel(catType, effectiveInvoiceLanguage);
       const displayName = getServiceDisplayNameForInvoice(s);
       const dateFrom = s.dateFrom;
       const dateTo = s.dateTo;
@@ -585,17 +601,23 @@ export default function InvoiceCreator({
   }, [showTypePopover]);
 
   // Load invoice number on mount — single: reserve one; bulk: reserve N for this order (same numbers on revisit)
+  const singleNumberFetchedRef = useRef(false);
   useEffect(() => {
     if (hasMultiplePayers && servicesByPayer && servicesByPayer.size > 1) return;
+    if (singleNumberFetchedRef.current) return;
+    singleNumberFetchedRef.current = true;
     generateInvoiceNumber().then(setInvoiceNumber);
   }, [orderCode, hasMultiplePayers, servicesByPayer]);
 
   // Bulk: reserve N numbers when we have payer groups and no numbers yet
+  const bulkNumbersFetchedRef = useRef(false);
   useEffect(() => {
     if (!(hasMultiplePayers && payerGroups.length > 1)) return;
+    if (bulkNumbersFetchedRef.current) return;
     const need = payerGroups.length;
     const have = invoiceNumberByPayerIndex.filter((n) => n?.trim()).length;
     if (have >= need) return;
+    bulkNumbersFetchedRef.current = true;
     generateInvoiceNumbers(need).then((nums) => setInvoiceNumberByPayerIndex(nums.slice(0, need)));
   }, [orderCode, hasMultiplePayers, payerGroups.length]);
 
@@ -1369,20 +1391,18 @@ export default function InvoiceCreator({
             )}
           </div>
           {availableCancelledNumbers.length > 0 && (
-            <div className="mt-2">
-              <span className="text-xs text-gray-600">Reuse number from cancelled invoice: </span>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {availableCancelledNumbers.map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setEffectiveInvoiceNumber(num)}
-                    className="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
+            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-gray-400">Reuse:</span>
+              {availableCancelledNumbers.map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => setEffectiveInvoiceNumber(num)}
+                  className="px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50/50 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
+                >
+                  {num}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -1889,14 +1909,14 @@ export default function InvoiceCreator({
                         )}
                       </div>
                       {availableCancelledNumbers.length > 0 && (
-                        <div className="mt-1.5 text-xs text-gray-600">
-                          Reuse number from cancelled invoice:{" "}
+                        <div className="mt-1 flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] text-gray-400">Reuse:</span>
                           {availableCancelledNumbers.map((num) => (
                             <button
                               key={num}
                               type="button"
                               onClick={() => setEffectiveInvoiceNumber(num)}
-                              className="mr-1.5 px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                              className="px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50/50 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                             >
                               {num}
                             </button>

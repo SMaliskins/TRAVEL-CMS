@@ -198,7 +198,7 @@ export function generateSmartHints(
         id: `linked-services-${transfer.id}`,
         type: 'suggestion',
         category: 'linked_services',
-        message: 'Potential linked services detected (flight, hotel, or Meet & Greet). We recommend opening the Transfer to link them.',
+        message: 'Potential linked services detected (flight, hotel, or Airport Services). We recommend opening the Transfer to link them.',
         priority: 1,
         action: {
           label: 'Open Transfer',
@@ -299,10 +299,10 @@ export function generateSmartHints(
             message: `Short connection time: ${timeStr} between flights. Is this enough?`,
             priority: 1, // High priority for short connections
             action: {
-              label: 'Add Meet & Greet',
-              serviceCategory: 'Other',
+              label: 'Add Airport Service',
+              serviceCategory: 'Airport Services',
               prefillData: {
-                name: 'Meet & Greet Service',
+                name: 'Meet & Greet',
                 dateFrom: currentFlight.dateTo,
                 dateTo: currentFlight.dateTo,
               }
@@ -319,10 +319,10 @@ export function generateSmartHints(
             message: 'Consider Fast Track service for quicker transit',
             priority: 2, // Higher priority for short connections
             action: {
-              label: 'Add Fast Track',
-              serviceCategory: 'Other',
+              label: 'Add Airport Service',
+              serviceCategory: 'Airport Services',
               prefillData: {
-                name: 'Fast Track Airport',
+                name: 'Fast Track',
                 dateFrom: currentFlight.dateTo,
                 dateTo: currentFlight.dateTo,
               }
@@ -339,10 +339,10 @@ export function generateSmartHints(
             message: 'Consider Fast Track service for quicker transit',
             priority: 3,
             action: {
-              label: 'Add Fast Track',
-              serviceCategory: 'Other',
+              label: 'Add Airport Service',
+              serviceCategory: 'Airport Services',
               prefillData: {
-                name: 'Fast Track Airport',
+                name: 'Fast Track',
                 dateFrom: currentFlight.dateTo,
                 dateTo: currentFlight.dateTo,
               }
@@ -360,10 +360,10 @@ export function generateSmartHints(
             message: 'Is there enough time between these connecting flights?',
             priority: 2,
             action: {
-              label: 'Add Meet & Greet',
-              serviceCategory: 'Other',
+              label: 'Add Airport Service',
+              serviceCategory: 'Airport Services',
               prefillData: {
-                name: 'Meet & Greet Service',
+                name: 'Meet & Greet',
                 dateFrom: currentFlight.dateTo,
                 dateTo: currentFlight.dateTo,
               }
@@ -381,10 +381,10 @@ export function generateSmartHints(
           message: 'Is there enough time between these connecting flights?',
           priority: 2,
           action: {
-            label: 'Add Meet & Greet',
-            serviceCategory: 'Other',
+            label: 'Add Airport Service',
+            serviceCategory: 'Airport Services',
             prefillData: {
-              name: 'Meet & Greet Service',
+              name: 'Meet & Greet',
               dateFrom: currentFlight.dateTo,
               dateTo: currentFlight.dateTo,
             }

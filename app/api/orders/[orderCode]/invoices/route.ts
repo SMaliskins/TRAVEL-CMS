@@ -156,16 +156,22 @@ export async function GET(
         });
       }
 
-      // Released numbers for this company and year — reuse smallest first
+      // Released numbers for this company and year — reuse smallest sequence first (cross-order)
       const { data: released } = await supabaseAdmin
         .from("invoice_reservations")
         .select("id, invoice_number")
         .eq("company_id", order.company_id)
         .eq("status", "released")
-        .like("invoice_number", `${prefix}-%`)
-        .order("invoice_number", { ascending: true });
+        .like("invoice_number", `___${currentYear}-%`);
 
-      const releasedList = (released || []).slice(0, needCount);
+      const extractSeq = (num: string): number => {
+        const m = num.match(/-(\d{4})$/);
+        return m ? parseInt(m[1], 10) : Infinity;
+      };
+      const releasedSorted = (released || [])
+        .filter(r => r.invoice_number.slice(3, 5) === currentYear)
+        .sort((a, b) => extractSeq(a.invoice_number) - extractSeq(b.invoice_number));
+      const releasedList = releasedSorted.slice(0, needCount);
       const toTakeFromReleased = releasedList.length;
       const toTakeFromSequence = needCount - toTakeFromReleased;
 
@@ -173,11 +179,15 @@ export async function GET(
 
       for (let i = 0; i < toTakeFromReleased; i++) {
         const row = releasedList[i];
-        const { error: upErr } = await supabaseAdmin
+        const seq = extractSeq(row.invoice_number);
+        const newNum = `${prefix}-${userInitials}-${String(seq).padStart(4, "0")}`;
+        const { data: upData, error: upErr } = await supabaseAdmin
           .from("invoice_reservations")
-          .update({ order_id: order.id, status: "reserved", reserved_at: new Date().toISOString() })
-          .eq("id", row.id);
-        if (!upErr) newNumbers.push(row.invoice_number);
+          .update({ order_id: order.id, status: "reserved", reserved_at: new Date().toISOString(), invoice_number: newNum })
+          .eq("id", row.id)
+          .eq("status", "released")
+          .select("id");
+        if (!upErr && upData && upData.length > 0) newNumbers.push(newNum);
       }
 
       if (toTakeFromSequence > 0) {

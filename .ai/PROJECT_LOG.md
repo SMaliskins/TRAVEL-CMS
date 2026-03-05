@@ -5,6 +5,23 @@
 
 ---
 
+### 📅 [2026-03-05] | Fix invoice number gaps — cross-order released pool reuse
+**Agent:** Code Writer
+**Task:** Fix sequential invoice numbering gaps
+**Complexity:** 🟡
+
+**Actions:**
+- Fixed released pool query in `/api/orders/[orderCode]/invoices/route.ts`: removed order-prefix filter (`like prefix-%`), replaced with year-only filter (`___YY-%`) so released numbers can be reused across different orders
+- When reusing released numbers, extract sequence and rebuild invoice_number with current order prefix + user initials + old sequence — prevents permanent gaps when user abandons invoice on one order and creates on another
+- Added race condition protection: UPDATE on released pool now checks `status = 'released'` and verifies rows affected via `.select("id")` to prevent concurrent claims of same number
+- Added ref guards (`singleNumberFetchedRef`, `bulkNumbersFetchedRef`) in `InvoiceCreator.tsx` to prevent duplicate API calls from useEffect re-fires when reactive dependencies change
+
+**Result:** Invoice numbers should now be strictly sequential with no gaps from cross-order reservation abandonment
+
+**Next Step:** QA verification
+
+---
+
 ### 📅 [2026-03-04] | Invoice Finance workflow — Processed / Amended
 **Agent:** Code Writer
 **Task:** Invoice processing workflow between Finance and users

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Link2, Plane, Hotel, Car } from "lucide-react";
+import { Link2, Plane, Hotel, Car, PlaneTakeoff } from "lucide-react";
 import type { FlightSegment } from "@/components/FlightItineraryInput";
 import { formatDateShort } from "@/utils/dateFormat";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
@@ -69,6 +69,10 @@ interface LinkedServicesModalProps {
   suggestPickupTime?: (routeId: string, flightServiceId: string, segmentIndex?: number) => void;
   /** When "one_way", show only Route 1 with option to add Route 2 */
   transferBookingType?: "one_way" | "return" | "by_hour";
+  /** Override the label and icon for the "current service" block (default: Transfer with car icon) */
+  serviceLabel?: string;
+  /** Airport service flow: arrival (Flight→Service→Transfer), departure (Transfer→Service→Flight), transit (Flight→Service→Flight) */
+  airportServiceFlowType?: "arrival" | "departure" | "transit";
 }
 
 export default function LinkedServicesModal({
@@ -79,13 +83,18 @@ export default function LinkedServicesModal({
   onClose,
   suggestPickupTime = () => {},
   transferBookingType,
+  serviceLabel,
+  airportServiceFlowType,
 }: LinkedServicesModalProps) {
   useModalOverlay();
   const trapRef = useFocusTrap<HTMLDivElement>(true);
   const isOneWay = transferBookingType === "one_way";
+  const hasAirportFlow = !!airportServiceFlowType;
 
   type BlockId = "flight" | "transfer" | "hotel";
-  const defaultRoute1Order: BlockId[] = ["flight", "transfer", "hotel"];
+  const defaultRoute1Order: BlockId[] = hasAirportFlow
+    ? airportServiceFlowType === "departure" ? ["hotel", "transfer", "flight"] : ["flight", "transfer", "hotel"]
+    : ["flight", "transfer", "hotel"];
   const defaultRoute2Order: BlockId[] = ["hotel", "transfer", "flight"];
   const [route1Order, setRoute1Order] = useState<BlockId[]>(() => defaultRoute1Order);
   const [route2Order, setRoute2Order] = useState<BlockId[]>(() => defaultRoute2Order);
@@ -98,10 +107,15 @@ export default function LinkedServicesModal({
     setOrder(next);
   };
 
+  const isAirportService = !!serviceLabel;
   const blockConfig: Record<BlockId, { icon: typeof Plane; label: string; isTransfer?: boolean }> = {
     flight: { icon: Plane, label: "Flight", isTransfer: false },
-    transfer: { icon: Car, label: "Transfer", isTransfer: true },
-    hotel: { icon: Hotel, label: "Hotel", isTransfer: false },
+    transfer: { icon: isAirportService ? PlaneTakeoff : Car, label: serviceLabel || "Transfer", isTransfer: true },
+    hotel: hasAirportFlow
+      ? airportServiceFlowType === "transit"
+        ? { icon: Plane, label: "Flight", isTransfer: false }
+        : { icon: Car, label: "Transfer", isTransfer: false }
+      : { icon: Hotel, label: "Hotel", isTransfer: false },
   };
 
   const DraggableRow = ({
@@ -287,162 +301,259 @@ export default function LinkedServicesModal({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Visual: where does this transfer sit relative to other services — draggable per route */}
+          {/* Visual: where does this service sit relative to other services */}
           {(flightServices.length > 0 || hotelServices.length > 0) && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 space-y-3">
-              <p className="text-xs font-medium text-emerald-800">Transfer position in itinerary</p>
-              <p className="text-[10px] text-emerald-700">Drag blocks to reorder. Route 1: arrival flow. Route 2: return flow.</p>
-              <DraggableRow
-                order={route1Order}
-                setOrder={setRoute1Order}
-                label="Route 1"
-                showFlight={flightServices.length > 0}
-                showHotel={hotelServices.length > 0}
-              />
-              {!isOneWay && (
-                <DraggableRow
-                  order={route2Order}
-                  setOrder={setRoute2Order}
-                  label="Route 2"
-                  showFlight={flightServices.length > 0}
-                  showHotel={hotelServices.length > 0}
-                />
+              <p className="text-xs font-medium text-emerald-800">{serviceLabel || "Transfer"} position in itinerary</p>
+              {hasAirportFlow ? (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-emerald-700">
+                    {airportServiceFlowType === "arrival" ? "Arrival flow: passenger arrives and is met at the airport" :
+                     airportServiceFlowType === "departure" ? "Departure flow: passenger is assisted before the flight" :
+                     "Transit flow: passenger is assisted between connecting flights"}
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {route1Order.map((id, idx) => {
+                      const cfg = blockConfig[id];
+                      const Icon = cfg.icon;
+                      const isCurrent = cfg.isTransfer;
+                      return (
+                        <React.Fragment key={`${id}-${idx}`}>
+                          {idx > 0 && <span className="text-slate-400">→</span>}
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg select-none ${
+                            isCurrent ? "bg-emerald-100 border-2 border-emerald-500 shadow-sm ring-2 ring-emerald-200" : "bg-white border border-slate-200 shadow-sm"
+                          }`}>
+                            <Icon className={`w-4 h-4 ${isCurrent ? "text-emerald-700" : "text-slate-500"}`} />
+                            <span className={`text-xs font-medium ${isCurrent ? "text-emerald-800" : "text-slate-700"}`}>{cfg.label}</span>
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[10px] text-emerald-700">Drag blocks to reorder. Route 1: arrival flow. Route 2: return flow.</p>
+                  <DraggableRow
+                    order={route1Order}
+                    setOrder={setRoute1Order}
+                    label="Route 1"
+                    showFlight={flightServices.length > 0}
+                    showHotel={hotelServices.length > 0}
+                  />
+                  {!isOneWay && (
+                    <DraggableRow
+                      order={route2Order}
+                      setOrder={setRoute2Order}
+                      label="Route 2"
+                      showFlight={flightServices.length > 0}
+                      showHotel={hotelServices.length > 0}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
-          {flightServices.length > 0 || hotelServices.length > 0 ? (
-            <p className="text-sm text-gray-600">
-              Link routes to flights so pickup times are suggested. Choose which route connects to which flight.
-            </p>
-          ) : (
-            <p className="text-sm text-gray-500">
-              No flights or hotels in this order yet. Add them first to link with transfer.
-            </p>
-          )}
-          {canAutoLink && (
-            <button
-              type="button"
-              onClick={handleAutoLink}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-emerald-400 bg-emerald-50 text-emerald-800 font-medium hover:bg-emerald-100 transition-colors"
-            >
-              <Hotel className="w-5 h-5" />
-              Auto-link airport — hotel — airport
-            </button>
-          )}
-          {flightServices.length > 0 ? (
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
-                <Plane className="w-4 h-4" />
-                Flights
-              </h4>
-              <div className="space-y-2">
-                {arrivalSegmentInfo && (
-                  <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm">
-                    <div className="text-[10px] font-semibold text-emerald-600 uppercase mb-1">Route 1 — arrival (pickup at airport)</div>
-                    <div className="font-medium text-gray-900">
-                      {`${arrivalSegmentInfo.segment.flightNumber || ""} ${arrivalSegmentInfo.segment.departure || ""}→${arrivalSegmentInfo.segment.arrival || ""}`.trim() || arrivalSegmentInfo.flight.name}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      Dep: {formatDateShort(arrivalSegmentInfo.segment.departureDate || "")} {arrivalSegmentInfo.segment.departureTimeScheduled || ""} {arrivalSegmentInfo.segment.departure || ""}
-                    </div>
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const r = transferRoutes[0];
-                          if (!r) return;
-                          const route = transferRoutes.find((x) => x.id === r.id);
-                          const flightWithSeg = { ...arrivalSegmentInfo.flight, flightSegments: [arrivalSegmentInfo.segment] };
-                          const pickupTime = !route?.pickupTime ? suggestPickupTimeFromFlight(flightWithSeg, true, route?.durationMin) : route.pickupTime;
-                          const hotelName = (firstHotel?.hotelName || "").trim() || "Hotel";
-                          const arrIata = (arrivalSegmentInfo.segment.arrival || "").trim();
-                          const segIdx = arrivalSegmentInfo.flight.flightSegments?.findIndex((x) => x === arrivalSegmentInfo.segment) ?? 0;
-                          const updated = transferRoutes.map((rt) =>
-                            rt.id === r.id
-                              ? { ...rt, linkedFlightId: arrivalSegmentInfo.flight.id, linkedSegmentIndex: segIdx, pickupTime: pickupTime || rt.pickupTime, pickup: arrIata ? `${arrIata} Airport` : "Airport", pickupType: "airport" as const, pickupMeta: arrIata ? { iata: arrIata } : undefined, dropoff: hotelName, dropoffType: "address" as const }
-                              : rt
-                          );
-                          onApply(updated);
-                          suggestPickupTime(r.id, arrivalSegmentInfo.flight.id, segIdx);
-                        }}
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          transferRoutes[0]?.linkedFlightId === arrivalSegmentInfo.flight.id
-                            ? "bg-emerald-600 text-white"
-                            : "bg-white border border-gray-300 text-gray-600 hover:border-emerald-400 hover:text-emerald-700"
-                        }`}
-                      >
-                        Link Route 1
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {!isOneWay && returnSegmentInfo && transferRoutes[1] && (
-                  <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm">
-                    <div className="text-[10px] font-semibold text-emerald-600 uppercase mb-1">Route 2 — return (dropoff at airport)</div>
-                    <div className="font-medium text-gray-900">
-                      {`${returnSegmentInfo.segment.flightNumber || ""} ${returnSegmentInfo.segment.departure || ""}→${returnSegmentInfo.segment.arrival || ""}`.trim() || returnSegmentInfo.flight.name}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      Dep: {formatDateShort(returnSegmentInfo.segment.departureDate || "")} {returnSegmentInfo.segment.departureTimeScheduled || ""} {returnSegmentInfo.segment.departure || ""}
-                    </div>
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const r = transferRoutes[1];
-                          if (!r) return;
-                          const route = transferRoutes.find((x) => x.id === r.id);
-                          const flightWithSeg = { ...returnSegmentInfo.flight, flightSegments: [returnSegmentInfo.segment] };
-                          const pickupTime = !route?.pickupTime ? suggestPickupTimeFromFlight(flightWithSeg, false, route?.durationMin, true) : route.pickupTime;
-                          const hotelName = (firstHotel?.hotelName || "").trim() || "Hotel";
-                          const depIata = (returnSegmentInfo.segment.departure || "").trim();
-                          const segIdx = returnSegmentInfo.flight.flightSegments?.findIndex((x) => x === returnSegmentInfo.segment) ?? 0;
-                          const updated = transferRoutes.map((rt) =>
-                            rt.id === r.id
-                              ? { ...rt, linkedFlightId: returnSegmentInfo.flight.id, linkedSegmentIndex: segIdx, pickupTime: pickupTime || rt.pickupTime, pickup: hotelName, pickupType: "address" as const, dropoff: depIata ? `${depIata} Airport` : "Airport", dropoffType: "airport" as const, dropoffMeta: depIata ? { iata: depIata } : undefined }
-                              : rt
-                          );
-                          onApply(updated);
-                          suggestPickupTime(r.id, returnSegmentInfo.flight.id, segIdx);
-                        }}
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          transferRoutes[1]?.linkedFlightId === returnSegmentInfo.flight.id
-                            ? "bg-emerald-600 text-white"
-                            : "bg-white border border-gray-300 text-gray-600 hover:border-emerald-400 hover:text-emerald-700"
-                        }`}
-                      >
-                        Link Route 2
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {isOneWay && transferRoutes.length === 1 && (
-                  <div className="p-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50/50 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const r0 = transferRoutes[0];
-                        const newRoute: TransferRouteData = {
-                          id: crypto.randomUUID(),
-                          pickup: r0?.dropoff || "",
-                          pickupType: (r0?.dropoffType as "airport" | "hotel" | "address") || "address",
-                          dropoff: r0?.pickup || "",
-                          dropoffType: (r0?.pickupType as "airport" | "hotel" | "address") || "address",
-                          pickupMeta: r0?.dropoffMeta,
-                          dropoffMeta: r0?.pickupMeta,
-                        };
-                        onApply([...transferRoutes, newRoute]);
-                      }}
-                      className="w-full py-2 text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 rounded-lg transition-colors"
-                    >
-                      + Add Route 2
-                    </button>
-                  </div>
-                )}
+          {/* Airport Services: simplified flight list with Link/Unlink */}
+          {hasAirportFlow ? (
+            flightServices.length > 0 ? (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+                  <Plane className="w-4 h-4" />
+                  Choose the flight for this service
+                </h4>
+                <div className="space-y-2">
+                  {flightsSorted.map((flight) => {
+                    const isLinked = transferRoutes[0]?.linkedFlightId === flight.id;
+                    const segs = flight.flightSegments || [];
+                    const routeStr = segs.length > 0
+                      ? segs.map(s => `${s.flightNumber || ""} ${s.departure || ""}→${s.arrival || ""}`).join(", ").trim()
+                      : flight.name;
+                    const dateStr = segs.length > 0
+                      ? segs.map(s => `${formatDateShort(s.departureDate || "")} ${s.departureTimeScheduled || ""}`).join(" / ")
+                      : "";
+                    return (
+                      <div key={flight.id} className={`p-3 rounded-lg border text-sm ${isLinked ? "border-emerald-400 bg-emerald-50" : "border-gray-200 bg-gray-50"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{routeStr || flight.name}</div>
+                            {dateStr && <div className="text-xs text-gray-500 mt-0.5">{dateStr}</div>}
+                          </div>
+                          {isLinked ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = transferRoutes.map(rt => ({ ...rt, linkedFlightId: undefined, linkedSegmentIndex: undefined }));
+                                onApply(updated);
+                              }}
+                              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 transition-colors"
+                            >
+                              Unlink
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = transferRoutes.map(rt => ({ ...rt, linkedFlightId: flight.id, linkedSegmentIndex: 0 }));
+                                onApply(updated);
+                              }}
+                              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            >
+                              Link
+                            </button>
+                          )}
+                        </div>
+                        {isLinked && (
+                          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-emerald-700">
+                            <Link2 className="w-3 h-3" />
+                            Linked to this service
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-sm text-gray-500">No flights in this order yet. Add a flight first, then link it here.</p>
+            )
           ) : (
-            <p className="text-sm text-gray-500">No flights in this order. Add flights first to link with transfer.</p>
+            <>
+              {flightServices.length > 0 || hotelServices.length > 0 ? (
+                <p className="text-sm text-gray-600">
+                  Link routes to flights so pickup times are suggested. Choose which route connects to which flight.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  No flights or hotels in this order yet. Add them first to link with transfer.
+                </p>
+              )}
+              {canAutoLink && (
+                <button
+                  type="button"
+                  onClick={handleAutoLink}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-emerald-400 bg-emerald-50 text-emerald-800 font-medium hover:bg-emerald-100 transition-colors"
+                >
+                  <Hotel className="w-5 h-5" />
+                  Auto-link airport — hotel — airport
+                </button>
+              )}
+              {flightServices.length > 0 ? (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+                    <Plane className="w-4 h-4" />
+                    Flights
+                  </h4>
+                  <div className="space-y-2">
+                    {arrivalSegmentInfo && (
+                      <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                        <div className="text-[10px] font-semibold text-emerald-600 uppercase mb-1">Route 1 — arrival (pickup at airport)</div>
+                        <div className="font-medium text-gray-900">
+                          {`${arrivalSegmentInfo.segment.flightNumber || ""} ${arrivalSegmentInfo.segment.departure || ""}→${arrivalSegmentInfo.segment.arrival || ""}`.trim() || arrivalSegmentInfo.flight.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          Dep: {formatDateShort(arrivalSegmentInfo.segment.departureDate || "")} {arrivalSegmentInfo.segment.departureTimeScheduled || ""} {arrivalSegmentInfo.segment.departure || ""}
+                        </div>
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const r = transferRoutes[0];
+                              if (!r) return;
+                              const route = transferRoutes.find((x) => x.id === r.id);
+                              const flightWithSeg = { ...arrivalSegmentInfo.flight, flightSegments: [arrivalSegmentInfo.segment] };
+                              const pickupTime = !route?.pickupTime ? suggestPickupTimeFromFlight(flightWithSeg, true, route?.durationMin) : route.pickupTime;
+                              const hotelName = (firstHotel?.hotelName || "").trim() || "Hotel";
+                              const arrIata = (arrivalSegmentInfo.segment.arrival || "").trim();
+                              const segIdx = arrivalSegmentInfo.flight.flightSegments?.findIndex((x) => x === arrivalSegmentInfo.segment) ?? 0;
+                              const updated = transferRoutes.map((rt) =>
+                                rt.id === r.id
+                                  ? { ...rt, linkedFlightId: arrivalSegmentInfo.flight.id, linkedSegmentIndex: segIdx, pickupTime: pickupTime || rt.pickupTime, pickup: arrIata ? `${arrIata} Airport` : "Airport", pickupType: "airport" as const, pickupMeta: arrIata ? { iata: arrIata } : undefined, dropoff: hotelName, dropoffType: "address" as const }
+                                  : rt
+                              );
+                              onApply(updated);
+                              suggestPickupTime(r.id, arrivalSegmentInfo.flight.id, segIdx);
+                            }}
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              transferRoutes[0]?.linkedFlightId === arrivalSegmentInfo.flight.id
+                                ? "bg-emerald-600 text-white"
+                                : "bg-white border border-gray-300 text-gray-600 hover:border-emerald-400 hover:text-emerald-700"
+                            }`}
+                          >
+                            Link Route 1
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {!isOneWay && returnSegmentInfo && transferRoutes[1] && (
+                      <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                        <div className="text-[10px] font-semibold text-emerald-600 uppercase mb-1">Route 2 — return (dropoff at airport)</div>
+                        <div className="font-medium text-gray-900">
+                          {`${returnSegmentInfo.segment.flightNumber || ""} ${returnSegmentInfo.segment.departure || ""}→${returnSegmentInfo.segment.arrival || ""}`.trim() || returnSegmentInfo.flight.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          Dep: {formatDateShort(returnSegmentInfo.segment.departureDate || "")} {returnSegmentInfo.segment.departureTimeScheduled || ""} {returnSegmentInfo.segment.departure || ""}
+                        </div>
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const r = transferRoutes[1];
+                              if (!r) return;
+                              const route = transferRoutes.find((x) => x.id === r.id);
+                              const flightWithSeg = { ...returnSegmentInfo.flight, flightSegments: [returnSegmentInfo.segment] };
+                              const pickupTime = !route?.pickupTime ? suggestPickupTimeFromFlight(flightWithSeg, false, route?.durationMin, true) : route.pickupTime;
+                              const hotelName = (firstHotel?.hotelName || "").trim() || "Hotel";
+                              const depIata = (returnSegmentInfo.segment.departure || "").trim();
+                              const segIdx = returnSegmentInfo.flight.flightSegments?.findIndex((x) => x === returnSegmentInfo.segment) ?? 0;
+                              const updated = transferRoutes.map((rt) =>
+                                rt.id === r.id
+                                  ? { ...rt, linkedFlightId: returnSegmentInfo.flight.id, linkedSegmentIndex: segIdx, pickupTime: pickupTime || rt.pickupTime, pickup: hotelName, pickupType: "address" as const, dropoff: depIata ? `${depIata} Airport` : "Airport", dropoffType: "airport" as const, dropoffMeta: depIata ? { iata: depIata } : undefined }
+                                  : rt
+                              );
+                              onApply(updated);
+                              suggestPickupTime(r.id, returnSegmentInfo.flight.id, segIdx);
+                            }}
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              transferRoutes[1]?.linkedFlightId === returnSegmentInfo.flight.id
+                                ? "bg-emerald-600 text-white"
+                                : "bg-white border border-gray-300 text-gray-600 hover:border-emerald-400 hover:text-emerald-700"
+                            }`}
+                          >
+                            Link Route 2
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {isOneWay && transferRoutes.length === 1 && (
+                      <div className="p-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50/50 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const r0 = transferRoutes[0];
+                            const newRoute: TransferRouteData = {
+                              id: crypto.randomUUID(),
+                              pickup: r0?.dropoff || "",
+                              pickupType: (r0?.dropoffType as "airport" | "hotel" | "address") || "address",
+                              dropoff: r0?.pickup || "",
+                              dropoffType: (r0?.pickupType as "airport" | "hotel" | "address") || "address",
+                              pickupMeta: r0?.dropoffMeta,
+                              dropoffMeta: r0?.pickupMeta,
+                            };
+                            onApply([...transferRoutes, newRoute]);
+                          }}
+                          className="w-full py-2 text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 rounded-lg transition-colors"
+                        >
+                          + Add Route 2
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No flights in this order. Add flights first to link with transfer.</p>
+              )}
+            </>
           )}
         </div>
         <div className="p-4 border-t bg-gray-50">

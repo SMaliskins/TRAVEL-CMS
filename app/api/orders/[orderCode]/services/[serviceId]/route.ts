@@ -3,6 +3,113 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 
+async function syncOrderDatesFromServices(orderId: string) {
+  try {
+    const { data: order } = await supabaseAdmin
+      .from("orders")
+      .select("date_from, date_to")
+      .eq("id", orderId)
+      .single();
+    if (!order) return;
+
+    const { data: services } = await supabaseAdmin
+      .from("order_services")
+      .select("service_date_from, service_date_to")
+      .eq("order_id", orderId)
+      .neq("res_status", "cancelled");
+    if (!services || services.length === 0) return;
+
+    const froms = services.map(s => s.service_date_from).filter(Boolean).sort();
+    const tos = services.map(s => s.service_date_to || s.service_date_from).filter(Boolean).sort();
+    const minFrom = froms[0] || null;
+    const maxTo = tos[tos.length - 1] || null;
+
+    const upd: Record<string, string | null> = {};
+    if (!order.date_from && minFrom) upd.date_from = minFrom;
+    if (!order.date_to && maxTo) upd.date_to = maxTo;
+    if (Object.keys(upd).length > 0) {
+      await supabaseAdmin.from("orders").update(upd).eq("id", orderId);
+    }
+  } catch (e) {
+    console.warn("[syncOrderDatesFromServices]", e);
+  }
+}
+
+/**
+ * GET /api/orders/[orderCode]/services/[serviceId]
+ * Fetch a single service with full details (flight_segments, baggage, cabin_class, etc.)
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string; serviceId: string }> }
+) {
+  try {
+    const { orderCode, serviceId } = await params;
+
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from("orders")
+      .select("id")
+      .eq("order_code", orderCode)
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const { data: s, error } = await supabaseAdmin
+      .from("order_services")
+      .select("*")
+      .eq("id", serviceId)
+      .eq("order_id", order.id)
+      .single();
+
+    if (error || !s) {
+      return NextResponse.json({ error: "Service not found" }, { status: 404 });
+    }
+
+    const { data: serviceTravellers } = await supabaseAdmin
+      .from("order_service_travellers")
+      .select("traveller_id")
+      .eq("service_id", serviceId);
+
+    const travellerIds = (serviceTravellers || []).map((st: { traveller_id: string }) => st.traveller_id);
+
+    const row = s as Record<string, unknown>;
+    const service = {
+      id: s.id,
+      category: s.category || "",
+      serviceName: s.service_name,
+      dateFrom: s.service_date_from,
+      dateTo: s.service_date_to,
+      supplierPartyId: s.supplier_party_id,
+      supplierName: s.supplier_name || "",
+      clientPartyId: s.client_party_id,
+      clientName: s.client_name || "",
+      payerPartyId: s.payer_party_id,
+      payerName: s.payer_name || "",
+      servicePrice: parseFloat(String(s.service_price || "0")),
+      clientPrice: parseFloat(String(s.client_price || "0")),
+      resStatus: s.res_status || "booked",
+      refNr: s.ref_nr || "",
+      ticketNr: s.ticket_nr || "",
+      travellerIds,
+      flightSegments: Array.isArray(row.flight_segments) ? row.flight_segments : [],
+      ticketNumbers: Array.isArray(row.ticket_numbers) ? row.ticket_numbers : [],
+      boardingPasses: Array.isArray(row.boarding_passes) ? row.boarding_passes : [],
+      baggage: row.baggage ?? "",
+      cabinClass: row.cabin_class ?? "economy",
+      pricingPerClient: Array.isArray(row.pricing_per_client) ? row.pricing_per_client : null,
+      invoice_id: row.invoice_id ?? null,
+      splitGroupId: row.split_group_id ?? null,
+    };
+
+    return NextResponse.json({ service });
+  } catch (err) {
+    console.error("GET service error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 /**
  * PATCH /api/orders/[orderCode]/services/[serviceId]
  * Update a service
@@ -140,6 +247,7 @@ export async function PATCH(
     if (body.pickup_time !== undefined) updates.pickup_time = body.pickup_time;
     if (body.estimated_duration !== undefined) updates.estimated_duration = body.estimated_duration;
     if (body.linked_flight_id !== undefined) updates.linked_flight_id = body.linked_flight_id;
+    if (body.airport_service_flow !== undefined) updates.airport_service_flow = body.airport_service_flow;
     if (body.transfer_routes !== undefined) updates.transfer_routes = Array.isArray(body.transfer_routes) ? body.transfer_routes : null;
     if (body.transfer_mode !== undefined) updates.transfer_mode = body.transfer_mode;
     if (body.vehicle_class !== undefined) updates.vehicle_class = body.vehicle_class;
@@ -181,6 +289,8 @@ export async function PATCH(
     }
 
     upsertOrderServiceEmbedding(serviceId).catch((e) => console.warn("[PATCH service] upsertOrderServiceEmbedding:", e));
+
+    syncOrderDatesFromServices(order.id).catch(() => {});
 
     const { data: orderForPush } = await supabaseAdmin
       .from("orders")
@@ -296,6 +406,8 @@ export async function DELETE(
         { status: 500 }
       );
     }
+
+    syncOrderDatesFromServices(order.id).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (err) {

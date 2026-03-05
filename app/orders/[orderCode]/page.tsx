@@ -1309,6 +1309,17 @@ export default function OrderPage({
                 orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 companyCurrencyCode={companyCurrencyCode}
                 onDestinationsFromServices={setAutoDestinations}
+                onDatesFromServices={(dates) => {
+                  setOrder(prev => {
+                    if (!prev) return prev;
+                    if (prev.date_from && prev.date_to) return prev;
+                    const upd: Partial<OrderData> = {};
+                    if (!prev.date_from && dates.dateFrom) upd.date_from = dates.dateFrom;
+                    if (!prev.date_to && dates.dateTo) upd.date_to = dates.dateTo;
+                    if (Object.keys(upd).length === 0) return prev;
+                    return { ...prev, ...upd };
+                  });
+                }}
                 onTotalsChanged={(totals) => {
                   setOrder(prev => prev ? {
                     ...prev,

@@ -34,6 +34,38 @@ async function getCompanyId(userId: string): Promise<string | null> {
   return userProfileData.company_id as string;
 }
 
+async function syncOrderDatesFromServices(orderId: string) {
+  try {
+    const { data: order } = await supabaseAdmin
+      .from("orders")
+      .select("date_from, date_to")
+      .eq("id", orderId)
+      .single();
+    if (!order) return;
+
+    const { data: services } = await supabaseAdmin
+      .from("order_services")
+      .select("service_date_from, service_date_to")
+      .eq("order_id", orderId)
+      .neq("res_status", "cancelled");
+    if (!services || services.length === 0) return;
+
+    const froms = services.map(s => s.service_date_from).filter(Boolean).sort();
+    const tos = services.map(s => s.service_date_to || s.service_date_from).filter(Boolean).sort();
+    const minFrom = froms[0] || null;
+    const maxTo = tos[tos.length - 1] || null;
+
+    const upd: Record<string, string | null> = {};
+    if (!order.date_from && minFrom) upd.date_from = minFrom;
+    if (!order.date_to && maxTo) upd.date_to = maxTo;
+    if (Object.keys(upd).length > 0) {
+      await supabaseAdmin.from("orders").update(upd).eq("id", orderId);
+    }
+  } catch (e) {
+    console.warn("[syncOrderDatesFromServices]", e);
+  }
+}
+
 async function getOrderId(orderCode: string, companyId: string): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from("orders")
@@ -292,6 +324,7 @@ export async function GET(
         pickupTime: row.pickup_time ?? null,
         estimatedDuration: row.estimated_duration ?? null,
         linkedFlightId: row.linked_flight_id ?? null,
+        airportServiceFlow: row.airport_service_flow ?? null,
         transferRoutes: Array.isArray(row.transfer_routes) ? row.transfer_routes : [],
         transferMode: row.transfer_mode ?? null,
         vehicleClass: row.vehicle_class ?? null,
@@ -433,6 +466,7 @@ export async function POST(
     if (body.pickupTime !== undefined) serviceData.pickup_time = body.pickupTime || null;
     if (body.estimatedDuration !== undefined) serviceData.estimated_duration = body.estimatedDuration || null;
     if (body.linkedFlightId !== undefined) serviceData.linked_flight_id = body.linkedFlightId || null;
+    if (body.airportServiceFlow !== undefined) serviceData.airport_service_flow = body.airportServiceFlow || null;
     // Transfer (new structured fields)
     if (body.transferRoutes !== undefined) serviceData.transfer_routes = Array.isArray(body.transferRoutes) ? body.transferRoutes : null;
     if (body.transferMode !== undefined) serviceData.transfer_mode = body.transferMode || null;
@@ -525,6 +559,8 @@ export async function POST(
     }
 
     upsertOrderServiceEmbedding(service.id).catch((e) => console.warn("[POST services] upsertOrderServiceEmbedding:", e));
+
+    syncOrderDatesFromServices(orderId).catch(() => {});
 
     const { data: orderForPush } = await supabaseAdmin
       .from("orders")

@@ -25,6 +25,13 @@ import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormaliz
 import { BANK_LIST } from "@/lib/constants/banks";
 import { Check, X, Plus, PanelLeft, Columns } from "lucide-react";
 
+function toTitleCase(str: string): string {
+  if (!str) return str;
+  return str
+    .toLowerCase()
+    .replace(/(^|\s|[-/(])(\S)/g, (_m, sep, ch) => sep + ch.toUpperCase());
+}
+
 function getZodiacSign(dateStr: string): string | null {
   if (!dateStr) return null;
   const d = new Date(dateStr);
@@ -732,8 +739,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
       // Set person or company fields based on actual type
       if (actualType === "person") {
-        formData.firstName = firstName;
-        formData.lastName = lastName;
+        formData.firstName = toTitleCase(firstName);
+        formData.lastName = toTitleCase(lastName);
         formData.gender = gender || undefined;
         formData.personalCode = personalCode || undefined;
         formData.dob = dob || undefined;
@@ -755,13 +762,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           formData.dob = passportData.dob;
         }
       } else {
-        formData.companyName = companyName;
+        formData.companyName = toTitleCase(companyName);
         formData.companyAvatarUrl = record?.companyAvatarUrl || undefined;
         formData.regNumber = regNo || undefined;
         formData.vatNumber = vatNo || undefined;
-        formData.legalAddress = address || undefined;
-        formData.actualAddress = actualAddress || undefined;
-        formData.contactPerson = contactPerson || undefined;
+        formData.legalAddress = toTitleCase(address) || undefined;
+        formData.actualAddress = toTitleCase(actualAddress) || undefined;
+        formData.contactPerson = toTitleCase(contactPerson) || undefined;
         if (!record || !record.personalCode) {
           formData.personalCode = regNo || undefined;
         }
@@ -1036,7 +1043,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setFirstName(e.target.value);
                           markFieldDirty("firstName");
                         }}
-                        onBlur={() => markFieldTouched("firstName")}
+                        onBlur={() => { setFirstName(v => toTitleCase(v)); markFieldTouched("firstName"); }}
                         onFocus={() => markFieldTouched("firstName")}
                         className={getInputClasses("firstName", true, firstName)}
                         required
@@ -1054,7 +1061,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setLastName(e.target.value);
                           markFieldDirty("lastName");
                         }}
-                        onBlur={() => markFieldTouched("lastName")}
+                        onBlur={() => { setLastName(v => toTitleCase(v)); markFieldTouched("lastName"); }}
                         onFocus={() => markFieldTouched("lastName")}
                         className={getInputClasses("lastName", true, lastName)}
                         required
@@ -1137,7 +1144,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         setCompanyName(e.target.value);
                         markFieldDirty("companyName");
                       }}
-                      onBlur={() => markFieldTouched("companyName")}
+                      onBlur={() => { setCompanyName(v => toTitleCase(v)); markFieldTouched("companyName"); }}
                       onFocus={() => markFieldTouched("companyName")}
                       className={getInputClasses("companyName", true, companyName)}
                       required
@@ -1187,7 +1194,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         setAddress(e.target.value);
                         markFieldDirty("address");
                       }}
-                      onBlur={() => markFieldTouched("address")}
+                      onBlur={() => { setAddress(v => toTitleCase(v)); markFieldTouched("address"); }}
                       onFocus={() => markFieldTouched("address")}
                       className={getInputClasses("address", false, address)}
                       aria-label="Legal address"
@@ -1261,7 +1268,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         setActualAddress(e.target.value);
                         markFieldDirty("actualAddress");
                       }}
-                      onBlur={() => markFieldTouched("actualAddress")}
+                      onBlur={() => { setActualAddress(v => toTitleCase(v)); markFieldTouched("actualAddress"); }}
                       onFocus={() => markFieldTouched("actualAddress")}
                       className={getInputClasses("actualAddress", false, actualAddress)}
                       aria-label="Actual address"
@@ -1285,7 +1292,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             setContactPerson(e.target.value);
                             markFieldDirty("contactPerson");
                           }}
-                          onBlur={() => markFieldTouched("contactPerson")}
+                          onBlur={() => { setContactPerson(v => toTitleCase(v)); markFieldTouched("contactPerson"); }}
                           onFocus={() => markFieldTouched("contactPerson")}
                           className={`${getInputClasses("contactPerson", false, contactPerson)} ${touchedFields.has("contactPerson") || contactPerson.trim() ? 'pr-10' : ''}`}
                           aria-label="Contact person"

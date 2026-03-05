@@ -614,7 +614,7 @@ export function generateInvoiceHTML(
     * { box-sizing: border-box; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
     .invoice-title { font-size: 32px; font-weight: bold; }
-    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 8px; }
     .section { border: 1px solid #ddd; background: #fafafa; padding: 12px 15px; border-radius: 5px; font-size: 12px; }
     .section-title { font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 8px; }
     .section-content { font-size: 12px; }
@@ -628,7 +628,7 @@ export function generateInvoiceHTML(
     .totals-table td:first-child { background: #fafafa; }
     .totals-table td.num { text-align: right; width: 100px; min-width: 100px; }
     .totals-table tr.total-row td { font-weight: bold; border-top: 2px solid #333; }
-    .items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 8px 0 16px 0; font-size: 12px; }
     .items-table th, .items-table td { padding: 8px 10px; border: 1px solid #ddd; font-size: 12px; }
     .items-table th { text-align: left; background: #f5f5f5; font-weight: 600; text-transform: uppercase; color: #444; }
     .items-table th:last-child, .items-table td.amount { text-align: right; width: 100px; min-width: 100px; box-sizing: border-box; }

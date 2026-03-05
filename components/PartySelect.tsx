@@ -6,6 +6,13 @@ import { supabase } from "@/lib/supabaseClient";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
+function toTitleCase(str: string): string {
+  if (!str) return str;
+  return str
+    .toLowerCase()
+    .replace(/(^|\s|[-/(])(\S)/g, (_m, sep, ch) => sep + ch.toUpperCase());
+}
+
 interface Party {
   id: string;
   display_name: string;
@@ -215,14 +222,14 @@ export default function PartySelect({
       };
 
       if (createType === "person") {
-        payload.firstName = createFirstName.trim();
-        payload.lastName = createLastName.trim();
+        payload.firstName = toTitleCase(createFirstName.trim());
+        payload.lastName = toTitleCase(createLastName.trim());
         if (createPersonalCode.trim()) payload.personalCode = createPersonalCode.trim();
         if (createPhone.trim()) payload.phone = createPhone.trim();
         if (createEmail.trim()) payload.email = createEmail.trim();
       } else {
-        payload.companyName = createCompanyName.trim();
-        if (createAddress.trim()) payload.legalAddress = createAddress.trim();
+        payload.companyName = toTitleCase(createCompanyName.trim());
+        if (createAddress.trim()) payload.legalAddress = toTitleCase(createAddress.trim());
         if (createRegNumber.trim()) payload.regNumber = createRegNumber.trim();
       }
       
@@ -290,18 +297,28 @@ export default function PartySelect({
     setCreateError("");
   };
   
-  // Service area options for suppliers
-  const SERVICE_AREA_OPTIONS = [
-    "Flight",
-    "Hotel", 
-    "Transfer",
-    "Tour",
-    "Insurance",
-    "Visa",
-    "Rent a Car",
-    "Cruise",
-    "Other",
-  ];
+  // Service area options for suppliers — loaded from Settings > Travel Services
+  const [serviceAreaOptions, setServiceAreaOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!showCreateForm || roleFilter !== "supplier") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch("/api/travel-service-categories", {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          credentials: "include",
+        });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        const names = (data.categories || [])
+          .filter((c: { is_active?: boolean }) => c.is_active !== false)
+          .map((c: { name: string }) => c.name);
+        if (!cancelled) setServiceAreaOptions(names);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [showCreateForm, roleFilter]);
   
   const toggleServiceArea = (area: string) => {
     setCreateServiceAreas(prev => 
@@ -536,6 +553,7 @@ export default function PartySelect({
                   placeholder="First Name *"
                   value={createFirstName}
                   onChange={(e) => setCreateFirstName(e.target.value)}
+                  onBlur={() => setCreateFirstName(v => toTitleCase(v))}
                   className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
                 />
                 <input
@@ -543,6 +561,7 @@ export default function PartySelect({
                   placeholder="Last Name *"
                   value={createLastName}
                   onChange={(e) => setCreateLastName(e.target.value)}
+                  onBlur={() => setCreateLastName(v => toTitleCase(v))}
                   className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>
@@ -577,6 +596,7 @@ export default function PartySelect({
                 placeholder="Company Name *"
                 value={createCompanyName}
                 onChange={(e) => setCreateCompanyName(e.target.value)}
+                onBlur={() => setCreateCompanyName(v => toTitleCase(v))}
                 className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
               />
               <input
@@ -584,6 +604,7 @@ export default function PartySelect({
                 placeholder="Address"
                 value={createAddress}
                 onChange={(e) => setCreateAddress(e.target.value)}
+                onBlur={() => setCreateAddress(v => toTitleCase(v))}
                 className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
               />
               <input
@@ -601,7 +622,7 @@ export default function PartySelect({
             <div className="mt-3 pt-3 border-t border-gray-200">
               <label className="block text-xs font-medium text-gray-700 mb-2">Service Areas</label>
               <div className="flex flex-wrap gap-1.5">
-                {SERVICE_AREA_OPTIONS.map((area) => (
+                {serviceAreaOptions.map((area) => (
                   <button
                     key={area}
                     type="button"
