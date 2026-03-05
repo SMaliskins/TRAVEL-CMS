@@ -426,7 +426,11 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         isOpen={!!previewDoc}
         onClose={() => setPreviewDoc(null)}
         title={previewDoc?.file_name}
-        url={previewDoc?.download_url ?? undefined}
+        url={
+          previewDoc
+            ? `/api/orders/${encodeURIComponent(orderCode)}/documents/${previewDoc.id}/file`
+            : undefined
+        }
       />
     </div>
   );
