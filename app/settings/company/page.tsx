@@ -43,15 +43,6 @@ const DATE_FORMATS = [
   { value: "yyyy-mm-dd", label: "YYYY-MM-DD" },
 ];
 
-const LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "lv", label: "Latvian" },
-  { value: "ru", label: "Russian" },
-  { value: "de", label: "German" },
-  { value: "fr", label: "French" },
-  { value: "es", label: "Spanish" },
-];
-
 const TIMEZONE_OPTIONS = [
   { cityLabel: "Riga", timezone: "Europe/Riga" },
   { cityLabel: "London", timezone: "Europe/London" },
@@ -138,7 +129,6 @@ interface Company {
   default_currency?: string;
   default_vat_rate?: number;
   date_format?: string;
-  document_language?: string;
   timezone?: string;
   city_label?: string;
   show_order_source?: boolean;
@@ -1145,19 +1135,6 @@ export default function CompanySettingsPage() {
                 >
                   {CURRENCIES.map((cur) => (
                     <option key={cur} value={cur}>{cur}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">System Language</label>
-                <select
-                  value={formData.document_language || "en"}
-                  onChange={(e) => updateField("document_language", e.target.value)}
-                  disabled={readonly}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  {LANGUAGES.map((lang) => (
-                    <option key={lang.value} value={lang.value}>{lang.label}</option>
                   ))}
                 </select>
               </div>

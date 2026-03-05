@@ -239,9 +239,33 @@ export async function GET(
                   user.email?.split("@")[0] || null;
     }
 
+    // If order dates were not set, derive from active services: date_from = first service start, date_to = last service end
+    let effectiveDateFrom = order.date_from;
+    let effectiveDateTo = order.date_to;
+    if (!effectiveDateFrom || !effectiveDateTo) {
+      const { data: dateServices } = await supabaseAdmin
+        .from("order_services")
+        .select("service_date_from, service_date_to")
+        .eq("order_id", order.id)
+        .eq("company_id", companyId)
+        .neq("res_status", "cancelled");
+      const withDates = (dateServices || []).filter(
+        (s: { service_date_from?: string | null; service_date_to?: string | null }) =>
+          s.service_date_from != null || s.service_date_to != null
+      );
+      if (withDates.length > 0) {
+        const froms = withDates.map((s: { service_date_from?: string | null }) => s.service_date_from).filter(Boolean) as string[];
+        const tos = withDates.map((s: { service_date_to?: string | null }) => s.service_date_to).filter(Boolean) as string[];
+        if (froms.length > 0 && !effectiveDateFrom) effectiveDateFrom = froms.sort()[0];
+        if (tos.length > 0 && !effectiveDateTo) effectiveDateTo = tos.sort().reverse()[0];
+      }
+    }
+
     return NextResponse.json({ 
       order: {
         ...order,
+        date_from: effectiveDateFrom ?? order.date_from,
+        date_to: effectiveDateTo ?? order.date_to,
         owner_name: ownerName,
         amount_total: amountTotalFromServices,
         amount_paid: amountPaid,

@@ -34,6 +34,8 @@ interface InvoiceOption {
   total: number;
   status: string;
   payer_name: string | null;
+  paid_amount?: number;
+  remaining?: number;
 }
 
 export interface EditPaymentData {
@@ -505,7 +507,12 @@ export default function AddPaymentModal({
                   setInvoiceId(e.target.value);
                   if (e.target.value) {
                     const inv = invoiceOptions.find((i) => i.id === e.target.value);
-                    if (inv?.total) setAmount(String(inv.total));
+                    if (inv) {
+                      const amountToSuggest = typeof inv.remaining === "number" && inv.remaining >= 0
+                        ? inv.remaining
+                        : inv.total;
+                      if (amountToSuggest != null) setAmount(String(amountToSuggest));
+                    }
                     if (inv?.payer_name) {
                       setPayerName(inv.payer_name);
                       setPayerSearch(inv.payer_name);
@@ -517,8 +524,10 @@ export default function AddPaymentModal({
                 <option value="">-- No invoice --</option>
                 {invoiceOptions.map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.invoice_number} -- {inv.total?.toFixed(2)} (
-                    {inv.status})
+                    {inv.invoice_number} -- {inv.total?.toFixed(2)} ({inv.status})
+                    {typeof inv.remaining === "number" && inv.remaining < (inv.total ?? 0) && inv.remaining >= 0
+                      ? `; remaining ${inv.remaining.toFixed(2)}`
+                      : ""}
                   </option>
                 ))}
               </select>

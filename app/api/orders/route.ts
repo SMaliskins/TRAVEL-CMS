@@ -129,10 +129,10 @@ export async function GET(request: NextRequest) {
     // Get invoice statistics for all orders
     const orderIds = orders.map((o: any) => o.id);
     
-    // Get all services for these orders with their invoice status and pricing
+    // Get all services for these orders with their invoice status, pricing, and dates (for deriving order dates when missing)
     const { data: servicesData } = await supabaseAdmin
       .from("order_services")
-      .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate")
+      .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to")
       .eq("company_id", companyId)
       .in("order_id", orderIds);
     
@@ -253,31 +253,52 @@ export async function GET(request: NextRequest) {
       });
     });
 
+    // Derive order dates from services when missing: date_from = min(service_date_from), date_to = max(service_date_to)
+    const derivedDates = new Map<string, { dateFrom: string; dateTo: string }>();
+    (orders || []).forEach((order: Record<string, unknown>) => {
+      const orderId = order.id as string;
+      if (order.date_from && order.date_to) return;
+      const activeServices = (servicesData || []).filter(
+        (s: any) => s.order_id === orderId && s.res_status !== "cancelled"
+      );
+      const froms = activeServices.map((s: any) => s.service_date_from).filter(Boolean).sort();
+      const tos = activeServices.map((s: any) => s.service_date_to).filter(Boolean).sort();
+      if (froms.length > 0 || tos.length > 0) {
+        derivedDates.set(orderId, {
+          dateFrom: (order.date_from as string) || (froms[0] ?? ""),
+          dateTo: (order.date_to as string) || (tos[tos.length - 1] ?? ""),
+        });
+      }
+    });
+
     // Transform to frontend format
     // Handle both old schema (without client_display_name) and new schema
     const transformedOrders = (orders || []).map((order: Record<string, unknown>) => {
       const orderId = order.id as string;
       const svcStats = serviceStats.get(orderId);
       const invStats = invoiceStats.get(orderId);
-      
+      const derived = derivedDates.get(orderId);
+      const datesFrom = (order.date_from as string) || derived?.dateFrom || "";
+      const datesTo = (order.date_to as string) || derived?.dateTo || "";
+
       // Amount, profit (за вычетом VAT), vat from services
       const amount = svcStats?.amount || Number(order.amount_total) || 0;
       const profit = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
       const vat = svcStats?.vat ?? 0;
       const paid = Number(order.amount_paid) || 0;
       const debt = amount - paid; // Calculate debt as amount - paid
-      
+
       // Owner from user profiles
       const ownerId = order.owner_user_id as string;
       const owner = ownerId ? (ownerNames.get(ownerId) || "") : "";
-      
+
       return {
         id: orderId,
         orderId: order.order_code || order.order_number || `#${orderId}`,
         client: (order.client_display_name as string) || "—",
         countriesCities: (order.countries_cities as string) || "",
-        datesFrom: (order.date_from as string) || "",
-        datesTo: (order.date_to as string) || "",
+        datesFrom,
+        datesTo,
         amount,
         paid,
         debt,

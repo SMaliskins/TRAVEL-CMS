@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
-import AddPaymentModal from "./_components/AddPaymentModal";
-import { Landmark, Banknote, CreditCard, Trash2 } from "lucide-react";
+import AddPaymentModal, { type EditPaymentData } from "./_components/AddPaymentModal";
+import { Landmark, Banknote, CreditCard, Trash2, Pencil } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -62,6 +62,7 @@ export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editPayment, setEditPayment] = useState<EditPaymentData | null>(null);
 
   const [filterMethod, setFilterMethod] = useState<string>(() => loadPaymentsFilters()?.filterMethod ?? "all");
   const [period, setPeriod] = useState<PeriodType>(() => loadPaymentsFilters()?.period ?? "currentMonth");
@@ -116,6 +117,23 @@ export default function PaymentsPage() {
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+
+  const handleEdit = (p: Payment) => {
+    setEditPayment({
+      id: p.id,
+      order_id: p.order_id,
+      order_code: p.order_code ?? undefined,
+      invoice_id: p.invoice_id,
+      method: p.method,
+      amount: p.amount,
+      currency: p.currency,
+      paid_at: p.paid_at,
+      payer_name: p.payer_name,
+      payer_party_id: undefined,
+      note: p.note ?? undefined,
+      account_id: p.account_id ?? undefined,
+    });
+  };
 
   const handleDelete = async (paymentId: string) => {
     if (!confirm("Delete this payment?")) return;
@@ -293,13 +311,22 @@ export default function PaymentsPage() {
                     {p.note || "-"}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => handleDelete(p.id)}
-                      className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                      title="Delete payment"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleEdit(p)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Edit payment"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(p.id)}
+                        className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Delete payment"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -309,9 +336,14 @@ export default function PaymentsPage() {
       </div>
 
       <AddPaymentModal
-        open={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onCreated={() => loadPayments()}
+        open={showAddModal || !!editPayment}
+        onClose={() => { setShowAddModal(false); setEditPayment(null); }}
+        onCreated={() => {
+          setShowAddModal(false);
+          setEditPayment(null);
+          loadPayments();
+        }}
+        editPayment={editPayment}
       />
     </div>
   );

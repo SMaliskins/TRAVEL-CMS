@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/contexts/UserContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import RoleBadge from "@/components/users/RoleBadge";
 
 interface Profile {
@@ -30,9 +32,16 @@ interface Profile {
   } | null;
 }
 
+const LANGUAGE_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: "en", labelKey: "lang.en" },
+  { value: "lv", labelKey: "lang.lv" },
+  { value: "ru", labelKey: "lang.ru" },
+];
+
 export default function ProfilePage() {
   const router = useRouter();
   const { updateAvatar } = useUser();
+  const { prefs, updatePrefs, isMounted: prefsMounted } = useUserPreferences();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -296,14 +305,14 @@ export default function ProfilePage() {
         {/* Header */}
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">My Profile</h1>
-            <p className="text-sm text-gray-500 mt-1">Your personal settings and preferences</p>
+            <h1 className="text-2xl font-semibold text-gray-900">{t(prefs.language, "profile.title")}</h1>
+            <p className="text-sm text-gray-500 mt-1">{t(prefs.language, "profile.subtitle")}</p>
           </div>
           <Link
             href="/settings"
             className="text-sm text-blue-600 hover:text-blue-700"
           >
-            ← Back to Settings
+            ← {t(prefs.language, "profile.backToSettings")}
           </Link>
         </div>
 
@@ -311,7 +320,7 @@ export default function ProfilePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Column 1: Profile Info Card */}
           <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t(prefs.language, "profile.profile")}</h2>
             <div className="flex flex-col items-center text-center">
               {/* Avatar with upload */}
               <div className="relative mb-4">
@@ -370,7 +379,7 @@ export default function ProfilePage() {
           {/* Column 2: Personal Information Form */}
           <div className="rounded-lg bg-white shadow-sm">
             <div className="border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Personal Information</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t(prefs.language, "profile.personalInfo")}</h2>
             </div>
 
             <form onSubmit={handleSaveProfile} className="p-6">
@@ -382,14 +391,14 @@ export default function ProfilePage() {
 
               {profileSuccess && (
                 <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-                  Profile updated successfully!
+                  {t(prefs.language, "profile.updated")}
                 </div>
               )}
 
               <div className="space-y-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Email
+                    {t(prefs.language, "profile.email")}
                   </label>
                   <input
                     type="email"
@@ -401,7 +410,7 @@ export default function ProfilePage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    First Name
+                    {t(prefs.language, "profile.firstName")}
                   </label>
                   <input
                     type="text"
@@ -413,7 +422,7 @@ export default function ProfilePage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Last Name
+                    {t(prefs.language, "profile.lastName")}
                   </label>
                   <input
                     type="text"
@@ -425,7 +434,7 @@ export default function ProfilePage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Phone
+                    {t(prefs.language, "profile.phone")}
                   </label>
                   <input
                     type="tel"
@@ -443,16 +452,41 @@ export default function ProfilePage() {
                   disabled={isSavingProfile}
                   className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isSavingProfile ? "Saving..." : "Save Changes"}
+                  {isSavingProfile ? t(prefs.language, "profile.saving") : t(prefs.language, "profile.saveChanges")}
                 </button>
               </div>
             </form>
           </div>
 
+          {/* Language */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">{t(prefs.language, "profile.language")}</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{t(prefs.language, "profile.languageHint")}</p>
+            </div>
+            <div className="p-6">
+              {prefsMounted ? (
+                <select
+                  value={prefs.language}
+                  onChange={(e) => updatePrefs({ language: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {t(prefs.language, opt.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
+              )}
+            </div>
+          </div>
+
           {/* Column 3: Change Password Form */}
           <div className="rounded-lg bg-white shadow-sm">
             <div className="border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t(prefs.language, "profile.changePassword")}</h2>
             </div>
 
             <form onSubmit={handleChangePassword} className="p-6">
@@ -464,14 +498,14 @@ export default function ProfilePage() {
 
               {passwordSuccess && (
                 <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-                  Password changed successfully!
+                  {t(prefs.language, "profile.passwordChanged")}
                 </div>
               )}
 
               <div className="space-y-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Current Password
+                    {t(prefs.language, "profile.currentPassword")}
                   </label>
                   <input
                     type="password"
@@ -484,7 +518,7 @@ export default function ProfilePage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    New Password
+                    {t(prefs.language, "profile.newPassword")}
                   </label>
                   <input
                     type="password"
@@ -494,12 +528,12 @@ export default function ProfilePage() {
                     minLength={8}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
                   />
-                  <p className="mt-1 text-xs text-gray-400">Minimum 8 characters</p>
+                  <p className="mt-1 text-xs text-gray-400">{t(prefs.language, "profile.minChars")}</p>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Confirm Password
+                    {t(prefs.language, "profile.confirmPassword")}
                   </label>
                   <input
                     type="password"
@@ -517,7 +551,7 @@ export default function ProfilePage() {
                   disabled={isSavingPassword || !currentPassword || !newPassword || !confirmPassword}
                   className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isSavingPassword ? "Changing..." : "Change Password"}
+                  {isSavingPassword ? t(prefs.language, "profile.changing") : t(prefs.language, "profile.changePasswordBtn")}
                 </button>
               </div>
             </form>

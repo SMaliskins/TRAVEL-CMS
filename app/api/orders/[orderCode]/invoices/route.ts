@@ -275,10 +275,15 @@ export async function GET(
       }
     }
 
-    const invoicesWithPaid = (invoices || []).map((inv: { id: string }) => ({
-      ...inv,
-      paid_amount: paidByInvoice[inv.id] || 0,
-    }));
+    const invoicesWithPaid = (invoices || []).map((inv: { id: string; total?: string | number }) => {
+      const paid = paidByInvoice[inv.id] || 0;
+      const total = Number(inv.total) || 0;
+      return {
+        ...inv,
+        paid_amount: paid,
+        remaining: Math.round((total - paid) * 100) / 100,
+      };
+    });
 
     return NextResponse.json({ 
       invoices: invoicesWithPaid,

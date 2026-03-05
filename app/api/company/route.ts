@@ -121,7 +121,7 @@ export async function PATCH(request: NextRequest) {
       // IATA
       "is_iata_accredited", "iata_code", "iata_type", "bsp_remittance_frequency",
       // Regional Settings
-      "default_currency", "date_format", "document_language", "timezone", "city_label",
+      "default_currency", "date_format", "timezone", "city_label",
       "show_order_source",
       "invoice_languages",
       "invoice_currencies",
