@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 interface Traveller {
   id: string;
@@ -22,6 +24,8 @@ export default function ItineraryTabs({
   onSelectTraveller,
   serviceCountByTraveller,
 }: ItineraryTabsProps) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   // Filter travellers to only show those with active services
   const travellersWithServices = travellers.filter(
     (t) => (serviceCountByTraveller[t.id] || 0) > 0
@@ -46,7 +50,7 @@ export default function ItineraryTabs({
               : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
           }`}
         >
-          <span>All Travellers</span>
+          <span>{t(lang, "order.allTravellers")}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded-full ${
             selectedTravellerId === null ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
           }`}>

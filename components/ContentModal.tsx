@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -79,7 +80,7 @@ export default function ContentModal({
   const hasUrl = Boolean(url);
   const hasHtml = Boolean(htmlContent);
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
       <div
         ref={trapRef}
@@ -139,4 +140,6 @@ export default function ContentModal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
 }

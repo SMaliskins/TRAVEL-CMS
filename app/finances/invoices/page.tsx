@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { FileDown, CheckCircle, Download } from "lucide-react";
 
 interface Invoice {
@@ -13,7 +15,7 @@ interface Invoice {
   invoice_number: string;
   invoice_date: string;
   due_date: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'processed' | 'amended';
+  status: 'draft' | 'sent' | 'issued' | 'paid' | 'cancelled' | 'overdue' | 'processed' | 'amended';
   total: number;
   subtotal: number;
   tax_amount: number;
@@ -62,6 +64,8 @@ function saveFilters(f: { filterStatus: string; activeOnly: boolean; period: Per
 
 export default function FinancesInvoicesPage() {
   const router = useRouter();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -219,20 +223,9 @@ export default function FinancesInvoicesPage() {
       processed: 'bg-purple-100 text-purple-700',
       amended: 'bg-amber-100 text-amber-800 border border-amber-300',
     };
-
-    const labels: Record<string, string> = {
-      draft: 'Draft',
-      sent: 'Sent',
-      paid: 'Paid',
-      cancelled: 'Cancelled',
-      overdue: 'Overdue',
-      processed: 'Processed',
-      amended: 'Amended',
-    };
-
     return (
       <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || styles.draft}`}>
-        {labels[status] || status}
+        {t(lang, `invoices.${status}`) || status}
       </span>
     );
   };
@@ -240,7 +233,7 @@ export default function FinancesInvoicesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading invoices...</div>
+        <div className="text-gray-500">{t(lang, "invoices.loading")}</div>
       </div>
     );
   }
@@ -248,11 +241,10 @@ export default function FinancesInvoicesPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-        <p className="text-sm text-gray-600 mt-1">Manage and process invoices</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t(lang, "invoices.title")}</h1>
+        <p className="text-sm text-gray-600 mt-1">{t(lang, "invoices.subtitle")}</p>
       </div>
 
-      {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -261,10 +253,10 @@ export default function FinancesInvoicesPage() {
             onChange={(e) => setActiveOnly(e.target.checked)}
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <span className="text-sm text-gray-700">Active only</span>
+          <span className="text-sm text-gray-700">{t(lang, "invoices.activeOnly")}</span>
         </label>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700">Status:</span>
+          <span className="text-sm text-gray-700">{t(lang, "invoices.status")}:</span>
           {['all', 'draft', 'sent', 'paid', 'overdue', 'processed', 'amended'].map((status) => (
             <button
               key={status}
@@ -275,7 +267,7 @@ export default function FinancesInvoicesPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
+              {t(lang, `invoices.${status}`)}
             </button>
           ))}
         </div>
@@ -285,6 +277,7 @@ export default function FinancesInvoicesPage() {
           startDate={dateFrom}
           endDate={dateTo}
           dropdownAlign="left"
+          calendarFocusPast
         />
       </div>
 
@@ -293,21 +286,21 @@ export default function FinancesInvoicesPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Invoice #</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Payer</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Order</th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-700">Amount</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700">Change</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.invoiceNo")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.date")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.payer")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.order")}</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">{t(lang, "invoices.amount")}</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">{t(lang, "invoices.change")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "invoices.status")}</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">{t(lang, "invoices.actions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {invoices.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
-                  No invoices found
+                  {t(lang, "invoices.noInvoices")}
                 </td>
               </tr>
             ) : (
@@ -355,7 +348,7 @@ export default function FinancesInvoicesPage() {
                         <button
                           onClick={() => handleExportPDF(invoice.id, invoice.order_code)}
                           className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                          title="Export PDF"
+                          title={t(lang, "invoices.exportPdf")}
                         >
                           <FileDown size={15} />
                         </button>
@@ -367,7 +360,7 @@ export default function FinancesInvoicesPage() {
                                 ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
                                 : 'text-green-600 hover:text-green-700 hover:bg-green-50'
                             }`}
-                            title={isAmended ? 'Re-process (amount changed)' : 'Mark as processed'}
+                            title={isAmended ? t(lang, "invoices.reprocess") : t(lang, "invoices.markProcessed")}
                           >
                             <CheckCircle size={15} />
                           </button>
@@ -384,15 +377,15 @@ export default function FinancesInvoicesPage() {
 
       {uploadedDocs.length > 0 && (
         <div className="mt-8">
-          <h3 className="mb-3 text-base font-semibold text-gray-900">Uploaded invoices</h3>
+          <h3 className="mb-3 text-base font-semibold text-gray-900">{t(lang, "invoices.uploadedInvoices")}</h3>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">File</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Order</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Uploaded</th>
-                  <th className="px-4 py-2 text-right font-semibold text-gray-700">Actions</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">{t(lang, "invoices.file")}</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">{t(lang, "invoices.order")}</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">{t(lang, "invoices.uploaded")}</th>
+                  <th className="px-4 py-2 text-right font-semibold text-gray-700">{t(lang, "invoices.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -421,7 +414,7 @@ export default function FinancesInvoicesPage() {
                           className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800"
                         >
                           <Download size={14} />
-                          Download
+                          {t(lang, "invoices.download")}
                         </a>
                       )}
                     </td>

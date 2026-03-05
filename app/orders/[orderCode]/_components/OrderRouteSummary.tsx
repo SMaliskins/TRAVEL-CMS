@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { getCityByName, countryCodeToFlag } from "@/lib/data/cities";
 import { supabase } from "@/lib/supabaseClient";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 interface OrderRouteSummaryProps {
   orderId: string;
@@ -41,6 +43,8 @@ export default function OrderRouteSummary({
   orderSource,
   onUpdate,
 }: OrderRouteSummaryProps) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Parse route - supports both new format (origin:|return:) and legacy (comma-separated)
@@ -106,14 +110,12 @@ export default function OrderRouteSummary({
     });
   }, [parsedRoute.destinations]);
 
-  // Calculate days/nights
+  // Calculate days/nights for display (translated in render)
   const daysAndNights = useMemo(() => {
     if (!dateFrom || !dateTo) return null;
     const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const nights = Math.max(0, days - 1);
-    const dayWord = days === 1 ? "day" : "days";
-    const nightWord = nights === 1 ? "night" : "nights";
-    return ` (${days} ${dayWord} / ${nights} ${nightWord})`;
+    return { days, nights };
   }, [dateFrom, dateTo]);
 
   // Calculate days until trip
@@ -223,11 +225,12 @@ export default function OrderRouteSummary({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             <span className="text-sm font-medium text-gray-700">
-              {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}{daysAndNights}
+              {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}
+              {daysAndNights && ` (${daysAndNights.days} ${t(lang, daysAndNights.days === 1 ? "order.day" : "order.days")} / ${daysAndNights.nights} ${t(lang, daysAndNights.nights === 1 ? "order.night" : "order.nights")})`}
             </span>
             {daysUntilTrip !== null && daysUntilTrip >= 0 && (
               <span className="text-xs font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-full">
-                {daysUntilTrip} {daysUntilTrip === 1 ? 'day' : 'days'} before trip
+                {daysUntilTrip} {t(lang, daysUntilTrip === 1 ? "order.dayBeforeTrip" : "order.daysBeforeTrip")}
               </span>
             )}
           </div>

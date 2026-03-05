@@ -2,6 +2,11 @@
 
 import React from "react";
 import { SmartHint, getHintIcon, getHintColorClass } from "@/lib/itinerary/smartHints";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
+
+const NO_INSURANCE_MSG_EN = "No travel insurance! This is recommended for custom travel packages.";
+const ADD_INSURANCE_LABEL_EN = "Add Insurance";
 
 interface SmartHintRowProps {
   hint: SmartHint;
@@ -10,8 +15,12 @@ interface SmartHintRowProps {
 }
 
 export default function SmartHintRow({ hint, onAction, onDismiss }: SmartHintRowProps) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const colorClass = getHintColorClass(hint.type);
   const icon = getHintIcon(hint.type);
+  const message = hint.message === NO_INSURANCE_MSG_EN ? t(lang, "order.noTravelInsurance") : hint.message;
+  const actionLabel = hint.action?.label === ADD_INSURANCE_LABEL_EN ? t(lang, "order.addInsurance") : hint.action?.label;
 
   return (
     <tr>
@@ -19,16 +28,16 @@ export default function SmartHintRow({ hint, onAction, onDismiss }: SmartHintRow
         <div className={`mx-2 my-1 px-3 py-2 rounded-lg border flex items-center justify-between ${colorClass}`}>
           <div className="flex items-center gap-2">
             <span className="text-lg">{icon}</span>
-            <span className="text-sm font-medium">{hint.message}</span>
+            <span className="text-sm font-medium">{message}</span>
           </div>
           
           <div className="flex items-center gap-2">
-            {hint.action && onAction && (
+            {hint.action && onAction && actionLabel && (
               <button
                 onClick={() => onAction(hint)}
                 className="px-3 py-1 text-xs font-medium rounded bg-white border border-current hover:bg-opacity-80 transition-colors"
               >
-                {hint.action.label}
+                {actionLabel}
               </button>
             )}
             {onDismiss && (

@@ -51,6 +51,8 @@ import { generateSmartHints, SmartHint, ServiceForHint } from "@/lib/itinerary/s
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 interface Traveller {
   id: string;
@@ -186,10 +188,12 @@ const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_ra
 ];
 
 function ChooseServiceTypeModal({
+  lang,
   categories,
   onSelect,
   onClose,
 }: {
+  lang: string;
   categories: { id: string; name: string; type?: string; vat_rate?: number }[];
   onSelect: (categoryId: string, category?: { id: string; name: string; type?: string; vat_rate?: number }) => void;
   onClose: () => void;
@@ -212,7 +216,7 @@ function ChooseServiceTypeModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">What service are you adding?</h2>
+          <h2 className="text-base font-semibold text-gray-900">{t(lang, "order.whatServiceAdding")}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -232,7 +236,7 @@ function ChooseServiceTypeModal({
               onClick={() => onSelect(cat.id, cat)}
               className="flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800"
             >
-              {cat.name}
+              {cat.type ? (t(lang, `order.category.${cat.type}` as any) ?? cat.name) : cat.name}
             </button>
           ))}
         </div>
@@ -242,9 +246,11 @@ function ChooseServiceTypeModal({
 }
 
 function TransferTypeChooserPopup({
+  lang,
   onSelect,
   onClose,
 }: {
+  lang: string;
   onSelect: (type: "one_way" | "return" | "by_hour") => void;
   onClose: () => void;
 }) {
@@ -266,7 +272,7 @@ function TransferTypeChooserPopup({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">Transfer type</h2>
+          <h2 className="text-base font-semibold text-gray-900">{t(lang, "order.transferType")}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -278,28 +284,28 @@ function TransferTypeChooserPopup({
             </svg>
           </button>
         </div>
-        <p className="text-sm text-gray-600 mb-4">Choose type so we can suggest Linked Services correctly.</p>
+        <p className="text-sm text-gray-600 mb-4">{t(lang, "order.transferTypeHint")}</p>
         <div className="flex flex-col gap-2">
           <button
             type="button"
             onClick={() => onSelect("one_way")}
             className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
           >
-            One way
+            {t(lang, "order.oneWay")}
           </button>
           <button
             type="button"
             onClick={() => onSelect("return")}
             className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
           >
-            Return Transfer
+            {t(lang, "order.returnTransfer")}
           </button>
           <button
             type="button"
             onClick={() => onSelect("by_hour")}
             className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800"
           >
-            By the hour
+            {t(lang, "order.byHour")}
           </button>
         </div>
       </div>
@@ -372,6 +378,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   onTotalsChanged,
   stickyTopOffset = 0,
 }, ref) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const router = useRouter();
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -1971,7 +1979,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ClipboardList size={18} strokeWidth={1.6} className="text-gray-500" />
-            <h2 className="text-base font-semibold text-gray-900">Services</h2>
+            <h2 className="text-base font-semibold text-gray-900">{t(lang, "order.services")}</h2>
             <span className="text-xs text-gray-500">({visibleServices.length}{hideCancelled && services.length > visibleServices.length ? ` of ${services.length}` : ""})</span>
           </div>
           <div className="flex items-center gap-2">
@@ -1982,45 +1990,45 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
                   hasActiveFilters ? "bg-blue-100 text-blue-700 hover:bg-blue-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
-                title="Filter by Category, Supplier, Client, Payer"
+                title={t(lang, "order.filterBy")}
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
-                Filter{hasActiveFilters ? ` (${[filterCategory, filterSupplier, filterClient, filterPayer].filter(Boolean).length})` : ""}
+                {t(lang, "order.filter")}{hasActiveFilters ? ` (${[filterCategory, filterSupplier, filterClient, filterPayer].filter(Boolean).length})` : ""}
               </button>
               {filterMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-white rounded-lg border border-gray-200 shadow-lg py-2 px-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-700">Filter by</span>
+                    <span className="text-xs font-medium text-gray-700">{t(lang, "order.filterBy")}</span>
                     {hasActiveFilters && (
-                      <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">Clear</button>
+                      <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">{t(lang, "order.clear")}</button>
                     )}
                   </div>
                   <div className="space-y-2">
                     <div>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">Category</label>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">{t(lang, "order.servCategory")}</label>
                       <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
                         <option value="">All</option>
                         {filterOptions.categories.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">Supplier</label>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">{t(lang, "order.servSupplier")}</label>
                       <select value={filterSupplier} onChange={(e) => setFilterSupplier(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
                         <option value="">All</option>
                         {filterOptions.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">Client</label>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">{t(lang, "order.servClient")}</label>
                       <select value={filterClient} onChange={(e) => setFilterClient(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
                         <option value="">All</option>
                         {filterOptions.clients.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">Payer</label>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">{t(lang, "order.servPayer")}</label>
                       <select value={filterPayer} onChange={(e) => setFilterPayer(e.target.value)} className="w-full text-xs border border-gray-300 rounded px-2 py-1">
                         <option value="">All</option>
                         {filterOptions.payers.map(p => <option key={p} value={p}>{p}</option>)}
@@ -2038,7 +2046,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                   ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
-              title={hideCancelled ? "Show cancelled services" : "Hide cancelled services"}
+              title={hideCancelled ? t(lang, "order.showCancelled") : t(lang, "order.hideCancelled")}
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {hideCancelled ? (
@@ -2047,7 +2055,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                 )}
               </svg>
-              {hideCancelled ? "Show" : "Hide"} Cancelled
+              {hideCancelled ? t(lang, "order.showCancelled") : t(lang, "order.hideCancelled")}
             </button>
           </div>
         </div>
@@ -2079,38 +2087,38 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                         onClick={(e) => e.stopPropagation()}
                       />
                     )}
-                    <span>Invoice</span>
+                    <span>{t(lang, "order.servInvoice")}</span>
                   </div>
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Category
+                  {t(lang, "order.servCategory")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Name
+                  {t(lang, "order.servName")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Supplier
+                  {t(lang, "order.servSupplier")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Client
+                  {t(lang, "order.servClient")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Payer
+                  {t(lang, "order.servPayer")}
                 </th>
                 <th className="w-20 px-1 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Service Price
+                  {t(lang, "order.servServicePrice")}
                 </th>
                 <th className="w-20 px-1 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Client Price
+                  {t(lang, "order.servClientPrice")}
                 </th>
                 <th className="min-w-[180px] px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Travellers
+                  {t(lang, "order.servTravellers")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Status
+                  {t(lang, "order.servStatus")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Terms
+                  {t(lang, "order.servTerms")}
                 </th>
               </tr>
             </thead>
@@ -2537,6 +2545,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
       {showChooseCategoryModal && (
         <ChooseServiceTypeModal
+          lang={lang}
           categories={serviceCategories.length > 0 ? serviceCategories : CHOOSE_CATEGORY_FALLBACK}
           onSelect={(categoryId, category) => {
             setAddServiceCategoryId(categoryId);
@@ -2557,6 +2566,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
       {showTransferTypePopup && (
         <TransferTypeChooserPopup
+          lang={lang}
           onSelect={(transferType) => {
             setAddServiceTransferBookingType(transferType);
             setShowTransferTypePopup(false);

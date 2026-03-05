@@ -54,9 +54,31 @@ export async function GET(request: NextRequest) {
     if (method) query = query.eq("method", method);
     if (accountId) query = query.eq("account_id", accountId);
 
-    const { data, error } = await query;
+    let data: unknown[] | null = null;
+    let error: { message?: string } | null = null;
+    try {
+      const result = await query;
+      data = result.data;
+      error = result.error;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network/i.test(msg)) {
+        return NextResponse.json(
+          { error: "Database connection failed. Please check your network and Supabase status." },
+          { status: 503 }
+        );
+      }
+      throw err;
+    }
 
     if (error) {
+      const isNetwork = /fetch failed|ECONNREFUSED|ETIMEDOUT|network/i.test(error.message || "");
+      if (isNetwork) {
+        return NextResponse.json(
+          { error: "Database connection failed. Please check your network and Supabase status." },
+          { status: 503 }
+        );
+      }
       console.error("[payments] GET error:", error);
       return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 });
     }
@@ -72,7 +94,14 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({ data: payments });
-  } catch (err) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network/i.test(msg)) {
+      return NextResponse.json(
+        { error: "Database connection failed. Please check your network and Supabase status." },
+        { status: 503 }
+      );
+    }
     console.error("[payments] GET:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

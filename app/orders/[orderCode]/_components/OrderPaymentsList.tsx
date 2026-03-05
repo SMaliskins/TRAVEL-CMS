@@ -4,6 +4,8 @@ import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { Pencil, Ban, Plus, Landmark, Banknote, CreditCard } from "lucide-react";
 import AddPaymentModal, { type EditPaymentData } from "@/app/finances/payments/_components/AddPaymentModal";
 
@@ -44,6 +46,8 @@ const METHOD_STYLE: Record<string, string> = {
 };
 
 export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }: OrderPaymentsListProps) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
@@ -142,15 +146,15 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
   if (payments.length === 0) return (
     <div>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Payments</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{t(lang, "payments.title")}</h2>
         <button
           onClick={() => setShowAddModal(true)}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
         >
-          + Add Payment
+          + {t(lang, "payments.addPayment")}
         </button>
       </div>
-      <div className="text-sm text-gray-400 py-4">No payments yet</div>
+      <div className="text-sm text-gray-400 py-4">{t(lang, "order.noPaymentsYet")}</div>
       <AddPaymentModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -176,7 +180,7 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Payments</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{t(lang, "payments.title")}</h2>
         <div className="flex items-center gap-2">
           {hasCancelled && (
             <button
@@ -186,7 +190,7 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
                   ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
                   : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
               }`}
-              title={hideCancelled ? 'Show cancelled payments' : 'Hide cancelled payments'}
+              title={hideCancelled ? t(lang, "order.showCancelledPayments") : t(lang, "order.hideCancelledPayments")}
             >
               {hideCancelled ? (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
@@ -199,20 +203,20 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
           >
-            + Add Payment
+            + {t(lang, "payments.addPayment")}
           </button>
         </div>
       </div>
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50 text-xs">
-            <th className="text-left py-1.5 px-2 font-medium text-gray-600">Date</th>
-            <th className="text-left py-1.5 px-2 font-medium text-gray-600">Payer</th>
-            <th className="text-center py-1.5 px-2 font-medium text-gray-600">Method</th>
-            <th className="text-right py-1.5 px-2 font-medium text-gray-600">Amount</th>
-            <th className="text-left py-1.5 px-2 font-medium text-gray-600">Note</th>
-            <th className="text-center py-1.5 px-2 font-medium text-gray-600">Invoice</th>
-            <th className="text-center py-1.5 px-2 font-medium text-gray-600 w-[80px]">Actions</th>
+            <th className="text-left py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.date")}</th>
+            <th className="text-left py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.payer")}</th>
+            <th className="text-center py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.method")}</th>
+            <th className="text-right py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.amount")}</th>
+            <th className="text-left py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.note")}</th>
+            <th className="text-center py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.invoice")}</th>
+            <th className="text-center py-1.5 px-2 font-medium text-gray-600 w-[80px]">{t(lang, "payments.actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -225,12 +229,12 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
                 <td className="py-1.5 px-2 text-center">
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded ${isCancelled ? "bg-gray-100 text-gray-400" : (METHOD_STYLE[p.method] || "bg-gray-100 text-gray-700")}`}>
                     {METHOD_ICON[p.method]}
-                    {p.method}
+                    {t(lang, `payments.${p.method}` as any)}
                   </span>
                 </td>
                 <td className={`py-1.5 px-2 text-right font-medium ${isCancelled ? "text-gray-400 line-through" : "text-gray-900"}`}>{formatCurrency(p.amount, p.currency)}</td>
                 <td className="py-1.5 px-2 text-gray-500 text-xs max-w-[150px] truncate">
-                  {isCancelled ? <span className="text-red-500 text-xs">Cancelled</span> : (p.note || "—")}
+                  {isCancelled ? <span className="text-red-500 text-xs">{t(lang, "payments.cancelled")}</span> : (p.note || "—")}
                 </td>
                 <td className="py-1.5 px-2 text-center text-xs text-gray-400">
                   {p.invoice_id ? "✓" : "—"}
@@ -253,13 +257,13 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
         </tbody>
         <tfoot>
           <tr className="border-t border-gray-300">
-            <td colSpan={3} className="py-1.5 px-2 text-xs font-medium text-gray-600 text-right">Total:</td>
+            <td colSpan={3} className="py-1.5 px-2 text-xs font-medium text-gray-600 text-right">{t(lang, "payments.total")}:</td>
             <td className="py-1.5 px-2 text-right font-semibold text-gray-900 text-sm">{formatCurrency(total)}</td>
             <td colSpan={3} />
           </tr>
           {total > linkedToInvoices + 0.01 && (
             <tr>
-              <td colSpan={3} className="py-1 px-2 text-xs font-medium text-purple-600 text-right">Overpayment:</td>
+              <td colSpan={3} className="py-1 px-2 text-xs font-medium text-purple-600 text-right">{t(lang, "payments.overpayment")}:</td>
               <td className="py-1 px-2 text-right font-semibold text-purple-700 text-sm">
                 +{formatCurrency(Math.round((total - linkedToInvoices) * 100) / 100)}
               </td>

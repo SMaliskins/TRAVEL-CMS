@@ -57,11 +57,18 @@ export default function DateRangePicker({
     return () => document.removeEventListener("keydown", handleEscape, true);
   }, [isCalendarOpen, from, to]);
 
-  // Update dropdown position when opening (for portal)
+  // Update dropdown position when opening (for portal); keep calendar inside viewport
+  const CALENDAR_WIDTH = 680;
+  const PADDING = 8;
   useEffect(() => {
-    if (!isCalendarOpen || !triggerRef.current) return;
+    if (!isCalendarOpen || typeof window === "undefined" || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    setDropdownPosition({ top: rect.bottom + 4, left: rect.left });
+    let left = rect.left;
+    if (left + CALENDAR_WIDTH > window.innerWidth - PADDING) {
+      left = Math.max(PADDING, window.innerWidth - CALENDAR_WIDTH - PADDING);
+    }
+    if (left < PADDING) left = PADDING;
+    setDropdownPosition({ top: rect.bottom + 4, left });
   }, [isCalendarOpen]);
 
   // Close calendar on click outside

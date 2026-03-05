@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatDateDDMMYYYY, parseDisplayToIso } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { FileUp, FileText, Download, Trash2, Eye, Pencil, Check, X } from "lucide-react";
 
 interface OrderDocument {
@@ -35,6 +37,8 @@ interface Props {
 }
 
 export default function OrderDocumentsTab({ orderCode }: Props) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [documents, setDocuments] = useState<OrderDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -240,13 +244,13 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
 
   return (
     <div className="rounded-lg bg-white p-6 shadow-sm">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">Documents</h2>
-      <p className="mb-4 text-sm text-gray-600">Upload invoices and other documents for this order. They will be visible in Finances.</p>
+      <h2 className="mb-4 text-lg font-semibold text-gray-900">{t(lang, "order.tab.documents")}</h2>
+      <p className="mb-4 text-sm text-gray-600">{t(lang, "order.documentsDesc")}</p>
 
       <div className="mb-4 flex items-center gap-3">
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
           <FileUp size={18} />
-          {uploading ? "Uploading..." : "Upload invoice"}
+          {uploading ? t(lang, "order.uploading") : t(lang, "order.uploadInvoice")}
           <input
             type="file"
             accept=".pdf,.png,.jpg,.jpeg,.webp"
@@ -262,10 +266,10 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
       )}
 
       {loading ? (
-        <div className="py-8 text-center text-gray-500">Loading documents...</div>
+        <div className="py-8 text-center text-gray-500">{t(lang, "order.loadingDocuments")}</div>
       ) : documents.length === 0 ? (
         <div className="rounded-lg border-2 border-dashed border-gray-200 py-12 text-center text-gray-500">
-          No documents yet. Upload an invoice or other document above.
+          {t(lang, "order.noDocumentsYet")}
         </div>
       ) : (
         <table className="w-full text-sm">

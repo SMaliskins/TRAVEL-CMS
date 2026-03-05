@@ -8,6 +8,8 @@ import PartySelect from "@/components/PartySelect";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import { getCityByName, countryCodeToFlag, CITIES, loadWorldCities } from "@/lib/data/cities";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import ChecklistPanel from "./ChecklistPanel";
 
 // Dynamic import TripMap to avoid SSR issues with Leaflet
@@ -114,6 +116,8 @@ export default function OrderClientSection({
   onUpdate,
   onClose,
 }: OrderClientSectionProps) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
@@ -439,14 +443,12 @@ export default function OrderClientSection({
     return diffDays;
   }, [dateFrom]);
 
-  // Calculate days and nights for display
+  // Calculate days and nights for display (translated in render)
   const daysAndNights = useMemo(() => {
     if (!dateFrom || !dateTo) return null;
     const days = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const nights = days - 1;
-    const daysWord = days === 1 ? 'day' : 'days';
-    const nightsWord = nights === 1 ? 'night' : 'nights';
-    return ` (${days} ${daysWord} / ${nights} ${nightsWord})`;
+    return { days, nights };
   }, [dateFrom, dateTo]);
 
   // Filter unique destinations by city name
@@ -472,7 +474,7 @@ export default function OrderClientSection({
               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
               </svg>
-              Route & Dates
+              {t(lang, "order.routeAndDates")}
             </h3>
           </div>
 
@@ -481,7 +483,7 @@ export default function OrderClientSection({
             <div>
               {renderField(
                 "itinerary",
-                "Itinerary",
+                t(lang, "order.itinerary"),
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Itinerary - compact inline, unique destinations only */}
                   {(parsedItinerary.origin || uniqueDestinations.length > 0) && (
@@ -531,11 +533,12 @@ export default function OrderClientSection({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <span className="text-sm font-medium text-gray-700">
-                        {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}{daysAndNights}
+                        {dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"} — {dateTo ? formatDateDDMMYYYY(dateTo) : "—"}
+                        {daysAndNights && ` (${daysAndNights.days} ${t(lang, daysAndNights.days === 1 ? "order.day" : "order.days")} / ${daysAndNights.nights} ${t(lang, daysAndNights.nights === 1 ? "order.night" : "order.nights")})`}
                       </span>
                       {daysUntilTrip !== null && daysUntilTrip >= 0 && (
                         <span className="text-[10px] font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-full">
-                          {daysUntilTrip} {daysUntilTrip === 1 ? 'day' : 'days'} before trip
+                          {daysUntilTrip} {t(lang, daysUntilTrip === 1 ? "order.dayBeforeTrip" : "order.daysBeforeTrip")}
                         </span>
                       )}
                     </div>

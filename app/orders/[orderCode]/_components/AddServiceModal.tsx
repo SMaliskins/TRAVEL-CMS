@@ -22,6 +22,15 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
+
+/** Parse price string; ignores spaces (e.g. "1 485.55" -> 1485.55). */
+function parsePrice(s: string | null | undefined): number {
+  if (s == null || s === "") return 0;
+  const cleaned = String(s).replace(/\s/g, "");
+  const n = parseFloat(cleaned);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 const BOARD_LABELS: Record<string, string> = {
   room_only: "Room only",
   breakfast: "Breakfast",
@@ -1793,18 +1802,18 @@ export default function AddServiceModal({
         payerPartyId,
         payerName,
         servicePrice: categoryType === "flight" && pricingPerClient.length > 0
-          ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.cost) || 0), 0) * 100) / 100
+          ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
           : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
         clientPrice: categoryType === "flight" && pricingPerClient.length > 0
-          ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0) * 100) / 100
+          ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
         quantity: categoryType === "flight" || categoryType === "tour" || categoryType === "transfer" || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
         pricingPerClient: categoryType === "flight" && pricingPerClient.length > 0
           ? clients.filter(c => c.id || c.name).map((c, i) => ({
               partyId: c.id ?? null,
-              cost: parseFloat(pricingPerClient[i]?.cost || "0") || 0,
-              marge: parseFloat(pricingPerClient[i]?.marge || "0") || 0,
-              sale: parseFloat(pricingPerClient[i]?.sale || "0") || 0,
+              cost: parsePrice(pricingPerClient[i]?.cost),
+              marge: parsePrice(pricingPerClient[i]?.marge),
+              sale: parsePrice(pricingPerClient[i]?.sale),
             }))
           : undefined,
         vatRate,
@@ -2131,6 +2140,23 @@ export default function AddServiceModal({
             </svg>
           </button>
         </div>
+
+        {/* Service name / Route — above Paste & Parse so required field is always visible for flight & tour */}
+        {(categoryType === "flight" || categoryType === "tour") && (
+          <div className="px-4 pt-3">
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
+              {categoryType === "flight" ? "Route *" : "Direction"}
+            </label>
+            <input
+              type="text"
+              value={serviceName}
+              onChange={(e) => setServiceName(e.target.value)}
+              placeholder={categoryType === "flight" ? "e.g. RIX - FRA - NCE / NCE - FRA - RIX or paste below" : "e.g. RIX-BOJ"}
+              className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+              aria-label={categoryType === "flight" ? "Route (required)" : "Direction"}
+            />
+          </div>
+        )}
 
         {/* Paste & Parse for Flight or Tour */}
         {(categoryType === "flight" || categoryType === "tour") && (
@@ -2784,19 +2810,20 @@ export default function AddServiceModal({
                   </div>
                 </div>
                 )}
-                
+
+                {/* Route/Name: for flight & tour shown above (above Paste & Parse); for other categories here */}
+                {categoryType !== "flight" && categoryType !== "tour" && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-0.5">
-                    {categoryType === "flight" ? "Route *" : categoryType === "tour" ? "Direction" : "Name *"}
-                  </label>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Name *</label>
                   <input
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "flight" ? "RIX - FRA - NCE / NCE - FRA - RIX" : categoryType === "tour" ? "RIX-BOJ" : categoryType === "visa" ? "Visa to Turkey" : (category || "").toLowerCase().includes("meet") && (category || "").toLowerCase().includes("greet") ? "Airport name, arrival/departure/transfer" : "e.g. Airport - Hotel - Airport, Hotel - Hotel, Train Station - Hotel"}
+                    placeholder={categoryType === "visa" ? "Visa to Turkey" : (category || "").toLowerCase().includes("meet") && (category || "").toLowerCase().includes("greet") ? "Airport name, arrival/departure/transfer" : "e.g. Airport - Hotel - Airport, Hotel - Hotel, Train Station - Hotel"}
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
+                )}
 
                 {categoryType === "flight" ? (
                   <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -3488,14 +3515,14 @@ export default function AddServiceModal({
                               <td className="py-1.5 pr-2 text-gray-900">{toTitleCaseForDisplay(client.name || "") || "—"}</td>
                               <td className="py-1.5 px-2">
                                 <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
+                                  type="text"
+                                  inputMode="decimal"
                                   value={pricingPerClient[idx]?.cost ?? ""}
                                   onChange={(e) => {
-                                    const costStr = e.target.value;
-                                    const cost = parseFloat(costStr) || 0;
-                                    const marge = parseFloat(pricingPerClient[idx]?.marge || "0") || 0;
+                                    const raw = e.target.value;
+                                    const costStr = raw.replace(/\s/g, "");
+                                    const cost = parsePrice(costStr);
+                                    const marge = parsePrice(pricingPerClient[idx]?.marge);
                                     const sale = Math.round((cost + marge) * 100) / 100;
                                     setPricingPerClient(prev => {
                                       const n = [...prev];
@@ -3510,13 +3537,14 @@ export default function AddServiceModal({
                               </td>
                               <td className="py-1.5 px-2">
                                 <input
-                                  type="number"
-                                  step="0.01"
+                                  type="text"
+                                  inputMode="decimal"
                                   value={pricingPerClient[idx]?.marge ?? ""}
                                   onChange={(e) => {
-                                    const margeStr = e.target.value;
-                                    const cost = parseFloat(pricingPerClient[idx]?.cost || "0") || 0;
-                                    const marge = parseFloat(margeStr) || 0;
+                                    const raw = e.target.value;
+                                    const margeStr = raw.replace(/\s/g, "");
+                                    const cost = parsePrice(pricingPerClient[idx]?.cost);
+                                    const marge = parsePrice(margeStr);
                                     const sale = Math.round((cost + marge) * 100) / 100;
                                     setPricingPerClient(prev => {
                                       const n = [...prev];
@@ -3531,14 +3559,14 @@ export default function AddServiceModal({
                               </td>
                               <td className="py-1.5 px-2">
                                 <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
+                                  type="text"
+                                  inputMode="decimal"
                                   value={pricingPerClient[idx]?.sale ?? ""}
                                   onChange={(e) => {
-                                    const saleStr = e.target.value;
-                                    const cost = parseFloat(pricingPerClient[idx]?.cost || "0") || 0;
-                                    const sale = parseFloat(saleStr) || 0;
+                                    const raw = e.target.value;
+                                    const saleStr = raw.replace(/\s/g, "");
+                                    const cost = parsePrice(pricingPerClient[idx]?.cost);
+                                    const sale = parsePrice(saleStr);
                                     const marge = Math.round((sale - cost) * 100) / 100;
                                     setPricingPerClient(prev => {
                                       const n = [...prev];
@@ -3558,11 +3586,11 @@ export default function AddServiceModal({
                     </div>
                     <div className="flex flex-wrap items-end gap-2 border-t border-gray-200 pt-2">
                       <span className="text-xs font-medium text-gray-600 mr-1">Bulk Price:</span>
-                      <input type="number" step="0.01" min="0" placeholder="Cost" id="apply-cost"
+                      <input type="text" inputMode="decimal" placeholder="Cost" id="apply-cost"
                         className="w-20 rounded border border-gray-300 px-2 py-1 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
-                      <input type="number" step="0.01" placeholder="Marge" id="apply-marge"
+                      <input type="text" inputMode="decimal" placeholder="Marge" id="apply-marge"
                         className="w-20 rounded border border-gray-300 px-2 py-1 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
-                      <input type="number" step="0.01" min="0" placeholder="Sale" id="apply-sale"
+                      <input type="text" inputMode="decimal" placeholder="Sale" id="apply-sale"
                         className="w-20 rounded border border-gray-300 px-2 py-1 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                       <button
                         type="button"
@@ -3570,29 +3598,29 @@ export default function AddServiceModal({
                           const costEl = document.getElementById("apply-cost") as HTMLInputElement;
                           const margeEl = document.getElementById("apply-marge") as HTMLInputElement;
                           const saleEl = document.getElementById("apply-sale") as HTMLInputElement;
-                          const costStr = costEl?.value?.trim() ?? "";
-                          const margeStr = margeEl?.value?.trim() ?? "";
-                          const saleStr = saleEl?.value?.trim() ?? "";
-                          const cost = parseFloat(costStr) || 0;
-                          const marge = parseFloat(margeStr) || 0;
-                          let sale = parseFloat(saleStr) || 0;
-                          if (!sale && (cost || marge)) sale = Math.round((cost + marge) * 100) / 100;
+                          const costStr = (costEl?.value ?? "").replace(/\s/g, "");
+                          const margeStr = (margeEl?.value ?? "").replace(/\s/g, "");
+                          const saleStr = (saleEl?.value ?? "").replace(/\s/g, "");
+                          const cost = parsePrice(costStr);
+                          const marge = parsePrice(margeStr);
+                          let sale = parsePrice(saleStr);
+                          if (sale === 0 && (cost > 0 || marge > 0)) sale = Math.round((cost + marge) * 100) / 100;
                           setPricingPerClient(prev => prev.map((p) => {
                             const c = costStr ? String(cost) : (p.cost ?? "");
                             const m = margeStr ? String(marge) : (p.marge ?? "");
-                            const s = saleStr ? String(sale) : (sale ? String(sale) : (p.sale ?? ""));
+                            const s = saleStr ? String(sale) : (sale > 0 ? String(sale) : (p.sale ?? ""));
                             return { cost: c, marge: m, sale: s };
                           }));
                         }}
-                        className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
                       >
                         Apply for all clients
                       </button>
                     </div>
                     {(() => {
-                      const totalCost = pricingPerClient.reduce((s, p) => s + (parseFloat(p.cost) || 0), 0);
-                      const totalMarge = pricingPerClient.reduce((s, p) => s + (parseFloat(p.marge) || 0), 0);
-                      const totalSale = pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0);
+                      const totalCost = pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0);
+                      const totalMarge = pricingPerClient.reduce((s, p) => s + parsePrice(p.marge), 0);
+                      const totalSale = pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0);
                       return (
                         <div className="grid grid-cols-3 gap-2 border-t border-gray-200 pt-2">
                           <div>
@@ -3897,11 +3925,11 @@ export default function AddServiceModal({
                   </div>
                   {(() => {
                     const totalMargin = categoryType === "flight" && pricingPerClient.length > 0
-                      ? Math.round(pricingPerClient.reduce((s, p) => s + (parseFloat(p.marge) || 0), 0) * 100) / 100
+                      ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.marge), 0) * 100) / 100
                       : Math.round((parseFloat(marge) || 0) * (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits) * 100) / 100;
                     const paid = (categoryType as string) === "hotel" && actuallyPaid !== "" ? parseFloat(actuallyPaid) : null;
                     const saleTotal = categoryType === "flight" && pricingPerClient.length > 0
-                      ? pricingPerClient.reduce((s, p) => s + (parseFloat(p.sale) || 0), 0)
+                      ? pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0)
                       : parseFloat(clientPrice) || 0;
                     const marginFromPaid = paid != null && Number.isFinite(paid) ? Math.round((saleTotal - paid) * 100) / 100 : null;
                     const vatAmount = vatRate > 0 && (marginFromPaid != null ? marginFromPaid : totalMargin) >= 0

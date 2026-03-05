@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock, { OrderServicesBlockHandle } from "./_components/OrderServicesBlock";
 import InvoiceCreator from "./_components/InvoiceCreator";
@@ -64,6 +66,8 @@ export default function OrderPage({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [activeTab, setActiveTabState] = useState<TabType>("client");
 
   // Sync tab from URL (on load and when user uses back/forward)
@@ -180,7 +184,7 @@ export default function OrderPage({
   
   // Parse itinerary from countries_cities
   const parsedItinerary = useMemo(() => {
-    if (!order?.countries_cities) return { origin: null, destinations: [], returnCity: null, daysNights: null, daysUntil: null };
+    if (!order?.countries_cities) return { origin: null, destinations: [], returnCity: null, daysCount: null, nightsCount: null, daysUntil: null };
     
     const countriesCities = order.countries_cities;
     let originCity: { name: string; countryCode?: string } | null = null;
@@ -244,21 +248,23 @@ export default function OrderPage({
       destinations = parsedCities;
     }
     
-    // Calculate days/nights
-    let daysNights = null;
+    // Calculate days/nights (counts for i18n; display string built in render)
+    let daysCount: number | null = null;
+    let nightsCount: number | null = null;
     let daysUntil = null;
     if (order.date_from && order.date_to) {
       const days = Math.ceil((new Date(order.date_to).getTime() - new Date(order.date_from).getTime()) / (1000 * 60 * 60 * 24)) + 1;
       const nights = Math.max(0, days - 1);
-      daysNights = `${days} ${days === 1 ? 'day' : 'days'} / ${nights} ${nights === 1 ? 'night' : 'nights'}`;
-      
+      daysCount = days;
+      nightsCount = nights;
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tripDate = new Date(order.date_from);
       tripDate.setHours(0, 0, 0, 0);
       daysUntil = Math.ceil((tripDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     }
-    
+
     // If no explicit destinations but origin/return exist, use them as destinations
     if (destinations.length === 0) {
       const fallback: { name: string; countryCode?: string; country?: string }[] = [];
@@ -276,7 +282,7 @@ export default function OrderPage({
       }
     }
 
-    return { origin: originCity, destinations, returnCity, daysNights, daysUntil };
+    return { origin: originCity, destinations, returnCity, daysCount, nightsCount, daysUntil };
   }, [order?.countries_cities, order?.date_from, order?.date_to, worldCitiesLoaded]);
 
   // Auto-save detected destinations только когда countries_cities пусто — не перезаписывать ручной ввод
@@ -545,15 +551,15 @@ export default function OrderPage({
             const data = await response.json();
             setOrder(data.order || data);
           } else if (response.status === 404) {
-            setError("Order not found");
+            setError(t(lang, "order.notFound"));
           } else {
             const errData = await response.json().catch(() => ({}));
-            setError(errData.error || "Failed to load order");
+            setError(errData.error || t(lang, "order.loadError"));
           }
         } catch (err) {
           if (!cancelled) {
             console.error("Fetch order error:", err);
-            setError("Network error");
+            setError(t(lang, "order.networkError"));
           }
         } finally {
           if (!cancelled) setOrderLoading(false);
@@ -561,7 +567,7 @@ export default function OrderPage({
       })();
     });
     return () => { cancelled = true; };
-  }, [params]);
+  }, [params, lang]);
 
   // Payment summary (linkedToInvoices) for overpayment in header — refetch when invoices may change
   useEffect(() => {
@@ -621,7 +627,7 @@ export default function OrderPage({
   if (!orderCode) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-gray-500">Loading...</div>
+        <div className="text-lg text-gray-500">{t(lang, "order.loading")}</div>
       </div>
     );
   }
@@ -658,7 +664,7 @@ export default function OrderPage({
               {/* Created date + Agent - directly under order code */}
               {order?.created_at && (
                 <div className="mt-0.5 text-[10px] text-gray-400">
-                  Created on {formatDateDDMMYYYY(order.created_at)} by {order.owner_name || "Unknown"}
+                  {t(lang, "order.createdOn")} {formatDateDDMMYYYY(order.created_at)} {t(lang, "order.by")} {order.owner_name || t(lang, "order.unknown")}
                 </div>
               )}
               {/* Order Type + Source: только на узких экранах (в шапке — в пустом месте по центру) */}
@@ -666,9 +672,9 @@ export default function OrderPage({
                 <div className="mt-1 flex sm:hidden items-center gap-1.5 flex-wrap">
                   <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit">
                     {[
-                      { value: "leisure", label: "Leisure" },
-                      { value: "business", label: "Business" },
-                      { value: "lifestyle", label: "Lifestyle" },
+                      { value: "leisure", label: t(lang, "order.leisure") },
+                      { value: "business", label: t(lang, "order.business") },
+                      { value: "lifestyle", label: t(lang, "order.lifestyle") },
                     ].map((type) => (
                       <button
                         key={type.value}
@@ -767,7 +773,7 @@ export default function OrderPage({
             {/* Block 2: Client + Itinerary + Dates — занимает оставшееся место, блок тегов справа не сжимается */}
             {!order ? (
               <div className="flex-1 min-w-0 flex items-center text-gray-500">
-                {orderLoading ? "Loading order..." : null}
+                {orderLoading ? t(lang, "order.loadingOrder") : null}
               </div>
             ) : (
               <div className="flex-1 min-w-0">
@@ -796,17 +802,17 @@ export default function OrderPage({
                       }}
                       className="text-sm text-gray-500 hover:text-gray-700"
                     >
-                      Cancel
+                      {t(lang, "order.cancel")}
                     </button>
                     <span className="text-xs text-gray-400">
-                      (Select new or Cancel to keep current)
+                      ({t(lang, "order.selectNewOrCancel")})
                     </span>
                   </div>
                 ) : (
                   <div className="flex flex-nowrap items-center gap-4 sm:gap-5 min-w-0">
                     {/* Lead Passenger — слева */}
                     <div className="min-w-0">
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">Lead Passenger</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">{t(lang, "order.leadPassenger")}</div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span 
                           className={`text-base font-semibold cursor-pointer rounded px-1 -mx-1 transition-colors ${
@@ -821,9 +827,9 @@ export default function OrderPage({
                               startEditingClient();
                             }
                           }}
-                          title={isCtrlPressed ? "Ctrl+Click to open client" : "Click to change client"}
+                          title={isCtrlPressed ? t(lang, "order.ctrlClickToOpenClient") : t(lang, "order.clickToChangeClient")}
                         >
-                          {order.client_display_name || "Select client"}
+                          {order.client_display_name || t(lang, "order.selectClient")}
                         </span>
                         {order.client_phone && (
                           <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
@@ -841,9 +847,9 @@ export default function OrderPage({
                     <div 
                       className="min-w-0 cursor-pointer rounded px-1 -mx-1 py-0.5 transition-colors hover:bg-gray-100"
                       onClick={startEditingItinerary}
-                      title="Click to edit itinerary"
+                      title={t(lang, "order.clickToEditItinerary")}
                     >
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">Destination</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">{t(lang, "order.destination")}</div>
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                         {parsedItinerary.origin || parsedItinerary.destinations.length > 0 || autoDestinations.length > 0 ? (
                           (() => {
@@ -855,7 +861,7 @@ export default function OrderPage({
                             // Приоритет: сохранённые countries_cities; autoDestinations только когда ничего не сохранено
                             const hasSaved = order?.countries_cities?.trim();
                             const allCities = hasSaved ? manualDests : (autoDestinations.length > 0 ? autoDestinations : manualDests);
-                            if (allCities.length === 0) return <span className="text-gray-400 text-sm">Click to set</span>;
+                            if (allCities.length === 0) return <span className="text-gray-400 text-sm">{t(lang, "order.clickToSet")}</span>;
                             const countryCities: Record<string, { countryCode?: string; cities: string[] }> = {};
                             for (const city of allCities) {
                               const cityName = (city as { name?: string }).name || (city as { city?: string }).city || "";
@@ -884,7 +890,7 @@ export default function OrderPage({
                             ));
                           })()
                         ) : (
-                          <span className="text-gray-400 text-sm">Click to set</span>
+                          <span className="text-gray-400 text-sm">{t(lang, "order.clickToSet")}</span>
                         )}
                       </div>
                     </div>
@@ -1024,7 +1030,7 @@ export default function OrderPage({
                       onClick={() => setEditingHeaderField(null)}
                       className="text-sm text-gray-500 hover:text-gray-700"
                     >
-                      Cancel
+                      {t(lang, "order.cancel")}
                     </button>
                   </div>
                 ) : (
@@ -1039,12 +1045,14 @@ export default function OrderPage({
                     <span>
                       {order.date_from ? formatDateDDMMYYYY(order.date_from) : "—"} — {order.date_to ? formatDateDDMMYYYY(order.date_to) : "—"}
                     </span>
-                    {parsedItinerary.daysNights && (
-                      <span className="text-gray-500">({parsedItinerary.daysNights})</span>
+                    {parsedItinerary.daysCount != null && parsedItinerary.nightsCount != null && (
+                      <span className="text-gray-500">
+                        ({parsedItinerary.daysCount} {t(lang, parsedItinerary.daysCount === 1 ? "order.day" : "order.days")} / {parsedItinerary.nightsCount} {t(lang, parsedItinerary.nightsCount === 1 ? "order.night" : "order.nights")})
+                      </span>
                     )}
                     {parsedItinerary.daysUntil !== null && parsedItinerary.daysUntil >= 0 && (
                       <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                        {parsedItinerary.daysUntil} {parsedItinerary.daysUntil === 1 ? 'day' : 'days'} before trip
+                        {parsedItinerary.daysUntil} {t(lang, parsedItinerary.daysUntil === 1 ? "order.dayBeforeTrip" : "order.daysBeforeTrip")}
                       </span>
                     )}
                   </div>
@@ -1062,9 +1070,9 @@ export default function OrderPage({
               <div className="hidden sm:flex shrink-0 items-center gap-2 px-1">
                 <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 w-fit shrink-0">
                   {[
-                    { value: "leisure", label: "Leisure" },
-                    { value: "business", label: "Business" },
-                    { value: "lifestyle", label: "Lifestyle" },
+                    { value: "leisure", label: t(lang, "order.leisure") },
+                    { value: "business", label: t(lang, "order.business") },
+                    { value: "lifestyle", label: t(lang, "order.lifestyle") },
                   ].map((type) => (
                     <button
                       key={type.value}
@@ -1166,17 +1174,17 @@ export default function OrderPage({
                   <div className="text-xl font-bold text-gray-900 cursor-default">
                     €{(order.amount_total ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </div>
-                  <div className="text-[10px] text-gray-400">Total (active services)</div>
+                  <div className="text-[10px] text-gray-400">{t(lang, "order.totalActiveServices")}</div>
 
                   {/* Payment plan tooltip — appears below the amount on hover */}
                   {(order.payment_dates?.length ?? 0) > 0 && (
                     <div className="absolute top-full right-0 mt-1 z-30 hidden group-hover/total:block">
                       <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-3 py-2 min-w-[200px] text-xs text-gray-700">
-                        <div className="font-semibold text-gray-900 mb-1.5 text-[11px]">Payment Plan</div>
+                        <div className="font-semibold text-gray-900 mb-1.5 text-[11px]">{t(lang, "order.paymentPlan")}</div>
                         <div className="space-y-1">
                           {order.payment_dates!.map((p, i) => (
                             <div key={i} className="flex justify-between gap-4">
-                              <span className="text-gray-500">{p.type === "deposit" ? "Deposit" : "Final"}</span>
+                              <span className="text-gray-500">{p.type === "deposit" ? t(lang, "order.deposit") : t(lang, "order.final")}</span>
                               <span className="font-medium">{formatDateDDMMYYYY(p.date)}</span>
                             </div>
                           ))}
@@ -1205,36 +1213,36 @@ export default function OrderPage({
                           : isPartial ? "bg-yellow-100 text-yellow-800"
                           : "bg-red-100 text-red-800"
                         }`}>
-                          {isOverpaid ? "Overpaid" : isPaid ? "Paid" : isPartial ? "Partially paid" : "Unpaid"}
+                          {isOverpaid ? t(lang, "order.overpaid") : isPaid ? t(lang, "order.paid") : isPartial ? t(lang, "order.partiallyPaid") : t(lang, "order.unpaid")}
                         </div>
                         {isOverpaid && (
                           <span className="text-xs text-purple-700">
-                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
+                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.paidAmount")}
                           </span>
                         )}
                         {isOverpaid && (
                           <span className="text-[10px] text-purple-600 font-medium">
-                            +€{overpayment.toLocaleString("en-US", { minimumFractionDigits: 2 })} overpayment
+                            +€{overpayment.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.overpayment")}
                           </span>
                         )}
                         {isPaid && (
                           <span className="text-xs text-green-700">
-                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid
+                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.paidAmount")}
                           </span>
                         )}
                         {isPartial && !isOverpaid && (
                           <span className="text-xs text-gray-600">
-                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} paid, €{(order.amount_debt ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining
+                            €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.paidAmount")}, €{(order.amount_debt ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.remaining")}
                           </span>
                         )}
                         {isUnpaid && (
                           <span className="text-xs text-gray-600">
-                            €{(order.amount_debt ?? total).toLocaleString("en-US", { minimumFractionDigits: 2 })} to pay
+                            €{(order.amount_debt ?? total).toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.toPay")}
                           </span>
                         )}
                         {order.overdue_days != null && order.overdue_days > 0 && (
                           <span className="text-[10px] text-red-600 font-medium">
-                            {order.overdue_days} {order.overdue_days === 1 ? "day" : "days"} overdue
+                            {order.overdue_days} {order.overdue_days === 1 ? t(lang, "order.dayOverdue") : t(lang, "order.daysOverdue")}
                           </span>
                         )}
                       </>
@@ -1249,7 +1257,6 @@ export default function OrderPage({
           <nav className="-mb-px flex items-center justify-between border-t border-gray-200/60 mt-1">
             <div className="flex flex-1 gap-1 pt-2">
               {(["client", "finance", "documents", "communication", "log"] as const).map((tab) => {
-                const labels: Record<typeof tab, string> = { client: "Services", finance: "Finance", documents: "Documents", communication: "Communication", log: "Log" };
                 const isActive = activeTab === tab;
                 return (
                   <button
@@ -1261,7 +1268,7 @@ export default function OrderPage({
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800"
                     }`}
                   >
-                    {labels[tab]}
+                    {t(lang, `order.tab.${tab}`)}
                   </button>
                 );
               })}
@@ -1279,7 +1286,7 @@ export default function OrderPage({
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
               >
                 <Plus size={14} strokeWidth={2} />
-                Service
+                {t(lang, "order.service")}
               </button>
             </div>
           </nav>

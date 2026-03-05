@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 interface RangeCalendarProps {
   maxDate?: string; // YYYY-MM-DD - maximum selectable date
@@ -9,28 +11,9 @@ interface RangeCalendarProps {
   onDateSelect: (date: string) => void; // YYYY-MM-DD
   onClear: () => void;
   autoCloseOnRangeComplete?: boolean; // Close calendar when range is complete
+  /** When true and no startDate, show previous + current month (e.g. for invoices) */
+  startFromPreviousMonth?: boolean;
 }
-
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-const MONTH_NAMES_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
 
 export default function RangeCalendar({
   maxDate,
@@ -39,14 +22,22 @@ export default function RangeCalendar({
   onDateSelect,
   onClear,
   autoCloseOnRangeComplete = false,
+  startFromPreviousMonth = false,
 }: RangeCalendarProps) {
-  // Initialize to show two months starting from start date or today
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
+
+  // Initialize to show two months: from start date, or today, or previous month when startFromPreviousMonth
   const getInitialMonth = () => {
     if (startDate) {
       const date = new Date(startDate + "T00:00:00");
       return { year: date.getFullYear(), month: date.getMonth() };
     }
     const today = new Date();
+    if (startFromPreviousMonth) {
+      const prev = today.getMonth() === 0 ? { year: today.getFullYear() - 1, month: 11 } : { year: today.getFullYear(), month: today.getMonth() - 1 };
+      return prev;
+    }
     return { year: today.getFullYear(), month: today.getMonth() };
   };
 
@@ -201,20 +192,20 @@ export default function RangeCalendar({
         <button
           type="button"
           onClick={() => handleMonthHeaderClick(side)}
-          className="text-sm font-semibold text-gray-900 hover:text-gray-700"
+          className="text-sm font-bold text-gray-900 hover:text-gray-700"
         >
-          {MONTH_NAMES[month.month]} {month.year}
+          {t(lang, `calendar.month.${month.month}`)} {month.year}
         </button>
       </div>
 
       {/* Weekday headers */}
       <div className="mb-2 grid grid-cols-7 gap-1">
-        {WEEKDAYS.map((day) => (
+        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
           <div
-            key={day}
-            className="text-center text-xs font-medium text-gray-500"
+            key={i}
+            className="text-center text-xs font-semibold text-gray-700 uppercase tracking-wide"
           >
-            {day}
+            {t(lang, `calendar.weekday.${i}`)}
           </div>
         ))}
       </div>
@@ -241,11 +232,11 @@ export default function RangeCalendar({
               disabled={isFuture}
               onClick={() => { if (!isFuture) handleDateClick(date); }}
               className={`
-                ${isFuture ? "text-gray-300 cursor-not-allowed opacity-50" : ""}
-                h-8 rounded text-sm transition-colors
-                ${isTodayDate && !isRangeEndpoint ? "font-semibold ring-1 ring-blue-500" : ""}
+                ${isFuture ? "text-gray-400 cursor-not-allowed bg-gray-100" : ""}
+                h-8 rounded-md text-sm font-medium transition-colors
+                ${isTodayDate && !isRangeEndpoint ? "ring-2 ring-blue-500 text-gray-900 bg-white" : ""}
                 ${inRange && !isRangeEndpoint ? "bg-blue-100 text-blue-900" : ""}
-                ${!inRange && !isRangeEndpoint ? "text-gray-700 hover:bg-gray-100" : ""}
+                ${!inRange && !isRangeEndpoint && !isFuture ? "text-gray-900 hover:bg-gray-200" : ""}
                 ${isRangeEndpoint ? "bg-blue-600 text-white font-semibold hover:bg-blue-700" : ""}
               `}
             >
@@ -264,7 +255,7 @@ export default function RangeCalendar({
         <button
           type="button"
           onClick={goToPreviousMonth}
-          className="flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-700 hover:bg-gray-200 transition-colors"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -273,7 +264,7 @@ export default function RangeCalendar({
         <button
           type="button"
           onClick={goToNextMonth}
-          className="flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-700 hover:bg-gray-200 transition-colors"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -319,7 +310,7 @@ export default function RangeCalendar({
 
           {/* Month grid */}
           <div className="grid grid-cols-3 gap-2">
-            {MONTH_NAMES_SHORT.map((monthName, index) => (
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) => (
               <button
                 key={index}
                 type="button"
@@ -332,7 +323,7 @@ export default function RangeCalendar({
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
               >
-                {monthName}
+                {t(lang, `calendar.monthShort.${index}`)}
               </button>
             ))}
           </div>
@@ -345,9 +336,9 @@ export default function RangeCalendar({
           <button
             type="button"
             onClick={onClear}
-            className="text-xs text-gray-600 hover:text-gray-900 underline"
+            className="text-xs font-medium text-gray-700 hover:text-gray-900 underline"
           >
-            Clear range
+            {t(lang, "calendar.clearRange")}
           </button>
         </div>
       )}

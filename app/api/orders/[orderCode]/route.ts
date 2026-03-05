@@ -139,12 +139,21 @@ export async function GET(
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    (invoices || []).forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null }) => {
+    (invoices || []).forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null; status?: string }) => {
       if (inv.deposit_date) paymentDates.push({ type: "deposit", date: inv.deposit_date });
       if (inv.final_payment_date) paymentDates.push({ type: "final", date: inv.final_payment_date });
     });
 
-    paymentDates.forEach(({ date: dateStr }) => {
+    // Only count overdue for invoices that are not paid (paid/processed = no overdue)
+    const unpaidInvoices = (invoices || []).filter(
+      (inv: { status?: string }) => inv.status !== "paid" && inv.status !== "processed"
+    );
+    const dueDatesToCheck: string[] = [];
+    unpaidInvoices.forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null }) => {
+      if (inv.deposit_date) dueDatesToCheck.push(inv.deposit_date);
+      if (inv.final_payment_date) dueDatesToCheck.push(inv.final_payment_date);
+    });
+    dueDatesToCheck.forEach((dateStr) => {
       const d = new Date(dateStr);
       d.setHours(0, 0, 0, 0);
       if (d < today) {

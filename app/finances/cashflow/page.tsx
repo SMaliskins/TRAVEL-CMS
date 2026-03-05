@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 interface CashPayment {
   id: string;
@@ -49,6 +51,8 @@ function saveCashflowFilters(f: { tab: Tab; period: PeriodType; dateFrom: string
 
 export default function CashFlowPage() {
   const router = useRouter();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>(() => loadCashflowFilters()?.tab ?? "cash");
   const [dailyReport, setDailyReport] = useState<DailyReport[]>([]);
@@ -212,13 +216,12 @@ export default function CashFlowPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Cash Flow</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t(lang, "cashflow.title")}</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Daily cash reports (Z-report) and bank movements
+          {t(lang, "cashflow.subtitle")}
         </p>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setTab("cash")}
@@ -228,7 +231,7 @@ export default function CashFlowPage() {
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
-          Z-Report (Cash)
+          {t(lang, "cashflow.zReport")}
         </button>
         <button
           onClick={() => setTab("bank")}
@@ -238,7 +241,7 @@ export default function CashFlowPage() {
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
-          Bank Movements
+          {t(lang, "cashflow.bankMovements")}
         </button>
       </div>
 
@@ -255,7 +258,7 @@ export default function CashFlowPage() {
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
-          <div className="text-gray-500">Loading...</div>
+          <div className="text-gray-500">{t(lang, "common.loading")}</div>
         </div>
       ) : tab === "cash" && calendarByMonth.length > 0 ? (
         <div className="space-y-4">
@@ -314,7 +317,7 @@ export default function CashFlowPage() {
           {/* Day details (for scroll target and full list) */}
           {dailyReport.length > 0 && (
             <div className="mt-6 pt-4 border-t border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">Daily details</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">{t(lang, "cashflow.dailyDetails")}</h2>
               <div className="space-y-4">
                 {dailyReport.map((day) => (
                   <div
@@ -328,26 +331,24 @@ export default function CashFlowPage() {
                   {formatDateDDMMYYYY(day.date)}
                 </h3>
                 <span className="text-sm font-bold text-gray-900">
-                  Total: {formatCurrency(day.total)}
+                  {t(lang, "payments.total")}: {formatCurrency(day.total)}
                 </span>
               </div>
 
-              {/* Day payments */}
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/50">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Order
+                      {t(lang, "payments.order")}
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Payer
+                      {t(lang, "payments.payer")}
                     </th>
-                    
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Note
+                      {t(lang, "payments.note")}
                     </th>
                     <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">
-                      Amount
+                      {t(lang, "payments.amount")}
                     </th>
                   </tr>
                 </thead>
@@ -391,17 +392,17 @@ export default function CashFlowPage() {
           {/* Grand total */}
           <div className="flex justify-end">
             <div className="bg-gray-900 text-white px-6 py-3 rounded-lg">
-              <span className="text-sm">Grand Total:</span>{" "}
+              <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
               <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
               <span className="text-gray-400 text-xs ml-2">
-                ({allPayments.length} payments)
+                ({allPayments.length} {t(lang, "payments.paymentsCount")})
               </span>
             </div>
           </div>
         </div>
       ) : dailyReport.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
-          No {tab === "cash" ? "cash" : "bank"} payments for this period
+          {tab === "cash" ? t(lang, "cashflow.noCashPayments") : t(lang, "cashflow.noBankPayments")}
         </div>
       ) : (
         <div className="space-y-4">
@@ -415,19 +416,19 @@ export default function CashFlowPage() {
                   {formatDateDDMMYYYY(day.date)}
                 </h3>
                 <span className="text-sm font-bold text-gray-900">
-                  Total: {formatCurrency(day.total)}
+                  {t(lang, "payments.total")}: {formatCurrency(day.total)}
                 </span>
               </div>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Order</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Payer</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.order")}</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.payer")}</th>
                     {tab === "bank" && (
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Account</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.account")}</th>
                     )}
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Note</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Amount</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.note")}</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t(lang, "payments.amount")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -465,9 +466,9 @@ export default function CashFlowPage() {
           ))}
           <div className="flex justify-end">
             <div className="bg-gray-900 text-white px-6 py-3 rounded-lg">
-              <span className="text-sm">Grand Total:</span>{" "}
+              <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
               <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
-              <span className="text-gray-400 text-xs ml-2">({allPayments.length} payments)</span>
+              <span className="text-gray-400 text-xs ml-2">({allPayments.length} {t(lang, "payments.paymentsCount")})</span>
             </div>
           </div>
         </div>

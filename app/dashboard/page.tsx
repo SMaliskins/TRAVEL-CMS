@@ -185,25 +185,31 @@ export default function DashboardPage() {
     setChartData(mockData);
   }, []);
 
-  // Mock tourist locations
+  // Fetch real tourist locations
   useEffect(() => {
-    // TODO: Replace with actual API call
-    setTouristLocations([
-      {
-        id: "1",
-        name: "John Doe",
-        location: [48.8566, 2.3522], // Paris
-        orderCode: "ORD-001",
-        status: "in-progress",
-      },
-      {
-        id: "2",
-        name: "Jane Smith",
-        location: [40.7128, -74.006], // New York
-        orderCode: "ORD-002",
-        status: "in-progress",
-      },
-    ]);
+    const fetchLocations = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch('/api/dashboard/map', {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.locations) {
+            setTouristLocations(data.locations);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching tourist locations on map:", error);
+      }
+    };
+
+    fetchLocations();
   }, []);
 
   // Mock calendar events
@@ -304,8 +310,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Statistic Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 relative z-0">
+        {/* Row 1: Statistic Cards & Target (5 columns) */}
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5 relative z-0">
           <StatisticCard
             title="Orders"
             value={statistics?.ordersCount || 0}
@@ -351,27 +357,27 @@ export default function DashboardPage() {
             value={`€${(statistics?.overdueAmount || 0).toLocaleString()}`}
             onClick={() => router.push("/analytics/orders")}
           />
+          <TargetSpeedometer
+            current={targetCurrent}
+            target={targetGoal}
+            rating={3}
+            message="Keep pushing forward!"
+          />
         </div>
 
-        {/* Chart and Target Row */}
+        {/* Row 2: Chart and Calendar */}
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <ProfitOrdersChart data={chartData} />
           </div>
           <div>
-            <TargetSpeedometer
-              current={targetCurrent}
-              target={targetGoal}
-              rating={3}
-              message="Keep pushing forward!"
-            />
+            <CalendarWithDots events={calendarEvents} />
           </div>
         </div>
 
-        {/* Map and Calendar Row */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        {/* Row 3: Map */}
+        <div className="grid gap-4">
           <TouristsMap locations={touristLocations} />
-          <CalendarWithDots events={calendarEvents} />
         </div>
 
         {/* Recently Completed Row */}
@@ -382,6 +388,6 @@ export default function DashboardPage() {
           <AIWindowPlaceholder />
         </div>
       </div>
-    </div>
+    </div >
   );
 }

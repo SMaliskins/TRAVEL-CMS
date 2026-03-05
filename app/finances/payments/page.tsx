@@ -7,6 +7,8 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import AddPaymentModal, { type EditPaymentData } from "./_components/AddPaymentModal";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { Landmark, Banknote, CreditCard, Trash2, Pencil } from "lucide-react";
 
 interface Payment {
@@ -27,11 +29,6 @@ interface Payment {
   created_at: string;
 }
 
-const METHOD_LABELS: Record<string, string> = {
-  bank: "Bank",
-  cash: "Cash",
-  card: "Card",
-};
 
 const METHOD_STYLES: Record<string, string> = {
   bank: "bg-blue-100 text-blue-700",
@@ -59,6 +56,8 @@ function savePaymentsFilters(f: { filterMethod: string; period: PeriodType; filt
 
 export default function PaymentsPage() {
   const router = useRouter();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -164,7 +163,7 @@ export default function PaymentsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading payments...</div>
+        <div className="text-gray-500">{t(lang, "payments.loading")}</div>
       </div>
     );
   }
@@ -173,21 +172,21 @@ export default function PaymentsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-          <p className="text-sm text-gray-600 mt-1">Record and track payments</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t(lang, "payments.title")}</h1>
+          <p className="text-sm text-gray-600 mt-1">{t(lang, "payments.subtitle")}</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
         >
-          + Add Payment
+          + {t(lang, "payments.addPayment")}
         </button>
       </div>
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm text-gray-700 mr-1">Method:</span>
+          <span className="text-sm text-gray-700 mr-1">{t(lang, "payments.method")}:</span>
           <button
             onClick={() => setFilterMethod("all")}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
@@ -196,7 +195,7 @@ export default function PaymentsPage() {
                 : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
             }`}
           >
-            All
+            {t(lang, "payments.all")}
           </button>
           <button
             onClick={() => setFilterMethod("bank")}
@@ -207,7 +206,7 @@ export default function PaymentsPage() {
             }`}
           >
             <Landmark size={16} className="shrink-0" />
-            Bank
+            {t(lang, "payments.bank")}
           </button>
           <button
             onClick={() => setFilterMethod("cash")}
@@ -218,7 +217,7 @@ export default function PaymentsPage() {
             }`}
           >
             <Banknote size={16} className="shrink-0" />
-            Cash
+            {t(lang, "payments.cash")}
           </button>
           <button
             onClick={() => setFilterMethod("card")}
@@ -229,7 +228,7 @@ export default function PaymentsPage() {
             }`}
           >
             <CreditCard size={16} className="shrink-0" />
-            Card
+            {t(lang, "payments.card")}
           </button>
         </div>
         <PeriodSelector
@@ -244,10 +243,10 @@ export default function PaymentsPage() {
       {/* Summary */}
       <div className="mb-4 flex items-center gap-4">
         <span className="text-sm text-gray-600">
-          Total: <strong className="text-gray-900">{payments.length}</strong> payments
+          {t(lang, "payments.total")}: <strong className="text-gray-900">{payments.length}</strong> {t(lang, "payments.paymentsCount")}
         </span>
         <span className="text-sm text-gray-600">
-          Amount: <strong className="text-gray-900">{formatCurrency(totalAmount, "EUR")}</strong>
+          {t(lang, "payments.amount")}: <strong className="text-gray-900">{formatCurrency(totalAmount, "EUR")}</strong>
         </span>
       </div>
 
@@ -256,21 +255,21 @@ export default function PaymentsPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Order</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Payer</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Method</th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-700">Amount</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Account</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Note</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.date")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.order")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.payer")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.method")}</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">{t(lang, "payments.amount")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.account")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.note")}</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">{t(lang, "payments.actions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {payments.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
-                  No payments found
+                  {t(lang, "payments.noPayments")}
                 </td>
               </tr>
             ) : (
@@ -298,7 +297,7 @@ export default function PaymentsPage() {
                         METHOD_STYLES[p.method] || "bg-gray-100 text-gray-700"
                       }`}
                     >
-                      {METHOD_LABELS[p.method] || p.method}
+                      {t(lang, `payments.${p.method}`) || p.method}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">
@@ -315,14 +314,14 @@ export default function PaymentsPage() {
                       <button
                         onClick={() => handleEdit(p)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                        title="Edit payment"
+                        title={t(lang, "payments.editPayment")}
                       >
                         <Pencil size={15} />
                       </button>
                       <button
                         onClick={() => handleDelete(p.id)}
                         className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                        title="Delete payment"
+                        title={t(lang, "payments.deletePayment")}
                       >
                         <Trash2 size={15} />
                       </button>

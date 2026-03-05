@@ -8,6 +8,8 @@ import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus } from "lucide-react";
 import { getCityByName } from "@/lib/data/cities";
 
@@ -438,6 +440,8 @@ const SEMANTIC_DEBOUNCE_MS = 400;
 export default function OrdersPage() {
   const router = useRouter();
   const { openTab } = useTabs();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -473,7 +477,7 @@ export default function OrdersPage() {
       setOrders(data.orders || []);
     } catch (error) {
       console.error("Failed to fetch orders:", error);
-      setLoadError(error instanceof Error ? error.message : "Failed to load orders");
+      setLoadError(error instanceof Error ? error.message : t(lang, "orders.loadError"));
     } finally {
       setIsLoading(false);
     }
@@ -639,13 +643,13 @@ export default function OrdersPage() {
   const getPaymentIcon = (order: OrderRow): { icon: React.ReactNode; tooltip: string } | null => {
     if (order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01) {
       const overpay = Math.round((order.paid - order.amount) * 100) / 100;
-      return { icon: <CirclePlus size={16} strokeWidth={1.8} className="text-purple-600" />, tooltip: `Overpaid by €${overpay.toFixed(2)}` };
+      return { icon: <CirclePlus size={16} strokeWidth={1.8} className="text-purple-600" />, tooltip: t(lang, "orders.tooltipOverpaid").replace("{amount}", overpay.toFixed(2)) };
     } else if (order.allInvoicesPaid && order.totalInvoices && order.totalInvoices > 0) {
-      return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: "All invoices paid in full" };
+      return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: t(lang, "orders.tooltipAllInvoicesPaid") };
     } else if (order.paid > 0 && order.amount > 0 && order.paid >= order.amount) {
-      return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: "Paid in full" };
+      return { icon: <CheckCircle2 size={16} strokeWidth={1.8} className="text-green-600" />, tooltip: t(lang, "orders.tooltipPaidInFull") };
     } else if (order.paid > 0) {
-      return { icon: <CircleDollarSign size={16} strokeWidth={1.8} className="text-amber-500" />, tooltip: "Partial payment" };
+      return { icon: <CircleDollarSign size={16} strokeWidth={1.8} className="text-amber-500" />, tooltip: t(lang, "orders.tooltipPartialPayment") };
     }
     return null;
   };
@@ -678,7 +682,7 @@ export default function OrdersPage() {
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
               <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse"></div>
             </div>
           </div>
@@ -705,13 +709,13 @@ export default function OrdersPage() {
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
               <button
                 onClick={() => router.push("/orders/new")}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <Plus size={16} strokeWidth={2} />
-                New
+                {t(lang, "orders.new")}
               </button>
             </div>
           </div>
@@ -721,7 +725,7 @@ export default function OrdersPage() {
               onClick={fetchOrders}
               className="mt-2 text-sm text-red-600 underline hover:text-red-800"
             >
-              Try again
+              {t(lang, "orders.tryAgain")}
             </button>
           </div>
         </div>
@@ -735,17 +739,17 @@ export default function OrdersPage() {
         {/* Header */}
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
             <button
               onClick={() => router.push("/orders/new")}
               className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <Plus size={16} strokeWidth={2} />
-              New
+              {t(lang, "orders.new")}
             </button>
             {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
               <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                Filtered ({filteredOrders.length} results)
+                {t(lang, "orders.filteredResults").replace("{count}", String(filteredOrders.length))}
               </span>
             )}
           </div>
@@ -757,14 +761,14 @@ export default function OrdersPage() {
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <FileText size={32} strokeWidth={1.5} className="text-gray-400" />
             </div>
-            <p className="text-lg font-medium text-gray-900 mb-2">No orders yet</p>
-            <p className="text-gray-500 mb-6">Get started by creating your first order</p>
+            <p className="text-lg font-medium text-gray-900 mb-2">{t(lang, "orders.noOrdersYet")}</p>
+            <p className="text-gray-500 mb-6">{t(lang, "orders.getStarted")}</p>
             <button
               onClick={() => router.push("/orders/new")}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <Plus size={20} strokeWidth={2} />
-              Create your first order
+              {t(lang, "orders.createFirstOrder")}
             </button>
           </div>
         )}
@@ -776,58 +780,58 @@ export default function OrdersPage() {
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Order ID
+                  {t(lang, "orders.orderId")}
                 </th>
                 <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title="Invoice issued" className="cursor-help inline-flex flex-col items-center gap-0.5">
-                    <span>Inv</span>
+                  <span title={t(lang, "orders.invTitle")} className="cursor-help inline-flex flex-col items-center gap-0.5">
+                    <span>{t(lang, "orders.inv")}</span>
                     <FileCheck size={14} strokeWidth={1.8} className="text-gray-400" />
                   </span>
                 </th>
                 <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title="Payment Status" className="cursor-help inline-flex flex-col items-center gap-0.5">
-                    <span>Pay</span>
+                  <span title={t(lang, "orders.payTitle")} className="cursor-help inline-flex flex-col items-center gap-0.5">
+                    <span>{t(lang, "orders.pay")}</span>
                     <CircleDollarSign size={14} strokeWidth={1.8} className="text-gray-400" />
                   </span>
                 </th>
                 <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title="Days to Due Date" className="cursor-help inline-flex flex-col items-center gap-0.5">
-                    <span>Due</span>
+                  <span title={t(lang, "orders.dueTitle")} className="cursor-help inline-flex flex-col items-center gap-0.5">
+                    <span>{t(lang, "orders.due")}</span>
                     <Clock size={14} strokeWidth={1.8} className="text-gray-400" />
                   </span>
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Client
+                  {t(lang, "orders.client")}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Countries/Cities
+                  {t(lang, "orders.countriesCities")}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Dates
+                  {t(lang, "orders.dates")}
                 </th>
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Amount
+                  {t(lang, "orders.amount")}
                 </th>
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Paid
+                  {t(lang, "orders.paid")}
                 </th>
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Debt
+                  {t(lang, "orders.debt")}
                 </th>
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Profit after PVN">
-                  Profit
+                  {t(lang, "orders.profit")}
                 </th>
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="VAT (PVN — Pievienotās vērtības nodoklis)">
-                  VAT
+                  {t(lang, "orders.vat")}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Status
+                  {t(lang, "orders.status")}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Type
+                  {t(lang, "orders.type")}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  Owner
+                  {t(lang, "orders.owner")}
                 </th>
               </tr>
             </thead>
@@ -878,7 +882,7 @@ export default function OrdersPage() {
                             <span className="mr-2 inline-block transition-transform duration-200">
                               {isExpanded("month", month.monthKey) ? "▾" : "▸"}
                             </span>
-                            {month.monthLabel}
+                            {t(lang, `calendar.month.${parseInt(month.monthKey.split("-")[1], 10) - 1}`)}
                           </td>
                           <td className="px-2 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
                           <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={2}></td>
@@ -964,12 +968,12 @@ export default function OrdersPage() {
                                       {/* Invoice icon column */}
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
                                         {order.hasInvoice && order.allServicesInvoiced && (
-                                          <span title="All services invoiced" className="cursor-help inline-flex justify-center">
+                                          <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center">
                                             <FileCheck size={16} strokeWidth={1.8} className="text-green-600" />
                                           </span>
                                         )}
                                         {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && (
-                                          <span title={`${order.invoicedServices}/${order.totalServices} services invoiced`} className="cursor-help inline-flex justify-center">
+                                          <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center">
                                             <FileMinus2 size={16} strokeWidth={1.8} className="text-amber-500" />
                                           </span>
                                         )}
@@ -987,13 +991,13 @@ export default function OrdersPage() {
                                       {/* DUE: число дней / галка если оплачено / - если нет счёта */}
                                       <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
                                         {order.allInvoicesPaid || (order.debt <= 0 && order.amount > 0) ? (
-                                          <span title="Оплачено" className="inline-flex justify-center text-green-600">
+                                          <span title={t(lang, "orders.paidShort")} className="inline-flex justify-center text-green-600">
                                             <Check size={16} strokeWidth={3} />
                                           </span>
                                         ) : daysToDue !== null ? (
                                           <span
                                             className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`}
-                                            title={`Due date: ${order.dueDate}`}
+                                            title={t(lang, "orders.tooltipDueDate").replace("{date}", order.dueDate ?? "")}
                                           >
                                             {daysToDue < 0 && <CircleAlert size={13} strokeWidth={2} />}
                                             {daysToDue}
@@ -1042,9 +1046,10 @@ export default function OrdersPage() {
                                       <td className="w-8 px-2 py-1.5 text-center">
                                         {(() => {
                                           const colors = getStatusBadgeColor(order.status);
+                                          const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`;
                                           return (
                                             <span
-                                              title={order.status}
+                                              title={t(lang, statusKey)}
                                               className={`inline-block h-2.5 w-2.5 rounded-full ${colors.dot} cursor-help`}
                                             />
                                           );

@@ -7,7 +7,9 @@ import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { roleHasPermission } from "@/lib/auth/permissions";
+import { t } from "@/lib/i18n";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -25,6 +27,7 @@ import {
 
 interface NavItem {
   name: string;
+  nameKey?: string;
   href: string;
   icon: React.ReactNode;
   children?: NavItem[];
@@ -36,34 +39,40 @@ const ICON_SIZE = 20;
 const ICON_STROKE = 1.6;
 
 const navConfig: NavElement[] = [
-  { name: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
-  { name: "Orders", href: "/orders", icon: <ClipboardList size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Dashboard", nameKey: "nav.dashboard", href: "/dashboard", icon: <LayoutDashboard size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Orders", nameKey: "nav.orders", href: "/orders", icon: <ClipboardList size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
   {
     name: "Finances",
+    nameKey: "nav.finances",
     href: "/finances/invoices",
     icon: <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} />,
     children: [
-      { name: "Invoices", href: "/finances/invoices", icon: <FileText size={18} strokeWidth={ICON_STROKE} /> },
-      { name: "Payments", href: "/finances/payments", icon: <CreditCard size={18} strokeWidth={ICON_STROKE} /> },
-      { name: "Cash Flow", href: "/finances/cashflow", icon: <TrendingUp size={18} strokeWidth={ICON_STROKE} /> },
-      { name: "IATA", href: "/finances/iata", icon: <Plane size={18} strokeWidth={ICON_STROKE} /> },
-      { name: "Reconciliation", href: "/finances/reconciliation", icon: <RefreshCcw size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Invoices", nameKey: "invoices.title", href: "/finances/invoices", icon: <FileText size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Payments", nameKey: "payments.title", href: "/finances/payments", icon: <CreditCard size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Cash Flow", nameKey: "cashflow.title", href: "/finances/cashflow", icon: <TrendingUp size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "IATA", nameKey: "iata.title", href: "/finances/iata", icon: <Plane size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Reconciliation", nameKey: "reconciliation.title", href: "/finances/reconciliation", icon: <RefreshCcw size={18} strokeWidth={ICON_STROKE} /> },
     ],
   },
-  { name: "Analytics", href: "/analytics/orders", icon: <BarChart3 size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
-  { name: "Directory", href: "/directory", icon: <Users size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
-  { name: "Hotels Booking", href: "/hotels-booking", icon: <Hotel size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Analytics", nameKey: "nav.analytics", href: "/analytics/orders", icon: <BarChart3 size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Directory", nameKey: "nav.directory", href: "/directory", icon: <Users size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Hotels Booking", nameKey: "nav.hotelsBooking", href: "/hotels-booking", icon: <Hotel size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
 ];
 
-const modeLabels: Record<SidebarMode, string> = {
-  expanded: "Expanded",
-  collapsed: "Collapsed",
-  hover: "Expand on hover",
-};
+function getModeLabel(mode: SidebarMode, lang: string): string {
+  const key = mode === "expanded" ? "sidebar.expanded" : mode === "collapsed" ? "sidebar.collapsed" : "sidebar.expandOnHover";
+  return t(lang, key);
+}
+
+function getNavLabel(item: NavItem, lang: string): string {
+  return item.nameKey ? t(lang, item.nameKey) : item.name;
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const userRole = useCurrentUserRole();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const {
     mode,
     setMode,
@@ -221,7 +230,7 @@ export default function Sidebar() {
               {/* Tooltip */}
               {hoveredItem === item.href && (
                 <div className="absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white whitespace-nowrap shadow-lg">
-                  {item.name}
+                  {getNavLabel(item, lang)}
                   <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
                 </div>
               )}
@@ -242,7 +251,7 @@ export default function Sidebar() {
                   }`}
                 >
                   <span className="flex-shrink-0">{item.icon}</span>
-                  <span>{item.name}</span>
+                  <span>{getNavLabel(item, lang)}</span>
                 </Link>
               </li>
               {/* Children items (expanded mode) */}
@@ -262,7 +271,7 @@ export default function Sidebar() {
                       }`}
                     >
                       <span className="flex-shrink-0">{child.icon}</span>
-                      <span>{child.name}</span>
+                      <span>{getNavLabel(child, lang)}</span>
                     </Link>
                   </li>
                 );
@@ -290,12 +299,12 @@ export default function Sidebar() {
               onMouseLeave={() => setHoveredItem(null)}
             >
               <span className="flex-shrink-0">{item.icon}</span>
-              {!showTooltip && <span>{item.name}</span>}
+              {!showTooltip && <span>{getNavLabel(item, lang)}</span>}
             </Link>
             {/* Tooltip for collapsed/hover mode */}
             {showTooltip && hoveredItem === item.href && (
               <div className="absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white whitespace-nowrap shadow-lg">
-                {item.name}
+                {getNavLabel(item, lang)}
                 <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
               </div>
             )}
@@ -411,7 +420,7 @@ export default function Sidebar() {
                 <Settings size={18} strokeWidth={1.6} />
                 {isExpanded && (
                   <>
-                    <span className="flex-1 text-left">{modeLabels[mode]}</span>
+                    <span className="flex-1 text-left">{getModeLabel(mode, lang)}</span>
                     <span className={`text-xs transition-transform ${isPopoverOpen ? "rotate-180" : ""}`}>▼</span>
                   </>
                 )}
@@ -462,7 +471,7 @@ export default function Sidebar() {
                             <span className="h-2 w-2 rounded-full border-2 border-gray-300"></span>
                           )}
                         </div>
-                        <span>{modeLabels[m]}</span>
+                        <span>{getModeLabel(m, lang)}</span>
                       </button>
                     ))}
                   </div>
@@ -508,7 +517,7 @@ export default function Sidebar() {
                   className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-gray-700 hover:bg-gray-900/5"
                 >
                   <Settings size={18} strokeWidth={1.6} />
-                  <span className="flex-1 text-left">{modeLabels[mode]}</span>
+                  <span className="flex-1 text-left">{getModeLabel(mode, lang)}</span>
                   <span className={`text-xs transition-transform ${isPopoverOpen ? "rotate-180" : ""}`}>▼</span>
                 </button>
 
@@ -557,7 +566,7 @@ export default function Sidebar() {
                               <span className="h-2 w-2 rounded-full border-2 border-gray-300"></span>
                             )}
                           </div>
-                          <span>{modeLabels[m]}</span>
+                          <span>{getModeLabel(m, lang)}</span>
                         </button>
                       ))}
                     </div>

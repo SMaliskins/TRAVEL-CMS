@@ -7,6 +7,8 @@ import DateInput from "@/components/DateInput";
 import { useToast } from "@/contexts/ToastContext";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { Eye, FileDown, Mail, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 
 interface Invoice {
@@ -59,6 +61,8 @@ interface PaymentSummary {
 }
 
 export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, orderAmountTotal = 0 }: InvoiceListProps) {
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [openActionsInvoiceId, setOpenActionsInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -613,19 +617,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   }
 
   const getStatusLabel = (status: Invoice['status']) => {
-    const labels: Record<Invoice['status'], string> = {
-      draft: 'Draft',
-      sent: 'Sent',
-      paid: 'Paid',
-      cancelled: 'Cancelled',
-      overdue: 'Overdue',
-      issued: 'Issued',
-      issued_sent: 'Sent',
-      processed: 'Processed',
-      replaced: 'Replaced',
-      amended: 'Amended',
-    };
-    return labels[status] || status;
+    const translated = t(lang, `invoices.${status}` as any);
+    return translated || status;
   };
 
   const getStatusColor = (status: Invoice['status']) => {
@@ -693,7 +686,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             <div className="p-4 overflow-auto flex-1 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Invoice date</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t(lang, "invoices.invoiceDate")}</label>
                   {editingLinesInvoice.status === 'processed' || editingLinesInvoice.status === 'amended' ? (
                     <div className="w-full rounded border border-gray-200 bg-gray-100 px-2 py-1.5 text-sm text-gray-600 cursor-not-allowed" title="Locked — invoice already processed by Finance">
                       {formatDate(editDatesForm.invoice_date)}
@@ -901,7 +894,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         />
       )}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{t(lang, "invoices.title")}</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setHideCancelled(!hideCancelled)}
@@ -922,19 +915,19 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             onClick={onCreateNew}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
           >
-            + Create Invoice
+            + {t(lang, "order.createInvoice")}
           </button>
         </div>
       </div>
 
       {groupedInvoices.size === 0 ? (
         <div className="rounded-lg bg-gray-50 border border-gray-200 p-8 text-center">
-          <p className="text-gray-500 mb-4">No invoices created yet</p>
+          <p className="text-gray-500 mb-4">{t(lang, "order.noInvoicesYet")}</p>
           <button
             onClick={onCreateNew}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
           >
-            Create First Invoice
+            {t(lang, "order.createFirstInvoice")}
           </button>
         </div>
       ) : (
@@ -953,15 +946,15 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             </colgroup>
             <thead>
               <tr className="border-b border-gray-300 bg-gray-50">
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Short nr.</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Complete nr.</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Payer</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-700">Total</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-700">Paid</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-700">Debt</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Status</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Due (schedule)</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Invoice date</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.shortNr")}</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.completeNr")}</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.payer")}</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.total")}</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.paid")}</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.debt")}</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.status")}</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.dueSchedule")}</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.invoiceDate")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1142,9 +1135,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         const overpayment = Math.max(0, Math.round((paymentSummary.totalPaid - paymentSummary.linkedToInvoices) * 100) / 100);
         return (
           <div className="flex items-center gap-4 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
-            <span>Total paid: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.totalPaid)}</span></span>
+            <span>{t(lang, "invoices.totalPaidLabel")}: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.totalPaid)}</span></span>
             {paymentSummary.linkedToInvoices > 0 && (
-              <span>Linked to invoices: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.linkedToInvoices)}</span></span>
+              <span>{t(lang, "invoices.linkedToInvoicesLabel")}: <span className="font-medium text-gray-700">{formatCurrency(paymentSummary.linkedToInvoices)}</span></span>
             )}
             {paymentSummary.deposit > 0 && overpayment <= 0 && (
               <span className="text-amber-600">

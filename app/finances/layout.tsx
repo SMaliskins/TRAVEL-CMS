@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 const tabs = [
-  { name: "Invoices", href: "/finances/invoices" },
-  { name: "Payments", href: "/finances/payments" },
-  { name: "Cash Flow", href: "/finances/cashflow" },
-  { name: "IATA", href: "/finances/iata" },
-  { name: "Reconciliation", href: "/finances/reconciliation" },
+  { nameKey: "invoices.title", href: "/finances/invoices" },
+  { nameKey: "payments.title", href: "/finances/payments" },
+  { nameKey: "cashflow.title", href: "/finances/cashflow" },
+  { nameKey: "iata.title", href: "/finances/iata" },
+  { nameKey: "reconciliation.title", href: "/finances/reconciliation" },
 ];
 
 export default function FinancesLayout({
@@ -17,6 +19,8 @@ export default function FinancesLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
 
   return (
     <div>
@@ -35,7 +39,7 @@ export default function FinancesLayout({
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 }`}
               >
-                {tab.name}
+                {t(lang, tab.nameKey)}
               </Link>
             );
           })}
