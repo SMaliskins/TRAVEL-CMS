@@ -83,7 +83,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 });
     }
 
-    const payments = (data ?? []).map((p: Record<string, unknown>) => ({
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const payments = rows.map((p) => ({
       ...p,
       order_code: (p.orders as Record<string, unknown>)?.order_code ?? null,
       order_client: (p.orders as Record<string, unknown>)?.client_display_name ?? null,
