@@ -23,7 +23,7 @@ const BOARD_LABELS: Record<string, string> = {
   uai: "UAI",
 };
 
-type FlightSegmentLike = { departure?: string; arrival?: string; departureCity?: string; arrivalCity?: string; arrival?: string };
+type FlightSegmentLike = { departure?: string; arrival?: string; departureCity?: string; arrivalCity?: string };
 
 export type ServiceForDisplayName = {
   category?: string;

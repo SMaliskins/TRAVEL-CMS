@@ -2824,7 +2824,7 @@ export default function AddServiceModal({
                       <button type="button" role="tab" aria-selected={basicInfoTab === "basic"} onClick={() => setBasicInfoTab("basic")} className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${basicInfoTab === "basic" ? "bg-white text-gray-900 shadow-sm border-b-2 border-transparent -mb-px" : "text-gray-600 hover:text-gray-700"}`}>Basic Info</button>
                       <button type="button" role="tab" aria-selected={basicInfoTab === "parties"} onClick={() => setBasicInfoTab("parties")} className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${basicInfoTab === "parties" ? "bg-white text-gray-900 shadow-sm font-semibold border-b-2 border-transparent -mb-px" : "text-gray-600 hover:text-gray-700"}`}>Parties</button>
                     </div>
-                {(basicInfoTab === "basic" || !CATEGORIES_WITH_PARTIES_TAB.includes(categoryType)) && categoryType !== "flight" && (
+                {(basicInfoTab === "basic" || !CATEGORIES_WITH_PARTIES_TAB.includes(categoryType)) && (
               <div className={`p-3 space-y-2 ${CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) ? "" : "modal-section"}`}>
                 {!CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && <h4 className="modal-section-title">BASIC INFO</h4>}
                 
@@ -2891,7 +2891,6 @@ export default function AddServiceModal({
                 </div>
                 )}
 
-                {categoryType !== "flight" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">
                     {categoryType === "tour" ? "Direction" : "Name *"}
@@ -2904,9 +2903,8 @@ export default function AddServiceModal({
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
-                )}
 
-                {categoryType === "flight" ? null : categoryType === "transfer" ? (
+                {categoryType === "transfer" ? (
                   <>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
@@ -3094,10 +3092,8 @@ export default function AddServiceModal({
                   </>
                 )}
                 
-                {/* Baggage for flight — shown in BASIC INFO block above CLIENT & PAYER */}
-                {categoryType !== "flight" && (
-                  <>
                 {/* Ref Nr (booking ref) — for Tour, above Status in BASIC INFO */}
+                <>
                 {categoryType === "tour" && (
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr (booking ref)</label>
@@ -3122,8 +3118,7 @@ export default function AddServiceModal({
                       ))}
                     </select>
                   </div>
-                  </>
-                )}
+                </>
               </div>
               )}
                 {basicInfoTab === "parties" && CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && (

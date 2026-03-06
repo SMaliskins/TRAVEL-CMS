@@ -10,7 +10,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { Check, X } from "lucide-react";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 import { getInvoiceLabels, numberToWords, getCategoryLabel, getCategoryTypeFromName } from "@/lib/invoices/generateInvoiceHTML";
-import { getServiceDisplayName } from "@/lib/services/serviceDisplayName";
+import { getServiceDisplayName, type ServiceForDisplayName } from "@/lib/services/serviceDisplayName";
 
 interface Service {
   id: string;
@@ -38,7 +38,7 @@ interface Service {
 
 /** Same string as the "Name" column in the services list, enriched with cabin class + airline for flights. */
 function getServiceDisplayNameForInvoice(s: Service): string {
-  const base = getServiceDisplayName(s, s.name);
+  const base = getServiceDisplayName(s as ServiceForDisplayName, s.name);
   const catType = s.categoryType || getCategoryTypeFromName(s.category);
   if (catType !== "flight") return base;
 
