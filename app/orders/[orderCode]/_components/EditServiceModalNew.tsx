@@ -54,7 +54,7 @@ const BOARD_LABELS: Record<string, string> = {
 };
 
 // Functional types that determine which features are available
-type CategoryType = 'flight' | 'hotel' | 'transfer' | 'tour' | 'insurance' | 'visa' | 'rent_a_car' | 'cruise' | 'other';
+type CategoryType = 'flight' | 'hotel' | 'transfer' | 'tour' | 'insurance' | 'visa' | 'rent_a_car' | 'cruise' | 'ancillary' | 'other';
 
 /** Categories that show Basic Info + Parties tabs (CLIENTS & PAYER, Supplier) */
 const CATEGORIES_WITH_PARTIES_TAB: CategoryType[] = ["tour", "other", "transfer", "visa", "insurance", "rent_a_car", "cruise"];
@@ -148,8 +148,9 @@ interface Service {
   changeFee?: number | null; // Airline change fee (for Flights)
   invoice_id?: string | null; // When set, service is on an invoice — client price (Sale) is locked
   // Amendment fields (change/cancellation)
-  serviceType?: "original" | "change" | "cancellation" | null;
+  serviceType?: "original" | "change" | "cancellation" | "ancillary" | null;
   parentServiceId?: string | null;
+  ancillaryType?: "extra_baggage" | "seat_selection" | "meal" | "other_ancillary" | null;
   cancellationFee?: number | null;
   refundAmount?: number | null;
   // Ticket numbers per client
@@ -279,6 +280,7 @@ export default function EditServiceModalNew({
     if (lower.includes("visa") || lower.includes("виза")) return "visa";
     if (lower.includes("rent") || lower.includes("car") || lower.includes("авто") || lower.includes("аренда")) return "rent_a_car";
     if (lower.includes("cruise") || lower.includes("круиз")) return "cruise";
+    if (lower.includes("ancillary") || lower.includes("add-on") || lower.includes("addon")) return "ancillary";
     return "other";
   };
   const [categories, setCategories] = useState<ServiceCategory[]>(FALLBACK_CATEGORIES);
@@ -803,6 +805,9 @@ export default function EditServiceModalNew({
 
   const [baggage, setBaggage] = useState<string>(service.baggage || "");
   const [cabinClass, setCabinClass] = useState<"economy" | "premium_economy" | "business" | "first">(service.cabinClass || "economy");
+  // Ancillary sub-service state
+  const [ancillaryType, setAncillaryType] = useState<"extra_baggage" | "seat_selection" | "meal" | "other_ancillary">(service.ancillaryType || "extra_baggage");
+  const [ancillaryParentId, setAncillaryParentId] = useState<string>(service.parentServiceId || "");
   
   // Payment deadline fields
   const [paymentDeadlineDeposit, setPaymentDeadlineDeposit] = useState(service.paymentDeadlineDeposit || "");
@@ -825,7 +830,7 @@ export default function EditServiceModalNew({
   // Sync pricingPerClient with clients for Flight (same length, preserve existing values)
   // When pricing_per_client is empty, derive from service_price/client_price for single client
   useEffect(() => {
-    if (categoryType === "flight") {
+    if (categoryType === "flight" || categoryType === "ancillary") {
       const validClients = clients.filter(c => c.id || c.name);
       if (validClients.length === 0) return;
       const costTotal = Number(service.servicePrice ?? 0) || 0;
@@ -2108,10 +2113,10 @@ export default function EditServiceModalNew({
         clients: resolvedClients.filter(c => c.id).map(c => ({ id: c.id, name: c.name })),
         payer_party_id: payerPartyId,
         payer_name: payerName,
-        service_price: categoryType === "flight" && pricingPerClient.length > 0
+        service_price: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
           : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
-        client_price: categoryType === "flight" && pricingPerClient.length > 0
+        client_price: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
         quantity: categoryType === "flight" || categoryType === "tour" || categoryType === "transfer" || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
@@ -2244,6 +2249,13 @@ export default function EditServiceModalNew({
         payload.refundAmount = amendRefundAmount ? parseFloat(amendRefundAmount) : null;
       }
 
+      // Ancillary sub-service fields
+      if (categoryType === "ancillary") {
+        payload.parentServiceId = ancillaryParentId || null;
+        payload.serviceType = "ancillary";
+        payload.ancillaryType = ancillaryType;
+      }
+
       // Tour (Package Tour): commission + agent discount + line items. Commission applies to commissionableCost only
       if (categoryType === "tour") {
         const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
@@ -2294,10 +2306,10 @@ export default function EditServiceModalNew({
         }
 
         const opt = (v: string | null | undefined) => (v?.trim() ? v.trim() : undefined);
-        const finalServicePrice = categoryType === "flight" && pricingPerClient.length > 0
+        const finalServicePrice = (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
           : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0);
-        const finalClientPrice = categoryType === "flight" && pricingPerClient.length > 0
+        const finalClientPrice = (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
           : parseFloat(clientPrice) || 0;
         onServiceUpdated({
@@ -2528,140 +2540,6 @@ export default function EditServiceModalNew({
           </button>
         </div>
 
-        {/* Paste & Parse for Flight only (Tour has it in Basic Info) */}
-        {categoryType === "flight" && (
-          <div className="px-4 pt-3">
-            {!showPasteInput ? (
-                <div
-                  role="region"
-                  aria-label="Drop or paste flight document"
-                  tabIndex={0}
-                  onDrop={handleFileDrop}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = "copy";
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={handleDragLeave}
-                  onPaste={(e) => {
-                    const files = e.clipboardData?.files;
-                    const f = files?.[0];
-                    if (f && (f.type === "application/pdf" || /\.(pdf|txt|eml)$/i.test(f.name || ""))) {
-                      e.preventDefault();
-                      const dt = new DataTransfer();
-                      dt.items.add(f);
-                      handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
-                      return;
-                    }
-                    const text = e.clipboardData?.getData?.("text/plain");
-                    if (text?.trim()) {
-                      e.preventDefault();
-                      setShowPasteInput(true);
-                      setPasteText(text.trim());
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setShowPasteInput(true);
-                    }
-                  }}
-                  onClick={() => setShowPasteInput(true)}
-                  className={`w-full px-3 py-3 text-sm border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-1 cursor-pointer transition-all outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
-                    isDragging
-                      ? 'border-blue-500 bg-blue-100 text-blue-700'
-                      : 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400'
-                  }`}
-                >
-                  {isLoadingPdf ? (
-                    <span className="animate-pulse">⏳ Reading PDF...</span>
-                  ) : isDragging ? (
-                    <span className="font-medium">📄 Drop PDF here</span>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        📋 Paste & Parse (replace flight)
-                      </div>
-                      <span className="text-xs text-gray-400">or drop PDF / TXT file, Ctrl+V to paste</span>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-xs text-blue-600 font-medium mb-1">
-                    Paste Amadeus ITR or airline confirmation — will replace current flight data
-                  </div>
-                  <textarea
-                    ref={flightPasteTextareaRef}
-                    value={pasteText}
-                    onChange={(e) => setPasteText(e.target.value)}
-                    onPaste={(e) => {
-                      const files = e.clipboardData?.files;
-                      const f = files?.[0];
-                      if (f && (f.type === "application/pdf" || /\.(pdf|txt|eml)$/i.test(f.name || ""))) {
-                        e.preventDefault();
-                        const dt = new DataTransfer();
-                        dt.items.add(f);
-                        handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
-                      }
-                    }}
-                    placeholder="Paste Amadeus ITR, airline confirmation, or PDF text here. Or paste file (Ctrl+V)."
-                    rows={6}
-                    className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    autoFocus
-                    tabIndex={0}
-                  />
-                  <input
-                    ref={flightFileInputRef}
-                    type="file"
-                    accept=".pdf,.txt,.eml"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        const dt = new DataTransfer();
-                        dt.items.add(f);
-                        handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
-                      }
-                      e.target.value = "";
-                    }}
-                  />
-                  {parseError && (
-                    <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
-                  )}
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => flightFileInputRef.current?.click()}
-                      disabled={isLoadingPdf}
-                      className="px-4 py-1.5 text-sm border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      Attach PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleParseFlight}
-                      disabled={!pasteText.trim() || isParsingFlight}
-                      className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isParsingFlight ? "Parsing…" : "📋 Parse"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowPasteInput(false); setPasteText(""); setParseError(null); }}
-                      className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-          </div>
-        )}
 
         {/* Content: light grey background #F8F9FA, two columns left ~65% right ~35% */}
         <div className="p-4 modal-future-form-bg rounded-b-2xl">
@@ -2688,6 +2566,136 @@ export default function EditServiceModalNew({
                       className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                     />
                   </div>
+                  {/* Paste & Parse — drop zone or textarea (same as Add) */}
+                  {!showPasteInput ? (
+                    <div
+                      role="region"
+                      aria-label="Drop or paste flight document"
+                      tabIndex={0}
+                      onDrop={handleFileDrop}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = "copy";
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={handleDragLeave}
+                      onPaste={(e) => {
+                        const files = e.clipboardData?.files;
+                        const f = files?.[0];
+                        if (f && (f.type === "application/pdf" || /\.(pdf|txt|eml)$/i.test(f.name || ""))) {
+                          e.preventDefault();
+                          const dt = new DataTransfer();
+                          dt.items.add(f);
+                          handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
+                          return;
+                        }
+                        const text = e.clipboardData?.getData?.("text/plain");
+                        if (text?.trim()) {
+                          e.preventDefault();
+                          setShowPasteInput(true);
+                          setPasteText(text.trim());
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setShowPasteInput(true);
+                        }
+                      }}
+                      onClick={() => setShowPasteInput(true)}
+                      className={`w-full px-3 py-3 text-sm border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-1 cursor-pointer transition-all outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${
+                        isDragging
+                          ? 'border-blue-500 bg-blue-100 text-blue-700'
+                          : 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400'
+                      }`}
+                    >
+                      {isLoadingPdf ? (
+                        <span className="animate-pulse">⏳ Reading PDF...</span>
+                      ) : isDragging ? (
+                        <span className="font-medium">📄 Drop PDF here</span>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            📋 Paste & Parse (replace flight)
+                          </div>
+                          <span className="text-xs text-gray-400">or drop PDF / TXT file, Ctrl+V to paste</span>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="text-xs text-blue-600 font-medium mb-1">
+                        Paste Amadeus ITR or airline confirmation — will replace current flight data
+                      </div>
+                      <textarea
+                        ref={flightPasteTextareaRef}
+                        value={pasteText}
+                        onChange={(e) => setPasteText(e.target.value)}
+                        onPaste={(e) => {
+                          const files = e.clipboardData?.files;
+                          const f = files?.[0];
+                          if (f && (f.type === "application/pdf" || /\.(pdf|txt|eml)$/i.test(f.name || ""))) {
+                            e.preventDefault();
+                            const dt = new DataTransfer();
+                            dt.items.add(f);
+                            handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
+                          }
+                        }}
+                        placeholder="Paste Amadeus ITR, airline confirmation, or PDF text here. Or paste file (Ctrl+V)."
+                        rows={6}
+                        className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        autoFocus
+                        tabIndex={0}
+                      />
+                      <input
+                        ref={flightFileInputRef}
+                        type="file"
+                        accept=".pdf,.txt,.eml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            const dt = new DataTransfer();
+                            dt.items.add(f);
+                            handleFileDrop({ preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: dt } as React.DragEvent<HTMLDivElement>);
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                      {parseError && (
+                        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
+                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => flightFileInputRef.current?.click()}
+                          disabled={isLoadingPdf}
+                          className="px-4 py-1.5 text-sm border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 flex items-center gap-2"
+                        >
+                          Attach PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleParseFlight}
+                          disabled={!pasteText.trim() || isParsingFlight}
+                          className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {isParsingFlight ? "Parsing…" : "📋 Parse"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowPasteInput(false); setPasteText(""); setParseError(null); }}
+                          className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Dates</label>
@@ -2757,9 +2765,10 @@ export default function EditServiceModalNew({
                       <label className="block text-sm font-normal text-[#343A40] mb-1">Hotel <span className="text-red-500">*</span></label>
                       <HotelSuggestInput
                         value={hotelName}
-                        onChange={setHotelName}
+                        onChange={(v) => { setHotelName(v); setServiceName(v); }}
                         onHotelSelected={(d) => {
                           setHotelName(d.name);
+                          setServiceName(d.name);
                           if (d.address) setHotelAddress(d.address);
                           if (d.phone) setHotelPhone(d.phone);
                           if (d.email) setHotelEmail(d.email);
@@ -3597,6 +3606,80 @@ export default function EditServiceModalNew({
               </div>
             )}
 
+            {/* Ancillary sub-service form */}
+            {categoryType === "ancillary" && (
+              <>
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">ANCILLARY DETAILS</h4>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Linked Air Ticket</label>
+                  <select
+                    value={ancillaryParentId}
+                    onChange={(e) => setAncillaryParentId(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Select air ticket...</option>
+                    {(flightServices || []).map(f => (
+                      <option key={f.id} value={f.id}>{f.name || "Air Ticket"}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {([
+                      { value: "extra_baggage" as const, label: "Extra Baggage" },
+                      { value: "seat_selection" as const, label: "Seat Selection" },
+                      { value: "meal" as const, label: "Meal" },
+                      { value: "other_ancillary" as const, label: "Other" },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setAncillaryType(opt.value)}
+                        className={`px-3 py-2 text-sm rounded-lg border transition-colors ${ancillaryType === opt.value ? "bg-blue-50 border-blue-400 text-blue-800 font-medium" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Description</label>
+                  <input
+                    type="text"
+                    value={serviceName}
+                    onChange={(e) => setServiceName(e.target.value)}
+                    placeholder={ancillaryType === "extra_baggage" ? "e.g. 23kg checked bag" : ancillaryType === "seat_selection" ? "e.g. Seat 14A window" : ancillaryType === "meal" ? "e.g. Vegetarian meal" : "Description"}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="p-3 modal-section space-y-2">
+                <h4 className="modal-section-title">SUPPLIER</h4>
+                <PartySelect
+                  value={supplierPartyId}
+                  onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                  roleFilter="supplier"
+                  initialDisplayName={supplierName}
+                  prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                />
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref</label>
+                    <input type="text" value={refNr} onChange={(e) => setRefNr(e.target.value)} placeholder="Booking ref" className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Status</label>
+                    <select value={resStatus} onChange={(e) => setResStatus(e.target.value)} className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                      {RES_STATUS_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              </>
+            )}
+
             {/* Flight Schedule — in the left column */}
             {categoryType === "flight" && flightScheduleBlock}
             {/* Tour: Flight Information — parse document above or add/edit manually */}
@@ -3903,8 +3986,8 @@ export default function EditServiceModalNew({
                       </div>
                     </div>
                   </div>
-                ) : categoryType === "flight" ? (
-                  /* Flight: Bulk Price row above clients, per-column down-arrow to apply; then client rows */
+                ) : (categoryType === "flight" || categoryType === "ancillary") ? (
+                  /* Flight / Ancillary: Bulk Price row above clients, per-column down-arrow to apply; then client rows */
                   <div className="space-y-3">
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm border-collapse table-fixed">

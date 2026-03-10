@@ -161,7 +161,8 @@ interface Service {
   cancellationPenaltyPercent?: number | null;
   // Amendment fields (change/cancellation)
   parentServiceId?: string | null;
-  serviceType?: "original" | "change" | "cancellation";
+  serviceType?: "original" | "change" | "cancellation" | "ancillary";
+  ancillaryType?: "extra_baggage" | "seat_selection" | "meal" | "other_ancillary" | null;
   cancellationFee?: number | null;
   refundAmount?: number | null;
   changeFee?: number | null;
@@ -237,7 +238,7 @@ function ChooseServiceTypeModal({
               onClick={() => onSelect(cat.id, cat)}
               className="flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800"
             >
-              {cat.type ? (t(lang, `order.category.${cat.type}` as any) ?? cat.name) : cat.name}
+              {cat.name}
             </button>
           ))}
         </div>
@@ -459,6 +460,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [showTransferTypePopup, setShowTransferTypePopup] = useState(false);
   const [addServiceAirportServiceType, setAddServiceAirportServiceType] = useState<"meet_and_greet" | "fast_track" | null>(null);
   const [showAirportServiceTypePopup, setShowAirportServiceTypePopup] = useState(false);
+  const [ancillaryParentServiceId, setAncillaryParentServiceId] = useState<string | null>(null);
   const [serviceCategories, setServiceCategories] = useState<{ id: string; name: string; type?: string; vat_rate?: number }[]>([]);
   const [pendingOpenChooseModal, setPendingOpenChooseModal] = useState(false);
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
@@ -1380,6 +1382,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           // Amendment fields
           parentServiceId: (s.parentServiceId ?? s.parent_service_id ?? null) as string | null,
           serviceType: String(s.serviceType ?? s.service_type ?? "original") as Service["serviceType"],
+          ancillaryType: (s.ancillaryType ?? s.ancillary_type ?? null) as Service["ancillaryType"],
           cancellationFee: (s.cancellationFee ?? s.cancellation_fee ?? null) as number | null,
           refundAmount: (s.refundAmount ?? s.refund_amount ?? null) as number | null,
           changeFee: (s.changeFee ?? s.change_fee ?? null) as number | null,
@@ -2207,12 +2210,25 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               {(() => {
                 let serviceRowIndex = 0;
                 return sortedGroupKeys.map((groupKey) => {
-                const groupServices = groupedServices[groupKey].sort((a, b) => {
-                  // Sort within group: category, then name
-                  const categoryCompare = a.category.localeCompare(b.category);
-                  if (categoryCompare !== 0) return categoryCompare;
-                  return a.name.localeCompare(b.name);
-                });
+                const groupServices = (() => {
+                  const raw = groupedServices[groupKey];
+                  const parents = raw.filter(s => s.serviceType !== "ancillary").sort((a, b) => {
+                    const cc = a.category.localeCompare(b.category);
+                    return cc !== 0 ? cc : a.name.localeCompare(b.name);
+                  });
+                  const ancillaries = raw.filter(s => s.serviceType === "ancillary");
+                  const result: Service[] = [];
+                  for (const p of parents) {
+                    result.push(p);
+                    for (const a of ancillaries) {
+                      if (a.parentServiceId === p.id) result.push(a);
+                    }
+                  }
+                  for (const a of ancillaries) {
+                    if (!result.includes(a)) result.push(a);
+                  }
+                  return result;
+                })();
                 const isExpanded = expandedGroups[groupKey] ?? true;
 
                 return (
@@ -2259,6 +2275,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                         // CLIENT: show only the lead client (service.client), not all assigned travellers
                         const displayClientName = service.client;
                         const displayClientPartyId = service.clientPartyId;
+                        const isAncillary = service.serviceType === "ancillary";
 
                         const rowDelay = serviceRowIndex++ * 40;
                         return (
@@ -2266,7 +2283,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                           <tr
                             className={`services-row-in group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer relative ${
                               service.splitGroupId ? `border-l-4 ${splitGroupColor?.border}` : ""
-                            }`}
+                            } ${isAncillary ? "bg-blue-50/30" : ""}`}
                             style={{ animationDelay: `${rowDelay}ms` }}
                             onDoubleClick={(e) => {
                               e.stopPropagation();
@@ -2326,7 +2343,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             <td 
                               className="px-2 py-0.5 text-xs text-gray-700 leading-tight"
                             >
-                              {service.category}
+                              {isAncillary ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="text-gray-400">└</span>
+                                  <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700">
+                                    {service.ancillaryType === "extra_baggage" ? "Baggage" : service.ancillaryType === "seat_selection" ? "Seat" : service.ancillaryType === "meal" ? "Meal" : "Add-on"}
+                                  </span>
+                                </span>
+                              ) : service.category}
                             </td>
                             <td className="px-2 py-0.5 text-xs font-medium text-gray-900 leading-tight">
                               <div className="flex items-center gap-2">
@@ -2429,6 +2453,27 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               >
                                 {service.resStatus}
                               </span>
+                              {(service.categoryType === "flight" || (service.category || "").toLowerCase().includes("ticket") || (service.category || "").toLowerCase().includes("flight")) && !isAncillary && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const ancillaryCat = serviceCategories.find(c => c.type === "ancillary");
+                                    if (ancillaryCat) {
+                                      setAncillaryParentServiceId(service.id);
+                                      setAddServiceCategoryId(ancillaryCat.id);
+                                      setAddServiceCategoryType("ancillary");
+                                      setAddServiceCategoryName(ancillaryCat.name);
+                                      setAddServiceCategoryVatRate(ancillaryCat.vat_rate);
+                                      setShowAddModal(true);
+                                    }
+                                  }}
+                                  className="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors"
+                                  title="Add ancillary service (baggage, seat, meal)"
+                                >
+                                  + Add-on
+                                </button>
+                              )}
                             </td>
                             {/* Terms */}
                             <td className="px-2 py-0.5 text-xs leading-tight">
@@ -2539,6 +2584,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 vehicleClass: s.vehicleClass,
                 splitGroupId: s.splitGroupId ?? null,
                 assignedTravellerIds: s.assignedTravellerIds ?? [],
+                parentServiceId: s.parentServiceId ?? null,
+                ancillaryType: s.ancillaryType ?? null,
               }))}
               travellers={orderTravellers.filter(t => (serviceCountByTraveller[t.id] || 0) > 0)}
               selectedTravellerId={selectedTravellerId}
@@ -2694,6 +2741,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           initialVatRate={addServiceCategoryVatRate ?? undefined}
           initialTransferBookingType={addServiceTransferBookingType ?? undefined}
           initialAirportServiceType={addServiceAirportServiceType ?? undefined}
+          initialAncillaryParentId={ancillaryParentServiceId}
           flightServices={services.filter(s => (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase() === "flight").map(s => ({ id: s.id, name: s.name, flightSegments: s.flightSegments || [] }))}
           hotelServices={services.filter(s => { const t = (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase(); return t === "hotel" || (t === "tour" && !!(s as { hotelName?: string }).hotelName); }).map(s => ({ id: s.id, hotelName: (s as { hotelName?: string }).hotelName || s.name, dateFrom: s.dateFrom ?? undefined, dateTo: s.dateTo ?? undefined }))}
           orderTravellers={orderTravellers}
@@ -2704,6 +2752,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             setAddServiceCategoryName(null);
             setAddServiceCategoryVatRate(null);
             setAddServiceTransferBookingType(null);
+            setAncillaryParentServiceId(null);
           }}
           onServiceAdded={handleServiceAdded}
         />
@@ -3081,43 +3130,46 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       
       {/* Bulk Actions Popovers - appear near the floating bar */}
       {bulkAction === "status" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-72">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Set Status</h3>
-              <button onClick={() => setBulkAction(null)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-1">
-              {["booked", "confirmed", "changed", "rejected", "cancelled"].map(status => (
-                <button
-                  key={status}
-                  onClick={async () => {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    for (const serviceId of selectedServiceIds) {
-                      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
-                        method: "PATCH",
-                        headers: {
-                          "Content-Type": "application/json",
-                          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-                        },
-                        body: JSON.stringify({ res_status: status }),
-                      });
-                    }
-                    fetchServices();
-                    setBulkAction(null);
-                  }}
-                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 capitalize text-sm"
-                >
-                  {status}
+        <>
+          <div className="fixed inset-0 z-[65]" onClick={() => setBulkAction(null)} />
+          <div className="fixed inset-0 z-[70] flex items-end justify-center pb-24 pointer-events-none">
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-72 pointer-events-auto animate-[slideUp_0.2s_ease-out]">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Set Status</h3>
+                <button onClick={() => setBulkAction(null)} className="text-gray-400 hover:text-gray-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              ))}
+              </div>
+              <div className="space-y-1">
+                {["booked", "confirmed", "changed", "rejected", "cancelled"].map(status => (
+                  <button
+                    key={status}
+                    onClick={async () => {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      for (const serviceId of selectedServiceIds) {
+                        await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                          },
+                          body: JSON.stringify({ res_status: status }),
+                        });
+                      }
+                      fetchServices();
+                      setBulkAction(null);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 capitalize text-sm"
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
       
       {bulkAction === "cancel" && (
@@ -3198,162 +3250,186 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       
       {/* Set Payer Popover */}
       {bulkAction === "payer" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Set Payer</h3>
-              <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <input
-              type="text"
-              placeholder="Search payer..."
-              value={bulkSearchQuery}
-              autoFocus
-              onChange={async (e) => {
-                const query = e.target.value;
-                setBulkSearchQuery(query);
-                if (query.length < 2) {
-                  setBulkSearchResults([]);
-                  return;
-                }
-                setBulkSearchLoading(true);
-                const { data: { session } } = await supabase.auth.getSession();
-                const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
-                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
-                    id: r.id,
-                    type: r.type,
-                    displayName: r.type === "person" 
-                      ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
-                      : r.companyName || "Unknown",
-                  }));
-                  setBulkSearchResults(mapped);
-                }
-                setBulkSearchLoading(false);
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
-            <div className="max-h-48 overflow-y-auto space-y-1">
-              {bulkSearchResults.map(party => (
-                <button
-                  key={party.id}
-                  onClick={async () => {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    for (const serviceId of selectedServiceIds) {
-                      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
-                        method: "PATCH",
-                        headers: {
-                          "Content-Type": "application/json",
-                          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-                        },
-                        body: JSON.stringify({ payer_party_id: party.id, payer_name: party.displayName }),
-                      });
-                    }
-                    fetchServices();
-                    setBulkAction(null);
-                    setBulkSearchQuery("");
-                    setBulkSearchResults([]);
-                  }}
-                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
-                >
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
-                  <span>{party.displayName}</span>
+        <>
+          <div className="fixed inset-0 z-[65]" onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} />
+          <div className="fixed inset-0 z-[70] flex items-end justify-center pb-24 pointer-events-none">
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80 pointer-events-auto animate-[slideUp_0.2s_ease-out]">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Set Payer</h3>
+                <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} className="text-gray-400 hover:text-gray-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              ))}
+              </div>
+              <input
+                type="text"
+                placeholder="Search payer..."
+                value={bulkSearchQuery}
+                autoFocus
+                onChange={async (e) => {
+                  const query = e.target.value;
+                  setBulkSearchQuery(query);
+                  if (query.length < 2) {
+                    setBulkSearchResults([]);
+                    return;
+                  }
+                  setBulkSearchLoading(true);
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&limit=10`, {
+                    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
+                      id: r.id,
+                      type: r.type,
+                      displayName: r.type === "person" 
+                        ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
+                        : r.companyName || "Unknown",
+                    }));
+                    setBulkSearchResults(mapped);
+                  }
+                  setBulkSearchLoading(false);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {bulkSearchResults.map(party => (
+                  <button
+                    key={party.id}
+                    onClick={async (e) => {
+                      const btn = e.currentTarget;
+                      btn.disabled = true;
+                      btn.textContent = "Saving...";
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const promises = selectedServiceIds.map(serviceId =>
+                          fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                            method: "PATCH",
+                            headers: {
+                              "Content-Type": "application/json",
+                              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                            },
+                            body: JSON.stringify({ payer_party_id: party.id, payer_name: party.displayName }),
+                          })
+                        );
+                        await Promise.all(promises);
+                        fetchServices();
+                      } catch (err) {
+                        console.error("Failed to set payer:", err);
+                      }
+                      setBulkAction(null);
+                      setBulkSearchQuery("");
+                      setBulkSearchResults([]);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
+                  >
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
+                    <span>{party.displayName}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
       
       {/* Set Supplier Popover */}
       {bulkAction === "supplier" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Set Supplier</h3>
-              <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <input
-              type="text"
-              placeholder="Search supplier..."
-              value={bulkSearchQuery}
-              autoFocus
-              onChange={async (e) => {
-                const query = e.target.value;
-                setBulkSearchQuery(query);
-                if (query.length < 2) {
-                  setBulkSearchResults([]);
-                  return;
-                }
-                setBulkSearchLoading(true);
-                const { data: { session } } = await supabase.auth.getSession();
-                const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&role=supplier&limit=10`, {
-                  headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
-                    id: r.id,
-                    type: r.type,
-                    displayName: r.type === "person" 
-                      ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
-                      : r.companyName || "Unknown",
-                  }));
-                  setBulkSearchResults(mapped);
-                }
-                setBulkSearchLoading(false);
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
-            <div className="max-h-48 overflow-y-auto space-y-1">
-              {bulkSearchResults.map(party => (
-                <button
-                  key={party.id}
-                  onClick={async () => {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    for (const serviceId of selectedServiceIds) {
-                      await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
-                        method: "PATCH",
-                        headers: {
-                          "Content-Type": "application/json",
-                          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-                        },
-                        body: JSON.stringify({ supplier_party_id: party.id, supplier_name: party.displayName }),
-                      });
-                    }
-                    fetchServices();
-                    setBulkAction(null);
-                    setBulkSearchQuery("");
-                    setBulkSearchResults([]);
-                  }}
-                  className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
-                >
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
-                  <span>{party.displayName}</span>
+        <>
+          <div className="fixed inset-0 z-[65]" onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} />
+          <div className="fixed inset-0 z-[70] flex items-end justify-center pb-24 pointer-events-none">
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80 pointer-events-auto animate-[slideUp_0.2s_ease-out]">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Set Supplier</h3>
+                <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); }} className="text-gray-400 hover:text-gray-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              ))}
+              </div>
+              <input
+                type="text"
+                placeholder="Search supplier..."
+                value={bulkSearchQuery}
+                autoFocus
+                onChange={async (e) => {
+                  const query = e.target.value;
+                  setBulkSearchQuery(query);
+                  if (query.length < 2) {
+                    setBulkSearchResults([]);
+                    return;
+                  }
+                  setBulkSearchLoading(true);
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const res = await fetch(`/api/directory?search=${encodeURIComponent(query)}&role=supplier&limit=10`, {
+                    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    const mapped = (data.data || []).map((r: { id: string; type: string; firstName?: string; lastName?: string; companyName?: string }) => ({
+                      id: r.id,
+                      type: r.type,
+                      displayName: r.type === "person" 
+                        ? [r.firstName, r.lastName].filter(Boolean).join(" ") 
+                        : r.companyName || "Unknown",
+                    }));
+                    setBulkSearchResults(mapped);
+                  }
+                  setBulkSearchLoading(false);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {bulkSearchLoading && <p className="text-xs text-gray-500 mb-2">Searching...</p>}
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {bulkSearchResults.map(party => (
+                  <button
+                    key={party.id}
+                    onClick={async (e) => {
+                      const btn = e.currentTarget;
+                      btn.disabled = true;
+                      btn.textContent = "Saving...";
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const promises = selectedServiceIds.map(serviceId =>
+                          fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                            method: "PATCH",
+                            headers: {
+                              "Content-Type": "application/json",
+                              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                            },
+                            body: JSON.stringify({ supplier_party_id: party.id, supplier_name: party.displayName }),
+                          })
+                        );
+                        await Promise.all(promises);
+                        fetchServices();
+                      } catch (err) {
+                        console.error("Failed to set supplier:", err);
+                      }
+                      setBulkAction(null);
+                      setBulkSearchQuery("");
+                      setBulkSearchResults([]);
+                    }}
+                    className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-100 flex items-center gap-2 text-sm"
+                  >
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{party.type}</span>
+                    <span>{party.displayName}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
       
       {/* Set Client Popover - Multiple Selection */}
       {bulkAction === "client" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] animate-[slideUp_0.2s_ease-out]">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80">
+        <>
+          <div className="fixed inset-0 z-[65]" onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); setBulkSelectedClients([]); }} />
+          <div className="fixed inset-0 z-[70] flex items-end justify-center pb-24 pointer-events-none">
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80 pointer-events-auto animate-[slideUp_0.2s_ease-out]">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-gray-900">Add Clients</h3>
               <button onClick={() => { setBulkAction(null); setBulkSearchQuery(""); setBulkSearchResults([]); setBulkSelectedClients([]); }} className="text-gray-400 hover:text-gray-600">
@@ -3470,7 +3546,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               Apply ({bulkSelectedClients.length})
             </button>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Floating panel for selected boarding passes */}

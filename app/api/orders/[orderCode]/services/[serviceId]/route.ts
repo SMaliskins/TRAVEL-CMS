@@ -104,6 +104,7 @@ export async function GET(
       // Amendment fields (change/cancellation)
       parentServiceId: row.parent_service_id ?? null,
       serviceType: row.service_type ?? "original",
+      ancillaryType: row.ancillary_type ?? null,
       cancellationFee: row.cancellation_fee != null ? parseFloat(String(row.cancellation_fee)) : null,
       refundAmount: row.refund_amount != null ? parseFloat(String(row.refund_amount)) : null,
       changeFee: row.change_fee != null ? parseFloat(String(row.change_fee)) : null,
@@ -269,6 +270,7 @@ export async function PATCH(
     // Amendment fields (change/cancellation)
     if (body.parentServiceId !== undefined) updates.parent_service_id = body.parentServiceId || null;
     if (body.serviceType !== undefined) updates.service_type = body.serviceType || "original";
+    if (body.ancillaryType !== undefined) updates.ancillary_type = body.ancillaryType || null;
     if (body.cancellationFee !== undefined) updates.cancellation_fee = body.cancellationFee != null ? parseFloat(String(body.cancellationFee)) : null;
     if (body.refundAmount !== undefined) updates.refund_amount = body.refundAmount != null ? parseFloat(String(body.refundAmount)) : null;
 

@@ -165,6 +165,9 @@ interface TimelineService {
   assignedTravellerIds?: string[];
   /** For merged hotels: each sub-array = one original room's traveller IDs */
   hotelRooms?: string[][];
+  parentServiceId?: string | null;
+  ancillaryType?: string | null;
+  categoryType?: string | null;
 }
 
 interface Traveller {
@@ -538,16 +541,16 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
     })();
 
     if (service.category === "Hotel") {
-      const hotelKey = `${service.name}|${service.dateFrom}|${service.dateTo}`;
+      const hotelTitle = service.hotelName || service.name;
+      const hotelKey = `${hotelTitle}|${service.dateFrom}|${service.dateTo}`;
       if (seenHotelKeys.has(hotelKey)) continue;
       seenHotelKeys.add(hotelKey);
-      // Hotel: check-in 13:00-14:00, check-out 11:00-12:00
       events.push({
         id: `${service.id}-checkin`,
         date: service.dateFrom,
         type: 'hotel_checkin',
         icon: "hotel",
-        title: `Check-in 13:00-14:00: ${service.name}`,
+        title: `Check-in 13:00-14:00: ${hotelTitle}`,
         sortOrder: 50,
         serviceId: service.id,
         hotelRoomSurnames: hotelRoomSurnames.length > 0 ? hotelRoomSurnames : undefined,
@@ -561,7 +564,7 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
           date: service.dateTo,
           type: 'hotel_checkout',
           icon: "hotel",
-          title: `Check-out 11:00-12:00: ${service.name}`,
+          title: `Check-out 11:00-12:00: ${hotelTitle}`,
           sortOrder: 10,
           serviceId: service.id,
           hotelRoomSurnames: hotelRoomSurnames.length > 0 ? hotelRoomSurnames : undefined,
@@ -634,27 +637,64 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
           });
         }
       } else {
-        // Fallback: flight without segments — show ticket block, do NOT repeat service name
-        events.push({
-          id: service.id,
-          date: service.dateFrom,
-          type: 'flight',
-          icon: flightIcon,
-          title: "Flight",
-          subtitle: service.supplier,
-          sortOrder: 30,
-          flightNumber: firstFlightNumber || "—",
-          departureCode: "",
-          arrivalCode: "",
-          departureTime: "",
-          arrivalTime: "",
-          bookingRef: service.refNr,
-          ticketNumbers: service.ticketNumbers,
-          checkinUrl: checkinUrl || undefined,
-          serviceId: service.id,
-          boardingPasses: service.boardingPasses,
-          assignedTravellerIds: service.assignedTravellerIds,
-        });
+        // Fallback: flight without segments — parse IATA codes from service name
+        const nameCodes = (service.name || "")
+          .replace(/^(\d{2}\.\d{2}(?:\.\d{4})?)\s+/, "")
+          .split(/[\s\-–—>→/]+/)
+          .map(x => x.trim().toUpperCase())
+          .filter(x => /^[A-Z]{3}$/.test(x));
+
+        if (nameCodes.length >= 2) {
+          for (let i = 0; i < nameCodes.length - 1; i++) {
+            const depCode = nameCodes[i];
+            const arrCode = nameCodes[i + 1];
+            const depCity = getCityByIATA(depCode);
+            const arrCity = getCityByIATA(arrCode);
+            events.push({
+              id: `${service.id}-leg-${i}`,
+              date: service.dateFrom,
+              type: 'flight',
+              icon: flightIcon,
+              title: `${depCode} → ${arrCode}`,
+              subtitle: service.supplier,
+              sortOrder: 30 + i,
+              flightNumber: "—",
+              departureCode: depCode,
+              departureCity: depCity?.name,
+              arrivalCode: arrCode,
+              arrivalCity: arrCity?.name,
+              departureTime: "",
+              arrivalTime: "",
+              bookingRef: service.refNr,
+              ticketNumbers: service.ticketNumbers,
+              checkinUrl: checkinUrl || undefined,
+              serviceId: service.id,
+              boardingPasses: service.boardingPasses,
+              assignedTravellerIds: service.assignedTravellerIds,
+            });
+          }
+        } else {
+          events.push({
+            id: service.id,
+            date: service.dateFrom,
+            type: 'flight',
+            icon: flightIcon,
+            title: service.name || "Flight",
+            subtitle: service.supplier,
+            sortOrder: 30,
+            flightNumber: firstFlightNumber || "—",
+            departureCode: "",
+            arrivalCode: "",
+            departureTime: "",
+            arrivalTime: "",
+            bookingRef: service.refNr,
+            ticketNumbers: service.ticketNumbers,
+            checkinUrl: checkinUrl || undefined,
+            serviceId: service.id,
+            boardingPasses: service.boardingPasses,
+            assignedTravellerIds: service.assignedTravellerIds,
+          });
+        }
       }
       // Tour Package: hotel check-in 13:00-14:00, check-out 11:00-12:00 (deduplicate for splitted)
       const isTour = (service as { categoryType?: string }).categoryType === "tour" || service.category === "Tour" || service.category === "Package Tour";
@@ -952,15 +992,26 @@ export default function ItineraryTimeline({
 
   const hotelColors = useMemo(() => getHotelColors(routeColorsUsed), [routeColorsUsed]);
 
+  const ancillariesByParent = useMemo(() => {
+    const map: Record<string, TimelineService[]> = {};
+    for (const s of services) {
+      if (s.serviceType === "ancillary" && s.parentServiceId) {
+        if (!map[s.parentServiceId]) map[s.parentServiceId] = [];
+        map[s.parentServiceId].push(s);
+      }
+    }
+    return map;
+  }, [services]);
+
   const categories = useMemo(() => {
     const cats = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
     return cats.sort((a, b) => a.localeCompare(b));
   }, [services]);
 
-  const servicesFilteredByCategory = useMemo(() =>
-    selectedCategory ? services.filter((s) => s.category === selectedCategory) : services,
-    [services, selectedCategory]
-  );
+  const servicesFilteredByCategory = useMemo(() => {
+    const filtered = selectedCategory ? services.filter((s) => s.category === selectedCategory) : services;
+    return filtered.filter(s => s.serviceType !== "ancillary");
+  }, [services, selectedCategory]);
   const allEvents = useMemo(() =>
     servicesToEvents(servicesFilteredByCategory, travellers),
     [servicesFilteredByCategory, travellers]
@@ -1294,7 +1345,7 @@ export default function ItineraryTimeline({
                       })()
                     ) : event.type === 'flight' && event.flightNumber ? (
                       // Detailed flight display — flight block 2/3 (left border = map route colour), right panel 1/3
-                      <div className="flex items-stretch gap-2 min-w-0">
+                      <><div className="flex items-stretch gap-2 min-w-0">
                         <div className="w-2/3 flex-shrink-0 min-w-0 overflow-x-auto">
                           {renderFlightCard(
                             event,
@@ -1467,7 +1518,28 @@ export default function ItineraryTimeline({
                           </div>
                         ) : null}
                       </div>
-                    ) : (
+                      {event.serviceId && ancillariesByParent[event.serviceId] && ancillariesByParent[event.serviceId].length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1 pl-1">
+                          {ancillariesByParent[event.serviceId].map(anc => (
+                            <span
+                              key={anc.id}
+                              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                anc.ancillaryType === "extra_baggage" ? "bg-amber-100 text-amber-700" :
+                                anc.ancillaryType === "seat_selection" ? "bg-indigo-100 text-indigo-700" :
+                                anc.ancillaryType === "meal" ? "bg-green-100 text-green-700" :
+                                "bg-gray-100 text-gray-700"
+                              }`}
+                              title={anc.name}
+                            >
+                              {anc.ancillaryType === "extra_baggage" ? "\uD83E\uDDF3" :
+                               anc.ancillaryType === "seat_selection" ? "\uD83D\uDCBA" :
+                               anc.ancillaryType === "meal" ? "\uD83C\uDF7D" : "\u2795"}{" "}
+                              {anc.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>) : (
                       // Simple display for other events (with traveller surnames)
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="flex-shrink-0 text-gray-500">{event.icon}</span>

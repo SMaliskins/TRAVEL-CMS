@@ -335,6 +335,7 @@ export async function GET(
         // Amendment fields (change/cancellation)
         parentServiceId: (row as { parent_service_id?: string | null }).parent_service_id ?? null,
         serviceType: (row as { service_type?: string | null }).service_type ?? "original",
+        ancillaryType: (row as { ancillary_type?: string | null }).ancillary_type ?? null,
         cancellationFee: (row as { cancellation_fee?: number | null }).cancellation_fee != null ? parseFloat(String((row as { cancellation_fee?: number }).cancellation_fee)) : null,
         refundAmount: (row as { refund_amount?: number | null }).refund_amount != null ? parseFloat(String((row as { refund_amount?: number }).refund_amount)) : null,
         changeFee: (row as { change_fee?: number | null }).change_fee != null ? parseFloat(String((row as { change_fee?: number }).change_fee)) : null,
@@ -489,6 +490,7 @@ export async function POST(
     // Amendment fields (change/cancellation)
     if (body.parentServiceId) serviceData.parent_service_id = body.parentServiceId;
     if (body.serviceType && body.serviceType !== "original") serviceData.service_type = body.serviceType;
+    if (body.ancillaryType) serviceData.ancillary_type = body.ancillaryType;
     if (body.cancellationFee != null) serviceData.cancellation_fee = parseFloat(String(body.cancellationFee)) || null;
     if (body.refundAmount != null) serviceData.refund_amount = parseFloat(String(body.refundAmount)) || null;
 

@@ -969,3 +969,23 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+## [2026-03-09 23:00] CW — Ancillary Sub-Services for Air Tickets
+
+**Task:** Ancillary Sub-Services | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- DB: Added `ancillary_type` column to `order_services`, inserted "Ancillary" category, extended `service_type` constraint to accept "ancillary"
+- API: Extended GET/POST/PATCH in services routes to handle `ancillary_type` field
+- Add Form: Added ancillary layout to `AddServiceModal` — parent ticket selector, sub-type buttons (Extra Baggage / Seat Selection / Meal / Other), description, per-client pricing
+- Edit Form: Mirrored ancillary layout in `EditServiceModalNew`
+- Table: Nested ancillary rows under parent Air Ticket with indented badge display, "+ Add-on" shortcut button on flight rows
+- Itinerary: Ancillary badges on flight cards (emoji + name), no separate timeline events for ancillaries
+
+**Результат:** Full ancillary sub-service workflow: Add/Edit forms with parent linking, per-client pricing, nested table display, itinerary badges.
+
+**Next Step:** QA
+
+---
+
