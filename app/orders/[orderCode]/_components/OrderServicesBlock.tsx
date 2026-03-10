@@ -1481,12 +1481,12 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   }, [fetchServices, fetchTravellers]);
 
   // Recalculate totals whenever services change
+  // Include ALL services (cancelled + cancellation credit lines) so totals are financially correct
   const prevTotalsRef = React.useRef<{ amount_total: number; profit_estimated: number } | null>(null);
   useEffect(() => {
     if (!onTotalsChanged) return;
-    const active = services.filter(s => s.resStatus !== "cancelled");
-    const amount_total = active.reduce((sum, s) => sum + (Number(s.clientPrice) || 0), 0);
-    const profit_estimated = active.reduce((sum, s) => {
+    const amount_total = services.reduce((sum, s) => sum + (Number(s.clientPrice) || 0), 0);
+    const profit_estimated = services.reduce((sum, s) => {
       const sale = Number(s.clientPrice) || 0;
       const cost = Number(s.servicePrice) || 0;
       const isTour = s.categoryType === "tour";
@@ -2155,14 +2155,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-20 px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-2 py-1 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   <div className="flex items-center justify-center gap-2">
                     {visibleServicesWithoutInvoice.length > 0 && (
                       <input
                         type="checkbox"
                         checked={allNonInvoicedSelected}
                         onChange={(e) => handleSelectAllNonInvoiced(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         title="Select all visible services without invoice"
                         aria-label="Select all visible services without invoice"
                         onClick={(e) => e.stopPropagation()}
@@ -2171,34 +2171,34 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     <span>{t(lang, "order.servInvoice")}</span>
                   </div>
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servCategory")}
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servName")}
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servSupplier")}
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servClient")}
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servPayer")}
                 </th>
-                <th className="w-20 px-1 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-1 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servServicePrice")}
                 </th>
-                <th className="w-20 px-1 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-1 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servClientPrice")}
                 </th>
-                <th className="min-w-[180px] px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="min-w-[180px] px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servTravellers")}
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servStatus")}
                 </th>
-                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
                   {t(lang, "order.servTerms")}
                 </th>
               </tr>
@@ -2275,7 +2275,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             }}
                             title="Double-click to edit"
                           >
-                            <td className="w-20 px-2 py-1 text-center relative">
+                            <td className="w-20 px-2 py-0.5 text-center relative">
                               {/* Connector icon between split group rows */}
                               {splitInfo && splitInfo.index > 1 && splitGroupColor && (
                                 <div className="absolute -left-3 -top-3 z-20">
@@ -2324,11 +2324,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </div>
                             </td>
                             <td 
-                              className="px-2 py-1 text-sm text-gray-700 leading-tight"
+                              className="px-2 py-0.5 text-xs text-gray-700 leading-tight"
                             >
                               {service.category}
                             </td>
-                            <td className="px-2 py-1 text-sm font-medium text-gray-900 leading-tight">
+                            <td className="px-2 py-0.5 text-xs font-medium text-gray-900 leading-tight">
                               <div className="flex items-center gap-2">
                                 {splitInfo && (
                                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
@@ -2340,7 +2340,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </div>
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm leading-tight ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-0.5 text-xs leading-tight ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
                                   e.preventDefault();
@@ -2353,7 +2353,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {service.supplier}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm leading-tight ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-0.5 text-xs leading-tight ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 const partyId = displayClientPartyId ?? service.clientPartyId;
                                 if ((e.ctrlKey || e.metaKey) && partyId) {
@@ -2367,7 +2367,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {displayClientName}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm leading-tight ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-0.5 text-xs leading-tight ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.payerPartyId) {
                                   e.preventDefault();
@@ -2379,14 +2379,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700 leading-tight">
+                            <td className="w-20 whitespace-nowrap px-1 py-0.5 text-left text-xs text-gray-700 leading-tight">
                               {formatCurrency(service.servicePrice)}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium text-gray-900 leading-tight">
+                            <td className="w-20 whitespace-nowrap px-1 py-0.5 text-left text-xs font-medium text-gray-900 leading-tight">
                               {formatCurrency(service.clientPrice)}
                             </td>
                             <td 
-                              className="min-w-[180px] px-2 py-1 leading-tight cursor-pointer hover:bg-blue-50 transition-colors"
+                              className="min-w-[180px] px-2 py-0.5 leading-tight cursor-pointer hover:bg-blue-50 transition-colors"
                               onClick={(e) => handleOpenModal(service.id, e)}
                               title="Click to manage travellers"
                             >
@@ -2395,7 +2395,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                   {visibleIds.map((travellerId) => (
                                     <div
                                       key={travellerId}
-                                      className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-800"
+                                      className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[10px] font-medium text-blue-800"
                                       title={
                                         orderTravellers.find(
                                           (t) => t.id === travellerId
@@ -2415,15 +2415,15 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                     </span>
                                   )}
                                 </div>
-                                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-600">
+                                <span className="ml-1 flex h-4 w-4 items-center justify-center rounded border border-gray-300 bg-white text-[10px] text-gray-600">
                                   +
                                 </span>
                               </div>
                             </td>
                             {/* Status */}
-                            <td className="px-2 py-1 text-sm leading-tight">
+                            <td className="px-2 py-0.5 text-xs leading-tight">
                               <span
-                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getResStatusColor(
+                                className={`inline-flex rounded-full px-1.5 py-px text-[10px] font-medium capitalize ${getResStatusColor(
                                   service.resStatus
                                 )}`}
                               >
@@ -2431,7 +2431,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </span>
                             </td>
                             {/* Terms */}
-                            <td className="px-2 py-1 text-sm leading-tight">
+                            <td className="px-2 py-0.5 text-xs leading-tight">
                               {(() => {
                                 const policy = service.refundPolicy || "non_ref";
                                 const freeCancelDate = service.freeCancellationUntil || null;
@@ -2481,7 +2481,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 
                                 return badge ? (
                                   <span
-                                    className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium cursor-help ${badgeClass}`}
+                                    className={`inline-flex rounded px-1 py-px text-[10px] font-medium cursor-help ${badgeClass}`}
                                     title={tooltipParts.join("\n")}
                                   >
                                     {badge}
@@ -2511,7 +2511,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         </div>
 
         {/* Itinerary Timeline — attached under Services; header z-[60] so scrolling content goes under, not over */}
-        <div className="border-t border-gray-200 bg-white">
+        <div className="bg-white mt-10">
           <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
           <div className="lg:col-span-2">
             <ItineraryTimeline

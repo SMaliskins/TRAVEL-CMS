@@ -57,38 +57,27 @@ export function getServiceDisplayName(
     catNorm.includes("air ticket") ||
     catNorm.includes("авиа");
 
-  // Flight: transcribe IATA codes to city names when flightSegments exist
-  if (isFlight && s.flightSegments && s.flightSegments.length > 0) {
-    const segs = [...s.flightSegments].sort((a, b) => {
-      const da = (a as { departureDate?: string; departure_time?: string }).departureDate ?? (a as { departure_date?: string }).departure_date ?? "";
-      const db = (b as { departureDate?: string; departure_time?: string }).departureDate ?? (b as { departure_date?: string }).departure_date ?? "";
-      const ta = (a as { departureTimeScheduled?: string }).departureTimeScheduled ?? (a as { departure_time_scheduled?: string }).departure_time_scheduled ?? "";
-      const tb = (b as { departureTimeScheduled?: string }).departureTimeScheduled ?? (b as { departure_time_scheduled?: string }).departure_time_scheduled ?? "";
-      return new Date(`${da}T${ta}`).getTime() - new Date(`${db}T${tb}`).getTime();
-    });
-    const parts: string[] = [];
-    const depCode = (segs[0] as { departure?: string }).departure;
-    if (depCode) {
-      const c = getCityByIATA(depCode) || getCityByName((segs[0] as { departureCity?: string }).departureCity ?? depCode);
-      parts.push(c?.name ?? depCode);
-    }
-    for (const seg of segs) {
-      const arrCode = (seg as { arrival?: string }).arrival;
-      if (arrCode) {
-        const c = getCityByIATA(arrCode) || getCityByName((seg as { arrivalCity?: string }).arrivalCity ?? arrCode);
-        parts.push(c?.name ?? arrCode);
+  // Flight: use stored service name (auto-generated from segments in Add/Edit modal)
+  if (isFlight && s.name) {
+    // Match "DD.MM IATA-IATA-IATA" or "DD.MM.YYYY IATA-IATA-IATA" with optional date prefix
+    const dateRouteMatch = s.name.match(/^(\d{2}\.\d{2}(?:\.\d{4})?)\s+([A-Z]{3}[\s\-–—>→/]+(?:[A-Z]{3}[\s\-–—>→/]*)+)$/);
+    if (dateRouteMatch) {
+      const datePrefix = dateRouteMatch[1];
+      const routePart = dateRouteMatch[2];
+      const codes = routePart.split(/[\s\-–—>→/]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{3}$/.test(x));
+      if (codes.length >= 2) {
+        const cities = codes.map((code) => getCityByIATA(code)?.name ?? code);
+        return `${datePrefix} ${cities.join(" - ")}`;
       }
     }
-    if (parts.length > 0) return parts.join(" — ");
-  }
-
-  // Flight without segments: try to transcribe IATA codes from name (e.g. "RIX - FRA - NCE")
-  if (isFlight && s.name) {
+    // If name is only IATA codes (e.g. "TLL - ARN - NCE"), transcribe to city names
     const codes = s.name.split(/[\s\-–—>→]+/).map((x) => x.trim().toUpperCase()).filter((x) => x.length === 3 && /^[A-Z]{3}$/.test(x));
-    if (codes.length >= 2) {
+    const nonCodeParts = s.name.replace(/[A-Z]{3}/g, "").replace(/[\s\-–—>→/]+/g, "").trim();
+    if (codes.length >= 2 && !nonCodeParts) {
       const parts = codes.map((code) => getCityByIATA(code)?.name ?? code);
       return parts.join(" — ");
     }
+    return s.name;
   }
 
   if (!isHotelOrTour) return s.name;

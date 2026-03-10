@@ -44,14 +44,14 @@ export default function ItineraryTabs({
         {/* "All" tab */}
         <button
           onClick={() => onSelectTraveller(null)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
             selectedTravellerId === null
               ? "border-blue-600 text-blue-600 bg-blue-50"
               : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
           }`}
         >
           <span>{t(lang, "order.allTravellers")}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+          <span className={`text-[10px] px-1 py-px rounded-full ${
             selectedTravellerId === null ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
           }`}>
             {totalServices}
@@ -67,14 +67,14 @@ export default function ItineraryTabs({
             <button
               key={traveller.id}
               onClick={() => onSelectTraveller(traveller.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
                 isSelected
                   ? "border-blue-600 text-blue-600 bg-blue-50"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
               }`}
             >
               <span>{traveller.firstName} {traveller.lastName}</span>
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+              <span className={`text-[10px] px-1 py-px rounded-full ${
                 isSelected ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
               }`}>
                 {count}

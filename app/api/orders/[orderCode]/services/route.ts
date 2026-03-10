@@ -332,6 +332,12 @@ export async function GET(
         driverPhone: row.driver_phone ?? null,
         driverNotes: row.driver_notes ?? null,
         pricingPerClient: Array.isArray((s as { pricing_per_client?: unknown }).pricing_per_client) ? (s as { pricing_per_client: unknown[] }).pricing_per_client : null,
+        // Amendment fields (change/cancellation)
+        parentServiceId: (row as { parent_service_id?: string | null }).parent_service_id ?? null,
+        serviceType: (row as { service_type?: string | null }).service_type ?? "original",
+        cancellationFee: (row as { cancellation_fee?: number | null }).cancellation_fee != null ? parseFloat(String((row as { cancellation_fee?: number }).cancellation_fee)) : null,
+        refundAmount: (row as { refund_amount?: number | null }).refund_amount != null ? parseFloat(String((row as { refund_amount?: number }).refund_amount)) : null,
+        changeFee: (row as { change_fee?: number | null }).change_fee != null ? parseFloat(String((row as { change_fee?: number }).change_fee)) : null,
       };
     });
 
@@ -480,6 +486,11 @@ export async function POST(
     if (body.flightSegments !== undefined && Array.isArray(body.flightSegments)) serviceData.flight_segments = body.flightSegments;
     if (body.ticketNumbers !== undefined && Array.isArray(body.ticketNumbers)) serviceData.ticket_numbers = body.ticketNumbers;
     if (body.pricingPerClient !== undefined && Array.isArray(body.pricingPerClient)) serviceData.pricing_per_client = body.pricingPerClient;
+    // Amendment fields (change/cancellation)
+    if (body.parentServiceId) serviceData.parent_service_id = body.parentServiceId;
+    if (body.serviceType && body.serviceType !== "original") serviceData.service_type = body.serviceType;
+    if (body.cancellationFee != null) serviceData.cancellation_fee = parseFloat(String(body.cancellationFee)) || null;
+    if (body.refundAmount != null) serviceData.refund_amount = parseFloat(String(body.refundAmount)) || null;
 
     const { data: service, error } = await supabaseAdmin
       .from("order_services")

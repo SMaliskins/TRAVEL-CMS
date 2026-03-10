@@ -163,6 +163,8 @@ interface TimelineService {
   vehicleClass?: string | null;
   splitGroupId?: string | null;
   assignedTravellerIds?: string[];
+  /** For merged hotels: each sub-array = one original room's traveller IDs */
+  hotelRooms?: string[][];
 }
 
 interface Traveller {
@@ -440,6 +442,14 @@ function mergeDuplicateServices(services: TimelineService[], travellers: Travell
 
     const existing = groupMap.get(key);
     if (existing) {
+      if (service.category === "Hotel" && service.assignedTravellerIds?.length) {
+        if (!existing.hotelRooms) {
+          existing.hotelRooms = existing.assignedTravellerIds?.length
+            ? [[...existing.assignedTravellerIds]]
+            : [];
+        }
+        existing.hotelRooms.push([...service.assignedTravellerIds]);
+      }
       const merged = new Set([
         ...(existing.assignedTravellerIds || []),
         ...(service.assignedTravellerIds || []),
@@ -467,6 +477,9 @@ function mergeDuplicateServices(services: TimelineService[], travellers: Travell
       const entry = { ...service };
       if (service.category === "Hotel" && service.name) {
         entry.name = normalizeHotelNameForGroup(service.name);
+      }
+      if (service.category === "Hotel" && service.assignedTravellerIds?.length) {
+        entry.hotelRooms = [[...service.assignedTravellerIds]];
       }
       groupMap.set(key, entry);
     }
@@ -501,14 +514,28 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
     const icon = categoryIcons[service.category] || categoryIcons.Other;
     const travellerIds = service.assignedTravellerIds || [];
     const travellerSurnames = getTravellerSurnamesFromIds(travellerIds, travellers);
-    // For merged hotels with multiple travellers: Room 1 - Surname, Room 2 - Surname
-    const hotelRoomSurnames: string[] =
-      service.category === "Hotel" && travellerIds.length > 1
-        ? travellerIds.map((tid, i) => {
-            const t = travellers.find((t0) => t0.id === tid);
-            return `Room ${i + 1} - ${t?.lastName ?? "—"}`;
-          })
-        : [];
+    // For merged hotels: one line per original room (service), not per traveller
+    const hotelRoomSurnames: string[] = (() => {
+      if (service.category !== "Hotel") return [];
+      const rooms = service.hotelRooms;
+      if (rooms && rooms.length > 1) {
+        return rooms.map((roomTids, i) => {
+          const surnames = [...new Set(
+            roomTids
+              .map((tid) => travellers.find((t0) => t0.id === tid)?.lastName)
+              .filter(Boolean) as string[]
+          )];
+          return `Room ${i + 1} - ${surnames.join(", ") || "—"}`;
+        });
+      }
+      if (travellerIds.length > 1 && !rooms) {
+        return travellerIds.map((tid, i) => {
+          const t = travellers.find((t0) => t0.id === tid);
+          return `Room ${i + 1} - ${t?.lastName ?? "—"}`;
+        });
+      }
+      return [];
+    })();
 
     if (service.category === "Hotel") {
       const hotelKey = `${service.name}|${service.dateFrom}|${service.dateTo}`;
@@ -1279,7 +1306,7 @@ export default function ItineraryTimeline({
                         </div>
                         
                         {/* Right panel: same outline as flight card (rounded + border), no thick left stripe */}
-                        {(event.ticketNumbers && event.ticketNumbers.length > 0) || event.bookingRef ? (
+                        {(event.ticketNumbers && event.ticketNumbers.length > 0) || event.bookingRef || (event.assignedTravellerIds && event.assignedTravellerIds.length > 0) ? (
                           <div className="flex-1 min-w-0 flex flex-col items-end justify-center gap-2 pl-4 rounded-lg border border-sky-100 bg-white">
                             {/* Row 1: PNR + passenger surname(s) */}
                             <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
@@ -1290,23 +1317,25 @@ export default function ItineraryTimeline({
                                   <CopyButton text={event.bookingRef} title="Copy PNR" />
                                 </div>
                               )}
-                              {event.ticketNumbers && event.ticketNumbers.length > 0 && (
-                                <>
-                                  {event.bookingRef && <span className="text-gray-300">|</span>}
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs text-gray-600">
-                                      {event.ticketNumbers.map(t => t.clientName.split(" ").pop()).join(", ")}
-                                    </span>
-                                    <CopyButton
-                                      text={event.ticketNumbers.map(t => t.clientName.split(" ").pop()).join(", ")}
-                                      title="Copy surname"
-                                    />
-                                  </div>
-                                </>
-                              )}
+                              {(() => {
+                                const surnames = event.ticketNumbers && event.ticketNumbers.length > 0
+                                  ? event.ticketNumbers.map(t => t.clientName.split(" ").pop()).filter(Boolean).join(", ")
+                                  : event.assignedTravellerIds && event.assignedTravellerIds.length > 0
+                                    ? event.assignedTravellerIds.map(tid => travellers.find(t => t.id === tid)?.lastName).filter(Boolean).join(", ")
+                                    : "";
+                                return surnames ? (
+                                  <>
+                                    {event.bookingRef && <span className="text-gray-300">|</span>}
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-gray-600">{surnames}</span>
+                                      <CopyButton text={surnames} title="Copy surname" />
+                                    </div>
+                                  </>
+                                ) : null;
+                              })()}
                             </div>
                             {/* Row 2: BP checkboxes (all passes) + one +BP button for multiple files */}
-                            {event.serviceId && event.ticketNumbers && event.ticketNumbers.length > 0 && (
+                            {event.serviceId && ((event.ticketNumbers && event.ticketNumbers.length > 0) || (event.assignedTravellerIds && event.assignedTravellerIds.length > 0)) && (
                               <div className="flex items-center gap-2 justify-end flex-wrap">
                                 {event.boardingPasses && event.boardingPasses.length > 0 && onToggleBoardingPassSelection && (
                                   <div className="flex flex-col gap-0.5">
@@ -1346,12 +1375,14 @@ export default function ItineraryTimeline({
                                     e.target.value = "";
                                     if (!onUploadBoardingPass || !event.serviceId || files.length === 0) return;
                                     const tickets = event.ticketNumbers || [];
-                                    if (tickets.length === 0) return;
+                                    const clientIds = tickets.length > 0
+                                      ? tickets.map(t => t.clientId)
+                                      : (event.assignedTravellerIds || []);
+                                    if (clientIds.length === 0) return;
                                     setUploadingServiceId(event.serviceId);
                                     try {
                                       for (let i = 0; i < files.length; i++) {
-                                        const ticket = tickets[i % tickets.length];
-                                        await onUploadBoardingPass(event.serviceId, files[i], ticket.clientId, event.flightNumber || "");
+                                        await onUploadBoardingPass(event.serviceId, files[i], clientIds[i % clientIds.length], event.flightNumber || "");
                                       }
                                     } finally {
                                       setUploadingServiceId(null);

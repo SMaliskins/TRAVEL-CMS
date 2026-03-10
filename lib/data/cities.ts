@@ -174,6 +174,9 @@ export const CITIES: City[] = [
   // UAE
   { name: "Dubai", country: "United Arab Emirates", countryCode: "AE", lat: 25.2048, lng: 55.2708, iataCode: "DXB" },
   { name: "Abu Dhabi", country: "United Arab Emirates", countryCode: "AE", lat: 24.4539, lng: 54.3773, iataCode: "AUH" },
+
+  // Oman
+  { name: "Muscat", country: "Oman", countryCode: "OM", lat: 23.5880, lng: 58.3829, iataCode: "MCT" },
   
   // Thailand
   { name: "Bangkok", country: "Thailand", countryCode: "TH", lat: 13.7563, lng: 100.5018, iataCode: "BKK" },

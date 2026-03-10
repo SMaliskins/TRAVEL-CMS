@@ -101,6 +101,12 @@ export async function GET(
       pricingPerClient: Array.isArray(row.pricing_per_client) ? row.pricing_per_client : null,
       invoice_id: row.invoice_id ?? null,
       splitGroupId: row.split_group_id ?? null,
+      // Amendment fields (change/cancellation)
+      parentServiceId: row.parent_service_id ?? null,
+      serviceType: row.service_type ?? "original",
+      cancellationFee: row.cancellation_fee != null ? parseFloat(String(row.cancellation_fee)) : null,
+      refundAmount: row.refund_amount != null ? parseFloat(String(row.refund_amount)) : null,
+      changeFee: row.change_fee != null ? parseFloat(String(row.change_fee)) : null,
     };
 
     return NextResponse.json({ service });
@@ -260,6 +266,11 @@ export async function PATCH(
     if (body.quantity !== undefined) updates.quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
     if (body.priceUnits !== undefined) updates.quantity = Math.max(1, Math.floor(Number(body.priceUnits) || 1));
     if (body.pricingPerClient !== undefined && Array.isArray(body.pricingPerClient)) updates.pricing_per_client = body.pricingPerClient;
+    // Amendment fields (change/cancellation)
+    if (body.parentServiceId !== undefined) updates.parent_service_id = body.parentServiceId || null;
+    if (body.serviceType !== undefined) updates.service_type = body.serviceType || "original";
+    if (body.cancellationFee !== undefined) updates.cancellation_fee = body.cancellationFee != null ? parseFloat(String(body.cancellationFee)) : null;
+    if (body.refundAmount !== undefined) updates.refund_amount = body.refundAmount != null ? parseFloat(String(body.refundAmount)) : null;
 
     // Fetch old service for notification diff
     const { data: oldSvc } = await supabaseAdmin

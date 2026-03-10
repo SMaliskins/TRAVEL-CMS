@@ -762,7 +762,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           formData.dob = passportData.dob;
         }
       } else {
-        formData.companyName = toTitleCase(companyName);
+        formData.companyName = companyName.trim();
         formData.companyAvatarUrl = record?.companyAvatarUrl || undefined;
         formData.regNumber = regNo || undefined;
         formData.vatNumber = vatNo || undefined;
@@ -1144,7 +1144,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         setCompanyName(e.target.value);
                         markFieldDirty("companyName");
                       }}
-                      onBlur={() => { setCompanyName(v => toTitleCase(v)); markFieldTouched("companyName"); }}
+                      onBlur={() => { markFieldTouched("companyName"); }}
                       onFocus={() => markFieldTouched("companyName")}
                       className={getInputClasses("companyName", true, companyName)}
                       required

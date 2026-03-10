@@ -147,6 +147,11 @@ interface Service {
   cancellationPenaltyPercent?: number | null;
   changeFee?: number | null; // Airline change fee (for Flights)
   invoice_id?: string | null; // When set, service is on an invoice — client price (Sale) is locked
+  // Amendment fields (change/cancellation)
+  serviceType?: "original" | "change" | "cancellation" | null;
+  parentServiceId?: string | null;
+  cancellationFee?: number | null;
+  refundAmount?: number | null;
   // Ticket numbers per client
   ticketNumbers?: { clientId: string; clientName: string; ticketNr: string }[];
   // Tour (Package Tour) pricing
@@ -811,6 +816,11 @@ export default function EditServiceModalNew({
   const [cancellationPenaltyAmount, setCancellationPenaltyAmount] = useState(service.cancellationPenaltyAmount?.toString() || "");
   const [cancellationPenaltyPercent, setCancellationPenaltyPercent] = useState(service.cancellationPenaltyPercent?.toString() || "");
   const [changeFee, setChangeFee] = useState(service.changeFee?.toString() || "");
+
+  // Amendment fields (cancellation/change)
+  const isCancellationService = service.serviceType === "cancellation";
+  const [amendRefundAmount, setAmendRefundAmount] = useState(service.refundAmount?.toString() || "");
+  const [amendCancellationFee, setAmendCancellationFee] = useState(service.cancellationFee?.toString() || "");
 
   // Sync pricingPerClient with clients for Flight (same length, preserve existing values)
   // When pricing_per_client is empty, derive from service_price/client_price for single client
@@ -1969,8 +1979,47 @@ export default function EditServiceModalNew({
     
     setParseError(null);
     const text = pasteText.trim();
+
+    // Try regex first — instant, free, deterministic
+    const result = parseFlightBooking(text);
+    if (result && result.segments.length > 0) {
+      const segments: FlightSegment[] = result.segments.map(seg => ({
+        id: seg.id,
+        flightNumber: seg.flightNumber,
+        airline: seg.airline,
+        departure: seg.departure,
+        departureCity: seg.departureCity,
+        arrival: seg.arrival,
+        arrivalCity: seg.arrivalCity,
+        departureDate: seg.departureDate,
+        departureTimeScheduled: seg.departureTimeScheduled,
+        arrivalDate: seg.arrivalDate,
+        arrivalTimeScheduled: seg.arrivalTimeScheduled,
+        departureTerminal: seg.departureTerminal,
+        arrivalTerminal: seg.arrivalTerminal,
+        duration: seg.duration,
+        cabinClass: seg.cabinClass,
+        baggage: seg.baggage,
+        bookingRef: seg.bookingRef,
+        ticketNumber: seg.ticketNumber,
+        departureStatus: "scheduled",
+        arrivalStatus: "scheduled",
+      }));
+      applyParsedFlightData(segments, {
+        bookingRef: result.booking.bookingRef,
+        airline: result.booking.airline,
+        totalPrice: result.booking.totalPrice,
+        ticketNumbers: result.booking.ticketNumbers,
+        passengers: result.booking.passengers,
+        cabinClass: result.booking.cabinClass,
+        baggage: result.booking.baggage,
+        refundPolicy: result.booking.refundPolicy,
+      });
+      return;
+    }
+
+    // Fallback: AI parsing for formats regex can't handle
     setIsParsingFlight(true);
-    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/ai/parse-flight-itinerary", {
@@ -1993,44 +2042,7 @@ export default function EditServiceModalNew({
       setIsParsingFlight(false);
     }
     
-    const result = parseFlightBooking(text);
-    if (!result || result.segments.length === 0) {
-      setParseError("Could not parse this booking. Try copying the full confirmation text.");
-      return;
-    }
-    
-    const segments: FlightSegment[] = result.segments.map(seg => ({
-      id: seg.id,
-      flightNumber: seg.flightNumber,
-      airline: seg.airline,
-      departure: seg.departure,
-      departureCity: seg.departureCity,
-      arrival: seg.arrival,
-      arrivalCity: seg.arrivalCity,
-      departureDate: seg.departureDate,
-      departureTimeScheduled: seg.departureTimeScheduled,
-      arrivalDate: seg.arrivalDate,
-      arrivalTimeScheduled: seg.arrivalTimeScheduled,
-      departureTerminal: seg.departureTerminal,
-      arrivalTerminal: seg.arrivalTerminal,
-      duration: seg.duration,
-      cabinClass: seg.cabinClass,
-      baggage: seg.baggage,
-      bookingRef: seg.bookingRef,
-      ticketNumber: seg.ticketNumber,
-      departureStatus: "scheduled",
-      arrivalStatus: "scheduled",
-    }));
-    applyParsedFlightData(segments, {
-      bookingRef: result.booking.bookingRef,
-      airline: result.booking.airline,
-      totalPrice: result.booking.totalPrice,
-      ticketNumbers: result.booking.ticketNumbers,
-      passengers: result.booking.passengers,
-      cabinClass: result.booking.cabinClass,
-      baggage: result.booking.baggage,
-      refundPolicy: result.booking.refundPolicy,
-    });
+    setParseError("Could not parse this booking. Try copying the full confirmation text.");
   };
 
   const handleSave = async () => {
@@ -2222,6 +2234,14 @@ export default function EditServiceModalNew({
       payload.cancellation_penalty_percent = cancellationPenaltyPercent ? parseInt(cancellationPenaltyPercent) : null;
       if (categoryType === "flight") {
         payload.change_fee = changeFee ? parseFloat(changeFee) : null;
+      }
+
+      // Amendment fields (cancellation/change)
+      if (isCancellationService) {
+        payload.serviceType = "cancellation";
+        payload.parentServiceId = service.parentServiceId || null;
+        payload.cancellationFee = amendCancellationFee ? parseFloat(amendCancellationFee) : null;
+        payload.refundAmount = amendRefundAmount ? parseFloat(amendRefundAmount) : null;
       }
 
       // Tour (Package Tour): commission + agent discount + line items. Commission applies to commissionableCost only
@@ -2508,11 +2528,10 @@ export default function EditServiceModalNew({
           </button>
         </div>
 
-        {/* Paste & Parse - unified for Flight and Tour (top of form) */}
-        {(categoryType === "flight" || categoryType === "tour") && (
+        {/* Paste & Parse for Flight only (Tour has it in Basic Info) */}
+        {categoryType === "flight" && (
           <div className="px-4 pt-3">
-            {categoryType === "flight" ? (
-              !showPasteInput ? (
+            {!showPasteInput ? (
                 <div
                   role="region"
                   aria-label="Drop or paste flight document"
@@ -2640,147 +2659,7 @@ export default function EditServiceModalNew({
                     </button>
                   </div>
                 </div>
-              )
-            ) : (
-              /* Tour: PDF / image / paste text */
-              !showTourPasteInput ? (
-                <div
-                  role="region"
-                  aria-label="Drop or paste Tour Package document"
-                  tabIndex={0}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDraggingTour(false);
-                    if (isParsingTour) return;
-                    const f = e.dataTransfer.files?.[0];
-                    if (f && isAcceptableTourFile(f)) handleParsePackageTour(f);
-                    else if (f) setParseError("Supported: PDF or image (JPG, PNG, etc.)");
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = "copy";
-                  }}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDraggingTour(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDraggingTour(false);
-                  }}
-                  onPaste={(e) => {
-                    if (isParsingTour) return;
-                    const files = e.clipboardData?.files;
-                    const f = files?.[0];
-                    if (f && isAcceptableTourFile(f)) {
-                      e.preventDefault();
-                      handleParsePackageTour(f);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      if (!isParsingTour) tourParseInputRef.current?.click();
-                    }
-                  }}
-                  onClick={() => !isParsingTour && tourParseInputRef.current?.click()}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${isParsingTour ? "cursor-wait opacity-80 border-gray-200 bg-gray-50" : isDraggingTour ? "border-blue-500 bg-blue-100 ring-2 ring-blue-400" : "cursor-pointer border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/50"}`}
-                >
-                  {isParsingTour ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <span className="text-sm text-gray-600">Parsing document...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="text-sm text-gray-600">Drop PDF/image, Ctrl+V to paste, or click to parse</span>
-                      <span
-                        onClick={(e) => { e.stopPropagation(); setShowTourPasteInput(true); }}
-                        className="ml-auto text-xs text-blue-600 hover:underline shrink-0 cursor-pointer"
-                      >
-                        Paste text
-                      </span>
-                    </>
-                  )}
-                  <input
-                    ref={tourParseInputRef}
-                    type="file"
-                    accept=".pdf,image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleParsePackageTour(f);
-                      e.target.value = "";
-                    }}
-                  />
-                  {parseError && !showTourPasteInput && (
-                    <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="text-xs text-gray-600 font-medium mb-1">
-                    Paste document text — will fill tour fields
-                  </div>
-                  <textarea
-                    value={tourPasteText}
-                    onChange={(e) => setTourPasteText(e.target.value)}
-                    onPaste={(e) => {
-                      const files = e.clipboardData?.files;
-                      const f = files?.[0];
-                      if (f && isAcceptableTourFile(f)) {
-                        e.preventDefault();
-                        handleParsePackageTour(f);
-                      }
-                    }}
-                    placeholder="Open PDF, Ctrl+A, Ctrl+C, paste here. Or paste file (Ctrl+V)."
-                    rows={4}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                    autoFocus
-                  />
-                  {parseError && (
-                    <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleParsePackageTourText}
-                      disabled={!tourPasteText.trim() || isParsingTour}
-                      className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isParsingTour ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          Parsing...
-                        </>
-                      ) : (
-                        "📋 Parse"
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowTourPasteInput(false); setTourPasteText(""); setParseError(null); }}
-                      className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )
-            )}
+              )}
           </div>
         )}
 
@@ -3250,10 +3129,86 @@ export default function EditServiceModalNew({
                     type="text"
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
-                    placeholder={categoryType === "tour" ? "RIX-BOJ" : categoryType === "visa" ? "Visa to Turkey" : isAirportServices ? "Airport name, arrival/departure/transfer" : "e.g. Airport - Hotel - Airport, Hotel - Hotel, Train Station - Hotel"}
+                    placeholder={categoryType === "tour" ? "e.g. RIX-BOJ or paste below" : categoryType === "visa" ? "Visa to Turkey" : isAirportServices ? "Airport name, arrival/departure/transfer" : "e.g. Airport - Hotel - Airport, Hotel - Hotel, Train Station - Hotel"}
                     className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
+
+                {/* Tour: Paste & Parse in Basic Info */}
+                {categoryType === "tour" && (
+                  !showTourPasteInput ? (
+                    <div
+                      role="region"
+                      aria-label="Drop or paste Tour Package document"
+                      tabIndex={0}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingTour(false);
+                        if (isParsingTour) return;
+                        const f = e.dataTransfer.files?.[0];
+                        if (f && isAcceptableTourFile(f)) handleParsePackageTour(f);
+                        else if (f) setParseError("Supported: PDF or image (JPG, PNG, etc.)");
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; }}
+                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingTour(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingTour(false); }}
+                      onPaste={(e) => {
+                        if (isParsingTour) return;
+                        const files = e.clipboardData?.files;
+                        const f = files?.[0];
+                        if (f && isAcceptableTourFile(f)) { e.preventDefault(); handleParsePackageTour(f); }
+                      }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!isParsingTour) tourParseInputRef.current?.click(); } }}
+                      onClick={() => !isParsingTour && tourParseInputRef.current?.click()}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 ${isParsingTour ? "cursor-wait opacity-80 border-gray-200 bg-gray-50" : isDraggingTour ? "border-blue-500 bg-blue-100 ring-2 ring-blue-400" : "cursor-pointer border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/50"}`}
+                    >
+                      {isParsingTour ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span className="text-sm text-gray-600">Parsing document...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-sm text-gray-600">Drop PDF/image, Ctrl+V to paste, or click to parse Tour Package</span>
+                          <span onClick={(e) => { e.stopPropagation(); setShowTourPasteInput(true); }} className="ml-auto text-xs text-blue-600 hover:underline shrink-0 cursor-pointer">Paste text</span>
+                        </>
+                      )}
+                      <input ref={tourParseInputRef} type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleParsePackageTour(f); e.target.value = ""; }} />
+                      {parseError && !showTourPasteInput && <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="text-xs text-gray-600 font-medium mb-1">Paste document text — will fill tour fields</div>
+                      <textarea
+                        value={tourPasteText}
+                        onChange={(e) => setTourPasteText(e.target.value)}
+                        onPaste={(e) => {
+                          const files = e.clipboardData?.files;
+                          const f = files?.[0];
+                          if (f && isAcceptableTourFile(f)) { e.preventDefault(); handleParsePackageTour(f); }
+                        }}
+                        placeholder="Open PDF, Ctrl+A, Ctrl+C, paste here. Or paste file (Ctrl+V)."
+                        rows={4}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        autoFocus
+                      />
+                      {parseError && <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>}
+                      <div className="flex gap-2">
+                        <button type="button" onClick={handleParsePackageTourText} disabled={!tourPasteText.trim() || isParsingTour} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                          {isParsingTour ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg> Parsing...</> : "📋 Parse"}
+                        </button>
+                        <button type="button" onClick={() => { setShowTourPasteInput(false); setTourPasteText(""); setParseError(null); }} className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+                      </div>
+                    </div>
+                  )
+                )}
 
                 {categoryType === "transfer" ? (
                   <>
@@ -3667,6 +3622,36 @@ export default function EditServiceModalNew({
               return (
                 <RightWrapper {...rightWrapperProps}>
             <div className="space-y-2">
+              {/* CANCELLATION DETAILS — only for cancellation-type services */}
+              {isCancellationService && (
+                <div className="p-3 modal-section space-y-2 border-l-4 border-red-300 bg-red-50/30">
+                  <h4 className="modal-section-title text-red-700">CANCELLATION DETAILS</h4>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-slate-600">Refund from Supplier</span>
+                    <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-red-500 bg-white">
+                      <span className="pl-2 text-slate-600 shrink-0">€</span>
+                      <input type="number" step="0.01" min="0" value={amendRefundAmount} onChange={(e) => setAmendRefundAmount(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-slate-600">Cancellation Fee</span>
+                    <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-red-500 bg-white">
+                      <span className="pl-2 text-slate-600 shrink-0">€</span>
+                      <input type="number" step="0.01" min="0" value={amendCancellationFee} onChange={(e) => setAmendCancellationFee(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-red-200">
+                    <span className="text-sm font-medium text-slate-700">Client Credit</span>
+                    <span className="text-sm font-semibold text-red-700">
+                      {(() => {
+                        const refund = parseFloat(amendRefundAmount) || 0;
+                        const fee = parseFloat(amendCancellationFee) || 0;
+                        return `€${(refund - fee).toFixed(2)}`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+              )}
               {/* PRICING */}
               <div className="p-3 modal-section space-y-2">
                 <div className="flex items-center justify-between gap-2">
