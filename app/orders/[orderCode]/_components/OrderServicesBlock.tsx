@@ -2464,7 +2464,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                       setAddServiceCategoryId(ancillaryCat.id);
                                       setAddServiceCategoryType("ancillary");
                                       setAddServiceCategoryName(ancillaryCat.name);
-                                      setAddServiceCategoryVatRate(ancillaryCat.vat_rate);
+                                      setAddServiceCategoryVatRate(ancillaryCat.vat_rate ?? null);
                                       setShowAddModal(true);
                                     }
                                   }}
