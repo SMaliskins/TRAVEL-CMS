@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { parseFlightBooking, getAirportTimezoneOffset } from '@/lib/flights/airlineParsers';
+import { getCityByIATA } from '@/lib/data/cities';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
@@ -116,11 +117,16 @@ export default function ChangeServiceModal({
       if (!groupedByDate[date]) groupedByDate[date] = [];
       groupedByDate[date].push(seg);
     });
+    const resolveCity = (code: string, cityName?: string): string => {
+      if (cityName?.trim()) return cityName.trim();
+      if (!code) return "";
+      return getCityByIATA(code)?.name || code;
+    };
     const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
       const dateStr = formatDateShort(segs[0]?.departureDate || "");
       const cities = [
-        segs[0].departureCity?.trim() || segs[0].departure || "",
-        ...segs.map(s => (s.arrivalCity?.trim() || s.arrival || "")),
+        resolveCity(segs[0].departure, segs[0].departureCity),
+        ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
       ].filter(Boolean);
       const routeStr = cities.join(" - ");
       return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
@@ -141,7 +147,7 @@ export default function ChangeServiceModal({
     setPasteInput('');
   }, []);
 
-  // Parse flight booking data — try AI first, fallback to regex
+  // Parse flight booking data — try regex first (instant, free), fallback to AI
   const handleParse = useCallback(async () => {
     if (!pasteInput.trim()) return;
     
@@ -149,7 +155,41 @@ export default function ChangeServiceModal({
     setParseError(null);
     setParseSuccess(false);
     const text = pasteInput.trim();
-    
+
+    // Try regex first — deterministic and instant
+    const result = parseFlightBooking(text);
+    if (result && result.segments.length > 0) {
+      const segments: FlightSegment[] = result.segments.map(seg => ({
+        id: crypto.randomUUID(),
+        flightNumber: seg.flightNumber,
+        airline: seg.airline,
+        departure: seg.departure || "",
+        departureCity: seg.departureCity,
+        arrival: seg.arrival || "",
+        arrivalCity: seg.arrivalCity,
+        departureDate: seg.departureDate || "",
+        departureTimeScheduled: seg.departureTimeScheduled || "",
+        arrivalDate: seg.arrivalDate || "",
+        arrivalTimeScheduled: seg.arrivalTimeScheduled || "",
+        departureTerminal: seg.departureTerminal,
+        arrivalTerminal: seg.arrivalTerminal,
+        duration: seg.duration,
+        cabinClass: seg.cabinClass,
+        baggage: seg.baggage,
+        bookingRef: seg.bookingRef,
+        ticketNumber: seg.ticketNumber,
+        departureStatus: "scheduled",
+        arrivalStatus: "scheduled",
+      }));
+      applySegments(segments, {
+        cabinClass: result.booking.cabinClass,
+        baggage: result.booking.baggage,
+      });
+      setIsParsing(false);
+      return;
+    }
+
+    // Fallback: AI parsing for formats regex can't handle
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/ai/parse-flight-itinerary", {
@@ -172,39 +212,7 @@ export default function ChangeServiceModal({
       setIsParsing(false);
     }
     
-    const result = parseFlightBooking(text);
-    if (!result || result.segments.length === 0) {
-      setParseError('Could not parse flight data. Please check the format.');
-      return;
-    }
-    
-    const segments: FlightSegment[] = result.segments.map(seg => ({
-      id: crypto.randomUUID(),
-      flightNumber: seg.flightNumber,
-      airline: seg.airline,
-      departure: seg.departure || "",
-      departureCity: seg.departureCity,
-      arrival: seg.arrival || "",
-      arrivalCity: seg.arrivalCity,
-      departureDate: seg.departureDate || "",
-      departureTimeScheduled: seg.departureTimeScheduled || "",
-      arrivalDate: seg.arrivalDate || "",
-      arrivalTimeScheduled: seg.arrivalTimeScheduled || "",
-      departureTerminal: seg.departureTerminal,
-      arrivalTerminal: seg.arrivalTerminal,
-      duration: seg.duration,
-      cabinClass: seg.cabinClass,
-      baggage: seg.baggage,
-      bookingRef: seg.bookingRef,
-      ticketNumber: seg.ticketNumber,
-      departureStatus: "scheduled",
-      arrivalStatus: "scheduled",
-    }));
-    applySegments(segments, {
-      cabinClass: result.booking.cabinClass,
-      baggage: result.booking.baggage,
-    });
-    setIsParsing(false);
+    setParseError('Could not parse flight data. Please check the format.');
   }, [pasteInput, applySegments]);
   
   // Handle file drop

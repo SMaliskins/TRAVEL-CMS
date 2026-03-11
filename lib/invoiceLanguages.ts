@@ -12,6 +12,7 @@ export const INVOICE_LANGUAGE_OPTIONS = [
   { value: "de", label: "German" },
   { value: "fr", label: "French" },
   { value: "es", label: "Spanish" },
+  { value: "ru", label: "Russian" },
 ] as const;
 
 export type InvoiceLanguageCode = (typeof INVOICE_LANGUAGE_OPTIONS)[number]["value"];

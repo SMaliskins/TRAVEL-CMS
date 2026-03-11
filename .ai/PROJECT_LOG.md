@@ -989,3 +989,24 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+## [2026-03-09 23:00] CW — AIRLINE-CHANNEL: Airline Channel option for BSP supplier
+
+**Task:** AIRLINE-CHANNEL | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Added `airline_channel`, `airline_channel_supplier_id`, `airline_channel_supplier_name` columns to `order_services` (migration: `migrations/add_airline_channel.sql`)
+- Updated POST API (`/api/orders/[orderCode]/services/route.ts`) to accept and save the new fields
+- Updated PATCH API (`/api/orders/[orderCode]/services/[serviceId]/route.ts`) to handle the new fields
+- Updated GET APIs to return the new fields in response
+- AddServiceModal: when supplier name contains "BSP", shows "Airline Channel" checkbox; when checked, shows secondary PartySelect for airline
+- EditServiceModalNew: same UI logic for Edit mode, loads existing values from service
+- OrderServicesBlock: Service interface + mapping updated for the new fields
+
+**Результат:** Airline Channel feature complete. Migration needs to be applied to Supabase.
+
+**Next Step:** Apply migration, QA
+
+---
+

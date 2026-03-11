@@ -1761,7 +1761,14 @@ function parseSAS(text: string): ParseResult | null {
   if (!text.includes("SAS") && !text.includes("Scandinavian") && !text.match(/SK\s?\d{3,4}/i)) {
     return null;
   }
-  
+
+  // Skip Amadeus PNR format — let parseAmadeus handle it (correct dep/arr times)
+  // PNR: "2  SK1745 N 11MAR 3 TLLARN HK1  1540 1540  11MAR  E  SK/ZTPYQC"
+  const isPNRFormat = text.match(/^\s*\d+\s+[A-Z]{2}\d{3,4}\s+[A-Z]\s+\d{1,2}[A-Z]{3}\s+\d\s+[A-Z]{6}\s+[A-Z]{2}\d?\s+\d{4}\s+\d{4}/m);
+  if (isPNRFormat) {
+    return null;
+  }
+
   const bookingRefMatch = text.match(/(?:Booking\s+reference|Bestillingsnummer)[\s:]+([A-Z0-9]{6})/i);
   const ticketMatch = text.match(/(?:Ticket|E-ticket)[\s:]+(\d{13})/i);
   const priceMatch = text.match(/(?:Total|Totalt)[\s:]+(?:EUR|SEK|NOK|DKK|€)\s*([\d.,]+)/i);

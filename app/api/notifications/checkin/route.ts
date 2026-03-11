@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { formatCheckinEmailData } from "@/lib/notifications/checkinNotifications";
 import { getCheckinUrl } from "@/lib/flights/airlineCheckin";
+import { sendEmail } from "@/lib/email/sendEmail";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
@@ -9,48 +10,6 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
-
-// Email sending via Resend (or other provider)
-async function sendEmail(to: string, subject: string, html: string, text: string) {
-  // Check if we have Resend API key
-  const resendApiKey = process.env.RESEND_API_KEY;
-  
-  if (!resendApiKey) {
-    console.log("RESEND_API_KEY not set, skipping email send");
-    console.log("Would send email to:", to);
-    console.log("Subject:", subject);
-    return { success: false, reason: "no_api_key" };
-  }
-
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM || "Travel CMS <noreply@travel-cms.com>",
-        to: [to],
-        subject,
-        html,
-        text,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("Failed to send email:", error);
-      return { success: false, reason: "api_error", error };
-    }
-
-    const result = await response.json();
-    return { success: true, id: result.id };
-  } catch (error) {
-    console.error("Email send error:", error);
-    return { success: false, reason: "exception", error };
-  }
-}
 
 export async function POST(request: Request) {
   try {
@@ -108,12 +67,23 @@ export async function POST(request: Request) {
       locale: locale as "en" | "ru" | "lv",
     });
 
-    // Send email to agent
+    let companyId: string | undefined;
+    if (userId) {
+      const { data: profile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("company_id")
+        .eq("id", userId)
+        .single();
+      companyId = profile?.company_id || undefined;
+    }
+
     const emailResult = await sendEmail(
       agentEmail,
       emailData.subject,
       emailData.html,
-      emailData.text
+      emailData.text,
+      undefined,
+      { companyId }
     );
 
     // Log the notification (only if we have userId and table exists)

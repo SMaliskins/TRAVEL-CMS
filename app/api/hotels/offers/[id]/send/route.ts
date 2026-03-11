@@ -63,7 +63,10 @@ export async function POST(
         await sendEmail(
           offer.client_email,
           `Hotel offer: ${offer.hotel_name}`,
-          html
+          html,
+          undefined,
+          undefined,
+          { companyId }
         );
       }
     }

@@ -1,4 +1,5 @@
 import { OrdersSearchState } from "./ordersSearchStore";
+import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Types matching orders/page.tsx
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -21,11 +22,13 @@ export interface OrderRow {
   status: OrderStatus;
   type: OrderType;
   owner: string;
+  ownerId: string;
   access: AccessType;
   updated: string;
   createdAt?: string;
   invoiceCount?: number;
   dueDate?: string;
+  payers?: string[];
 }
 
 export interface FilterOrdersOptions {
@@ -44,6 +47,11 @@ export function filterOrders(
   const { semanticOrderCodes = [] } = options || {};
   const semanticSet = new Set(semanticOrderCodes);
 
+  // Pre-compute search patterns once (expensive)
+  const surnamePatterns = searchState.clientLastName
+    ? getSearchPatterns(searchState.clientLastName)
+    : null;
+
   return orders.filter((order) => {
     // Query text search (case-insensitive, searches in orderId, client name, refNr if exists)
     // When semanticOrderCodes provided, also include orders whose orderId is in that set
@@ -57,17 +65,18 @@ export function filterOrders(
       }
     }
 
-    // Client last name
-    if (searchState.clientLastName) {
-      const lastName = order.client.split(" ").pop()?.toLowerCase() || "";
-      if (!lastName.includes(searchState.clientLastName.toLowerCase())) {
+    // Client / Payer surname search with layout + diacritics + typo tolerance
+    if (surnamePatterns) {
+      const matchClient = matchesSearch(order.client, surnamePatterns);
+      const matchPayer = (order.payers || []).some(p => matchesSearch(p, surnamePatterns));
+      if (!matchClient && !matchPayer) {
         return false;
       }
     }
 
-    // Agent/Owner
+    // Agent/Owner — match by ownerId (UUID) or owner name
     if (searchState.agentId !== "all") {
-      if (order.owner !== searchState.agentId) {
+      if (order.ownerId !== searchState.agentId && order.owner !== searchState.agentId) {
         return false;
       }
     }
@@ -130,11 +139,13 @@ export function filterOrders(
       }
     }
 
-    // Hotel name (TODO: would need to check services if available)
-    // For now, skip this filter
-
-    // RefNr (TODO: would need to be added to OrderRow interface)
-    // For now, skip this filter
+    // Created at date range
+    if (searchState.createdAt?.from || searchState.createdAt?.to) {
+      const created = (order.createdAt || order.updated || "").slice(0, 10);
+      if (!created) return false;
+      if (searchState.createdAt.from && created < searchState.createdAt.from) return false;
+      if (searchState.createdAt.to && created > searchState.createdAt.to) return false;
+    }
 
     return true;
   });

@@ -141,6 +141,9 @@ interface Company {
   invoice_languages?: string[];
   invoice_currencies?: string[];
   concierge_hotel_markup?: number;
+  resend_api_key?: string;
+  resend_api_key_set?: boolean;
+  email_domain_verified?: boolean;
 }
 
 export default function CompanySettingsPage() {
@@ -166,6 +169,13 @@ export default function CompanySettingsPage() {
   const [countrySearch, setCountrySearch] = useState("");
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
   const countryInputRef = useRef<HTMLInputElement>(null);
+
+  // Email configuration
+  const [resendApiKeyInput, setResendApiKeyInput] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testEmailAddr, setTestEmailAddr] = useState("");
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Invoice languages: type-ahead add
   const [invoiceLanguageSearch, setInvoiceLanguageSearch] = useState("");
@@ -307,6 +317,67 @@ export default function CompanySettingsPage() {
       setError("Network error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!isSupervisor || !resendApiKeyInput.trim()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch("/api/company", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ resend_api_key: resendApiKeyInput.trim() }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCompany(data.company);
+        setFormData(data.company);
+        setResendApiKeyInput("");
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      } else {
+        const err = await response.json();
+        setError(err.error || "Failed to save API key");
+      }
+    } catch {
+      setError("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmailAddr.trim()) return;
+    try {
+      setTestingEmail(true);
+      setTestEmailResult(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch("/api/company/email-test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ email: testEmailAddr.trim() }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setTestEmailResult({ ok: true, message: data.message || "Test email sent!" });
+      } else {
+        setTestEmailResult({ ok: false, message: data.error || "Failed to send test email" });
+      }
+    } catch {
+      setTestEmailResult({ ok: false, message: "Network error" });
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -959,18 +1030,6 @@ export default function CompanySettingsPage() {
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email for sending invoices (From address)</label>
-                  <input
-                    type="email"
-                    value={formData.invoice_email_from || ""}
-                    onChange={(e) => updateField("invoice_email_from", e.target.value)}
-                    disabled={readonly}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="e.g. invoices@yourcompany.com"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Invoices will be sent from this address (display name = company name). Leave empty to use the default. Domain must be verified in Resend.</p>
-                </div>
               </div>
             </div>
 
@@ -996,6 +1055,134 @@ export default function CompanySettingsPage() {
             
             {/* Banking Details = Payment Accounts */}
             <BankAccountsManager readonly={readonly} />
+          </div>
+
+          {/* Email Configuration */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Email Configuration</h2>
+
+            {/* Status */}
+            <div className="mb-4 flex items-center gap-2">
+              {formData.resend_api_key_set ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  Email configured
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  <span className="w-2 h-2 rounded-full bg-gray-400" />
+                  Not configured
+                </span>
+              )}
+              {formData.resend_api_key_set && formData.email_domain_verified && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Domain verified
+                </span>
+              )}
+            </div>
+
+            {/* Resend API Key */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Resend API Key</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={resendApiKeyInput}
+                    onChange={(e) => setResendApiKeyInput(e.target.value)}
+                    disabled={readonly}
+                    placeholder={formData.resend_api_key_set ? "••••••••  (key is saved, enter new to replace)" : "re_xxxxxxxxxx"}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm pr-10 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    {showApiKey ? "Hide" : "Show"}
+                  </button>
+                </div>
+                <button
+                  onClick={handleSaveApiKey}
+                  disabled={readonly || saving || !resendApiKeyInput.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {saving ? "Saving..." : "Save Key"}
+                </button>
+              </div>
+            </div>
+
+            {/* From Address */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">From Address</label>
+              <input
+                type="email"
+                value={formData.invoice_email_from || ""}
+                onChange={(e) => updateField("invoice_email_from", e.target.value)}
+                disabled={readonly}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                placeholder="e.g. invoices@yourcompany.com"
+              />
+              <p className="text-xs text-gray-500 mt-1">All outgoing emails will be sent from this address. Domain must be verified in Resend.</p>
+            </div>
+
+            {/* Test Email */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Send Test Email</label>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={testEmailAddr}
+                  onChange={(e) => setTestEmailAddr(e.target.value)}
+                  placeholder="your@email.com"
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={handleTestEmail}
+                  disabled={testingEmail || !testEmailAddr.trim() || !formData.resend_api_key_set}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {testingEmail ? "Sending..." : "Send Test"}
+                </button>
+              </div>
+              {testEmailResult && (
+                <p className={`text-xs mt-1.5 ${testEmailResult.ok ? "text-green-600" : "text-red-600"}`}>
+                  {testEmailResult.message}
+                </p>
+              )}
+              {!formData.resend_api_key_set && (
+                <p className="text-xs text-amber-600 mt-1">Save your Resend API key first to enable test emails.</p>
+              )}
+            </div>
+
+            {/* Setup Guide */}
+            <details className="mt-4 border border-gray-200 rounded-lg">
+              <summary className="px-4 py-3 text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-50 rounded-lg">
+                Setup Guide
+              </summary>
+              <div className="px-4 pb-4 text-sm text-gray-600 space-y-2">
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>
+                    Create a free account at{" "}
+                    <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">resend.com</a>
+                    {" "}(100 emails/day free, $20/mo for 50k emails)
+                  </li>
+                  <li>
+                    Add your domain in{" "}
+                    <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Resend Domains</a>
+                    {" "}and configure the 3 DNS records (DKIM, MX, SPF)
+                  </li>
+                  <li>
+                    Copy your API key from{" "}
+                    <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Resend API Keys</a>
+                    {" "}and paste it above
+                  </li>
+                  <li>Set your &quot;From&quot; email address (must use your verified domain)</li>
+                  <li>Click &quot;Send Test&quot; to verify everything works</li>
+                </ol>
+                <p className="text-xs text-gray-400 mt-2">Each company manages their own Resend account and domain. Costs are billed directly by Resend to each company.</p>
+              </div>
+            </details>
           </div>
 
           {/* Licenses & Certifications + IATA */}

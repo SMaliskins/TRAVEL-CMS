@@ -44,6 +44,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<OrderDocument | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [attemptedParse, setAttemptedParse] = useState<Set<string>>(new Set());
   const [parsingIds, setParsingIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -173,12 +174,48 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
     }
   };
 
+  const compressImage = useCallback(async (file: File, maxWidth = 1600, quality = 0.8): Promise<File> => {
+    const isImage = /^image\/(png|jpeg|jpg|webp)$/.test(file.type);
+    if (!isImage) return file;
+    return new Promise((resolve) => {
+      const objUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(objUrl);
+        let { width, height } = img;
+        const needsResize = width > maxWidth;
+        const needsConvert = file.type === "image/png";
+        if (!needsResize && !needsConvert) { resolve(file); return; }
+        if (needsResize) {
+          const ratio = maxWidth / width;
+          width = maxWidth;
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        const outType = needsConvert ? "image/webp" : file.type;
+        const outExt = outType === "image/webp" ? ".webp" : (file.name.match(/\.\w+$/)?.[0] || ".jpg");
+        const outName = file.name.replace(/\.\w+$/, outExt);
+        canvas.toBlob(
+          (blob) => resolve(blob ? new File([blob], outName, { type: outType }) : file),
+          outType,
+          quality
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(file); };
+      img.src = objUrl;
+    });
+  }, []);
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !orderCode) return;
+    const rawFile = e.target.files?.[0];
+    if (!rawFile || !orderCode) return;
     setUploading(true);
     setError(null);
     try {
+      const file = await compressImage(rawFile);
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.set("file", file);
@@ -238,8 +275,22 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
     return `${(bytes / 1024).toFixed(1)} KB`;
   };
 
-  const handlePreview = (doc: OrderDocument) => {
-    if (doc.download_url) setPreviewDoc(doc);
+  const handlePreview = async (doc: OrderDocument) => {
+    if (!doc.download_url) return;
+    setPreviewDoc(doc);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/documents/${doc.id}/file`,
+        { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} }
+      );
+      if (!res.ok) throw new Error("Failed to load file");
+      const blob = await res.blob();
+      setPreviewBlobUrl(URL.createObjectURL(blob));
+    } catch {
+      setError("Failed to load preview");
+      setPreviewDoc(null);
+    }
   };
 
   return (
@@ -428,13 +479,12 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
 
       <ContentModal
         isOpen={!!previewDoc}
-        onClose={() => setPreviewDoc(null)}
+        onClose={() => {
+          setPreviewDoc(null);
+          if (previewBlobUrl) { URL.revokeObjectURL(previewBlobUrl); setPreviewBlobUrl(null); }
+        }}
         title={previewDoc?.file_name}
-        url={
-          previewDoc
-            ? `/api/orders/${encodeURIComponent(orderCode)}/documents/${previewDoc.id}/file`
-            : undefined
-        }
+        url={previewBlobUrl ?? undefined}
       />
     </div>
   );

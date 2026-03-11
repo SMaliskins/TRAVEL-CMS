@@ -146,6 +146,9 @@ interface Service {
   boardingPasses?: { id: string; fileName: string; fileUrl: string; clientId: string; clientName: string; uploadedAt: string }[];
   baggage?: string; // Baggage info
   cabinClass?: "economy" | "premium_economy" | "business" | "first";
+  airlineChannel?: boolean;
+  airlineChannelSupplierId?: string | null;
+  airlineChannelSupplierName?: string;
   /** Flight: per-client cost/marge/sale (from API pricing_per_client) */
   pricingPerClient?: { cost: number; marge: number; sale: number }[] | null;
   // Terms & Conditions
@@ -1372,6 +1375,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           boardingPasses: (s.boardingPasses ?? s.boarding_passes ?? []) as Service["boardingPasses"],
           baggage: String(s.baggage ?? ""),
           cabinClass: String(s.cabinClass ?? s.cabin_class ?? "economy") as Service["cabinClass"],
+          airlineChannel: !!(s.airlineChannel ?? s.airline_channel),
+          airlineChannelSupplierId: (s.airlineChannelSupplierId ?? s.airline_channel_supplier_id ?? null) as string | null,
+          airlineChannelSupplierName: String(s.airlineChannelSupplierName ?? s.airline_channel_supplier_name ?? ""),
           pricingPerClient: Array.isArray(s.pricingPerClient ?? s.pricing_per_client) ? (s.pricingPerClient ?? s.pricing_per_client) as Service["pricingPerClient"] : null,
           // Terms & Conditions
           priceType: (s.priceType ?? s.price_type ?? null) as Service["priceType"],
@@ -1506,7 +1512,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
 
-  // Auto-sync order dates from services (only when order dates are empty)
+  // Auto-sync order dates from services (always recalculate from service date range)
   const prevServiceDatesRef = React.useRef<{ dateFrom: string | null; dateTo: string | null } | null>(null);
   useEffect(() => {
     if (!onDatesFromServices || services.length === 0) return;

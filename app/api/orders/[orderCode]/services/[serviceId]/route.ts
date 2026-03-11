@@ -5,13 +5,6 @@ import { sendPushToClient } from "@/lib/client-push/sendPush";
 
 async function syncOrderDatesFromServices(orderId: string) {
   try {
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("date_from, date_to")
-      .eq("id", orderId)
-      .single();
-    if (!order) return;
-
     const { data: services } = await supabaseAdmin
       .from("order_services")
       .select("service_date_from, service_date_to")
@@ -24,10 +17,10 @@ async function syncOrderDatesFromServices(orderId: string) {
     const minFrom = froms[0] || null;
     const maxTo = tos[tos.length - 1] || null;
 
-    const upd: Record<string, string | null> = {};
-    if (!order.date_from && minFrom) upd.date_from = minFrom;
-    if (!order.date_to && maxTo) upd.date_to = maxTo;
-    if (Object.keys(upd).length > 0) {
+    if (minFrom || maxTo) {
+      const upd: Record<string, string | null> = {};
+      if (minFrom) upd.date_from = minFrom;
+      if (maxTo) upd.date_to = maxTo;
       await supabaseAdmin.from("orders").update(upd).eq("id", orderId);
     }
   } catch (e) {
@@ -83,6 +76,9 @@ export async function GET(
       dateTo: s.service_date_to,
       supplierPartyId: s.supplier_party_id,
       supplierName: s.supplier_name || "",
+      airlineChannel: s.airline_channel || false,
+      airlineChannelSupplierId: s.airline_channel_supplier_id || null,
+      airlineChannelSupplierName: s.airline_channel_supplier_name || "",
       clientPartyId: s.client_party_id,
       clientName: s.client_name || "",
       payerPartyId: s.payer_party_id,
@@ -231,6 +227,9 @@ export async function PATCH(
     if (body.hotel_price_per !== undefined) updates.hotel_price_per = body.hotel_price_per === "stay" ? "stay" : (body.hotel_price_per || "night");
     if (body.hotelPricePer !== undefined) updates.hotel_price_per = body.hotelPricePer === "stay" ? "stay" : (body.hotelPricePer || "night");
     if (body.supplier_booking_type !== undefined) updates.supplier_booking_type = body.supplier_booking_type;
+    if (body.airline_channel !== undefined) updates.airline_channel = !!body.airline_channel;
+    if (body.airline_channel_supplier_id !== undefined) updates.airline_channel_supplier_id = body.airline_channel_supplier_id || null;
+    if (body.airline_channel_supplier_name !== undefined) updates.airline_channel_supplier_name = body.airline_channel_supplier_name || null;
     if (body.payment_deadline_deposit !== undefined) updates.payment_deadline_deposit = body.payment_deadline_deposit;
     if (body.payment_deadline_final !== undefined) updates.payment_deadline_final = body.payment_deadline_final;
     if (body.payment_terms !== undefined) updates.payment_terms = body.payment_terms;

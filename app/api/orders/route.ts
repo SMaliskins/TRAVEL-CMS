@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     // client_display_name and countries_cities may not exist in all deployments
     let query = supabaseAdmin
       .from("orders")
-      .select("*")
+      .select("id, order_code, order_number, client_display_name, countries_cities, date_from, date_to, amount_total, amount_paid, profit_estimated, status, order_type, owner_user_id, manager_user_id, created_at, updated_at, client_payment_due_date")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
@@ -129,46 +129,38 @@ export async function GET(request: NextRequest) {
     // Get invoice statistics for all orders
     const orderIds = orders.map((o: any) => o.id);
     
-    // Get all services for these orders with their invoice status, pricing, and dates (for deriving order dates when missing)
-    const { data: servicesData } = await supabaseAdmin
-      .from("order_services")
-      .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to")
-      .eq("company_id", companyId)
-      .in("order_id", orderIds);
-    
-    // Get owner profiles for owner names
-    // Note: DB uses owner_user_id, not manager_user_id
-    const ownerIds = [...new Set((orders || []).map((o: any) => o.owner_user_id).filter(Boolean))];
-    
-    const { data: ownerProfiles } = ownerIds.length > 0
-      ? await supabaseAdmin
-          .from("user_profiles")
-          .select("user_id, first_name, last_name")
-          .in("user_id", ownerIds)
-      : { data: [] };
+    // Run all sub-queries in parallel
+    const ownerIds = [...new Set((orders || []).map((o: any) => o.owner_user_id || o.manager_user_id).filter(Boolean))];
+
+    const [servicesResult, ownerProfilesResult, invoicesResult] = await Promise.all([
+      supabaseAdmin
+        .from("order_services")
+        .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name")
+        .eq("company_id", companyId)
+        .in("order_id", orderIds),
+      ownerIds.length > 0
+        ? supabaseAdmin
+            .from("user_profiles")
+            .select("id, first_name, last_name")
+            .in("id", ownerIds)
+        : Promise.resolve({ data: [] }),
+      supabaseAdmin
+        .from("invoices")
+        .select("id, order_id, status, total, due_date, final_payment_date")
+        .eq("company_id", companyId)
+        .in("order_id", orderIds)
+        .neq("status", "cancelled"),
+    ]);
+
+    const servicesData = servicesResult.data;
+    const invoicesData = invoicesResult.data;
     
     // Build owner name lookup
     const ownerNames = new Map<string, string>();
-    (ownerProfiles || []).forEach((p: any) => {
+    ((ownerProfilesResult.data || []) as any[]).forEach((p: any) => {
       const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown";
-      ownerNames.set(p.user_id, name);
+      ownerNames.set(p.id, name);
     });
-    
-    
-    // Get all invoices for these orders with payment status and due dates
-    const invoicesQuery = await supabaseAdmin
-      .from("invoices")
-      .select("id, order_id, status, total, due_date, final_payment_date")
-      .eq("company_id", companyId)
-      .in("order_id", orderIds)
-      .neq("status", "cancelled");
-    
-    const invoicesData = invoicesQuery.data;
-    const invoicesError = invoicesQuery.error;
-    
-    if (invoicesError) {
-    } else {
-    }
     
     // Build invoice statistics and due dates per order
     const invoiceStats = new Map<string, {
@@ -180,14 +172,6 @@ export async function GET(request: NextRequest) {
       allInvoicesPaid: boolean;
       dueDate: string | null;
     }>();
-    
-    
-    console.log('Total orders:', orderIds.length);
-    console.log('Services data:', servicesData?.length || 0, 'rows');
-    console.log('Invoices data:', invoicesData?.length || 0, 'rows');
-    if (invoicesData && invoicesData.length > 0) {
-      console.log('Sample invoice:', invoicesData[0]);
-    }
     
     // Build service stats (amount, profit, vat) — profit за вычетом VAT
     const serviceStats = new Map<string, { amount: number; profit: number; vat: number }>();
@@ -253,6 +237,15 @@ export async function GET(request: NextRequest) {
       });
     });
 
+    // Aggregate payer names per order for search
+    const payerNamesMap = new Map<string, string[]>();
+    (servicesData || []).forEach((s: any) => {
+      if (!s.payer_name || s.res_status === "cancelled") return;
+      const names = payerNamesMap.get(s.order_id) || [];
+      if (!names.includes(s.payer_name)) names.push(s.payer_name);
+      payerNamesMap.set(s.order_id, names);
+    });
+
     // Derive order dates from services when missing: date_from = min(service_date_from), date_to = max(service_date_to)
     const derivedDates = new Map<string, { dateFrom: string; dateTo: string }>();
     (orders || []).forEach((order: Record<string, unknown>) => {
@@ -288,8 +281,8 @@ export async function GET(request: NextRequest) {
       const paid = Number(order.amount_paid) || 0;
       const debt = amount - paid; // Calculate debt as amount - paid
 
-      // Owner from user profiles
-      const ownerId = order.owner_user_id as string;
+      // Owner from user profiles (fallback to manager_user_id)
+      const ownerId = (order.owner_user_id || order.manager_user_id) as string;
       const owner = ownerId ? (ownerNames.get(ownerId) || "") : "";
 
       return {
@@ -307,6 +300,7 @@ export async function GET(request: NextRequest) {
         status: order.status || "Draft",
         type: order.order_type || "TA",
         owner,
+        ownerId: ownerId || "",
         access: "Owner",
         updated: ((order.updated_at as string) || "").split("T")[0] || "",
         createdAt: ((order.created_at as string) || "").split("T")[0] || "",
@@ -317,11 +311,18 @@ export async function GET(request: NextRequest) {
         allServicesInvoiced: invStats?.allServicesInvoiced || false,
         totalInvoices: invStats?.totalInvoices || 0,
         allInvoicesPaid: invStats?.allInvoicesPaid || false,
+        payers: payerNamesMap.get(orderId) || [],
         dueDate: invStats?.dueDate || (order.client_payment_due_date as string) || undefined,
       };
     });
 
-    return NextResponse.json({ orders: transformedOrders });
+    const agents = Array.from(ownerNames.entries()).map(([id, name]) => ({
+      id,
+      name,
+      initials: name.split(" ").map(w => w[0]).join("").toUpperCase(),
+    }));
+
+    return NextResponse.json({ orders: transformedOrders, agents });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Orders GET error:", errorMsg);

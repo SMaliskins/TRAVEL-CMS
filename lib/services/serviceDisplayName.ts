@@ -59,23 +59,36 @@ export function getServiceDisplayName(
 
   // Flight: use stored service name (auto-generated from segments in Add/Edit modal)
   if (isFlight && s.name) {
-    // Match "DD.MM IATA-IATA-IATA" or "DD.MM.YYYY IATA-IATA-IATA" with optional date prefix
-    const dateRouteMatch = s.name.match(/^(\d{2}\.\d{2}(?:\.\d{4})?)\s+([A-Z]{3}[\s\-–—>→/]+(?:[A-Z]{3}[\s\-–—>→/]*)+)$/);
-    if (dateRouteMatch) {
-      const datePrefix = dateRouteMatch[1];
-      const routePart = dateRouteMatch[2];
-      const codes = routePart.split(/[\s\-–—>→/]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{3}$/.test(x));
-      if (codes.length >= 2) {
-        const cities = codes.map((code) => getCityByIATA(code)?.name ?? code);
-        return `${datePrefix} ${cities.join(" - ")}`;
+    // Multi-segment: "18.03 RIX-IST / 24.03 IST-RIX" — split by " / " and resolve each part
+    const segments = s.name.split(/\s*\/\s*/);
+    const dateRoutePattern = /^(\d{2}\.\d{2}(?:\.\d{4})?)\s+(.+)$/;
+    let allConverted = true;
+    const converted = segments.map((seg) => {
+      const m = seg.match(dateRoutePattern);
+      if (m) {
+        const datePrefix = m[1];
+        const routePart = m[2];
+        const codes = routePart.split(/[\s\-–—>→]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{3}$/.test(x));
+        if (codes.length >= 2) {
+          const cities = codes.map((code) => getCityByIATA(code)?.name ?? code);
+          return `${datePrefix} ${cities.join(" - ")}`;
+        }
+        const singleCode = routePart.trim().toUpperCase();
+        if (/^[A-Z]{3}$/.test(singleCode)) {
+          return `${datePrefix} ${getCityByIATA(singleCode)?.name ?? singleCode}`;
+        }
       }
-    }
-    // If name is only IATA codes (e.g. "TLL - ARN - NCE"), transcribe to city names
-    const codes = s.name.split(/[\s\-–—>→]+/).map((x) => x.trim().toUpperCase()).filter((x) => x.length === 3 && /^[A-Z]{3}$/.test(x));
-    const nonCodeParts = s.name.replace(/[A-Z]{3}/g, "").replace(/[\s\-–—>→/]+/g, "").trim();
-    if (codes.length >= 2 && !nonCodeParts) {
-      const parts = codes.map((code) => getCityByIATA(code)?.name ?? code);
-      return parts.join(" — ");
+      // No date prefix — try pure IATA codes
+      const codes = seg.split(/[\s\-–—>→]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{3}$/.test(x));
+      const nonCodeParts = seg.replace(/[A-Z]{3}/g, "").replace(/[\s\-–—>→]+/g, "").trim();
+      if (codes.length >= 2 && !nonCodeParts) {
+        return codes.map((code) => getCityByIATA(code)?.name ?? code).join(" - ");
+      }
+      allConverted = false;
+      return seg;
+    });
+    if (allConverted || converted.some((c, i) => c !== segments[i])) {
+      return converted.join(" / ");
     }
     return s.name;
   }

@@ -36,13 +36,6 @@ async function getCompanyId(userId: string): Promise<string | null> {
 
 async function syncOrderDatesFromServices(orderId: string) {
   try {
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("date_from, date_to")
-      .eq("id", orderId)
-      .single();
-    if (!order) return;
-
     const { data: services } = await supabaseAdmin
       .from("order_services")
       .select("service_date_from, service_date_to")
@@ -55,10 +48,10 @@ async function syncOrderDatesFromServices(orderId: string) {
     const minFrom = froms[0] || null;
     const maxTo = tos[tos.length - 1] || null;
 
-    const upd: Record<string, string | null> = {};
-    if (!order.date_from && minFrom) upd.date_from = minFrom;
-    if (!order.date_to && maxTo) upd.date_to = maxTo;
-    if (Object.keys(upd).length > 0) {
+    if (minFrom || maxTo) {
+      const upd: Record<string, string | null> = {};
+      if (minFrom) upd.date_from = minFrom;
+      if (maxTo) upd.date_to = maxTo;
       await supabaseAdmin.from("orders").update(upd).eq("id", orderId);
     }
   } catch (e) {
@@ -250,6 +243,9 @@ export async function GET(
         dateTo: s.service_date_to,
         supplierPartyId: s.supplier_party_id,
         supplierName: s.supplier_name || "",
+        airlineChannel: s.airline_channel || false,
+        airlineChannelSupplierId: s.airline_channel_supplier_id || null,
+        airlineChannelSupplierName: s.airline_channel_supplier_name || "",
         clientPartyId: s.client_party_id,
         clientName: s.client_name || "",
         payerPartyId: s.payer_party_id,
@@ -447,6 +443,9 @@ export async function POST(
     if (body.exchangeRate !== undefined) serviceData.exchange_rate = body.exchangeRate != null ? parseFloat(String(body.exchangeRate)) : null;
     if (body.actuallyPaid !== undefined) serviceData.actually_paid = body.actuallyPaid != null && body.actuallyPaid !== "" ? parseFloat(String(body.actuallyPaid)) : null;
     if (body.supplierBookingType !== undefined) serviceData.supplier_booking_type = body.supplierBookingType || null;
+    if (body.airlineChannel !== undefined) serviceData.airline_channel = !!body.airlineChannel;
+    if (body.airlineChannelSupplierId !== undefined) serviceData.airline_channel_supplier_id = body.airlineChannelSupplierId || null;
+    if (body.airlineChannelSupplierName !== undefined) serviceData.airline_channel_supplier_name = body.airlineChannelSupplierName || null;
     // Payment / terms
     if (body.paymentDeadlineDeposit !== undefined) serviceData.payment_deadline_deposit = body.paymentDeadlineDeposit || null;
     if (body.paymentDeadlineFinal !== undefined) serviceData.payment_deadline_final = body.paymentDeadlineFinal || null;

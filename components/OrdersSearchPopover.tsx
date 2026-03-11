@@ -16,6 +16,7 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
   const [filters, setFilters] = useState<OrdersSearchState>(() =>
     ordersSearchStore.getState()
   );
+  const [agents, setAgents] = useState<{ id: string; name: string; initials: string }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [userPosition, setUserPosition] = useState<{ left: number; top: number } | null>(null);
@@ -26,6 +27,14 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || agents.length > 0) return;
+    fetch("/api/orders", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.agents) setAgents(data.agents); })
+      .catch(() => {});
+  }, [isOpen, agents.length]);
 
   // Debounce text inputs
   const debouncedQueryText = useDebounce(filters.queryText, 200);
@@ -592,9 +601,9 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
                           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
                         >
                           <option value="all">All Agents</option>
-                          <option value="JS">JS</option>
-                          <option value="MK">MK</option>
-                          <option value="AB">AB</option>
+                          {agents.map(a => (
+                            <option key={a.id} value={a.id}>{a.initials} — {a.name}</option>
+                          ))}
                         </select>
                       </div>
 

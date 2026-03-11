@@ -11,6 +11,7 @@ import OrderServicesBlock, { OrderServicesBlockHandle } from "./_components/Orde
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
 import OrderDocumentsTab from "./_components/OrderDocumentsTab";
+import OrderCommunicationsTab from "./_components/OrderCommunicationsTab";
 import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
@@ -92,31 +93,8 @@ export default function OrderPage({
 
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const servicesBlockRef = useRef<OrderServicesBlockHandle>(null);
-  const [stickyHeaderBottom, setStickyHeaderBottom] = useState(280);
+  const [stickyHeaderBottom, setStickyHeaderBottom] = useState(0);
   const [pendingAction, setPendingAction] = useState<"service" | null>(null);
-
-  useEffect(() => {
-    const headerEl = stickyHeaderRef.current;
-    if (!headerEl) return;
-    const STICKY_TOP = 92;
-    const measure = () => {
-      const h = stickyHeaderRef.current;
-      if (!h) return;
-      const rect = h.getBoundingClientRect();
-      const bottom = rect.top <= STICKY_TOP + 5 ? rect.bottom : STICKY_TOP + h.offsetHeight;
-      setStickyHeaderBottom(Math.round(bottom));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(headerEl);
-    window.addEventListener("scroll", measure, { passive: true });
-    const t = setTimeout(measure, 150);
-    return () => {
-      clearTimeout(t);
-      ro.disconnect();
-      window.removeEventListener("scroll", measure);
-    };
-  }, [activeTab]);
 
   // Fire pending action once Services tab mounts and ref becomes available
   useEffect(() => {
@@ -160,6 +138,31 @@ export default function OrderPage({
   const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
   const autoDestSavedRef = useRef(false);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
+
+  useEffect(() => {
+    const headerEl = stickyHeaderRef.current;
+    if (!headerEl) return;
+    const STICKY_TOP = 92;
+    const measure = () => {
+      const h = stickyHeaderRef.current;
+      if (!h) return;
+      const rect = h.getBoundingClientRect();
+      const bottom = rect.top <= STICKY_TOP + 5 ? rect.bottom : STICKY_TOP + h.offsetHeight;
+      setStickyHeaderBottom(Math.round(bottom));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(headerEl);
+    window.addEventListener("scroll", measure, { passive: true });
+    const t1 = setTimeout(measure, 150);
+    const t2 = setTimeout(measure, 500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      ro.disconnect();
+      window.removeEventListener("scroll", measure);
+    };
+  }, [activeTab, orderLoading]);
 
   // Load world cities on mount so getCityByName finds Tashkent etc. for DESTINATION display
   useEffect(() => {
@@ -1312,12 +1315,10 @@ export default function OrderPage({
                 onDatesFromServices={(dates) => {
                   setOrder(prev => {
                     if (!prev) return prev;
-                    if (prev.date_from && prev.date_to) return prev;
-                    const upd: Partial<OrderData> = {};
-                    if (!prev.date_from && dates.dateFrom) upd.date_from = dates.dateFrom;
-                    if (!prev.date_to && dates.dateTo) upd.date_to = dates.dateTo;
-                    if (Object.keys(upd).length === 0) return prev;
-                    return { ...prev, ...upd };
+                    const newFrom = dates.dateFrom || prev.date_from;
+                    const newTo = dates.dateTo || prev.date_to;
+                    if (prev.date_from === newFrom && prev.date_to === newTo) return prev;
+                    return { ...prev, date_from: newFrom, date_to: newTo };
                   });
                 }}
                 onTotalsChanged={(totals) => {
@@ -1423,12 +1424,9 @@ export default function OrderPage({
             </div>
           )}
 
-          {activeTab === "communication" && (
+          {activeTab === "communication" && orderCode && (
             <div className="rounded-lg bg-white p-6 shadow-sm">
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">
-                Communication
-              </h2>
-              <p className="text-gray-600">Coming next</p>
+              <OrderCommunicationsTab orderCode={orderCode} />
             </div>
           )}
 

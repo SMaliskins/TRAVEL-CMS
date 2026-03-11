@@ -6,6 +6,7 @@ import PartySelect from '@/components/PartySelect';
 import DateRangePicker from '@/components/DateRangePicker';
 import FlightItineraryInput, { FlightSegment } from '@/components/FlightItineraryInput';
 import { getAirportTimezoneOffset, parseFlightBooking, formatBaggageDisplay } from '@/lib/flights/airlineParsers';
+import { getCityByIATA } from '@/lib/data/cities';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useDraggableModal } from '@/hooks/useDraggableModal';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -138,6 +139,9 @@ interface Service {
   flightSegments?: FlightSegment[];
   baggage?: string;
   cabinClass?: "economy" | "premium_economy" | "business" | "first";
+  airlineChannel?: boolean;
+  airlineChannelSupplierId?: string | null;
+  airlineChannelSupplierName?: string;
   // Terms & Conditions
   priceType?: "ebd" | "regular" | "spo" | null;
   hotelPricePer?: "night" | "stay" | null;
@@ -299,6 +303,9 @@ export default function EditServiceModalNew({
   const [dateTo, setDateTo] = useState<string | undefined>(service.dateTo || undefined);
   const [supplierPartyId, setSupplierPartyId] = useState<string | null>(service.supplierPartyId || null);
   const [supplierName, setSupplierName] = useState(service.supplier || "");
+  const [airlineChannel, setAirlineChannel] = useState(service.airlineChannel || false);
+  const [airlineChannelSupplierId, setAirlineChannelSupplierId] = useState<string | null>(service.airlineChannelSupplierId || null);
+  const [airlineChannelSupplierName, setAirlineChannelSupplierName] = useState(service.airlineChannelSupplierName || "");
   
   // Use pre-resolved clients from parent if available (no extra API round-trip)
   const [clients, setClients] = useState<ClientEntry[]>(() => {
@@ -967,6 +974,12 @@ export default function EditServiceModalNew({
   // Auto-update service name (route) from flight segments — full city names, format: "date city - city / date city - city"
   useEffect(() => {
     if (categoryType !== "flight" || flightSegments.length === 0) return;
+    const resolveCity = (code: string, cityName?: string): string => {
+      if (cityName?.trim()) return cityName.trim();
+      if (!code) return "";
+      return getCityByIATA(code)?.name || code;
+    };
+
     const groupedByDate: Record<string, FlightSegment[]> = {};
     flightSegments.forEach(seg => {
       const date = seg.departureDate || "unknown";
@@ -976,14 +989,19 @@ export default function EditServiceModalNew({
     const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
       const dateStr = formatDateShort(segs[0]?.departureDate || "");
       const cities = [
-        segs[0].departureCity?.trim() || segs[0].departure || "",
-        ...segs.map(s => (s.arrivalCity?.trim() || s.arrival || "")),
+        resolveCity(segs[0].departure, segs[0].departureCity),
+        ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
       ].filter(Boolean);
       const routeStr = cities.join(" - ");
       return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
     });
-    const newRoute = routeParts.join(" / ");
-    if (newRoute && newRoute !== serviceName) setServiceName(newRoute);
+    const newRoute = routeParts.join(" / ").trim();
+    // Only update if we produced a meaningful route (not just dates with empty cities)
+    const hasAnyCities = routeParts.some(p => {
+      const withoutDate = p.replace(/^\d{2}\.\d{2}\s*/, "").trim();
+      return withoutDate.length > 0;
+    });
+    if (newRoute && hasAnyCities && newRoute !== serviceName) setServiceName(newRoute);
   }, [flightSegments, categoryType]); // serviceName intentionally omitted so segment edits update the name
 
   // Effective Service Price: Service Price (base) + sum of line items. Line items ADD to Service Price, do not replace.
@@ -1957,6 +1975,11 @@ export default function EditServiceModalNew({
       if (lastSeg.arrivalDate) setDateTo(lastSeg.arrivalDate);
     }
     if (segments.length > 0) {
+      const resolveCity = (code: string, cityName?: string): string => {
+        if (cityName?.trim()) return cityName.trim();
+        if (!code) return "";
+        return getCityByIATA(code)?.name || code;
+      };
       const groupedByDate: Record<string, FlightSegment[]> = {};
       segments.forEach(seg => {
         const date = seg.departureDate || "unknown";
@@ -1966,8 +1989,8 @@ export default function EditServiceModalNew({
       const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
         const dateStr = formatDateShort(segs[0]?.departureDate || "");
         const cities = [
-          segs[0].departureCity?.trim() || segs[0].departure || "",
-          ...segs.map(s => (s.arrivalCity?.trim() || s.arrival || "")),
+          resolveCity(segs[0].departure, segs[0].departureCity),
+          ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
         ].filter(Boolean);
         const routeStr = cities.join(" - ");
         return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
@@ -2212,6 +2235,9 @@ export default function EditServiceModalNew({
         if (flightSegments.length > 0) {
           payload.flight_segments = flightSegments;
         }
+        payload.airline_channel = airlineChannel;
+        payload.airline_channel_supplier_id = airlineChannelSupplierId;
+        payload.airline_channel_supplier_name = airlineChannelSupplierName;
         if (pricingPerClient.length > 0) {
           const validClients = clients.filter(c => c.id || c.name);
           payload.pricingPerClient = validClients.map((c, i) => ({
@@ -3553,11 +3579,51 @@ export default function EditServiceModalNew({
                 <h4 className="modal-section-title">SUPPLIER</h4>
                 <PartySelect
                   value={supplierPartyId}
-                  onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                  onChange={(id, name) => {
+                    setSupplierPartyId(id);
+                    setSupplierName(name);
+                    if (!name.toUpperCase().includes("BSP")) {
+                      setAirlineChannel(false);
+                      setAirlineChannelSupplierId(null);
+                      setAirlineChannelSupplierName("");
+                    }
+                  }}
                   roleFilter="supplier"
                   initialDisplayName={supplierName}
                   prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
                 />
+                {supplierName.toUpperCase().includes("BSP") && (
+                  <div className="mt-1.5 space-y-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={airlineChannel}
+                        onChange={(e) => {
+                          setAirlineChannel(e.target.checked);
+                          if (!e.target.checked) {
+                            setAirlineChannelSupplierId(null);
+                            setAirlineChannelSupplierName("");
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                      <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                    </label>
+                    {airlineChannel && (
+                      <div className="pl-6">
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                        <PartySelect
+                          value={airlineChannelSupplierId}
+                          onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                          roleFilter="supplier"
+                          initialDisplayName={airlineChannelSupplierName}
+                          prioritizedParties={[]}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">PNR (Ref)</label>
@@ -3680,13 +3746,13 @@ export default function EditServiceModalNew({
               </>
             )}
 
-            {/* Flight Schedule — in the left column */}
-            {categoryType === "flight" && flightScheduleBlock}
-            {/* Tour: Flight Information — parse document above or add/edit manually */}
-            {categoryType === "tour" && (
+            {/* Flight Schedule — editable for flight and tour */}
+            {(categoryType === "flight" || categoryType === "tour") && (
               <div className="mt-3 p-3 rounded-lg border bg-sky-50/50 border-sky-100">
-                <h4 className="text-xs font-semibold uppercase tracking-wide mb-2 text-sky-600">FLIGHT INFORMATION</h4>
-                <p className="text-xs text-gray-500 mb-3">Parse document above, or add flight segments manually:</p>
+                <h4 className="text-xs font-semibold uppercase tracking-wide mb-2 text-sky-600">
+                  {categoryType === "flight" ? "FLIGHT SCHEDULE" : "FLIGHT INFORMATION"}
+                </h4>
+                <p className="text-xs text-gray-500 mb-3">Parse document above, or edit/remove segments manually:</p>
                 <FlightItineraryInput
                   segments={flightSegments}
                   onSegmentsChange={(segs) => setFlightSegments(normalizeSegmentsArrivalYear(segs) as FlightSegment[])}

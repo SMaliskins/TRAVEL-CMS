@@ -76,7 +76,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to get company" }, { status: 500 });
     }
 
-    return NextResponse.json({ company });
+    const sanitized = { ...company };
+    if (sanitized.resend_api_key) {
+      sanitized.resend_api_key_set = true;
+      delete sanitized.resend_api_key;
+    } else {
+      sanitized.resend_api_key_set = false;
+    }
+
+    return NextResponse.json({ company: sanitized });
   } catch (error) {
     console.error("Company GET error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -130,6 +138,9 @@ export async function PATCH(request: NextRequest) {
       "invoice_prefix",
       "default_payment_terms",
       "invoice_email_from",
+      // Email configuration (per-company Resend)
+      "resend_api_key",
+      "email_domain_verified",
       // Concierge
       "concierge_hotel_markup"
     ];
@@ -163,7 +174,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: `Failed to update company: ${error.message}` }, { status: 500 });
     }
 
-    return NextResponse.json({ company });
+    const sanitized = { ...company };
+    if (sanitized.resend_api_key) {
+      sanitized.resend_api_key_set = true;
+      delete sanitized.resend_api_key;
+    } else {
+      sanitized.resend_api_key_set = false;
+    }
+
+    return NextResponse.json({ company: sanitized });
   } catch (error) {
     console.error("Company PATCH error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

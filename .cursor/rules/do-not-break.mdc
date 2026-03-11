@@ -1,0 +1,37 @@
+---
+description: Do not break existing functionality — use existing functions, do not rewrite or replace
+globs: 
+  - "**/*.tsx"
+  - "**/*.ts"
+---
+
+# DO NOT BREAK EXISTING FUNCTIONALITY
+
+**CRITICAL RULE — HIGHEST PRIORITY**
+
+## Principles
+
+1. **Never rewrite or replace working code** unless the user explicitly asks to change that specific code.
+2. **Use existing utility functions** — do not create new functions that duplicate what already exists.
+3. **Before modifying any file**, understand what the existing code does and ensure it continues to work after changes.
+4. **Adding new features must not alter existing behavior** — new code should be additive, not destructive.
+
+## Before making changes
+
+- Read and understand the existing code in the area you're modifying
+- Identify all utility functions, hooks, and helpers that are already used
+- Ensure your changes use those same utilities — do not invent new patterns for the same purpose
+
+## FORBIDDEN
+
+- ❌ Removing or simplifying existing logic that works correctly
+- ❌ Replacing a complex function with a "cleaner" version that loses functionality
+- ❌ Creating a new utility when one already exists (e.g., new date formatter, new IATA resolver, new search function)
+- ❌ Changing function signatures, return types, or behavior of existing utilities
+- ❌ "Refactoring" code the user did not ask to refactor
+
+## REQUIRED
+
+- ✅ When adding new code, reuse existing imports, utilities, and patterns
+- ✅ After any edit, verify nothing existing is broken (TypeScript check, lint check)
+- ✅ If unsure whether a utility exists, search the codebase first (`lib/`, `utils/`, `components/`)

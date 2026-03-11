@@ -12,6 +12,7 @@ export interface OrdersSearchState {
   hotelName: string;
   clientLastName: string;
   refNr: string;
+  createdAt: { from?: string; to?: string };
 }
 
 const STORAGE_KEY = "travelcms.orders.search";
@@ -28,6 +29,7 @@ const DEFAULT_STATE: OrdersSearchState = {
   hotelName: "",
   clientLastName: "",
   refNr: "",
+  createdAt: {},
 };
 
 type Listener = (state: OrdersSearchState) => void;
@@ -120,6 +122,7 @@ class OrdersSearchStore {
     if (this.state.hotelName) count++;
     if (this.state.clientLastName) count++;
     if (this.state.refNr) count++;
+    if (this.state.createdAt.from || this.state.createdAt.to) count++;
     return count;
   }
 }

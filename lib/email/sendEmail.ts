@@ -1,14 +1,58 @@
 /**
  * Send email via Resend API
  * Used by: send-to-hotel, invoice email, checkin notifications
+ *
+ * Supports per-company Resend API keys: pass `options.resendApiKey` to use
+ * the company's own key. Falls back to global `RESEND_API_KEY` env var.
  */
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
 export type SendEmailResult =
   | { success: true; id?: string }
   | { success: false; reason: "no_api_key" | "api_error" | "exception"; error?: string };
 
 export type EmailAttachment = { filename: string; content: Buffer };
 
-export type SendEmailOptions = { from?: string };
+export type SendEmailOptions = {
+  from?: string;
+  resendApiKey?: string;
+  companyId?: string;
+};
+
+/**
+ * Resolve the Resend API key and "from" address for a company.
+ * Priority: options.resendApiKey > company DB record > global env.
+ */
+export async function resolveEmailConfig(
+  companyId?: string | null,
+  overrideKey?: string | null,
+  overrideFrom?: string | null
+): Promise<{ apiKey: string | null; from: string }> {
+  const defaultFrom = process.env.EMAIL_FROM || "Travel CMS <noreply@travel-cms.com>";
+
+  if (overrideKey) {
+    return { apiKey: overrideKey, from: overrideFrom?.trim() || defaultFrom };
+  }
+
+  if (companyId) {
+    const { data: company } = await supabaseAdmin
+      .from("companies")
+      .select("resend_api_key, invoice_email_from, legal_name, trading_name, name")
+      .eq("id", companyId)
+      .single();
+
+    if (company?.resend_api_key) {
+      const displayName = company.legal_name || company.trading_name || company.name || "";
+      const emailAddr = company.invoice_email_from?.trim();
+      const from = emailAddr && displayName
+        ? `${displayName} <${emailAddr}>`
+        : emailAddr || overrideFrom?.trim() || defaultFrom;
+      return { apiKey: company.resend_api_key, from };
+    }
+  }
+
+  return { apiKey: process.env.RESEND_API_KEY || null, from: overrideFrom?.trim() || defaultFrom };
+}
 
 export async function sendEmail(
   to: string,
@@ -18,14 +62,18 @@ export async function sendEmail(
   attachments?: EmailAttachment[],
   options?: SendEmailOptions
 ): Promise<SendEmailResult> {
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const { apiKey, from: resolvedFrom } = await resolveEmailConfig(
+    options?.companyId,
+    options?.resendApiKey,
+    options?.from
+  );
 
-  if (!resendApiKey) {
-    console.log("RESEND_API_KEY not set, skipping email send");
+  if (!apiKey) {
+    console.log("No Resend API key available (neither company nor global), skipping email send");
     return { success: false, reason: "no_api_key" };
   }
 
-  const from = options?.from?.trim() || process.env.EMAIL_FROM || "Travel CMS <noreply@travel-cms.com>";
+  const from = options?.from?.trim() || resolvedFrom;
   const body: Record<string, unknown> = {
     from,
     to: [to],
@@ -44,7 +92,7 @@ export async function sendEmail(
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${resendApiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),

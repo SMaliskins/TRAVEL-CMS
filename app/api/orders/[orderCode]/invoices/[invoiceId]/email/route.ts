@@ -1,8 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 import { sendEmail } from "@/lib/email/sendEmail";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+async function getUser(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (!error && data?.user) return data.user;
+  }
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Cookie: cookieHeader } },
+    });
+    const { data, error } = await authClient.auth.getUser();
+    if (!error && data?.user) return data.user;
+  }
+  return null;
+}
 
 // POST /api/orders/[orderCode]/invoices/[invoiceId]/email - Send invoice via email (Resend)
 export async function POST(
@@ -13,6 +37,8 @@ export async function POST(
     const { invoiceId } = await params;
     const body = await request.json();
     const { to, subject, message } = body;
+
+    const user = await getUser(request);
 
     if (!to || !to.trim()) {
       return NextResponse.json(
@@ -26,7 +52,7 @@ export async function POST(
       .from("invoices")
       .select(`
         *,
-        orders(order_code, company_id),
+        orders(id, order_code, company_id),
         invoice_items (
           id,
           service_name,
@@ -119,7 +145,7 @@ export async function POST(
       emailHtml,
       undefined,
       attachments.length ? attachments : undefined,
-      emailFrom ? { from: emailFrom } : undefined
+      { from: emailFrom || undefined, companyId: companyId || undefined }
     );
 
     if (!result.success) {
@@ -128,6 +154,25 @@ export async function POST(
           ? "Email is not configured (RESEND_API_KEY missing)."
           : result.error || "Failed to send email.";
       return NextResponse.json({ error: msg }, { status: 502 });
+    }
+
+    const orderId = orderRow?.id ?? null;
+    if (orderId && companyId) {
+      await supabaseAdmin.from("order_communications").insert({
+        company_id: companyId,
+        order_id: orderId,
+        invoice_id: invoiceId,
+        type: "to_client",
+        recipient_email: to.trim(),
+        subject: emailSubject,
+        body: message?.trim() || `Invoice ${invoice.invoice_number}`,
+        sent_by: user?.id ?? null,
+        email_sent: true,
+        resend_email_id: result.id ?? null,
+        delivery_status: "sent",
+      }).then(({ error: commError }) => {
+        if (commError) console.error("Failed to log communication:", commError);
+      });
     }
 
     return NextResponse.json({

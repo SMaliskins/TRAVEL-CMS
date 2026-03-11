@@ -9,7 +9,8 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { Eye, FileDown, Mail, Pencil, Plus, Trash2, XCircle } from "lucide-react";
+import { Eye, FileDown, Globe, Loader2, Mail, Pencil, Plus, Send, Trash2, XCircle } from "lucide-react";
+import { INVOICE_LANGUAGE_OPTIONS, getInvoiceLanguageLabel } from "@/lib/invoiceLanguages";
 
 interface Invoice {
   id: string;
@@ -23,6 +24,7 @@ interface Invoice {
   client_name: string;
   payer_name?: string | null;
   payer_email?: string | null;
+  payer_party_id?: string | null;
   notes: string | null;
   created_at?: string;
   replaced_by_invoice_id?: string | null;
@@ -73,10 +75,6 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
   const [printPreviewTitle, setPrintPreviewTitle] = useState<string | null>(null);
   const [editingLinesInvoice, setEditingLinesInvoice] = useState<Invoice | null>(null);
-  const cancelTrapRef = useFocusTrap<HTMLDivElement>(!!cancelConfirm);
-  const editTrapRef = useFocusTrap<HTMLDivElement>(!!editingLinesInvoice);
-  const actionsTrapRef = useFocusTrap<HTMLDivElement>(!!openActionsInvoiceId);
-  useModalOverlay(!!cancelConfirm || !!editingLinesInvoice || !!openActionsInvoiceId);
   const [editingLinesItems, setEditingLinesItems] = useState<Array<{
     id: string;
     service_name: string;
@@ -89,6 +87,25 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     unit_price: number;
     line_total: number;
   }>>([]);
+  const [emailModal, setEmailModal] = useState<{
+    invoiceId: string;
+    invoiceNumber: string;
+    to: string;
+    subject: string;
+    message: string;
+  } | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailLang, setEmailLang] = useState("en");
+  const [emailTranslating, setEmailTranslating] = useState(false);
+  const [payerLangs, setPayerLangs] = useState<string[]>(["en"]);
+  const [payerPartyId, setPayerPartyId] = useState<string | null>(null);
+  const [showAllLangs, setShowAllLangs] = useState(false);
+  const cancelTrapRef = useFocusTrap<HTMLDivElement>(!!cancelConfirm);
+  const editTrapRef = useFocusTrap<HTMLDivElement>(!!editingLinesInvoice);
+  const actionsTrapRef = useFocusTrap<HTMLDivElement>(!!openActionsInvoiceId);
+  const emailTrapRef = useFocusTrap<HTMLDivElement>(!!emailModal);
+  useModalOverlay(!!cancelConfirm || !!editingLinesInvoice || !!openActionsInvoiceId || !!emailModal);
+
   const [saveLinesSaving, setSaveLinesSaving] = useState(false);
   const [addLineSaving, setAddLineSaving] = useState(false);
   const [addLineForm, setAddLineForm] = useState({
@@ -327,29 +344,152 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     }
   };
 
-  const handleSendEmail = async (invoiceId: string) => {
+  const EMAIL_TEMPLATES: Record<string, { subject: (n: string) => string; message: (n: string) => string }> = {
+    en: { subject: (n) => `Invoice ${n}`, message: (n) => `Please find attached invoice ${n}.` },
+    lv: { subject: (n) => `Rēķins ${n}`, message: (n) => `Lūdzu, skatiet pievienoto rēķinu ${n}.` },
+    lt: { subject: (n) => `Sąskaita ${n}`, message: (n) => `Pridedame sąskaitą ${n}.` },
+    et: { subject: (n) => `Arve ${n}`, message: (n) => `Palun leiate lisatud arve ${n}.` },
+    pl: { subject: (n) => `Faktura ${n}`, message: (n) => `W załączeniu przesyłamy fakturę ${n}.` },
+    hu: { subject: (n) => `Számla ${n}`, message: (n) => `Mellékeljük a(z) ${n} számú számlát.` },
+    de: { subject: (n) => `Rechnung ${n}`, message: (n) => `Anbei finden Sie die Rechnung ${n}.` },
+    fr: { subject: (n) => `Facture ${n}`, message: (n) => `Veuillez trouver ci-joint la facture ${n}.` },
+    es: { subject: (n) => `Factura ${n}`, message: (n) => `Adjuntamos la factura ${n}.` },
+    ru: { subject: (n) => `Счёт ${n}`, message: (n) => `Пожалуйста, ознакомьтесь с приложенным счётом ${n}.` },
+  };
+
+  const openEmailModal = async (invoiceId: string) => {
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return;
+
+    let defaultLang = "en";
+    let langs: string[] = ["en"];
+    const pid = invoice.payer_party_id || null;
+    setPayerPartyId(pid);
+    setShowAllLangs(false);
+
+    if (pid) {
+      try {
+        const session = await (await import("@/lib/supabaseClient")).supabase.auth.getSession();
+        const token = session.data.session?.access_token;
+        const res = await fetch(`/api/directory/${pid}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const rec = data.record || data;
+          if (Array.isArray(rec.correspondenceLanguages) && rec.correspondenceLanguages.length > 0) {
+            langs = rec.correspondenceLanguages;
+          }
+          if (rec.invoiceLanguage) {
+            defaultLang = rec.invoiceLanguage;
+            if (!langs.includes(defaultLang)) langs = [defaultLang, ...langs];
+          } else {
+            defaultLang = langs[0];
+          }
+        }
+      } catch {
+        // fallback to defaults
+      }
+    }
+
+    setPayerLangs(langs);
+    setEmailLang(defaultLang);
+    const tpl = EMAIL_TEMPLATES[defaultLang] || EMAIL_TEMPLATES.en;
+    setEmailModal({
+      invoiceId,
+      invoiceNumber: invoice.invoice_number,
+      to: invoice.payer_email || "",
+      subject: tpl.subject(invoice.invoice_number),
+      message: tpl.message(invoice.invoice_number),
+    });
+  };
+
+  const addLangToPayerParty = async (lang: string) => {
+    if (!payerPartyId || payerLangs.includes(lang)) return;
+    const updatedLangs = [...payerLangs, lang];
+    setPayerLangs(updatedLangs);
     try {
-      const invoice = invoices.find(inv => inv.id === invoiceId);
-      if (!invoice) return;
+      const session = await (await import("@/lib/supabaseClient")).supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      await fetch(`/api/directory/${payerPartyId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ correspondenceLanguages: updatedLangs }),
+      });
+    } catch {
+      // non-critical — UI already updated
+    }
+  };
 
-      const email = prompt('Enter email address:', invoice.payer_email || '');
-      if (!email || !email.trim()) return;
+  const handleEmailLangChange = async (newLang: string) => {
+    if (!emailModal || newLang === emailLang) return;
+    setEmailLang(newLang);
 
-      const subject = prompt('Email subject:', `Invoice ${invoice.invoice_number}`);
-      if (subject === null) return; // User cancelled
+    if (!payerLangs.includes(newLang)) {
+      addLangToPayerParty(newLang);
+    }
 
-      const message = prompt('Email message:', `Please find attached invoice ${invoice.invoice_number}.`);
-      if (message === null) return; // User cancelled
+    const tpl = EMAIL_TEMPLATES[newLang];
+    if (tpl) {
+      setEmailModal({
+        ...emailModal,
+        subject: tpl.subject(emailModal.invoiceNumber),
+        message: tpl.message(emailModal.invoiceNumber),
+      });
+      return;
+    }
 
+    setEmailTranslating(true);
+    try {
+      const langLabel = getInvoiceLanguageLabel(newLang);
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: "translate",
+          text: JSON.stringify({
+            subject: `Invoice ${emailModal.invoiceNumber}`,
+            message: `Please find attached invoice ${emailModal.invoiceNumber}.`,
+          }),
+          targetLanguage: langLabel,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const translated = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
+        setEmailModal({
+          ...emailModal,
+          subject: translated.subject || emailModal.subject,
+          message: translated.message || emailModal.message,
+        });
+      }
+    } catch {
+      // keep current text if translation fails
+    } finally {
+      setEmailTranslating(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailModal) return;
+    if (!emailModal.to.trim()) {
+      showToast("error", "Email address is required");
+      return;
+    }
+    setEmailSending(true);
+    try {
       const response = await fetch(
-        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/email`,
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${emailModal.invoiceId}/email`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            to: email.trim(),
-            subject: subject || `Invoice ${invoice.invoice_number}`,
-            message: message || `Please find attached invoice ${invoice.invoice_number}.`,
+            to: emailModal.to.trim(),
+            subject: emailModal.subject,
+            message: emailModal.message,
           }),
         }
       );
@@ -361,10 +501,13 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       }
 
       showToast("success", "Invoice email sent successfully!");
+      setEmailModal(null);
       loadInvoices();
     } catch (error: any) {
       console.error('Error sending email:', error);
       showToast("error", `Failed to send email: ${error.message || "Unknown error"}`);
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -893,6 +1036,167 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
           showPrintButton
         />
       )}
+
+      {emailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div
+            ref={emailTrapRef}
+            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">
+                  Send Invoice {emailModal.invoiceNumber}
+                </h3>
+              </div>
+              <button
+                onClick={() => setEmailModal(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5" />
+                    Language
+                    {payerPartyId && (() => {
+                      const inv = invoices.find(i => i.id === emailModal.invoiceId);
+                      const name = inv?.payer_name;
+                      return name ? (
+                        <span className="font-normal text-xs text-gray-400 ml-1">
+                          — {name}
+                        </span>
+                      ) : null;
+                    })()}
+                  </span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {payerLangs.map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => handleEmailLangChange(code)}
+                      disabled={emailTranslating}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                        emailLang === code
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-600"
+                      } disabled:opacity-50`}
+                    >
+                      {getInvoiceLanguageLabel(code)}
+                    </button>
+                  ))}
+
+                  {!showAllLangs ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllLangs(true)}
+                      className="px-2 py-1 text-xs font-medium rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      + Add
+                    </button>
+                  ) : (
+                    INVOICE_LANGUAGE_OPTIONS
+                      .filter((opt) => !payerLangs.includes(opt.value))
+                      .map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleEmailLangChange(opt.value)}
+                          disabled={emailTranslating}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                            emailLang === opt.value
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-gray-50 text-gray-500 border-gray-200 hover:border-blue-400 hover:text-blue-600"
+                          } disabled:opacity-50`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))
+                  )}
+
+                  {emailTranslating && (
+                    <span className="flex items-center gap-1 text-xs text-gray-400 ml-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Translating...
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <input
+                  type="email"
+                  value={emailModal.to}
+                  onChange={(e) => setEmailModal({ ...emailModal, to: e.target.value })}
+                  placeholder="recipient@example.com"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={emailModal.subject}
+                  onChange={(e) => setEmailModal({ ...emailModal, subject: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={emailModal.message}
+                  onChange={(e) => setEmailModal({ ...emailModal, message: e.target.value })}
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <FileDown className="h-4 w-4 text-gray-400 shrink-0" />
+                <span>PDF invoice will be attached automatically</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setEmailModal(null)}
+                disabled={emailSending}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendEmail}
+                disabled={emailSending || !emailModal.to.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {emailSending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Send Email
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">{t(lang, "invoices.title")}</h2>
         <div className="flex items-center gap-2">
@@ -1108,7 +1412,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 </button>
                 <button
                   type="button"
-                  onClick={() => { closeActionsModal(); handleSendEmail(invoice.id); }}
+                  onClick={() => { closeActionsModal(); openEmailModal(invoice.id); }}
                   className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                 >
                   <Mail size={16} />

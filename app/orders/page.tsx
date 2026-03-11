@@ -10,7 +10,7 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus } from "lucide-react";
+import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { getCityByName } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -31,6 +31,7 @@ interface OrderRow {
   status: OrderStatus;
   type: OrderType;
   owner: string;
+  ownerId: string;
   access: AccessType;
   updated: string;
   createdAt?: string;
@@ -42,6 +43,7 @@ interface OrderRow {
   allServicesInvoiced?: boolean;
   totalInvoices?: number;
   allInvoicesPaid?: boolean;
+  payers?: string[];
 }
 
 interface OrderTotals {
@@ -92,19 +94,18 @@ function calculateTotals(orders: OrderRow[]): OrderTotals {
   };
 }
 
-// Build orders tree structure
-function buildOrdersTree(orders: OrderRow[]): OrderTree {
-  // Use createdAt or fallback to updated
-  const ordersWithDate = orders.map((order) => ({
-    ...order,
-    createdAt: order.createdAt || order.updated,
-  }));
+type DateGroupMode = "created" | "checkIn" | "checkOut";
 
-  // Group by year, month, day
+// Build orders tree structure
+function buildOrdersTree(orders: OrderRow[], dateMode: DateGroupMode = "created"): OrderTree {
   const yearMap = new Map<string, Map<string, Map<string, OrderRow[]>>>();
 
-  ordersWithDate.forEach((order) => {
-    const date = new Date(order.createdAt!);
+  orders.forEach((order) => {
+    const raw = dateMode === "checkIn" ? order.datesFrom
+              : dateMode === "checkOut" ? order.datesTo
+              : (order.createdAt || order.updated);
+    if (!raw) return;
+    const date = new Date(raw);
     const year = date.getFullYear().toString();
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const day = date.getDate().toString().padStart(2, "0");
@@ -443,6 +444,7 @@ export default function OrdersPage() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [agents, setAgents] = useState<{ id: string; name: string; initials: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
@@ -450,6 +452,11 @@ export default function OrdersPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => 
     loadExpandedFromStorage()
   );
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [dateGroupMode, setDateGroupMode] = useState<DateGroupMode>("created");
+  const [dateSortAsc, setDateSortAsc] = useState(false);
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [surnameInput, setSurnameInput] = useState(searchState.clientLastName || "");
 
   // Fetch orders from API
   const fetchOrders = useCallback(async () => {
@@ -475,6 +482,7 @@ export default function OrdersPage() {
 
       const data = await response.json();
       setOrders(data.orders || []);
+      setAgents(data.agents || []);
     } catch (error) {
       console.error("Failed to fetch orders:", error);
       setLoadError(error instanceof Error ? error.message : t(lang, "orders.loadError"));
@@ -538,7 +546,31 @@ export default function OrdersPage() {
   }, [orders, searchState, semanticOrderCodes]);
 
   // Build tree from filtered orders
-  const tree = useMemo(() => buildOrdersTree(filteredOrders), [filteredOrders]);
+  const tree = useMemo(() => buildOrdersTree(filteredOrders, dateGroupMode), [filteredOrders, dateGroupMode]);
+
+  // Flat month-grouped list for Start date / End date modes
+  const monthGroupedOrders = useMemo(() => {
+    if (dateGroupMode === "created") return null;
+    const dateKey = dateGroupMode === "checkIn" ? "datesFrom" : "datesTo";
+    const sorted = [...filteredOrders]
+      .filter(o => o[dateKey])
+      .sort((a, b) => {
+        const cmp = (a[dateKey] || "").localeCompare(b[dateKey] || "");
+        return dateSortAsc ? cmp : -cmp;
+      });
+    const months = new Map<string, { label: string; orders: OrderRow[]; totals: OrderTotals }>();
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    sorted.forEach(o => {
+      const d = new Date(o[dateKey]);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!months.has(key)) {
+        months.set(key, { label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`, orders: [], totals: { amount: 0, paid: 0, debt: 0, vat: 0, profit: 0 } });
+      }
+      months.get(key)!.orders.push(o);
+    });
+    months.forEach(g => { g.totals = calculateTotals(g.orders); });
+    return Array.from(months.values());
+  }, [dateGroupMode, filteredOrders, dateSortAsc]);
 
   // Initialize expanded state - all groups expanded by default, merge with stored preferences
   useEffect(() => {
@@ -675,6 +707,32 @@ export default function OrdersPage() {
     }
   };
 
+  const calendarOrders = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = (firstDay.getDay() + 6) % 7;
+    const calStart = new Date(firstDay);
+    calStart.setDate(calStart.getDate() - startOffset);
+    const totalCells = Math.ceil((startOffset + lastDay.getDate()) / 7) * 7;
+
+    const days: { date: Date; orders: OrderRow[]; isCurrentMonth: boolean }[] = [];
+    for (let i = 0; i < totalCells; i++) {
+      const d = new Date(calStart);
+      d.setDate(d.getDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      const dayOrders = filteredOrders.filter(o => {
+        if (!o.datesFrom || !o.datesTo) return false;
+        return o.datesFrom.slice(0, 10) <= iso && o.datesTo.slice(0, 10) >= iso;
+      });
+      days.push({ date: d, orders: dayOrders, isCurrentMonth: d.getMonth() === month });
+    }
+    return days;
+  }, [calendarDate, filteredOrders]);
+
+  const calMonthLabel = calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+
   // Loading state
   if (isLoading) {
     return (
@@ -733,27 +791,162 @@ export default function OrdersPage() {
     );
   }
 
+  const activeFilterCount = (() => {
+    let c = 0;
+    if (searchState.clientLastName) c++;
+    if (searchState.agentId !== "all") c++;
+    if (searchState.status !== "all") c++;
+    return c;
+  })();
+
+  const clearAllFilters = () => {
+    ordersSearchStore.applyPatch({
+      clientLastName: "",
+      agentId: "all",
+      status: "all",
+    });
+    setSurnameInput("");
+    setDateGroupMode("created");
+  };
+
   return (
-    <div className="bg-gray-50 p-6">
-      <div className="mx-auto max-w-[1800px] space-y-6">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
+    <div className="bg-gray-50 p-4">
+      <div className="mx-auto max-w-[1800px] space-y-2">
+        {/* Compact header with view tabs — sticky below TopBar + TabBar */}
+        <div className="sticky top-0 z-20 bg-gray-50 pb-2 -mb-2 -mt-4 pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
             <button
               onClick={() => router.push("/orders/new")}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
             >
-              <Plus size={16} strokeWidth={2} />
+              <Plus size={14} strokeWidth={2} />
               {t(lang, "orders.new")}
             </button>
-            {(searchState.queryText || searchState.clientLastName || searchState.status !== 'all' || searchState.country || searchState.orderType !== 'all') && (
-              <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                {t(lang, "orders.filteredResults").replace("{count}", String(filteredOrders.length))}
+            {filteredOrders.length !== orders.length && (
+              <span className="text-xs text-gray-500 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                {filteredOrders.length} / {orders.length}
               </span>
             )}
           </div>
+
+          <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                viewMode === "list"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <List size={13} />
+              List
+            </button>
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                viewMode === "calendar"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <CalendarDays size={13} />
+              Calendar
+            </button>
+          </div>
         </div>
+
+        {/* Inline filter bar */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-3 py-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Surname search */}
+            <div className="relative">
+              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Client / Payer..."
+                value={surnameInput}
+                onChange={(e) => {
+                  setSurnameInput(e.target.value);
+                  ordersSearchStore.setField("clientLastName", e.target.value);
+                }}
+                className="w-32 rounded border border-gray-300 pl-7 pr-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <span className="text-gray-300">|</span>
+
+            {/* Date group mode */}
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
+              {([
+                { value: "created", label: "Created" },
+                { value: "checkIn", label: "Start date" },
+                { value: "checkOut", label: "End date" },
+              ] as { value: DateGroupMode; label: string }[]).map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setDateGroupMode(opt.value)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    dateGroupMode === opt.value
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-gray-300">|</span>
+
+            {/* Agent */}
+            <div className="flex items-center gap-1">
+              <label className="text-[10px] text-gray-500 uppercase tracking-wide">Agent</label>
+              <select
+                value={searchState.agentId}
+                onChange={(e) => ordersSearchStore.setField("agentId", e.target.value)}
+                className="rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none"
+              >
+                <option value="all">All</option>
+                {agents.map(a => (
+                  <option key={a.id} value={a.id}>{a.initials} — {a.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-gray-300">|</span>
+
+            {/* Status */}
+            <div className="flex items-center gap-1">
+              <label className="text-[10px] text-gray-500 uppercase tracking-wide">Status</label>
+              <select
+                value={searchState.status}
+                onChange={(e) => ordersSearchStore.setField("status", e.target.value)}
+                className="rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none"
+              >
+                <option value="all">All</option>
+                <option value="Draft">Draft</option>
+                <option value="Active">Active</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="On hold">On hold</option>
+              </select>
+            </div>
+
+            {/* Clear all */}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearAllFilters}
+                className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <X size={12} />
+                Clear ({activeFilterCount})
+              </button>
+            )}
+          </div>
+        </div>
+        </div>{/* end sticky */}
 
         {/* Empty state */}
         {orders.length === 0 && (
@@ -765,7 +958,7 @@ export default function OrdersPage() {
             <p className="text-gray-500 mb-6">{t(lang, "orders.getStarted")}</p>
             <button
               onClick={() => router.push("/orders/new")}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
             >
               <Plus size={20} strokeWidth={2} />
               {t(lang, "orders.createFirstOrder")}
@@ -773,101 +966,232 @@ export default function OrdersPage() {
           </div>
         )}
 
-        {/* Table */}
-        {orders.length > 0 && (
-        <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
+        {/* Calendar View */}
+        {orders.length > 0 && viewMode === "calendar" && (
+          <div className="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50">
+              <button onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; })} className="p-1 rounded hover:bg-gray-200 transition-colors">
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-sm font-semibold text-gray-900">{calMonthLabel}</span>
+              <button onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; })} className="p-1 rounded hover:bg-gray-200 transition-colors">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <div className="grid grid-cols-7">
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
+                <div key={d} className="px-1 py-1 text-center text-[10px] font-medium text-gray-500 uppercase border-b border-gray-200 bg-gray-50">{d}</div>
+              ))}
+              {calendarOrders.map((cell, i) => {
+                const todayISO = new Date().toISOString().slice(0, 10);
+                const cellISO = cell.date.toISOString().slice(0, 10);
+                const isToday = cellISO === todayISO;
+                return (
+                  <div
+                    key={i}
+                    className={`min-h-[80px] border-b border-r border-gray-100 p-1 ${
+                      !cell.isCurrentMonth ? "bg-gray-50/50" : ""
+                    } ${isToday ? "bg-blue-50/60" : ""}`}
+                  >
+                    <div className={`text-[11px] mb-0.5 ${
+                      isToday ? "font-bold text-blue-600" : cell.isCurrentMonth ? "text-gray-700" : "text-gray-400"
+                    }`}>
+                      {cell.date.getDate()}
+                    </div>
+                    <div className="space-y-0.5 max-h-[60px] overflow-y-auto">
+                      {cell.orders.slice(0, 4).map(o => {
+                        const colors = getStatusBadgeColor(o.status);
+                        const isStart = o.datesFrom.slice(0, 10) === cellISO;
+                        const isEnd = o.datesTo.slice(0, 10) === cellISO;
+                        return (
+                          <div
+                            key={o.orderId}
+                            onClick={() => handleOrderClick(o)}
+                            className={`rounded px-1 py-px text-[9px] leading-tight cursor-pointer truncate transition-colors ${colors.bg} ${colors.text} hover:opacity-80 ${
+                              isStart ? "rounded-l-md border-l-2 border-current" : ""
+                            } ${isEnd ? "rounded-r-md border-r-2 border-current" : ""}`}
+                            title={`${o.orderId} — ${o.client} (${formatDate(o.datesFrom)} - ${formatDate(o.datesTo)})`}
+                          >
+                            {o.orderId.split("/")[0]} {o.client.split(" ")[0]}
+                          </div>
+                        );
+                      })}
+                      {cell.orders.length > 4 && (
+                        <div className="text-[9px] text-gray-400 text-center">+{cell.orders.length - 4}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Table (List view) */}
+        {orders.length > 0 && viewMode === "list" && (
+        <div className="rounded-lg bg-white shadow-sm">
           <table className="w-full border-collapse">
-            <thead>
+            <thead className="sticky top-[76px] z-10 shadow-[0_1px_0_0_#e5e7eb]">
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.orderId")}
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title={t(lang, "orders.invTitle")} className="cursor-help inline-flex flex-col items-center gap-0.5">
-                    <span>{t(lang, "orders.inv")}</span>
-                    <FileCheck size={14} strokeWidth={1.8} className="text-gray-400" />
+                <th className="w-8 px-1 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-gray-600">
+                  <span title={t(lang, "orders.invTitle")} className="cursor-help">
+                    <FileCheck size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
                   </span>
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title={t(lang, "orders.payTitle")} className="cursor-help inline-flex flex-col items-center gap-0.5">
-                    <span>{t(lang, "orders.pay")}</span>
-                    <CircleDollarSign size={14} strokeWidth={1.8} className="text-gray-400" />
+                <th className="w-8 px-1 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-gray-600">
+                  <span title={t(lang, "orders.payTitle")} className="cursor-help">
+                    <CircleDollarSign size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
                   </span>
                 </th>
-                <th className="w-12 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  <span title={t(lang, "orders.dueTitle")} className="cursor-help inline-flex flex-col items-center gap-0.5">
-                    <span>{t(lang, "orders.due")}</span>
-                    <Clock size={14} strokeWidth={1.8} className="text-gray-400" />
+                <th className="w-8 px-1 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-gray-600">
+                  <span title={t(lang, "orders.dueTitle")} className="cursor-help">
+                    <Clock size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
                   </span>
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.client")}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.countriesCities")}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
-                  {t(lang, "orders.dates")}
+                <th
+                  className={`px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600 ${dateGroupMode !== "created" ? "cursor-pointer select-none hover:text-gray-900" : ""}`}
+                  onClick={() => { if (dateGroupMode !== "created") setDateSortAsc(p => !p); }}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t(lang, "orders.dates")}
+                    {dateGroupMode !== "created" && (
+                      <span className="text-[9px] text-gray-400">{dateSortAsc ? "▲" : "▼"}</span>
+                    )}
+                  </span>
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-right text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.amount")}
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-right text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.paid")}
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-right text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.debt")}
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="Profit after PVN">
+                <th className="px-3 py-1 text-right text-[10px] font-medium uppercase tracking-wider text-gray-600" title="Profit after PVN">
                   {t(lang, "orders.profit")}
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider leading-tight text-gray-700" title="VAT (PVN — Pievienotās vērtības nodoklis)">
+                <th className="px-3 py-1 text-right text-[10px] font-medium uppercase tracking-wider text-gray-600" title="VAT">
                   {t(lang, "orders.vat")}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-8 px-1 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.status")}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.type")}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.owner")}
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {tree.map((year) => (
+              {/* Flat month-grouped view for Start date / End date */}
+              {monthGroupedOrders && monthGroupedOrders.map((group) => (
+                <React.Fragment key={group.label}>
+                  <tr className="bg-gray-100 font-semibold">
+                    <td className="px-3 py-1 text-xs text-gray-900">{group.label}</td>
+                    <td className="px-1 py-1" colSpan={3}></td>
+                    <td className="px-3 py-1" colSpan={2}></td>
+                    <td className="px-3 py-1"></td>
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.amount)}</td>
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.paid)}</td>
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.debt)}</td>
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.profit)}</td>
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-700">{formatCurrency(group.totals.vat)}</td>
+                    <td className="px-3 py-1" colSpan={3}></td>
+                  </tr>
+                  {group.orders.map((order) => {
+                    const daysToDue = getDaysToDue(order.dueDate);
+                    const paymentIcon = getPaymentIcon(order);
+                    return (
+                      <tr
+                        key={`order-${order.orderId}`}
+                        className="cursor-pointer transition-colors hover:bg-blue-50"
+                        onClick={() => handleOrderClick(order)}
+                        onKeyDown={(e) => handleOrderKeyDown(e, order)}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Open order ${order.orderId}`}
+                      >
+                        <td className="whitespace-nowrap px-3 py-0.5 pl-6 text-xs font-medium text-gray-900">{order.orderId}</td>
+                        <td className="w-8 px-1 py-0.5 text-center">
+                          {order.hasInvoice && order.allServicesInvoiced && <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center"><FileCheck size={13} strokeWidth={1.8} className="text-green-600" /></span>}
+                          {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center"><FileMinus2 size={13} strokeWidth={1.8} className="text-amber-500" /></span>}
+                        </td>
+                        <td className="w-8 px-1 py-0.5 text-center">
+                          {paymentIcon && <span title={paymentIcon.tooltip} className="cursor-help inline-flex justify-center">{paymentIcon.icon}</span>}
+                        </td>
+                        <td className="w-8 px-1 py-0.5 text-center text-xs">
+                          {order.allInvoicesPaid || (order.debt <= 0 && order.amount > 0) ? (
+                            <span title={t(lang, "orders.paidShort")} className="inline-flex justify-center text-green-600"><Check size={13} strokeWidth={3} /></span>
+                          ) : daysToDue !== null ? (
+                            <span className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`} title={t(lang, "orders.tooltipDueDate").replace("{date}", order.dueDate ?? "")}>
+                              {daysToDue < 0 && <CircleAlert size={11} strokeWidth={2} />}{daysToDue}
+                            </span>
+                          ) : <span className="text-gray-400">-</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{order.client}</td>
+                        <td className="px-3 py-0.5 text-xs text-gray-700 max-w-xs"><div className="truncate">{formatCountriesWithFlags(order.countriesCities)}</div></td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{formatDate(order.datesFrom)} - {formatDate(order.datesTo)}</td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">{formatCurrency(order.amount)}</td>
+                        <td className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01 ? "font-medium text-purple-700" : "text-gray-700"}`}>{formatCurrency(order.paid)}</td>
+                        <td className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${order.debt > 0 ? "font-medium text-orange-600" : "text-gray-700"}`}>{formatCurrency(order.debt)}</td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs font-semibold text-gray-900">{formatCurrency(order.profit)}</td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">{formatCurrency(order.vat ?? 0)}</td>
+                        <td className="w-8 px-1 py-0.5 text-center">
+                          {(() => { const colors = getStatusBadgeColor(order.status); const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`; return <span title={t(lang, statusKey)} className={`inline-block h-2 w-2 rounded-full ${colors.dot} cursor-help`} />; })()}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{order.type}</td>
+                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{order.owner}</td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+
+              {/* Year → Month → Day tree for Created mode */}
+              {!monthGroupedOrders && tree.map((year) => (
                 <React.Fragment key={`year-${year.year}`}>
                   {/* Year row */}
                   <tr
-                    className="cursor-pointer bg-gray-100 font-semibold leading-tight hover:bg-gray-200 transition-colors"
+                    className="cursor-pointer bg-gray-100 font-semibold hover:bg-gray-200 transition-colors"
                     onClick={() => toggleYear(year.year)}
                   >
-                    <td className="px-4 py-1.5 text-sm leading-tight text-gray-900">
-                      <span className="mr-2 inline-block transition-transform duration-200">
+                    <td className="px-3 py-1 text-xs text-gray-900">
+                      <span className="mr-1.5 inline-block text-[10px]">
                         {isExpanded("year", year.year) ? "▾" : "▸"}
                       </span>
                       {year.year}
                     </td>
-                    <td className="px-2 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
-                    <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={2}></td>
-                    <td className="px-4 py-1.5 text-sm leading-tight text-gray-700"></td>
-                    <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
+                    <td className="px-1 py-1 text-xs text-gray-700" colSpan={3}></td>
+                    <td className="px-3 py-1 text-xs text-gray-700" colSpan={2}></td>
+                    <td className="px-3 py-1 text-xs text-gray-700"></td>
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
                       {formatCurrency(year.totals.amount)}
                     </td>
-                    <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
                       {formatCurrency(year.totals.paid)}
                     </td>
-                    <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
                       {formatCurrency(year.totals.debt)}
                     </td>
-                    <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
                       {formatCurrency(year.totals.profit)}
                     </td>
-                    <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-700">
+                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-700">
                       {formatCurrency(year.totals.vat)}
                     </td>
-                    <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
+                    <td className="px-3 py-1 text-xs text-gray-700" colSpan={3}></td>
                   </tr>
 
                   {/* Month rows */}
@@ -875,34 +1199,34 @@ export default function OrdersPage() {
                     year.months.map((month) => (
                       <React.Fragment key={`month-${month.monthKey}`}>
                         <tr
-                          className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100 transition-colors"
+                          className="cursor-pointer bg-gray-50 font-medium hover:bg-gray-100 transition-colors"
                           onClick={() => toggleMonth(month.monthKey)}
                         >
-                          <td className="px-4 py-1.5 pl-8 text-sm leading-tight text-gray-900">
-                            <span className="mr-2 inline-block transition-transform duration-200">
+                          <td className="px-3 py-1 pl-7 text-xs text-gray-900">
+                            <span className="mr-1.5 inline-block text-[10px]">
                               {isExpanded("month", month.monthKey) ? "▾" : "▸"}
                             </span>
                             {t(lang, `calendar.month.${parseInt(month.monthKey.split("-")[1], 10) - 1}`)}
                           </td>
-                          <td className="px-2 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
-                          <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={2}></td>
-                          <td className="px-4 py-1.5 text-sm leading-tight text-gray-700"></td>
-                          <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
+                          <td className="px-1 py-1 text-xs text-gray-700" colSpan={3}></td>
+                          <td className="px-3 py-1 text-xs text-gray-700" colSpan={2}></td>
+                          <td className="px-3 py-1 text-xs text-gray-700"></td>
+                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
                             {formatCurrency(month.totals.amount)}
                           </td>
-                          <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
+                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
                             {formatCurrency(month.totals.paid)}
                           </td>
-                          <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
+                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
                             {formatCurrency(month.totals.debt)}
                           </td>
-                          <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
+                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
                             {formatCurrency(month.totals.profit)}
                           </td>
-                          <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-700">
+                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-700">
                             {formatCurrency(month.totals.vat)}
                           </td>
-                          <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
+                          <td className="px-3 py-1 text-xs text-gray-700" colSpan={3}></td>
                         </tr>
 
                         {/* Day rows */}
@@ -910,38 +1234,38 @@ export default function OrdersPage() {
                           month.days.map((day) => (
                             <React.Fragment key={`day-${day.dayKey}`}>
                               <tr
-                                className="cursor-pointer bg-gray-50 font-medium leading-tight hover:bg-gray-100 transition-colors"
+                                className="cursor-pointer bg-gray-50 font-medium hover:bg-gray-100 transition-colors"
                                 onClick={() => toggleDay(day.dayKey)}
                               >
-                                <td className="px-4 py-1.5 pl-16 text-sm leading-tight text-gray-900">
-                                  <span className="mr-2 inline-block transition-transform duration-200">
+                                <td className="px-3 py-1 pl-14 text-xs text-gray-900">
+                                  <span className="mr-1.5 inline-block text-[10px]">
                                     {isExpanded("day", day.dayKey) ? "▾" : "▸"}
                                   </span>
                                   {day.dayLabel}
                                 </td>
-                                <td className="px-2 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
-                                <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={2}></td>
-                                <td className="px-4 py-1.5 text-sm leading-tight text-gray-700"></td>
-                                <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
+                                <td className="px-1 py-1 text-xs text-gray-700" colSpan={3}></td>
+                                <td className="px-3 py-1 text-xs text-gray-700" colSpan={2}></td>
+                                <td className="px-3 py-1 text-xs text-gray-700"></td>
+                                <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
                                   {formatCurrency(day.totals.amount)}
                                 </td>
-                                <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-900">
+                                <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
                                   {formatCurrency(day.totals.paid)}
                                 </td>
                                 <td
-                                  className={`px-4 py-1.5 text-right text-sm font-medium leading-tight ${
+                                  className={`px-3 py-1 text-right text-xs font-medium ${
                                     day.totals.debt > 0 ? "text-red-600" : "text-gray-900"
                                   }`}
                                 >
                                   {formatCurrency(day.totals.debt)}
                                 </td>
-                                <td className="px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
+                                <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
                                   {formatCurrency(day.totals.profit)}
                                 </td>
-                                <td className="px-4 py-1.5 text-right text-sm font-medium leading-tight text-gray-700">
+                                <td className="px-3 py-1 text-right text-xs font-medium text-gray-700">
                                   {formatCurrency(day.totals.vat)}
                                 </td>
-                                <td className="px-4 py-1.5 text-sm leading-tight text-gray-700" colSpan={3}></td>
+                                <td className="px-3 py-1 text-xs text-gray-700" colSpan={3}></td>
                               </tr>
 
                               {/* Order rows */}
@@ -954,33 +1278,31 @@ export default function OrdersPage() {
                                   return (
                                     <tr
                                       key={`order-${order.orderId}`}
-                                      className="cursor-pointer leading-tight transition-colors hover:bg-blue-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-inset"
+                                      className="cursor-pointer transition-colors hover:bg-blue-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-inset"
                                       onClick={() => handleOrderClick(order)}
                                       onKeyDown={(e) => handleOrderKeyDown(e, order)}
                                       tabIndex={0}
                                       role="button"
                                       aria-label={`Open order ${order.orderId}`}
                                     >
-                                      <td className="whitespace-nowrap px-4 py-1.5 pl-24 text-sm font-medium leading-tight text-gray-900">
+                                      <td className="whitespace-nowrap px-3 py-0.5 pl-20 text-xs font-medium text-gray-900">
                                         {order.orderId}
                                       </td>
                                       
-                                      {/* Invoice icon column */}
-                                      <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
+                                      <td className="w-8 px-1 py-0.5 text-center">
                                         {order.hasInvoice && order.allServicesInvoiced && (
                                           <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center">
-                                            <FileCheck size={16} strokeWidth={1.8} className="text-green-600" />
+                                            <FileCheck size={13} strokeWidth={1.8} className="text-green-600" />
                                           </span>
                                         )}
                                         {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && (
                                           <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center">
-                                            <FileMinus2 size={16} strokeWidth={1.8} className="text-amber-500" />
+                                            <FileMinus2 size={13} strokeWidth={1.8} className="text-amber-500" />
                                           </span>
                                         )}
                                       </td>
                                       
-                                      {/* Payment status icon column */}
-                                      <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
+                                      <td className="w-8 px-1 py-0.5 text-center">
                                         {paymentIcon && (
                                           <span title={paymentIcon.tooltip} className="cursor-help inline-flex justify-center">
                                             {paymentIcon.icon}
@@ -988,18 +1310,17 @@ export default function OrdersPage() {
                                         )}
                                       </td>
                                       
-                                      {/* DUE: число дней / галка если оплачено / - если нет счёта */}
-                                      <td className="w-12 px-2 py-1.5 text-center text-sm leading-tight">
+                                      <td className="w-8 px-1 py-0.5 text-center text-xs">
                                         {order.allInvoicesPaid || (order.debt <= 0 && order.amount > 0) ? (
                                           <span title={t(lang, "orders.paidShort")} className="inline-flex justify-center text-green-600">
-                                            <Check size={16} strokeWidth={3} />
+                                            <Check size={13} strokeWidth={3} />
                                           </span>
                                         ) : daysToDue !== null ? (
                                           <span
                                             className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`}
                                             title={t(lang, "orders.tooltipDueDate").replace("{date}", order.dueDate ?? "")}
                                           >
-                                            {daysToDue < 0 && <CircleAlert size={13} strokeWidth={2} />}
+                                            {daysToDue < 0 && <CircleAlert size={11} strokeWidth={2} />}
                                             {daysToDue}
                                           </span>
                                         ) : (
@@ -1007,21 +1328,21 @@ export default function OrdersPage() {
                                         )}
                                       </td>
                                       
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">
                                         {order.client}
                                       </td>
-                                      <td className="px-4 py-1.5 text-sm leading-tight text-gray-700 max-w-xs" title={order.countriesCities}>
+                                      <td className="px-3 py-0.5 text-xs text-gray-700 max-w-xs" title={order.countriesCities}>
                                         <div className="truncate">
                                           {formatCountriesWithFlags(order.countriesCities)}
                                         </div>
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">
                                         {formatDate(order.datesFrom)} - {formatDate(order.datesTo)}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">
                                         {formatCurrency(order.amount)}
                                       </td>
-                                      <td className={`whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight ${
+                                      <td className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${
                                         order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01
                                           ? "font-medium text-purple-700"
                                           : "text-gray-700"
@@ -1029,7 +1350,7 @@ export default function OrdersPage() {
                                         {formatCurrency(order.paid)}
                                       </td>
                                       <td
-                                        className={`whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight ${
+                                        className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${
                                           order.debt > 0
                                             ? "font-medium text-orange-600"
                                             : "text-gray-700"
@@ -1037,28 +1358,28 @@ export default function OrdersPage() {
                                       >
                                         {formatCurrency(order.debt)}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm font-semibold leading-tight text-gray-900">
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs font-semibold text-gray-900">
                                         {formatCurrency(order.profit)}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-right text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">
                                         {formatCurrency(order.vat ?? 0)}
                                       </td>
-                                      <td className="w-8 px-2 py-1.5 text-center">
+                                      <td className="w-8 px-1 py-0.5 text-center">
                                         {(() => {
                                           const colors = getStatusBadgeColor(order.status);
                                           const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`;
                                           return (
                                             <span
                                               title={t(lang, statusKey)}
-                                              className={`inline-block h-2.5 w-2.5 rounded-full ${colors.dot} cursor-help`}
+                                              className={`inline-block h-2 w-2 rounded-full ${colors.dot} cursor-help`}
                                             />
                                           );
                                         })()}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700">
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">
                                         {order.type}
                                       </td>
-                                      <td className="whitespace-nowrap px-4 py-1.5 text-sm leading-tight text-gray-700" title={`Owner: ${order.owner}`}>
+                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700" title={`Owner: ${order.owner}`}>
                                         {order.owner}
                                       </td>
                                     </tr>
@@ -1073,6 +1394,16 @@ export default function OrdersPage() {
             </tbody>
           </table>
         </div>
+        )}
+
+        {/* No results message */}
+        {orders.length > 0 && filteredOrders.length === 0 && (
+          <div className="rounded-lg bg-white shadow-sm p-8 text-center">
+            <p className="text-sm text-gray-500">No orders match current filters</p>
+            <button onClick={clearAllFilters} className="mt-2 text-xs text-blue-600 hover:underline">
+              Clear all filters
+            </button>
+          </div>
         )}
       </div>
     </div>
