@@ -115,7 +115,7 @@ export default function MergeSelectedIntoModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4">
       <div ref={trapRef} className="w-full max-w-lg rounded-xl bg-white shadow-xl">
         <div className="border-b border-gray-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Merge selected into</h2>

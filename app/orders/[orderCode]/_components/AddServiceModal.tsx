@@ -2167,7 +2167,7 @@ export default function AddServiceModal({
   ) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-future-overlay">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 modal-future-overlay">
       <div ref={trapRef} className="w-full max-w-4xl max-h-[90vh] min-h-0 overflow-y-auto modal-future-container" style={modalStyle}>
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none shadow-sm" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">

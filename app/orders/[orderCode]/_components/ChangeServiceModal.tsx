@@ -475,7 +475,7 @@ export default function ChangeServiceModal({
   const formatDate = (dateStr: string) => formatDateDDMMYYYY(dateStr || null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4">
       <div ref={trapRef} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">

@@ -214,7 +214,7 @@ function ChooseServiceTypeModal({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
         ref={trapRef}
         className="w-full max-w-md rounded-xl bg-white shadow-xl p-4"

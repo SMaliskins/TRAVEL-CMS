@@ -135,7 +135,7 @@ export default function AddUserModal({
   // Success view with password
   if (createdUser) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
         <div ref={trapRef} className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
@@ -195,7 +195,7 @@ export default function AddUserModal({
 
   // Form view
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
       <div ref={trapRef} className="mx-4 w-full max-w-md rounded-lg bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <h3 className="text-lg font-semibold text-gray-900">Add New User</h3>

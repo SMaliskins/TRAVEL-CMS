@@ -59,6 +59,7 @@ export default function CashFlowPage() {
   const [allPayments, setAllPayments] = useState<CashPayment[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
 
+  const [filterAccount, setFilterAccount] = useState<string>("all");
   const [period, setPeriod] = useState<PeriodType>(() => loadCashflowFilters()?.period ?? "currentMonth");
   const [dateFrom, setDateFrom] = useState(() => {
     const s = loadCashflowFilters();
@@ -208,6 +209,29 @@ export default function CashFlowPage() {
     return byMonth;
   }, [calendarRange.days, totalByDate]);
 
+  const bankAccounts = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const p of allPayments) {
+      if (p.account_name) set.add(p.account_name);
+    }
+    return [...set].sort();
+  }, [allPayments]);
+
+  const filteredDailyReport = React.useMemo(() => {
+    if (filterAccount === "all") return dailyReport;
+    return dailyReport
+      .map((day) => {
+        const filtered = day.payments.filter((p) => p.account_name === filterAccount);
+        return { ...day, payments: filtered, total: filtered.reduce((s, p) => s + p.amount, 0) };
+      })
+      .filter((day) => day.payments.length > 0);
+  }, [dailyReport, filterAccount]);
+
+  const filteredGrandTotal = React.useMemo(() => {
+    if (filterAccount === "all") return grandTotal;
+    return filteredDailyReport.reduce((s, d) => s + d.total, 0);
+  }, [filteredDailyReport, filterAccount, grandTotal]);
+
   const scrollToDay = (date: string) => {
     const el = document.getElementById(`day-${date}`);
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -215,17 +239,10 @@ export default function CashFlowPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{t(lang, "cashflow.title")}</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          {t(lang, "cashflow.subtitle")}
-        </p>
-      </div>
-
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
-          onClick={() => setTab("cash")}
-          className={`px-4 py-2 text-sm font-medium rounded-md ${
+          onClick={() => { setTab("cash"); setFilterAccount("all"); }}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md ${
             tab === "cash"
               ? "bg-green-600 text-white"
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -234,8 +251,8 @@ export default function CashFlowPage() {
           {t(lang, "cashflow.zReport")}
         </button>
         <button
-          onClick={() => setTab("bank")}
-          className={`px-4 py-2 text-sm font-medium rounded-md ${
+          onClick={() => { setTab("bank"); setFilterAccount("all"); }}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md ${
             tab === "bank"
               ? "bg-blue-600 text-white"
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -243,10 +260,6 @@ export default function CashFlowPage() {
         >
           {t(lang, "cashflow.bankMovements")}
         </button>
-      </div>
-
-      {/* Date filters */}
-      <div className="mb-4 flex items-center gap-3">
         <PeriodSelector
           value={period}
           onChange={handlePeriodChange}
@@ -254,6 +267,18 @@ export default function CashFlowPage() {
           endDate={dateTo}
           dropdownAlign="left"
         />
+        {tab === "bank" && bankAccounts.length > 1 && (
+          <select
+            value={filterAccount}
+            onChange={(e) => setFilterAccount(e.target.value)}
+            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          >
+            <option value="all">All accounts</option>
+            {bankAccounts.map((acc) => (
+              <option key={acc} value={acc}>{acc}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {loading ? (
@@ -406,12 +431,12 @@ export default function CashFlowPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {dailyReport.map((day) => (
+          {filteredDailyReport.map((day) => (
             <div
               key={day.date}
               className="bg-white rounded-lg border border-gray-200 overflow-hidden"
             >
-              <div className="flex items-center justify-between bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {formatDateDDMMYYYY(day.date)}
                 </h3>
@@ -419,22 +444,22 @@ export default function CashFlowPage() {
                   {t(lang, "payments.total")}: {formatCurrency(day.total)}
                 </span>
               </div>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
                 <thead className="bg-gray-50/50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.order")}</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.payer")}</th>
+                    <th className="w-[12%] px-3 py-1.5 text-left text-xs font-medium text-gray-500">{t(lang, "payments.order")}</th>
+                    <th className="w-[20%] px-3 py-1.5 text-left text-xs font-medium text-gray-500">{t(lang, "payments.payer")}</th>
                     {tab === "bank" && (
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.account")}</th>
+                      <th className="w-[15%] px-3 py-1.5 text-left text-xs font-medium text-gray-500">{t(lang, "payments.account")}</th>
                     )}
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">{t(lang, "payments.note")}</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t(lang, "payments.amount")}</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500">{t(lang, "payments.note")}</th>
+                    <th className="w-[12%] px-3 py-1.5 text-right text-xs font-medium text-gray-500">{t(lang, "payments.amount")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {day.payments.map((p: CashPayment) => (
                     <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-1.5">
                         {p.order_code ? (
                           <button
                             onClick={() => router.push(`/orders/${orderCodeToSlug(p.order_code!)}`)}
@@ -446,16 +471,16 @@ export default function CashFlowPage() {
                           "-"
                         )}
                       </td>
-                      <td className="px-4 py-2 text-gray-600">
+                      <td className="px-3 py-1.5 text-gray-600 truncate">
                         {p.payer_name || p.order_client || "-"}
                       </td>
                       {tab === "bank" && (
-                        <td className="px-4 py-2 text-gray-600 text-xs">{p.account_name || "-"}</td>
+                        <td className="px-3 py-1.5 text-gray-600 text-xs truncate">{p.account_name || "-"}</td>
                       )}
-                      <td className="px-4 py-2 text-gray-500 text-xs max-w-[200px] truncate">
+                      <td className="px-3 py-1.5 text-gray-500 text-xs truncate">
                         {p.note || "-"}
                       </td>
-                      <td className="px-4 py-2 text-right font-semibold text-gray-900">
+                      <td className="px-3 py-1.5 text-right font-semibold text-gray-900">
                         {formatCurrency(p.amount)}
                       </td>
                     </tr>
@@ -467,8 +492,10 @@ export default function CashFlowPage() {
           <div className="flex justify-end">
             <div className="bg-gray-900 text-white px-6 py-3 rounded-lg">
               <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
-              <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
-              <span className="text-gray-400 text-xs ml-2">({allPayments.length} {t(lang, "payments.paymentsCount")})</span>
+              <span className="text-lg font-bold">{formatCurrency(filteredGrandTotal)}</span>
+              <span className="text-gray-400 text-xs ml-2">
+                ({filteredDailyReport.reduce((s, d) => s + d.payments.length, 0)} {t(lang, "payments.paymentsCount")})
+              </span>
             </div>
           </div>
         </div>

@@ -647,7 +647,7 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
-        <div ref={stickyHeaderRef} className="mb-0 sticky top-[92px] z-20 bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]">
+        <div ref={stickyHeaderRef} className={`mb-0 ${showInvoiceCreator ? "" : "sticky top-[92px] z-20"} bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]`}>
           <div className="flex items-stretch flex-wrap lg:flex-nowrap">
             {/* Block 1: Order Code + Status + Type/Source */}
             <div className="shrink-0 pr-2 flex flex-col justify-center">

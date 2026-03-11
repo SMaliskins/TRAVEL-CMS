@@ -218,7 +218,7 @@ export default function EditUserModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
       <div ref={trapRef} className="mx-4 w-full max-w-md rounded-lg bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>

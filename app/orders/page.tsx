@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ordersSearchStore from "@/lib/stores/ordersSearchStore";
 import { filterOrders } from "@/lib/stores/filterOrders";
@@ -440,6 +440,7 @@ const SEMANTIC_DEBOUNCE_MS = 400;
 
 export default function OrdersPage() {
   const router = useRouter();
+  const urlSearchParams = useSearchParams();
   const { openTab } = useTabs();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -449,7 +450,7 @@ export default function OrdersPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
   const [semanticOrderCodes, setSemanticOrderCodes] = useState<string[]>([]);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => 
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     loadExpandedFromStorage()
   );
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
@@ -457,6 +458,29 @@ export default function OrdersPage() {
   const [dateSortAsc, setDateSortAsc] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [surnameInput, setSurnameInput] = useState(searchState.clientLastName || "");
+
+  useEffect(() => {
+    const createdFrom = urlSearchParams.get("createdFrom");
+    const createdTo = urlSearchParams.get("createdTo");
+    const status = urlSearchParams.get("status");
+
+    if (createdFrom || createdTo || status) {
+      const patch: Partial<import("@/lib/stores/ordersSearchStore").OrdersSearchState> = {};
+      if (createdFrom || createdTo) {
+        patch.createdAt = { from: createdFrom || undefined, to: createdTo || undefined };
+        setDateGroupMode("created");
+      }
+      if (status) {
+        patch.status = status;
+      }
+      ordersSearchStore.applyPatch(patch);
+      // Remove URL params so they don't persist on refresh
+      window.history.replaceState({}, "", "/orders");
+    } else {
+      // Direct navigation without params — reset dashboard-applied filters
+      ordersSearchStore.applyPatch({ createdAt: {}, status: "all" });
+    }
+  }, []);
 
   // Fetch orders from API
   const fetchOrders = useCallback(async () => {

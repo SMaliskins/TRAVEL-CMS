@@ -19,7 +19,6 @@ import {
   TrendingUp,
   Plane,
   RefreshCcw,
-  BarChart3,
   Users,
   Settings,
   Hotel,
@@ -54,7 +53,7 @@ const navConfig: NavElement[] = [
       { name: "Reconciliation", nameKey: "reconciliation.title", href: "/finances/reconciliation", icon: <RefreshCcw size={18} strokeWidth={ICON_STROKE} /> },
     ],
   },
-  { name: "Analytics", nameKey: "nav.analytics", href: "/analytics/orders", icon: <BarChart3 size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  // Analytics page hidden — dashboard cards link directly to /orders with filters
   { name: "Directory", nameKey: "nav.directory", href: "/directory", icon: <Users size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
   { name: "Hotels Booking", nameKey: "nav.hotelsBooking", href: "/hotels-booking", icon: <Hotel size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
 ];

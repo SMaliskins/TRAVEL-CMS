@@ -196,20 +196,20 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
 
               <div className="text-right text-xs whitespace-nowrap shrink-0 space-y-0.5">
                 <div className="text-gray-500">
-                  Sent {formatDateDDMMYYYY(c.sent_at)} {formatTime(c.sent_at)}
+                  {formatDateDDMMYYYY(c.sent_at)} {formatTime(c.sent_at)}
                 </div>
                 {c.delivered_at && (
-                  <div className="text-blue-600">
-                    Delivered {formatTime(c.delivered_at)}
+                  <div className="text-blue-500">
+                    ✓ Delivered {formatTime(c.delivered_at)}
                   </div>
                 )}
                 {c.opened_at && (
                   <div className="text-green-600">
-                    Opened {formatTime(c.opened_at)}{c.open_count > 1 ? ` (${c.open_count}×)` : ""}
+                    👁 Opened {formatTime(c.opened_at)}{c.open_count > 1 ? ` (${c.open_count}×)` : ""}
                   </div>
                 )}
                 {c.delivery_status === "bounced" && (
-                  <div className="text-red-500">Bounced</div>
+                  <div className="text-red-500">✕ Bounced</div>
                 )}
               </div>
             </div>

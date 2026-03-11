@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 
 const tabs = [
   { nameKey: "invoices.title", href: "/finances/invoices" },
+  { nameKey: "invoices.suppliersInvoices", href: "/finances/suppliers-invoices" },
   { nameKey: "payments.title", href: "/finances/payments" },
   { nameKey: "cashflow.title", href: "/finances/cashflow" },
   { nameKey: "iata.title", href: "/finances/iata" },
@@ -33,10 +34,10 @@ export default function FinancesLayout({
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+                className={`px-4 py-2 text-sm rounded-t-md transition-colors ${
                   isActive
-                    ? "bg-gray-100 text-gray-900 border-b-2 border-blue-600"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    ? "font-bold text-gray-900 border-b-2 border-blue-600 bg-gray-100"
+                    : "font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 }`}
               >
                 {t(lang, tab.nameKey)}

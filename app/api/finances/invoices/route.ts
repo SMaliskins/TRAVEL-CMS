@@ -63,7 +63,22 @@ export async function GET(request: NextRequest) {
     if (dateFrom) query = query.gte("invoice_date", dateFrom);
     if (dateTo) query = query.lte("invoice_date", dateTo);
 
-    const { data: invoices, error: invoicesError } = await query;
+    const [invoicesResult, commsResult, paymentsResult] = await Promise.all([
+      query,
+      supabaseAdmin
+        .from("order_communications")
+        .select("invoice_id, delivery_status, delivered_at, opened_at, open_count, sent_at")
+        .eq("company_id", companyId)
+        .not("invoice_id", "is", null)
+        .order("sent_at", { ascending: false }),
+      supabaseAdmin
+        .from("payments")
+        .select("invoice_id, amount, status")
+        .eq("company_id", companyId)
+        .not("invoice_id", "is", null),
+    ]);
+
+    const { data: invoices, error: invoicesError } = invoicesResult;
 
     if (invoicesError) {
       console.error("Error fetching invoices:", invoicesError);
@@ -73,13 +88,39 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Map invoices with order_code (orders is an array, get first)
-    const mappedInvoices = (invoices || []).map((inv: any) => ({
-      ...inv,
-      order_code: (inv.orders && Array.isArray(inv.orders) && inv.orders[0]?.order_code) || 
-                  (inv.orders?.order_code) || null,
-      orders: undefined, // Remove nested orders object
-    }));
+    const commsMap = new Map<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>();
+    for (const c of commsResult.data || []) {
+      if (c.invoice_id && !commsMap.has(c.invoice_id)) {
+        commsMap.set(c.invoice_id, c);
+      }
+    }
+
+    const paidMap = new Map<string, number>();
+    for (const p of paymentsResult.data || []) {
+      if (p.invoice_id && p.status !== "cancelled") {
+        paidMap.set(p.invoice_id, (paidMap.get(p.invoice_id) || 0) + Number(p.amount || 0));
+      }
+    }
+
+    const mappedInvoices = (invoices || []).map((inv: any) => {
+      const comm = commsMap.get(inv.id);
+      const paid = paidMap.get(inv.id) || 0;
+      return {
+        ...inv,
+        order_code: (inv.orders && Array.isArray(inv.orders) && inv.orders[0]?.order_code) || 
+                    (inv.orders?.order_code) || null,
+        orders: undefined,
+        paid_amount: Math.round(paid * 100) / 100,
+        remaining: Math.round((Number(inv.total || 0) - paid) * 100) / 100,
+        email_status: comm ? {
+          delivery_status: comm.delivery_status,
+          delivered_at: comm.delivered_at,
+          opened_at: comm.opened_at,
+          open_count: comm.open_count,
+          sent_at: comm.sent_at,
+        } : null,
+      };
+    });
 
     return NextResponse.json({ invoices: mappedInvoices });
   } catch (error: any) {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 import { setGlobalDateFormat, DateFormatPattern } from "@/utils/dateFormat";
 import BankAccountsManager from "./_components/BankAccountsManager";
@@ -141,6 +142,9 @@ interface Company {
   invoice_languages?: string[];
   invoice_currencies?: string[];
   concierge_hotel_markup?: number;
+  target_profit_monthly?: number;
+  target_revenue_monthly?: number;
+  target_orders_monthly?: number;
   resend_api_key?: string;
   resend_api_key_set?: boolean;
   email_domain_verified?: boolean;
@@ -148,6 +152,7 @@ interface Company {
 
 export default function CompanySettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentRole = useCurrentUserRole();
   
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1386,6 +1391,55 @@ export default function CompanySettingsPage() {
             </div>
           </div>
 
+          {/* Monthly Targets — visible to Supervisor/Director only */}
+          {(currentRole === "supervisor" || currentRole === "director") && (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Targets</h3>
+              <p className="text-sm text-gray-500 mb-4">Targets shown on the Dashboard speedometer and comparison cards.</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Profit Target</label>
+                  <input
+                    type="number"
+                    step="100"
+                    min="0"
+                    value={formData.target_profit_monthly ?? 0}
+                    onChange={(e) => updateField("target_profit_monthly", parseFloat(e.target.value) || 0)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g., 50000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Revenue Target</label>
+                  <input
+                    type="number"
+                    step="100"
+                    min="0"
+                    value={formData.target_revenue_monthly ?? 0}
+                    onChange={(e) => updateField("target_revenue_monthly", parseFloat(e.target.value) || 0)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g., 200000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Orders Target</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={formData.target_orders_monthly ?? 0}
+                    onChange={(e) => updateField("target_orders_monthly", parseInt(e.target.value) || 0)}
+                    disabled={readonly}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g., 100"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Concierge / Client App Settings */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Client App &amp; Concierge</h3>
@@ -1411,6 +1465,49 @@ export default function CompanySettingsPage() {
               </div>
             </div>
           </div>
+
+          {/* Dashboard Targets — visible only to Supervisor and Director */}
+          {(currentRole === "supervisor" || currentRole === "admin" || currentRole === "director") && (
+            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Dashboard Targets</h3>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Profit Target (€)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={formData.target_profit_monthly ?? 0}
+                    onChange={(e) => updateField("target_profit_monthly", parseFloat(e.target.value) || 0)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Revenue Target (€)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={formData.target_revenue_monthly ?? 0}
+                    onChange={(e) => updateField("target_revenue_monthly", parseFloat(e.target.value) || 0)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Orders Target</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={formData.target_orders_monthly ?? 0}
+                    onChange={(e) => updateField("target_orders_monthly", parseInt(e.target.value) || 0)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">These targets are shown on the Dashboard speedometer widget.</p>
+            </div>
+          )}
 
         </div>
 

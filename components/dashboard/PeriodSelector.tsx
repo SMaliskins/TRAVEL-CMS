@@ -5,7 +5,7 @@ import RangeCalendar from "@/components/RangeCalendar";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 
-export type PeriodType = "currentMonth" | "lastMonth" | "lastMonthRolling" | "last3Months" | "last6Months" | "lastYear" | "custom";
+export type PeriodType = "currentMonth" | "lastMonth" | "lastMonthRolling" | "last3Months" | "last6Months" | "lastYear" | "allTime" | "custom";
 
 interface PeriodSelectorProps {
   value: PeriodType;
@@ -74,6 +74,14 @@ export default function PeriodSelector({
     }
   }, [showCalendar, customStart, customEnd]);
 
+  // Recalculate rolling periods on mount to keep dates current
+  useEffect(() => {
+    if (value !== "custom") {
+      handlePeriodChange(value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handlePeriodChange = (period: PeriodType) => {
     if (period === "custom") {
       setShowCalendar(true);
@@ -133,6 +141,9 @@ export default function PeriodSelector({
       }
       case "lastYear":
         startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        break;
+      case "allTime":
+        startDate = new Date(2020, 0, 1);
         break;
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -278,7 +289,7 @@ export default function PeriodSelector({
     return `${formatDisplay(startDate)} – ${formatDisplay(endDate)}`;
   };
 
-  const periods: PeriodType[] = ["currentMonth", "lastMonth", "lastMonthRolling", "last3Months", "last6Months", "lastYear", "custom"];
+  const periods: PeriodType[] = ["currentMonth", "lastMonth", "lastMonthRolling", "last3Months", "last6Months", "lastYear", "allTime", "custom"];
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>

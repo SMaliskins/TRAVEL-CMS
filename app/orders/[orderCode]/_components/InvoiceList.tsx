@@ -9,7 +9,10 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { Eye, FileDown, Globe, Loader2, Mail, Pencil, Plus, Send, Trash2, XCircle } from "lucide-react";
+import { CheckCheck, CheckCircle, ExternalLink, Eye, FileDown, Globe, Loader2, Mail, Pencil, Plus, Send, Trash2, X, XCircle } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { supabase } from "@/lib/supabaseClient";
 import { INVOICE_LANGUAGE_OPTIONS, getInvoiceLanguageLabel } from "@/lib/invoiceLanguages";
 
 interface Invoice {
@@ -65,7 +68,11 @@ interface PaymentSummary {
 export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, orderAmountTotal = 0 }: InvoiceListProps) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const userRole = useCurrentUserRole();
+  const isFinance = userRole === "finance" || userRole === "admin";
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [emailStatuses, setEmailStatuses] = useState<Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>>({});
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [openActionsInvoiceId, setOpenActionsInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hideCancelled, setHideCancelled] = useState(true);
@@ -151,9 +158,61 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     }
   };
 
+  const loadEmailStatuses = async () => {
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/communications`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
+      for (const c of data.communications || []) {
+        if (c.invoice_id && !map[c.invoice_id]) {
+          map[c.invoice_id] = { delivery_status: c.delivery_status, delivered_at: c.delivered_at, opened_at: c.opened_at, open_count: c.open_count || 0, sent_at: c.sent_at };
+        }
+      }
+      setEmailStatuses(map);
+    } catch {}
+  };
+
   useEffect(() => {
     loadInvoices();
+    loadEmailStatuses();
   }, [orderCode]);
+
+  const handlePreviewPDF = async (invoiceId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        setPreviewUrl(window.URL.createObjectURL(blob));
+      }
+    } catch (e) {
+      console.error("Preview error:", e);
+    }
+  };
+
+  const closePreview = () => {
+    if (previewUrl) window.URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  };
+
+  const handleMarkProcessed = async (invoiceId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`/api/finances/invoices/${invoiceId}/process`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ processed: true }),
+      });
+      if (res.ok) loadInvoices();
+    } catch (e) {
+      console.error("Process error:", e);
+    }
+  };
 
   const closeActionsModal = () => setOpenActionsInvoiceId(null);
 
@@ -783,7 +842,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   return (
     <div className="space-y-4 relative">
       {cancelConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title">
           <div ref={cancelTrapRef} className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
             <p id="cancel-invoice-title" className="text-gray-900 mb-4">{cancelConfirm.message}</p>
             <div className="flex justify-end gap-2">
@@ -807,7 +866,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       )}
       {editingLinesInvoice && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-invoice-title"
@@ -1038,7 +1097,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       )}
 
       {emailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40">
           <div
             ref={emailTrapRef}
             className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
@@ -1238,14 +1297,16 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse table-fixed">
             <colgroup>
-              <col className="w-[60px]" />
-              <col className="w-[150px]" />
-              <col className="w-[120px]" />
-              <col className="w-[80px]" />
+              <col className="w-[55px]" />
+              <col className="w-[140px]" />
+              <col className="w-[110px]" />
+              <col className="w-[75px]" />
+              <col className="w-[65px]" />
+              <col className="w-[75px]" />
               <col className="w-[70px]" />
+              <col className="w-[150px]" />
               <col className="w-[80px]" />
-              <col className="w-[80px]" />
-              <col className="w-[170px]" />
+              <col className="w-[90px]" />
               <col className="w-[85px]" />
             </colgroup>
             <thead>
@@ -1259,6 +1320,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 <th className="text-center py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.status")}</th>
                 <th className="text-left py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.dueSchedule")}</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.invoiceDate")}</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Email</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1344,6 +1407,67 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                           })()}
                         </td>
                         <td className="py-2 px-3 text-center text-gray-600">{formatDate(invoice.invoice_date)}</td>
+                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          {(() => {
+                            const es = emailStatuses[invoice.id];
+                            if (!es) return <span className="text-gray-300">—</span>;
+                            const fmtDt = (s: string | null) => {
+                              if (!s) return "";
+                              const d = new Date(s);
+                              return `${formatDate(s)} ${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`;
+                            };
+                            if (es.opened_at) return (
+                              <div className="inline-flex flex-col items-center gap-0.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700"><Eye className="h-2.5 w-2.5" />Opened{es.open_count > 1 ? ` ${es.open_count}×` : ""}</span>
+                                <span className="text-[9px] text-gray-400">{fmtDt(es.opened_at)}</span>
+                              </div>
+                            );
+                            if (es.delivered_at || es.delivery_status === "delivered") return (
+                              <div className="inline-flex flex-col items-center gap-0.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700"><CheckCheck className="h-2.5 w-2.5" />Delivered</span>
+                                <span className="text-[9px] text-gray-400">{fmtDt(es.delivered_at || es.sent_at)}</span>
+                              </div>
+                            );
+                            if (es.delivery_status === "bounced") return <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700">✕ Bounced</span>;
+                            return (
+                              <div className="inline-flex flex-col items-center gap-0.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600"><Send className="h-2.5 w-2.5" />Sent</span>
+                                <span className="text-[9px] text-gray-400">{fmtDt(es.sent_at)}</span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handlePreviewPDF(invoice.id)}
+                              className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Preview PDF"
+                            >
+                              <FileDown size={14} />
+                            </button>
+                            {invoice.status === "processed" ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-purple-600 bg-purple-50" title="Processed by Finance">
+                                <CheckCircle size={11} />
+                              </span>
+                            ) : invoice.status !== "cancelled" && isFinance ? (
+                              <button
+                                onClick={() => {
+                                  if (!confirm(`Mark invoice ${invoice.invoice_number} as processed?`)) return;
+                                  handleMarkProcessed(invoice.id);
+                                }}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                                  invoice.status === "amended"
+                                    ? "text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100"
+                                    : "text-gray-600 border-gray-300 bg-white hover:bg-green-50 hover:text-green-700 hover:border-green-400"
+                                }`}
+                                title={invoice.status === "amended" ? "Re-process" : "Mark as processed"}
+                              >
+                                {invoice.status === "amended" ? "Re-process" : "Process"}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1359,7 +1483,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         if (!invoice) return null;
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50"
             role="dialog"
             aria-modal="true"
             aria-labelledby="invoice-actions-title"
@@ -1456,6 +1580,20 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
           </div>
         );
       })()}
+      {previewUrl && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50" style={{ zIndex: 999999 }} onClick={closePreview}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[90vw] max-w-4xl h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Invoice Preview</h3>
+              <button onClick={closePreview} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <iframe src={previewUrl} className="flex-1 w-full" title="Invoice Preview" />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

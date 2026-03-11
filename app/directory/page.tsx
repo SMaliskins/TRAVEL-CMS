@@ -766,7 +766,7 @@ export default function DirectoryPage() {
 
         {/* Import CSV Modal */}
         {showImportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
             <div ref={importTrapRef} className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
               <h3 className="mb-2 text-lg font-semibold text-gray-900">Import Contacts from CSV</h3>
               <p className="mb-4 text-sm text-gray-600">

@@ -142,7 +142,11 @@ export async function PATCH(request: NextRequest) {
       "resend_api_key",
       "email_domain_verified",
       // Concierge
-      "concierge_hotel_markup"
+      "concierge_hotel_markup",
+      // Dashboard targets
+      "target_profit_monthly",
+      "target_revenue_monthly",
+      "target_orders_monthly"
     ];
 
     const updateData: Record<string, unknown> = {

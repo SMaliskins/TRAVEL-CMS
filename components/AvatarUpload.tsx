@@ -153,7 +153,7 @@ export default function AvatarUpload({
       {/* Modal: view photo with Edit & Delete */}
       {showModal && avatarUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md"
+          className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/65 backdrop-blur-md"
           onClick={() => !showDeleteConfirm && setShowModal(false)}
         >
           <div

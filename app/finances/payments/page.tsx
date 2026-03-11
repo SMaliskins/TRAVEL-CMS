@@ -170,21 +170,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t(lang, "payments.title")}</h1>
-          <p className="text-sm text-gray-600 mt-1">{t(lang, "payments.subtitle")}</p>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        >
-          + {t(lang, "payments.addPayment")}
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1.5">
           <span className="text-sm text-gray-700 mr-1">{t(lang, "payments.method")}:</span>
           <button
@@ -238,10 +224,17 @@ export default function PaymentsPage() {
           endDate={filterDateTo}
           dropdownAlign="left"
         />
+        <div className="ml-auto">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          >
+            + {t(lang, "payments.addPayment")}
+          </button>
+        </div>
       </div>
 
-      {/* Summary */}
-      <div className="mb-4 flex items-center gap-4">
+      <div className="mb-3 flex items-center gap-4">
         <span className="text-sm text-gray-600">
           {t(lang, "payments.total")}: <strong className="text-gray-900">{payments.length}</strong> {t(lang, "payments.paymentsCount")}
         </span>
