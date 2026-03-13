@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { provisionCompanyDatabase, suspendCompanyDatabase } from "@/lib/supabase/provisioning";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -80,7 +81,6 @@ export async function POST(request: NextRequest) {
             })
             .eq("id", existing.id);
         } else {
-          // Check if company has existing subscription (e.g. Free)
           const { data: existingSub } = await supabaseAdmin
             .from("company_subscriptions")
             .select("id")
@@ -112,6 +112,41 @@ export async function POST(request: NextRequest) {
               current_period_start: currentPeriodStart.toISOString(),
               current_period_end: currentPeriodEnd.toISOString(),
             });
+          }
+        }
+
+        // Auto-provision dedicated Supabase database if tariff requires it
+        const tariffPlanId = session.metadata?.tariff_plan_id;
+        if (tariffPlanId && companyId) {
+          const { data: tariff } = await supabaseAdmin
+            .from("tariff_plans")
+            .select("slug, supabase_plan")
+            .eq("id", tariffPlanId)
+            .single();
+
+          if (tariff && tariff.slug !== "starter") {
+            const { data: companyCheck } = await supabaseAdmin
+              .from("companies")
+              .select("supabase_configured, supabase_status, name")
+              .eq("id", companyId)
+              .single();
+
+            if (companyCheck && !companyCheck.supabase_configured) {
+              await supabaseAdmin
+                .from("companies")
+                .update({
+                  tariff_plan_id: tariffPlanId,
+                  stripe_customer_id: customerId,
+                  stripe_subscription_id: subscriptionId,
+                  subscription_status: "active",
+                  subscription_expires_at: currentPeriodEnd.toISOString(),
+                })
+                .eq("id", companyId);
+
+              provisionCompanyDatabase(companyId, companyCheck.name, "eu-central-1")
+                .then(() => console.log(`[Stripe Webhook] Database provisioned for company ${companyId}`))
+                .catch((err) => console.error(`[Stripe Webhook] Provisioning failed for ${companyId}:`, err));
+            }
           }
         }
         break;
@@ -168,13 +203,64 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subscriptionId);
+
+        // Suspend the dedicated database when subscription is cancelled
+        const { data: affectedCompany } = await supabaseAdmin
+          .from("companies")
+          .select("id, supabase_configured")
+          .eq("stripe_subscription_id", subscriptionId)
+          .single();
+
+        if (affectedCompany?.supabase_configured) {
+          await supabaseAdmin
+            .from("companies")
+            .update({ subscription_status: "cancelled" })
+            .eq("id", affectedCompany.id);
+
+          suspendCompanyDatabase(affectedCompany.id)
+            .then(() => console.log(`[Stripe Webhook] Database suspended for company ${affectedCompany.id}`))
+            .catch((err) => console.error(`[Stripe Webhook] Suspend failed for ${affectedCompany.id}:`, err));
+        }
         break;
       }
 
-      case "invoice.paid":
-      case "invoice.payment_failed":
-        // Optional: log or send notifications
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const paidSubId = invoice.subscription as string;
+        if (paidSubId) {
+          const { data: paidCompany } = await supabaseAdmin
+            .from("companies")
+            .select("id")
+            .eq("stripe_subscription_id", paidSubId)
+            .single();
+          if (paidCompany) {
+            await supabaseAdmin
+              .from("companies")
+              .update({ subscription_status: "active" })
+              .eq("id", paidCompany.id);
+          }
+        }
         break;
+      }
+
+      case "invoice.payment_failed": {
+        const failedInvoice = event.data.object as Stripe.Invoice;
+        const failedSubId = failedInvoice.subscription as string;
+        if (failedSubId) {
+          const { data: failedCompany } = await supabaseAdmin
+            .from("companies")
+            .select("id")
+            .eq("stripe_subscription_id", failedSubId)
+            .single();
+          if (failedCompany) {
+            await supabaseAdmin
+              .from("companies")
+              .update({ subscription_status: "past_due" })
+              .eq("id", failedCompany.id);
+          }
+        }
+        break;
+      }
 
       default:
         // Unhandled event type

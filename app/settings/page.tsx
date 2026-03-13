@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Brain } from "lucide-react";
+import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Brain, Database } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { t } from "@/lib/i18n";
@@ -14,6 +14,7 @@ const SETTINGS_SECTIONS = [
   { nameKey: "settings.travelServices", descKey: "settings.travelServicesDesc", href: "/settings/travel-services", icon: Plane, minRole: "agent" },
   { nameKey: "settings.accessibility", descKey: "settings.accessibilityDesc", href: "/settings/accessibility", icon: Type },
   { nameKey: "settings.aiParsing", descKey: "settings.aiParsingDesc", href: "/settings/ai-parsing", icon: Brain, minRole: "supervisor" },
+  { nameKey: "settings.database", descKey: "settings.databaseDesc", href: "/settings/database", icon: Database, minRole: "supervisor" },
 ];
 
 const ROLE_LEVEL: Record<string, number> = { subagent: 1, agent: 2, finance: 3, manager: 4, supervisor: 5 };

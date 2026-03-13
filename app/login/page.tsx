@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 import { Plane, Eye, EyeOff, Loader2 } from "lucide-react";
 
 const LOGIN_VIDEOS = [
@@ -49,21 +50,46 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      // Resolve which Supabase to authenticate against
+      const resolveRes = await fetch("/api/auth/resolve-company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
 
-    setLoading(false);
+      const resolved = await resolveRes.json();
 
-    if (error) {
-      setError(error.message === "Invalid login credentials"
-        ? "Invalid email or password"
-        : error.message);
-      return;
+      if (resolved.suspended) {
+        setError(resolved.message || "Account suspended");
+        setLoading(false);
+        return;
+      }
+
+      let authClient = supabase;
+
+      if (resolved.dedicated && resolved.supabaseUrl && resolved.supabaseAnonKey) {
+        authClient = createClient(resolved.supabaseUrl, resolved.supabaseAnonKey);
+      }
+
+      const { error: authError } = await authClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) {
+        setError(authError.message === "Invalid login credentials"
+          ? "Invalid email or password"
+          : authError.message);
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch {
+      setError("Login failed. Please try again.");
+      setLoading(false);
     }
-
-    router.push("/dashboard");
   };
 
   const [mounted, setMounted] = useState(false);
