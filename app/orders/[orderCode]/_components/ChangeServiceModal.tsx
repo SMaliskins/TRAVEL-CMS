@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { FlightSegment } from '@/components/FlightItineraryInput';
 import { parseFlightBooking, getAirportTimezoneOffset } from '@/lib/flights/airlineParsers';
-import { getCityByIATA } from '@/lib/data/cities';
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
@@ -74,6 +73,8 @@ export default function ChangeServiceModal({
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [parseSuccess, setParseSuccess] = useState(false);
+  const [showParsedBanner, setShowParsedBanner] = useState(false);
+  const parseSourceTextRef = useRef<string>("");
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -111,24 +112,25 @@ export default function ChangeServiceModal({
   // Apply segments to form (shared by AI and regex) — route with full city names: "date city - city / date city - city"
   const applySegments = useCallback((segments: FlightSegment[], booking: Record<string, unknown>) => {
     setNewSegments(segments);
+    const fallbackDate = segments[0]?.departureDate || "";
+    const enriched = segments.map((seg, i) => {
+      if (seg.departureDate) return seg;
+      const prev = (i > 0 ? segments[i - 1]?.departureDate : null) || fallbackDate;
+      return { ...seg, departureDate: prev };
+    });
     const groupedByDate: Record<string, FlightSegment[]> = {};
-    segments.forEach((seg) => {
+    enriched.forEach((seg) => {
       const date = seg.departureDate || "unknown";
       if (!groupedByDate[date]) groupedByDate[date] = [];
       groupedByDate[date].push(seg);
     });
-    const resolveCity = (code: string, cityName?: string): string => {
-      if (cityName?.trim()) return cityName.trim();
-      if (!code) return "";
-      return getCityByIATA(code)?.name || code;
-    };
     const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
       const dateStr = formatDateShort(segs[0]?.departureDate || "");
-      const cities = [
-        resolveCity(segs[0].departure, segs[0].departureCity),
-        ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
-      ].filter(Boolean);
-      const routeStr = cities.join(" - ");
+      const codes = [
+        segs[0].departure || "",
+        ...segs.map(s => s.arrival || ""),
+      ].filter(Boolean).map(c => c.toUpperCase());
+      const routeStr = codes.join("-");
       return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
     });
     setNewServiceName(routeParts.join(" / "));
@@ -155,6 +157,7 @@ export default function ChangeServiceModal({
     setParseError(null);
     setParseSuccess(false);
     const text = pasteInput.trim();
+    parseSourceTextRef.current = text;
 
     // Try regex first — deterministic and instant
     const result = parseFlightBooking(text);
@@ -185,6 +188,7 @@ export default function ChangeServiceModal({
         cabinClass: result.booking.cabinClass,
         baggage: result.booking.baggage,
       });
+      setShowParsedBanner(true);
       setIsParsing(false);
       return;
     }
@@ -204,6 +208,7 @@ export default function ChangeServiceModal({
       
       if (res.ok && data.segments?.length > 0) {
         applySegments(data.segments, data.booking || {});
+        setShowParsedBanner(true);
         return;
       }
     } catch (e) {
@@ -215,7 +220,48 @@ export default function ChangeServiceModal({
     setParseError('Could not parse flight data. Please check the format.');
   }, [pasteInput, applySegments]);
   
-  // Handle file drop
+  const autoParseText = useCallback(async (text: string) => {
+    parseSourceTextRef.current = text;
+    setIsParsing(true);
+    setParseError(null);
+    setParseSuccess(false);
+    try {
+      const result = parseFlightBooking(text);
+      if (result && result.segments.length > 0) {
+        const segments: FlightSegment[] = result.segments.map(seg => ({
+          id: crypto.randomUUID(),
+          flightNumber: seg.flightNumber, airline: seg.airline,
+          departure: seg.departure || "", departureCity: seg.departureCity,
+          arrival: seg.arrival || "", arrivalCity: seg.arrivalCity,
+          departureDate: seg.departureDate || "", departureTimeScheduled: seg.departureTimeScheduled || "",
+          arrivalDate: seg.arrivalDate || "", arrivalTimeScheduled: seg.arrivalTimeScheduled || "",
+          departureTerminal: seg.departureTerminal, arrivalTerminal: seg.arrivalTerminal,
+          duration: seg.duration, cabinClass: seg.cabinClass,
+          baggage: seg.baggage, bookingRef: seg.bookingRef, ticketNumber: seg.ticketNumber,
+          departureStatus: "scheduled", arrivalStatus: "scheduled",
+        }));
+        applySegments(segments, { cabinClass: result.booking.cabinClass, baggage: result.booking.baggage });
+        setShowParsedBanner(true);
+        return;
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/ai/parse-flight-itinerary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ text }),
+      });
+      const aiData = await res.json();
+      if (res.ok && aiData.segments?.length > 0) {
+        applySegments(aiData.segments, aiData.booking || {});
+        setShowParsedBanner(true);
+        return;
+      }
+    } catch (e) { console.error("AI flight parse error:", e); } finally { setIsParsing(false); }
+    setPasteInput(text);
+    setParseError('Could not parse flight data. Please check the format.');
+  }, [applySegments]);
+
+  // Handle file drop (PDF, TXT, EML)
   const handleFileDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -224,11 +270,24 @@ export default function ChangeServiceModal({
     if (!files || files.length === 0) return;
     
     const file = files[0];
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith('.pdf')) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch('/api/parse-pdf', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) { setParseError(data?.error || 'Failed to read PDF.'); return; }
+        const extractedText = (data.text || '').trim();
+        if (!extractedText) { setParseError('PDF is empty or could not be read.'); return; }
+        await autoParseText(extractedText);
+      } catch { setParseError('Failed to read PDF. Try copying text manually.'); }
+    } else if (fileName.endsWith('.txt') || fileName.endsWith('.eml')) {
       const text = await file.text();
-      setPasteInput(text);
+      if (text.trim()) await autoParseText(text.trim());
     }
-  }, []);
+  }, [autoParseText]);
   
   // Toggle segment selection
   const toggleSegmentSelection = (segmentId: string) => {
@@ -462,6 +521,20 @@ export default function ChangeServiceModal({
         throw new Error(errData.error || 'Failed to create change service');
       }
       
+      // Save corrected parse template if text was parsed
+      if (parseSourceTextRef.current && newSegments.length > 0) {
+        const { data: { session: s2 } } = await supabase.auth.getSession();
+        fetch("/api/ai/save-parse-template", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}) },
+          body: JSON.stringify({
+            text: parseSourceTextRef.current,
+            segments: newSegments,
+            booking: { cabinClass: newCabinClass, baggage: newBaggage },
+          }),
+        }).catch(() => {});
+        parseSourceTextRef.current = "";
+      }
       onChangeConfirmed();
       onClose();
     } catch (err) {
@@ -598,6 +671,14 @@ export default function ChangeServiceModal({
             </div>
           )}
           
+          {/* Parse verification banner */}
+          {showParsedBanner && newSegments.length > 0 && (
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              <span>📋 Please verify all parsed fields. Corrections will be saved and improve future parsing.</span>
+              <button type="button" onClick={() => setShowParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold ml-2 shrink-0">&times;</button>
+            </div>
+          )}
+
           {/* New Flight Preview */}
           {newSegments.length > 0 && selectedSegmentIds.size > 0 && (
             <div className="p-3 bg-green-50 rounded-lg border border-green-200">

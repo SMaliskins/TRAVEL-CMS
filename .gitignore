@@ -44,6 +44,7 @@ venv/
 *.bak
 
 # Exclude large/optional videos from repo (>100MB GitHub limit)
+Vid/
 public/Vid/DNK.mp4
 public/Vid/11910917_1920_1080_24fps.mp4
 

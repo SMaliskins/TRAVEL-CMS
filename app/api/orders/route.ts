@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 // Placeholder URLs for build-time
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
@@ -91,13 +92,20 @@ export async function GET(request: NextRequest) {
     const orderType = searchParams.get("order_type");
     const search = searchParams.get("search");
 
+    // Check role for subagent scope
+    const apiUser = await getApiUser(request);
+    const isSubagent = apiUser?.role === "subagent";
+
     // Build query - only select columns that definitely exist
-    // client_display_name and countries_cities may not exist in all deployments
     let query = supabaseAdmin
       .from("orders")
       .select("id, order_code, order_number, client_display_name, countries_cities, date_from, date_to, amount_total, amount_paid, profit_estimated, status, order_type, owner_user_id, manager_user_id, created_at, updated_at, client_payment_due_date")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
+
+    if (isSubagent) {
+      query = query.or(`owner_user_id.eq.${user.id},manager_user_id.eq.${user.id}`);
+    }
 
     // Apply filters
     if (status) {

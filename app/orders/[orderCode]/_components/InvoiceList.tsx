@@ -950,7 +950,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                             value={item.service_name}
                             onChange={(e) => updateEditingItem(item.id, { service_name: e.target.value })}
                             className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                            placeholder="Напр. Flight: Riga - Zurich - Riga или свой текст"
+                            placeholder="e.g. Flight: Riga - Zurich - Riga or custom text"
                           />
                         </td>
                         <td className="py-2 px-3 align-top">

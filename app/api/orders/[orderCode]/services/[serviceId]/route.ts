@@ -381,7 +381,8 @@ export async function PATCH(
 
 /**
  * DELETE /api/orders/[orderCode]/services/[serviceId]
- * Delete a service
+ * Delete a service (Supervisor only). Removes linked invoice_items first
+ * (ON DELETE RESTRICT), then deletes the service. Other FKs use CASCADE/SET NULL.
  */
 export async function DELETE(
   request: NextRequest,
@@ -390,7 +391,6 @@ export async function DELETE(
   try {
     const { orderCode, serviceId } = await params;
 
-    // Get order by code
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .select("id")
@@ -404,7 +404,24 @@ export async function DELETE(
       );
     }
 
-    // Delete service
+    // Remove invoice_items referencing this service (FK is ON DELETE RESTRICT)
+    const { error: iiError } = await supabaseAdmin
+      .from("invoice_items")
+      .delete()
+      .eq("service_id", serviceId);
+
+    if (iiError) {
+      console.error("Delete invoice_items for service error:", iiError);
+    }
+
+    // Unlink child services that reference this as parent (ON DELETE SET NULL handled by DB,
+    // but explicit clear avoids edge cases)
+    await supabaseAdmin
+      .from("order_services")
+      .update({ parent_service_id: null })
+      .eq("parent_service_id", serviceId);
+
+    // Delete the service (order_service_travellers, embeddings = CASCADE; communications = SET NULL)
     const { error: deleteError } = await supabaseAdmin
       .from("order_services")
       .delete()

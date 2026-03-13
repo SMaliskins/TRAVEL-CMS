@@ -1,6 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import { ChevronDown, Users, Building2 } from "lucide-react";
+
+export interface AgentTarget {
+  id: string;
+  name: string;
+  profit: number;
+}
 
 interface TargetSpeedometerProps {
   current: number;
@@ -9,20 +16,30 @@ interface TargetSpeedometerProps {
   label?: string;
   message?: string;
   className?: string;
+  agents?: AgentTarget[];
+  showAgentSelector?: boolean;
 }
 
 export default function TargetSpeedometer({
   current,
   target,
   vat,
-  label = "Monthly Target",
+  label = "Target",
   message = "Keep pushing forward!",
   className = "",
+  agents,
+  showAgentSelector = false,
 }: TargetSpeedometerProps) {
-  const percentage = target > 0 ? (current / target) * 100 : 0;
+  const [view, setView] = useState<"company" | "agents" | string>("company");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const isAgentView = view !== "company" && view !== "agents";
+  const selectedAgent = isAgentView ? agents?.find((a) => a.id === view) : null;
+
+  const displayCurrent = selectedAgent ? selectedAgent.profit : current;
+  const percentage = target > 0 ? (displayCurrent / target) * 100 : 0;
   const displayPercentage = Math.min(percentage, 100);
 
-  // Stars derived from percentage: 1 star per 20% achieved
   const stars = target > 0
     ? Math.min(5, Math.max(0, Math.ceil(percentage / 20)))
     : 0;
@@ -38,19 +55,65 @@ export default function TargetSpeedometer({
   const getMotivationalMessage = () => {
     if (target <= 0) return "Set target in Settings";
     if (percentage >= 100) {
-      const overPct = Math.round(percentage - 100);
-      return `+${overPct}% over target!`;
+      return `+${Math.round(percentage - 100)}% over target!`;
     }
     return message;
   };
 
   const barColor = getColor(percentage);
+  const viewLabel = view === "company"
+    ? "Company"
+    : view === "agents"
+      ? "All Agents"
+      : selectedAgent?.name || "Agent";
 
   return (
     <div className={`booking-glass-panel p-5 flex flex-col justify-between h-full ${className}`}>
       <div className="flex justify-between items-start mb-2">
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{label}</h3>
-        {target > 0 && (
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{label}</h3>
+          {showAgentSelector && agents && agents.length > 0 && (
+            <div className="relative mt-0.5">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-500 transition-colors"
+              >
+                {view === "company" ? <Building2 size={9} /> : <Users size={9} />}
+                <span className={view !== "company" ? "text-blue-500 font-medium" : ""}>
+                  {viewLabel}
+                </span>
+                <ChevronDown size={8} />
+              </button>
+              {dropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-50 min-w-[180px] max-h-[240px] overflow-y-auto">
+                  <button
+                    onClick={() => { setView("company"); setDropdownOpen(false); }}
+                    className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 flex items-center gap-2 ${view === "company" ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
+                  >
+                    <Building2 size={11} /> Company Total
+                  </button>
+                  <button
+                    onClick={() => { setView("agents"); setDropdownOpen(false); }}
+                    className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 flex items-center gap-2 ${view === "agents" ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
+                  >
+                    <Users size={11} /> All Agents
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
+                  {agents.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => { setView(a.id); setDropdownOpen(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${view === a.id ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
+                    >
+                      {a.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {target > 0 && view !== "agents" && (
           <div className="flex gap-0.5">
             {[1, 2, 3, 4, 5].map((s) => (
               <svg key={s} xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 ${s <= stars ? "fill-yellow-400 text-yellow-400" : "fill-gray-200 text-gray-200"}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
@@ -61,31 +124,63 @@ export default function TargetSpeedometer({
         )}
       </div>
 
-      <div className="mt-1">
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-gray-900">€{current.toLocaleString()}</span>
-          <span className="text-xs font-medium text-gray-500">/ €{target.toLocaleString()}</span>
+      {view === "agents" ? (
+        <div className="flex-1 overflow-y-auto -mx-1 mt-1" style={{ maxHeight: "140px" }}>
+          {agents!.map((a) => {
+            const agentPct = target > 0 ? (a.profit / target) * 100 : 0;
+            const agentBarPct = Math.min(agentPct, 100);
+            const agentColor = getColor(agentPct);
+            return (
+              <button
+                key={a.id}
+                onClick={() => setView(a.id)}
+                className="w-full px-2 py-1 hover:bg-gray-50 rounded text-left"
+              >
+                <div className="flex justify-between items-baseline text-[11px]">
+                  <span className="font-medium text-gray-700 truncate mr-2">{a.name}</span>
+                  <span className="text-gray-500 flex-shrink-0">
+                    €{a.profit.toLocaleString()} <span className="text-gray-400">({Math.round(agentPct)}%)</span>
+                  </span>
+                </div>
+                <div className="mt-0.5 w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-1.5 rounded-full bg-gradient-to-r ${agentColor} transition-all duration-500`}
+                    style={{ width: `${agentBarPct}%` }}
+                  />
+                </div>
+              </button>
+            );
+          })}
         </div>
-        {vat !== undefined && vat > 0 && (
-          <div className="mt-0.5 text-xs text-gray-500">
-            VAT: €{vat.toLocaleString()}
+      ) : (
+        <>
+          <div className="mt-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-gray-900">€{displayCurrent.toLocaleString()}</span>
+              <span className="text-xs font-medium text-gray-500">/ €{target.toLocaleString()}</span>
+            </div>
+            {vat !== undefined && vat > 0 && !isAgentView && (
+              <div className="mt-0.5 text-xs text-gray-500">
+                excl. VAT: €{vat.toLocaleString()}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="mt-4 w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-        <div
-          className={`h-2.5 rounded-full bg-gradient-to-r ${barColor} shadow-inner transition-all duration-1000 ease-out`}
-          style={{ width: `${displayPercentage}%` }}
-        />
-      </div>
+          <div className="mt-4 w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+            <div
+              className={`h-2.5 rounded-full bg-gradient-to-r ${barColor} shadow-inner transition-all duration-1000 ease-out`}
+              style={{ width: `${displayPercentage}%` }}
+            />
+          </div>
 
-      <div className="mt-3 flex justify-between items-center text-xs">
-        <span className="font-semibold text-gray-700">{Math.round(percentage)}% achieved</span>
-        <span className={`font-medium ${percentage >= 100 ? "text-emerald-600" : "text-gray-500"}`}>
-          {getMotivationalMessage()}
-        </span>
-      </div>
+          <div className="mt-3 flex justify-between items-center text-xs">
+            <span className="font-semibold text-gray-700">{Math.round(percentage)}% achieved</span>
+            <span className={`font-medium ${percentage >= 100 ? "text-emerald-600" : "text-gray-500"}`}>
+              {getMotivationalMessage()}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

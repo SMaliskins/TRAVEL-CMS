@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -1016,6 +1017,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (apiUser.role === "subagent") {
+      return NextResponse.json({ error: "Forbidden: subagents cannot delete directory records" }, { status: 403 });
+    }
 
     const user = await getCurrentUser(request);
     if (!user) {

@@ -150,6 +150,7 @@ interface TimelineService {
   supplier?: string;
   resStatus: string;
   refNr?: string; // Booking reference
+  bookingRefs?: { ref: string; ticketNumbers?: TicketNumber[] }[];
   hotelName?: string; // Tour Package hotel
   hotelAddress?: string;
   hotelPhone?: string;
@@ -261,6 +262,7 @@ interface TimelineEvent {
   arrivalDate?: string; // YYYY-MM-DD for schedule card
   // Client info for flights
   bookingRef?: string;
+  bookingRefs?: { ref: string; ticketNumbers?: TicketNumber[] }[];
   ticketNumbers?: TicketNumber[];
   checkinUrl?: string;
   checkinAvailable?: boolean;
@@ -458,6 +460,16 @@ function mergeDuplicateServices(services: TimelineService[], travellers: Travell
         ...(service.assignedTravellerIds || []),
       ]);
       existing.assignedTravellerIds = Array.from(merged);
+      // Collect additional booking refs before merging ticket numbers
+      if (service.refNr && service.refNr !== existing.refNr) {
+        if (!existing.bookingRefs) {
+          existing.bookingRefs = [{ ref: existing.refNr || "", ticketNumbers: existing.ticketNumbers ? [...existing.ticketNumbers] : undefined }];
+        }
+        const alreadyHas = existing.bookingRefs.some(br => br.ref === service.refNr);
+        if (!alreadyHas) {
+          existing.bookingRefs.push({ ref: service.refNr, ticketNumbers: service.ticketNumbers ? [...service.ticketNumbers] : undefined });
+        }
+      }
       if (service.ticketNumbers?.length) {
         const seen = new Set(
           (existing.ticketNumbers || []).map((t) => `${t.clientId}|${t.ticketNr}`)
@@ -483,6 +495,9 @@ function mergeDuplicateServices(services: TimelineService[], travellers: Travell
       }
       if (service.category === "Hotel" && service.assignedTravellerIds?.length) {
         entry.hotelRooms = [[...service.assignedTravellerIds]];
+      }
+      if (service.category === "Flight" && service.refNr) {
+        entry.bookingRefs = [{ ref: service.refNr, ticketNumbers: service.ticketNumbers ? [...service.ticketNumbers] : undefined }];
       }
       groupMap.set(key, entry);
     }
@@ -583,8 +598,10 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
       if (service.flightSegments && service.flightSegments.length > 0) {
         for (const rawSeg of service.flightSegments) {
           const segment = normalizeSegment(rawSeg as unknown as Record<string, unknown>);
+          const depDate = segment.departureDate || service.dateFrom || "";
+          const arrDate = segment.arrivalDate || depDate;
           // Deduplication: parent (res_status changed) and Change service may share same segments
-          const segmentKey = `${segment.departureDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
+          const segmentKey = `${depDate}-${segment.departureTimeScheduled}-${segment.flightNumber}-${segment.departure}-${segment.arrival}`;
           if (seenSegmentKeys.has(segmentKey)) continue;
           seenSegmentKeys.add(segmentKey);
           // Parse time to get sortOrder (earlier flights first)
@@ -594,14 +611,17 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
           
           // Check if check-in is available for this segment
           let checkinAvailable = false;
-          if (segment.departureDate && segment.departureTimeScheduled && segment.flightNumber) {
-            const depDateTime = new Date(`${segment.departureDate}T${segment.departureTimeScheduled}`);
-            checkinAvailable = isCheckinAvailable(segment.flightNumber, depDateTime);
+          const depDateTimeStr = depDate && segment.departureTimeScheduled ? `${depDate}T${segment.departureTimeScheduled}` : "";
+          if (depDateTimeStr && segment.flightNumber) {
+            const depDateTime = new Date(depDateTimeStr);
+            if (!isNaN(depDateTime.getTime())) {
+              checkinAvailable = isCheckinAvailable(segment.flightNumber, depDateTime);
+            }
           }
           
           events.push({
             id: `${service.id}-${segment.id}`,
-            date: segment.departureDate,
+            date: depDate,
             type: 'flight',
             icon: flightIcon,
             title: `${segment.departure} → ${segment.arrival}`,
@@ -621,15 +641,16 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
             duration: segment.duration,
             cabinClass: segment.cabinClass,
             baggage: segment.baggage || service.baggage,
-            arrivalNextDay: segment.arrivalDate !== segment.departureDate,
-            arrivalDate: segment.arrivalDate,
+            arrivalNextDay: arrDate !== depDate,
+            arrivalDate: arrDate,
             // Client info
             bookingRef: service.refNr,
+            bookingRefs: service.bookingRefs,
             ticketNumbers: service.ticketNumbers,
             checkinUrl: getCheckinUrl(segment.flightNumber) || checkinUrl || undefined,
             checkinAvailable,
             // For countdown
-            departureDateTime: `${segment.departureDate}T${segment.departureTimeScheduled}`,
+            departureDateTime: depDateTimeStr || undefined,
             // For boarding passes
             serviceId: service.id,
             boardingPasses: service.boardingPasses,
@@ -666,6 +687,7 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
               departureTime: "",
               arrivalTime: "",
               bookingRef: service.refNr,
+              bookingRefs: service.bookingRefs,
               ticketNumbers: service.ticketNumbers,
               checkinUrl: checkinUrl || undefined,
               serviceId: service.id,
@@ -688,6 +710,7 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
             departureTime: "",
             arrivalTime: "",
             bookingRef: service.refNr,
+            bookingRefs: service.bookingRefs,
             ticketNumbers: service.ticketNumbers,
             checkinUrl: checkinUrl || undefined,
             serviceId: service.id,
@@ -948,10 +971,11 @@ function groupByDate(events: TimelineEvent[]): Record<string, TimelineEvent[]> {
   const groups: Record<string, TimelineEvent[]> = {};
   
   for (const event of events) {
-    if (!groups[event.date]) {
-      groups[event.date] = [];
+    const key = event.date || "unknown";
+    if (!groups[key]) {
+      groups[key] = [];
     }
-    groups[event.date].push(event);
+    groups[key].push(event);
   }
   
   // Sort events within each day
@@ -1172,8 +1196,9 @@ export default function ItineraryTimeline({
       <div className="p-3 space-y-3">
         {sortedDates.map((dateKey) => {
           const dayEvents = groupedByDate[dateKey];
-          const formattedDate = formatDateShort(dateKey);
-          const weekday = new Date(dateKey).toLocaleDateString("en-GB", { weekday: "short" });
+          const formattedDate = dateKey === "unknown" ? "—" : formatDateShort(dateKey);
+          const parsedDate = dateKey !== "unknown" ? new Date(dateKey + (dateKey.includes("T") ? "" : "T00:00:00")) : null;
+          const weekday = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toLocaleDateString("en-GB", { weekday: "short" }) : "—";
           
           return (
             <div key={dateKey} className="rounded-r-lg border-l-2 border-blue-200 bg-gray-50/50 pl-3 pr-3 pt-2 pb-2">
@@ -1357,34 +1382,62 @@ export default function ItineraryTimeline({
                         </div>
                         
                         {/* Right panel: same outline as flight card (rounded + border), no thick left stripe */}
-                        {(event.ticketNumbers && event.ticketNumbers.length > 0) || event.bookingRef || (event.assignedTravellerIds && event.assignedTravellerIds.length > 0) ? (
+                        {(event.ticketNumbers && event.ticketNumbers.length > 0) || event.bookingRef || (event.bookingRefs && event.bookingRefs.length > 0) || (event.assignedTravellerIds && event.assignedTravellerIds.length > 0) ? (
                           <div className="flex-1 min-w-0 flex flex-col items-end justify-center gap-2 pl-4 rounded-lg border border-sky-100 bg-white">
-                            {/* Row 1: PNR + passenger surname(s) */}
-                            <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
-                              {event.bookingRef && (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-gray-500">PNR</span>
-                                  <span className="font-mono text-xs font-semibold text-gray-800">{event.bookingRef}</span>
-                                  <CopyButton text={event.bookingRef} title="Copy PNR" />
-                                </div>
-                              )}
-                              {(() => {
-                                const surnames = event.ticketNumbers && event.ticketNumbers.length > 0
-                                  ? event.ticketNumbers.map(t => t.clientName.split(" ").pop()).filter(Boolean).join(", ")
-                                  : event.assignedTravellerIds && event.assignedTravellerIds.length > 0
-                                    ? event.assignedTravellerIds.map(tid => travellers.find(t => t.id === tid)?.lastName).filter(Boolean).join(", ")
-                                    : "";
-                                return surnames ? (
-                                  <>
-                                    {event.bookingRef && <span className="text-gray-300">|</span>}
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-xs text-gray-600">{surnames}</span>
-                                      <CopyButton text={surnames} title="Copy surname" />
-                                    </div>
-                                  </>
-                                ) : null;
-                              })()}
-                            </div>
+                            {/* PNR + passenger surname(s) — multiple rows if multiple bookings */}
+                            {event.bookingRefs && event.bookingRefs.length > 0 ? (
+                              event.bookingRefs.map((br, brIdx) => {
+                                const surnames = br.ticketNumbers && br.ticketNumbers.length > 0
+                                  ? br.ticketNumbers.map(t => t.clientName.split(" ").pop()).filter(Boolean).join(", ")
+                                  : "";
+                                return (
+                                  <div key={br.ref || brIdx} className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                                    {br.ref && (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs text-gray-500">PNR</span>
+                                        <span className="font-mono text-xs font-semibold text-gray-800">{br.ref}</span>
+                                        <CopyButton text={br.ref} title="Copy PNR" />
+                                      </div>
+                                    )}
+                                    {surnames && (
+                                      <>
+                                        {br.ref && <span className="text-gray-300">|</span>}
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-xs text-gray-600">{surnames}</span>
+                                          <CopyButton text={surnames} title="Copy surname" />
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                                {event.bookingRef && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-500">PNR</span>
+                                    <span className="font-mono text-xs font-semibold text-gray-800">{event.bookingRef}</span>
+                                    <CopyButton text={event.bookingRef} title="Copy PNR" />
+                                  </div>
+                                )}
+                                {(() => {
+                                  const surnames = event.ticketNumbers && event.ticketNumbers.length > 0
+                                    ? event.ticketNumbers.map(t => t.clientName.split(" ").pop()).filter(Boolean).join(", ")
+                                    : event.assignedTravellerIds && event.assignedTravellerIds.length > 0
+                                      ? event.assignedTravellerIds.map(tid => travellers.find(t => t.id === tid)?.lastName).filter(Boolean).join(", ")
+                                      : "";
+                                  return surnames ? (
+                                    <>
+                                      {event.bookingRef && <span className="text-gray-300">|</span>}
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs text-gray-600">{surnames}</span>
+                                        <CopyButton text={surnames} title="Copy surname" />
+                                      </div>
+                                    </>
+                                  ) : null;
+                                })()}
+                              </div>
+                            )}
                             {/* Row 2: BP checkboxes (all passes) + one +BP button for multiple files */}
                             {event.serviceId && ((event.ticketNumbers && event.ticketNumbers.length > 0) || (event.assignedTravellerIds && event.assignedTravellerIds.length > 0)) && (
                               <div className="flex items-center gap-2 justify-end flex-wrap">
@@ -1493,6 +1546,7 @@ export default function ItineraryTimeline({
                             {/* Row 3: status */}
                             {event.flightNumber && event.departureDateTime && (() => {
                               const depTime = new Date(event.departureDateTime).getTime();
+                              if (isNaN(depTime)) return null;
                               const now = Date.now();
                               const isPast = now > depTime;
                               if (isPast) {

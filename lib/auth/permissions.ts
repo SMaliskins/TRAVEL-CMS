@@ -299,7 +299,7 @@ export const ROLE_PERMISSIONS: Record<string, Record<string, "all" | "own" | "co
     "services.delete": false,
     "services.price.view": false,
     "services.margin.view": false,
-    "invoices.view": false,
+    "invoices.view": "own",
     "invoices.create": false,
     "invoices.edit": false,
     "invoices.send": false,

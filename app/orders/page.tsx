@@ -11,7 +11,7 @@ import { useTabs } from "@/contexts/TabsContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { getCityByName } from "@/lib/data/cities";
+import { getCityByName, loadWorldCities } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -316,6 +316,11 @@ function getCountryFlag(countryName: string): string | null {
   }
 }
 
+function toInitials(name: string): string {
+  if (!name) return "—";
+  return name.split(" ").map(w => w[0]).filter(Boolean).join("").toUpperCase();
+}
+
 function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
   if (!countriesCities) return <span className="text-gray-400">—</span>;
 
@@ -458,6 +463,8 @@ export default function OrdersPage() {
   const [dateSortAsc, setDateSortAsc] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [surnameInput, setSurnameInput] = useState(searchState.clientLastName || "");
+
+  useEffect(() => { loadWorldCities(); }, []);
 
   useEffect(() => {
     const createdFrom = urlSearchParams.get("createdFrom");
@@ -794,7 +801,7 @@ export default function OrdersPage() {
               <h1 className="text-2xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
               <button
                 onClick={() => router.push("/orders/new")}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <Plus size={16} strokeWidth={2} />
                 {t(lang, "orders.new")}
@@ -840,16 +847,16 @@ export default function OrdersPage() {
         <div className="sticky top-0 z-20 bg-gray-50 pb-2 -mb-2 -mt-4 pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
+            <h1 className="text-xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
             <button
               onClick={() => router.push("/orders/new")}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
             >
-              <Plus size={14} strokeWidth={2} />
+              <Plus size={15} strokeWidth={2} />
               {t(lang, "orders.new")}
             </button>
             {filteredOrders.length !== orders.length && (
-              <span className="text-xs text-gray-500 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+              <span className="text-sm text-gray-500 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                 {filteredOrders.length} / {orders.length}
               </span>
             )}
@@ -858,35 +865,35 @@ export default function OrdersPage() {
           <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
             <button
               onClick={() => setViewMode("list")}
-              className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm font-medium transition-colors ${
                 viewMode === "list"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              <List size={13} />
+              <List size={15} />
               List
             </button>
             <button
               onClick={() => setViewMode("calendar")}
-              className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm font-medium transition-colors ${
                 viewMode === "calendar"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              <CalendarDays size={13} />
+              <CalendarDays size={15} />
               Calendar
             </button>
           </div>
         </div>
 
         {/* Inline filter bar */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-3 py-2">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2.5">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Surname search */}
             <div className="relative">
-              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Client / Payer..."
@@ -895,7 +902,7 @@ export default function OrdersPage() {
                   setSurnameInput(e.target.value);
                   ordersSearchStore.setField("clientLastName", e.target.value);
                 }}
-                className="w-32 rounded border border-gray-300 pl-7 pr-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                className="w-36 rounded border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               />
             </div>
 
@@ -911,7 +918,7 @@ export default function OrdersPage() {
                 <button
                   key={opt.value}
                   onClick={() => setDateGroupMode(opt.value)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  className={`px-2 py-1 rounded text-sm font-medium transition-colors ${
                     dateGroupMode === opt.value
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-500 hover:text-gray-700"
@@ -925,12 +932,12 @@ export default function OrdersPage() {
             <span className="text-gray-300">|</span>
 
             {/* Agent */}
-            <div className="flex items-center gap-1">
-              <label className="text-[10px] text-gray-500 uppercase tracking-wide">Agent</label>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-gray-500 uppercase">Agent</label>
               <select
                 value={searchState.agentId}
                 onChange={(e) => ordersSearchStore.setField("agentId", e.target.value)}
-                className="rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               >
                 <option value="all">All</option>
                 {agents.map(a => (
@@ -942,12 +949,12 @@ export default function OrdersPage() {
             <span className="text-gray-300">|</span>
 
             {/* Status */}
-            <div className="flex items-center gap-1">
-              <label className="text-[10px] text-gray-500 uppercase tracking-wide">Status</label>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-gray-500 uppercase">Status</label>
               <select
                 value={searchState.status}
                 onChange={(e) => ordersSearchStore.setField("status", e.target.value)}
-                className="rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               >
                 <option value="all">All</option>
                 <option value="Draft">Draft</option>
@@ -962,9 +969,9 @@ export default function OrdersPage() {
             {activeFilterCount > 0 && (
               <button
                 onClick={clearAllFilters}
-                className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 transition-colors"
+                className="inline-flex items-center gap-0.5 rounded px-2 py-1 text-sm text-red-600 hover:bg-red-50 transition-colors"
               >
-                <X size={12} />
+                <X size={14} />
                 Clear ({activeFilterCount})
               </button>
             )}
@@ -1122,17 +1129,17 @@ export default function OrdersPage() {
               {/* Flat month-grouped view for Start date / End date */}
               {monthGroupedOrders && monthGroupedOrders.map((group) => (
                 <React.Fragment key={group.label}>
-                  <tr className="bg-gray-100 font-semibold">
-                    <td className="px-3 py-1 text-xs text-gray-900">{group.label}</td>
-                    <td className="px-1 py-1" colSpan={3}></td>
-                    <td className="px-3 py-1" colSpan={2}></td>
-                    <td className="px-3 py-1"></td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.amount)}</td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.paid)}</td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.debt)}</td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">{formatCurrency(group.totals.profit)}</td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-700">{formatCurrency(group.totals.vat)}</td>
-                    <td className="px-3 py-1" colSpan={3}></td>
+                  <tr className="bg-gray-100/80">
+                    <td className="px-1.5 py-0.5 text-sm font-bold text-gray-900">{group.label}</td>
+                    <td className="px-0.5 py-0.5" colSpan={3}></td>
+                    <td className="px-1.5 py-1" colSpan={2}></td>
+                    <td className="px-1.5 py-1"></td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.amount)}</td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.paid)}</td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.debt)}</td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.profit)}</td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-500">{formatCurrency(group.totals.vat)}</td>
+                    <td className="px-1.5 py-1" colSpan={3}></td>
                   </tr>
                   {group.orders.map((order) => {
                     const daysToDue = getDaysToDue(order.dueDate);
@@ -1140,43 +1147,43 @@ export default function OrdersPage() {
                     return (
                       <tr
                         key={`order-${order.orderId}`}
-                        className="cursor-pointer transition-colors hover:bg-blue-50"
+                        className="cursor-pointer transition-colors hover:bg-blue-50/60"
                         onClick={() => handleOrderClick(order)}
                         onKeyDown={(e) => handleOrderKeyDown(e, order)}
                         tabIndex={0}
                         role="button"
                         aria-label={`Open order ${order.orderId}`}
                       >
-                        <td className="whitespace-nowrap px-3 py-0.5 pl-6 text-xs font-medium text-gray-900">{order.orderId}</td>
-                        <td className="w-8 px-1 py-0.5 text-center">
-                          {order.hasInvoice && order.allServicesInvoiced && <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center"><FileCheck size={13} strokeWidth={1.8} className="text-green-600" /></span>}
-                          {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center"><FileMinus2 size={13} strokeWidth={1.8} className="text-amber-500" /></span>}
+                        <td className="whitespace-nowrap px-1.5 py-0.5 pl-5 text-sm text-gray-900">{order.orderId}</td>
+                        <td className="w-7 px-0.5 py-0.5 text-center">
+                          {order.hasInvoice && order.allServicesInvoiced && <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center"><FileCheck size={14} strokeWidth={1.8} className="text-green-600" /></span>}
+                          {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center"><FileMinus2 size={14} strokeWidth={1.8} className="text-amber-500" /></span>}
                         </td>
-                        <td className="w-8 px-1 py-0.5 text-center">
+                        <td className="w-7 px-0.5 py-0.5 text-center">
                           {paymentIcon && <span title={paymentIcon.tooltip} className="cursor-help inline-flex justify-center">{paymentIcon.icon}</span>}
                         </td>
-                        <td className="w-8 px-1 py-0.5 text-center text-xs">
+                        <td className="w-7 px-0.5 py-0.5 text-center text-sm">
                           {order.allInvoicesPaid || (order.debt <= 0 && order.amount > 0) ? (
-                            <span title={t(lang, "orders.paidShort")} className="inline-flex justify-center text-green-600"><Check size={13} strokeWidth={3} /></span>
+                            <span title={t(lang, "orders.paidShort")} className="inline-flex justify-center text-green-600"><Check size={14} strokeWidth={3} /></span>
                           ) : daysToDue !== null ? (
-                            <span className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`} title={t(lang, "orders.tooltipDueDate").replace("{date}", order.dueDate ?? "")}>
-                              {daysToDue < 0 && <CircleAlert size={11} strokeWidth={2} />}{daysToDue}
+                            <span className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "text-red-600" : "text-gray-600"}`} title={t(lang, "orders.tooltipDueDate").replace("{date}", order.dueDate ?? "")}>
+                              {daysToDue < 0 && <CircleAlert size={12} strokeWidth={2} />}{daysToDue}
                             </span>
                           ) : <span className="text-gray-400">-</span>}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{order.client}</td>
-                        <td className="px-3 py-0.5 text-xs text-gray-700 max-w-xs"><div className="truncate">{formatCountriesWithFlags(order.countriesCities)}</div></td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{formatDate(order.datesFrom)} - {formatDate(order.datesTo)}</td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">{formatCurrency(order.amount)}</td>
-                        <td className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01 ? "font-medium text-purple-700" : "text-gray-700"}`}>{formatCurrency(order.paid)}</td>
-                        <td className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${order.debt > 0 ? "font-medium text-orange-600" : "text-gray-700"}`}>{formatCurrency(order.debt)}</td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs font-semibold text-gray-900">{formatCurrency(order.profit)}</td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">{formatCurrency(order.vat ?? 0)}</td>
-                        <td className="w-8 px-1 py-0.5 text-center">
-                          {(() => { const colors = getStatusBadgeColor(order.status); const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`; return <span title={t(lang, statusKey)} className={`inline-block h-2 w-2 rounded-full ${colors.dot} cursor-help`} />; })()}
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-800">{order.client}</td>
+                        <td className="px-1.5 py-0.5 text-sm text-gray-700 max-w-xs"><div className="truncate">{formatCountriesWithFlags(order.countriesCities)}</div></td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">{formatDate(order.datesFrom)} — {formatDate(order.datesTo)}</td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-800">{formatCurrency(order.amount)}</td>
+                        <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01 ? "text-purple-700" : "text-gray-800"}`}>{formatCurrency(order.paid)}</td>
+                        <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.debt > 0 ? "text-orange-600" : "text-gray-600"}`}>{formatCurrency(order.debt)}</td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900">{formatCurrency(order.profit)}</td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-600">{formatCurrency(order.vat ?? 0)}</td>
+                        <td className="w-7 px-0.5 py-0.5 text-center">
+                          {(() => { const colors = getStatusBadgeColor(order.status); const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`; return <span title={t(lang, statusKey)} className={`inline-block h-2.5 w-2.5 rounded-full ${colors.dot} cursor-help`} />; })()}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{order.type}</td>
-                        <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">{order.owner}</td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">{order.type}</td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600" title={order.owner}>{toInitials(order.owner)}</td>
                       </tr>
                     );
                   })}
@@ -1191,31 +1198,31 @@ export default function OrdersPage() {
                     className="cursor-pointer bg-gray-100 font-semibold hover:bg-gray-200 transition-colors"
                     onClick={() => toggleYear(year.year)}
                   >
-                    <td className="px-3 py-1 text-xs text-gray-900">
-                      <span className="mr-1.5 inline-block text-[10px]">
+                    <td className="px-1.5 py-0.5 text-sm font-bold text-gray-900">
+                      <span className="mr-1.5 inline-block text-[11px]">
                         {isExpanded("year", year.year) ? "▾" : "▸"}
                       </span>
                       {year.year}
                     </td>
-                    <td className="px-1 py-1 text-xs text-gray-700" colSpan={3}></td>
-                    <td className="px-3 py-1 text-xs text-gray-700" colSpan={2}></td>
-                    <td className="px-3 py-1 text-xs text-gray-700"></td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
+                    <td className="px-0.5 py-0.5" colSpan={3}></td>
+                    <td className="px-1.5 py-1" colSpan={2}></td>
+                    <td className="px-1.5 py-1"></td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-gray-900">
                       {formatCurrency(year.totals.amount)}
                     </td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-gray-900">
                       {formatCurrency(year.totals.paid)}
                     </td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-gray-900">
                       {formatCurrency(year.totals.debt)}
                     </td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-gray-900">
                       {formatCurrency(year.totals.profit)}
                     </td>
-                    <td className="px-3 py-1 text-right text-xs font-semibold text-gray-700">
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-gray-700">
                       {formatCurrency(year.totals.vat)}
                     </td>
-                    <td className="px-3 py-1 text-xs text-gray-700" colSpan={3}></td>
+                    <td className="px-1.5 py-1" colSpan={3}></td>
                   </tr>
 
                   {/* Month rows */}
@@ -1226,31 +1233,31 @@ export default function OrdersPage() {
                           className="cursor-pointer bg-gray-50 font-medium hover:bg-gray-100 transition-colors"
                           onClick={() => toggleMonth(month.monthKey)}
                         >
-                          <td className="px-3 py-1 pl-7 text-xs text-gray-900">
-                            <span className="mr-1.5 inline-block text-[10px]">
+                          <td className="px-1.5 py-0.5 pl-7 text-sm font-semibold text-gray-900">
+                            <span className="mr-1.5 inline-block text-[11px]">
                               {isExpanded("month", month.monthKey) ? "▾" : "▸"}
                             </span>
                             {t(lang, `calendar.month.${parseInt(month.monthKey.split("-")[1], 10) - 1}`)}
                           </td>
-                          <td className="px-1 py-1 text-xs text-gray-700" colSpan={3}></td>
-                          <td className="px-3 py-1 text-xs text-gray-700" colSpan={2}></td>
-                          <td className="px-3 py-1 text-xs text-gray-700"></td>
-                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
+                          <td className="px-0.5 py-0.5" colSpan={3}></td>
+                          <td className="px-1.5 py-1" colSpan={2}></td>
+                          <td className="px-1.5 py-1"></td>
+                          <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-blue-700">
                             {formatCurrency(month.totals.amount)}
                           </td>
-                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
+                          <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-blue-700">
                             {formatCurrency(month.totals.paid)}
                           </td>
-                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
+                          <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-blue-700">
                             {formatCurrency(month.totals.debt)}
                           </td>
-                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
+                          <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-blue-700">
                             {formatCurrency(month.totals.profit)}
                           </td>
-                          <td className="px-3 py-1 text-right text-xs font-medium text-gray-700">
+                          <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-blue-500">
                             {formatCurrency(month.totals.vat)}
                           </td>
-                          <td className="px-3 py-1 text-xs text-gray-700" colSpan={3}></td>
+                          <td className="px-1.5 py-1" colSpan={3}></td>
                         </tr>
 
                         {/* Day rows */}
@@ -1261,35 +1268,35 @@ export default function OrdersPage() {
                                 className="cursor-pointer bg-gray-50 font-medium hover:bg-gray-100 transition-colors"
                                 onClick={() => toggleDay(day.dayKey)}
                               >
-                                <td className="px-3 py-1 pl-14 text-xs text-gray-900">
-                                  <span className="mr-1.5 inline-block text-[10px]">
+                                <td className="px-1.5 py-0.5 pl-14 text-sm font-medium text-gray-800">
+                                  <span className="mr-1.5 inline-block text-[11px]">
                                     {isExpanded("day", day.dayKey) ? "▾" : "▸"}
                                   </span>
                                   {day.dayLabel}
                                 </td>
-                                <td className="px-1 py-1 text-xs text-gray-700" colSpan={3}></td>
-                                <td className="px-3 py-1 text-xs text-gray-700" colSpan={2}></td>
-                                <td className="px-3 py-1 text-xs text-gray-700"></td>
-                                <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
+                                <td className="px-0.5 py-0.5" colSpan={3}></td>
+                                <td className="px-1.5 py-1" colSpan={2}></td>
+                                <td className="px-1.5 py-1"></td>
+                                <td className="px-1.5 py-0.5 text-right text-sm font-medium text-gray-900">
                                   {formatCurrency(day.totals.amount)}
                                 </td>
-                                <td className="px-3 py-1 text-right text-xs font-medium text-gray-900">
+                                <td className="px-1.5 py-0.5 text-right text-sm font-medium text-gray-900">
                                   {formatCurrency(day.totals.paid)}
                                 </td>
                                 <td
-                                  className={`px-3 py-1 text-right text-xs font-medium ${
+                                  className={`px-1.5 py-0.5 text-right text-sm font-medium ${
                                     day.totals.debt > 0 ? "text-red-600" : "text-gray-900"
                                   }`}
                                 >
                                   {formatCurrency(day.totals.debt)}
                                 </td>
-                                <td className="px-3 py-1 text-right text-xs font-semibold text-gray-900">
+                                <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-gray-900">
                                   {formatCurrency(day.totals.profit)}
                                 </td>
-                                <td className="px-3 py-1 text-right text-xs font-medium text-gray-700">
+                                <td className="px-1.5 py-0.5 text-right text-sm font-medium text-gray-700">
                                   {formatCurrency(day.totals.vat)}
                                 </td>
-                                <td className="px-3 py-1 text-xs text-gray-700" colSpan={3}></td>
+                                <td className="px-1.5 py-1" colSpan={3}></td>
                               </tr>
 
                               {/* Order rows */}
@@ -1302,31 +1309,31 @@ export default function OrdersPage() {
                                   return (
                                     <tr
                                       key={`order-${order.orderId}`}
-                                      className="cursor-pointer transition-colors hover:bg-blue-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-inset"
+                                      className="cursor-pointer transition-colors hover:bg-blue-50/60"
                                       onClick={() => handleOrderClick(order)}
                                       onKeyDown={(e) => handleOrderKeyDown(e, order)}
                                       tabIndex={0}
                                       role="button"
                                       aria-label={`Open order ${order.orderId}`}
                                     >
-                                      <td className="whitespace-nowrap px-3 py-0.5 pl-20 text-xs font-medium text-gray-900">
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 pl-20 text-sm text-gray-900">
                                         {order.orderId}
                                       </td>
                                       
-                                      <td className="w-8 px-1 py-0.5 text-center">
+                                      <td className="w-7 px-0.5 py-0.5 text-center">
                                         {order.hasInvoice && order.allServicesInvoiced && (
                                           <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center">
-                                            <FileCheck size={13} strokeWidth={1.8} className="text-green-600" />
+                                            <FileCheck size={14} strokeWidth={1.8} className="text-green-600" />
                                           </span>
                                         )}
                                         {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && (
                                           <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center">
-                                            <FileMinus2 size={13} strokeWidth={1.8} className="text-amber-500" />
+                                            <FileMinus2 size={14} strokeWidth={1.8} className="text-amber-500" />
                                           </span>
                                         )}
                                       </td>
                                       
-                                      <td className="w-8 px-1 py-0.5 text-center">
+                                      <td className="w-7 px-0.5 py-0.5 text-center">
                                         {paymentIcon && (
                                           <span title={paymentIcon.tooltip} className="cursor-help inline-flex justify-center">
                                             {paymentIcon.icon}
@@ -1334,17 +1341,17 @@ export default function OrdersPage() {
                                         )}
                                       </td>
                                       
-                                      <td className="w-8 px-1 py-0.5 text-center text-xs">
+                                      <td className="w-7 px-0.5 py-0.5 text-center text-sm">
                                         {order.allInvoicesPaid || (order.debt <= 0 && order.amount > 0) ? (
                                           <span title={t(lang, "orders.paidShort")} className="inline-flex justify-center text-green-600">
-                                            <Check size={13} strokeWidth={3} />
+                                            <Check size={14} strokeWidth={3} />
                                           </span>
                                         ) : daysToDue !== null ? (
                                           <span
-                                            className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "font-medium text-red-600" : "text-gray-700"}`}
+                                            className={`inline-flex items-center justify-center gap-0.5 ${daysToDue < 0 ? "text-red-600" : "text-gray-600"}`}
                                             title={t(lang, "orders.tooltipDueDate").replace("{date}", order.dueDate ?? "")}
                                           >
-                                            {daysToDue < 0 && <CircleAlert size={11} strokeWidth={2} />}
+                                            {daysToDue < 0 && <CircleAlert size={12} strokeWidth={2} />}
                                             {daysToDue}
                                           </span>
                                         ) : (
@@ -1352,59 +1359,59 @@ export default function OrdersPage() {
                                         )}
                                       </td>
                                       
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-800">
                                         {order.client}
                                       </td>
-                                      <td className="px-3 py-0.5 text-xs text-gray-700 max-w-xs" title={order.countriesCities}>
+                                      <td className="px-1.5 py-0.5 text-sm text-gray-700 max-w-xs" title={order.countriesCities}>
                                         <div className="truncate">
                                           {formatCountriesWithFlags(order.countriesCities)}
                                         </div>
                                       </td>
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">
-                                        {formatDate(order.datesFrom)} - {formatDate(order.datesTo)}
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">
+                                        {formatDate(order.datesFrom)} — {formatDate(order.datesTo)}
                                       </td>
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-800">
                                         {formatCurrency(order.amount)}
                                       </td>
-                                      <td className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${
+                                      <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${
                                         order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01
-                                          ? "font-medium text-purple-700"
-                                          : "text-gray-700"
+                                          ? "text-purple-700"
+                                          : "text-gray-800"
                                       }`}>
                                         {formatCurrency(order.paid)}
                                       </td>
                                       <td
-                                        className={`whitespace-nowrap px-3 py-0.5 text-right text-xs ${
+                                        className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${
                                           order.debt > 0
-                                            ? "font-medium text-orange-600"
-                                            : "text-gray-700"
+                                            ? "text-orange-600"
+                                            : "text-gray-600"
                                         }`}
                                       >
                                         {formatCurrency(order.debt)}
                                       </td>
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs font-semibold text-gray-900">
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900">
                                         {formatCurrency(order.profit)}
                                       </td>
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-right text-xs text-gray-700">
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-600">
                                         {formatCurrency(order.vat ?? 0)}
                                       </td>
-                                      <td className="w-8 px-1 py-0.5 text-center">
+                                      <td className="w-7 px-0.5 py-0.5 text-center">
                                         {(() => {
                                           const colors = getStatusBadgeColor(order.status);
                                           const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`;
                                           return (
                                             <span
                                               title={t(lang, statusKey)}
-                                              className={`inline-block h-2 w-2 rounded-full ${colors.dot} cursor-help`}
+                                              className={`inline-block h-2.5 w-2.5 rounded-full ${colors.dot} cursor-help`}
                                             />
                                           );
                                         })()}
                                       </td>
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700">
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">
                                         {order.type}
                                       </td>
-                                      <td className="whitespace-nowrap px-3 py-0.5 text-xs text-gray-700" title={`Owner: ${order.owner}`}>
-                                        {order.owner}
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600" title={order.owner}>
+                                        {toInitials(order.owner)}
                                       </td>
                                     </tr>
                                   );

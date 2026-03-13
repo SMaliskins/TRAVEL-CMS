@@ -89,7 +89,10 @@ export default function CheckinCountdown({
   const airlineInfo = getAirlineCheckinInfo(airlineCode);
 
   // Calculate times once
-  const depTime = useMemo(() => new Date(departureDateTime).getTime(), [departureDateTime]);
+  const depTime = useMemo(() => {
+    const t = new Date(departureDateTime).getTime();
+    return isNaN(t) ? 0 : t;
+  }, [departureDateTime]);
   const checkinOpensAt = useMemo(
     () => airlineInfo ? depTime - (airlineInfo.checkinHoursBefore * 60 * 60 * 1000) : 0,
     [depTime, airlineInfo]
@@ -101,7 +104,7 @@ export default function CheckinCountdown({
 
   // Calculate status based on current time
   const { status, timeRemaining } = useMemo(
-    () => airlineInfo 
+    () => airlineInfo && depTime > 0
       ? calculateStatus(depTime, checkinOpensAt, checkinClosesAt, now)
       : { status: "upcoming" as CheckinStatus, timeRemaining: null },
     [depTime, checkinOpensAt, checkinClosesAt, now, airlineInfo]

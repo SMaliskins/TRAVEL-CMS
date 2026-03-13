@@ -16,6 +16,7 @@ interface Profile {
   last_name: string;
   phone: string | null;
   avatar_url: string | null;
+  email_signature: string | null;
   created_at: string;
   role: {
     id: string;
@@ -61,6 +62,13 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Email signature
+  const [emailSignature, setEmailSignature] = useState("");
+  const [isSavingSignature, setIsSavingSignature] = useState(false);
+  const [signatureSuccess, setSignatureSuccess] = useState(false);
+  const [signatureTab, setSignatureTab] = useState<"edit" | "preview">("edit");
+  const signatureLogoInputRef = useRef<HTMLInputElement>(null);
+
   // Avatar upload
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -98,6 +106,7 @@ export default function ProfilePage() {
       setLastName(data.last_name || "");
       setPhone(data.phone || "");
       setAvatarUrl(data.avatar_url || null);
+      setEmailSignature(data.email_signature || "");
     } catch (err) {
       console.error("Error fetching profile:", err);
       setError(err instanceof Error ? err.message : "Failed to load profile");
@@ -216,6 +225,46 @@ export default function ProfilePage() {
     } finally {
       setIsSavingProfile(false);
     }
+  };
+
+  const handleSaveSignature = async () => {
+    setIsSavingSignature(true);
+    setSignatureSuccess(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email_signature: emailSignature }),
+      });
+      if (!response.ok) throw new Error("Failed to save signature");
+      setSignatureSuccess(true);
+      setTimeout(() => setSignatureSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save signature");
+    } finally {
+      setIsSavingSignature(false);
+    }
+  };
+
+  const handleSignatureLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setError("Please select an image file"); return; }
+    if (file.size > 2 * 1024 * 1024) { setError("Image must be less than 2MB"); return; }
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `signature-logo-${profile?.id}-${Date.now()}.${fileExt}`;
+      const filePath = `signatures/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, { upsert: true });
+      if (uploadError) throw new Error(uploadError.message);
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      setEmailSignature(prev => prev + `\n<img src="${publicUrl}" alt="Logo" style="max-height:60px;" />`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload logo");
+    }
+    if (signatureLogoInputRef.current) signatureLogoInputRef.current.value = "";
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -555,6 +604,92 @@ export default function ProfilePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+
+        {/* Email Signature — full width */}
+        <div className="rounded-lg bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Email Signature</h2>
+              <p className="text-sm text-gray-500 mt-0.5">HTML signature appended to outgoing emails. Supports images and links.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSignatureTab("edit")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md ${signatureTab === "edit" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignatureTab("preview")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md ${signatureTab === "preview" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+              >
+                Preview
+              </button>
+            </div>
+          </div>
+          <div className="p-6">
+            {signatureSuccess && (
+              <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">Signature saved successfully.</div>
+            )}
+
+            {signatureTab === "edit" ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => signatureLogoInputRef.current?.click()}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 inline-flex items-center gap-1.5"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    Insert Logo
+                  </button>
+                  <input ref={signatureLogoInputRef} type="file" accept="image/*" onChange={handleSignatureLogoUpload} className="hidden" />
+                  <span className="text-xs text-gray-400">Write HTML directly — supports &lt;img&gt;, &lt;a&gt;, &lt;b&gt;, &lt;i&gt;, inline styles</span>
+                </div>
+                <textarea
+                  value={emailSignature}
+                  onChange={(e) => setEmailSignature(e.target.value)}
+                  rows={10}
+                  placeholder={'<div style="font-family: Arial, sans-serif; font-size: 13px; color: #333;">\n  <p><b>John Smith</b></p>\n  <p>Travel Consultant</p>\n  <p>Phone: +371 20000000</p>\n  <img src="https://..." alt="Logo" style="max-height: 60px;" />\n</div>'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 mb-2">This is how your signature will look in emails:</p>
+                <div className="rounded-lg border border-gray-200 p-4 bg-white min-h-[100px]">
+                  {emailSignature ? (
+                    <div dangerouslySetInnerHTML={{ __html: emailSignature }} />
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">No signature configured yet.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSaveSignature}
+                disabled={isSavingSignature}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSavingSignature ? "Saving..." : "Save Signature"}
+              </button>
+              {emailSignature && (
+                <button
+                  type="button"
+                  onClick={() => { if (confirm("Clear your email signature?")) setEmailSignature(""); }}
+                  className="text-sm text-red-600 hover:text-red-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

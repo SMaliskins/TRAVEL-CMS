@@ -18,8 +18,12 @@ export function getGlobalDateFormat(): DateFormatPattern {
 
 function parseDateSafe(dateString: string): Date | null {
   try {
-    const date = new Date(dateString + (dateString.includes("T") ? "" : "T00:00:00"));
-    return isNaN(date.getTime()) ? null : date;
+    if (!dateString || dateString.length < 8) return null;
+    const hasIsoT = /\d{4}-\d{2}-\d{2}T/.test(dateString) || /^\d{2}:\d{2}/.test(dateString.split("T")[1] || "");
+    const date = new Date(dateString + (hasIsoT ? "" : "T00:00:00"));
+    if (isNaN(date.getTime())) return null;
+    if (date.getFullYear() < 1970 || date.getFullYear() > 2100) return null;
+    return date;
   } catch {
     return null;
   }

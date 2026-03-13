@@ -427,6 +427,7 @@ interface OrderServicesBlockProps {
   onTotalsChanged?: (totals: { amount_total: number; profit_estimated: number }) => void;
   onDatesFromServices?: (dates: { dateFrom: string | null; dateTo: string | null }) => void;
   stickyTopOffset?: number;
+  userRole?: string | null;
 }
 
 const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlockProps>(function OrderServicesBlock({ 
@@ -443,6 +444,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   onTotalsChanged,
   onDatesFromServices,
   stickyTopOffset = 0,
+  userRole,
 }, ref) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -2164,7 +2166,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-20 px-2 py-1 text-center text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   <div className="flex items-center justify-center gap-2">
                     {visibleServicesWithoutInvoice.length > 0 && (
                       <input
@@ -2180,34 +2182,34 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     <span>{t(lang, "order.servInvoice")}</span>
                   </div>
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servCategory")}
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servName")}
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servSupplier")}
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servClient")}
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servPayer")}
                 </th>
-                <th className="w-20 px-1 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servServicePrice")}
                 </th>
-                <th className="w-20 px-1 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servClientPrice")}
                 </th>
-                <th className="min-w-[180px] px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="min-w-[180px] px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servTravellers")}
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servStatus")}
                 </th>
-                <th className="px-2 py-1 text-left text-xs font-medium uppercase tracking-wider leading-tight text-gray-700">
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servTerms")}
                 </th>
               </tr>
@@ -2244,17 +2246,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
                       onClick={() => toggleGroup(groupKey)}
                     >
-                      <td className="px-3 py-1.5" colSpan={12}>
+                      <td className="px-3 py-2" colSpan={12}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-600">
+                            <span className="text-sm text-gray-600">
                               {isExpanded ? "▼" : "▶"}
                             </span>
-                            <span className="text-xs font-medium text-gray-900">
+                            <span className="text-sm font-medium text-gray-900">
                               {groupKey}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-sm text-gray-500">
                             {groupServices.length}
                           </span>
                         </div>
@@ -2298,7 +2300,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             }}
                             title="Double-click to edit"
                           >
-                            <td className="w-20 px-2 py-0.5 text-center relative">
+                            <td className="w-20 px-2 py-1 text-center relative">
                               {/* Connector icon between split group rows */}
                               {splitInfo && splitInfo.index > 1 && splitGroupColor && (
                                 <div className="absolute -left-3 -top-3 z-20">
@@ -2347,18 +2349,18 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </div>
                             </td>
                             <td 
-                              className="px-2 py-0.5 text-xs text-gray-700 leading-tight"
+                              className="px-2 py-1 text-sm text-gray-700"
                             >
                               {isAncillary ? (
                                 <span className="inline-flex items-center gap-1">
                                   <span className="text-gray-400">└</span>
-                                  <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700">
+                                  <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700">
                                     {service.ancillaryType === "extra_baggage" ? "Baggage" : service.ancillaryType === "seat_selection" ? "Seat" : service.ancillaryType === "meal" ? "Meal" : "Add-on"}
                                   </span>
                                 </span>
                               ) : service.category}
                             </td>
-                            <td className="px-2 py-0.5 text-xs font-medium text-gray-900 leading-tight">
+                            <td className="px-2 py-1 text-sm font-medium text-gray-900">
                               <div className="flex items-center gap-2">
                                 {splitInfo && (
                                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
@@ -2370,7 +2372,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </div>
                             </td>
                             <td 
-                              className={`px-2 py-0.5 text-xs leading-tight ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
                                   e.preventDefault();
@@ -2383,7 +2385,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {service.supplier}
                             </td>
                             <td 
-                              className={`px-2 py-0.5 text-xs leading-tight ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 const partyId = displayClientPartyId ?? service.clientPartyId;
                                 if ((e.ctrlKey || e.metaKey) && partyId) {
@@ -2397,7 +2399,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {displayClientName}
                             </td>
                             <td 
-                              className={`px-2 py-0.5 text-xs leading-tight ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.payerPartyId) {
                                   e.preventDefault();
@@ -2409,14 +2411,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-0.5 text-left text-xs text-gray-700 leading-tight">
+                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700">
                               {formatCurrency(service.servicePrice)}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-0.5 text-left text-xs font-medium text-gray-900 leading-tight">
+                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium text-gray-900">
                               {formatCurrency(service.clientPrice)}
                             </td>
                             <td 
-                              className="min-w-[180px] px-2 py-0.5 leading-tight cursor-pointer hover:bg-blue-50 transition-colors"
+                              className="min-w-[180px] px-2 py-1 cursor-pointer hover:bg-blue-50 transition-colors"
                               onClick={(e) => handleOpenModal(service.id, e)}
                               title="Click to manage travellers"
                             >
@@ -2425,7 +2427,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                   {visibleIds.map((travellerId) => (
                                     <div
                                       key={travellerId}
-                                      className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[10px] font-medium text-blue-800"
+                                      className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-800"
                                       title={
                                         orderTravellers.find(
                                           (t) => t.id === travellerId
@@ -2440,49 +2442,28 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                     </div>
                                   ))}
                                   {remainingCount > 0 && (
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-sm text-gray-500">
                                       +{remainingCount}
                                     </span>
                                   )}
                                 </div>
-                                <span className="ml-1 flex h-4 w-4 items-center justify-center rounded border border-gray-300 bg-white text-[10px] text-gray-600">
+                                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-600">
                                   +
                                 </span>
                               </div>
                             </td>
                             {/* Status */}
-                            <td className="px-2 py-0.5 text-xs leading-tight">
+                            <td className="px-2 py-1 text-sm">
                               <span
-                                className={`inline-flex rounded-full px-1.5 py-px text-[10px] font-medium capitalize ${getResStatusColor(
+                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getResStatusColor(
                                   service.resStatus
                                 )}`}
                               >
                                 {service.resStatus}
                               </span>
-                              {(service.categoryType === "flight" || (service.category || "").toLowerCase().includes("ticket") || (service.category || "").toLowerCase().includes("flight")) && !isAncillary && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const ancillaryCat = serviceCategories.find(c => c.type === "ancillary");
-                                    if (ancillaryCat) {
-                                      setAncillaryParentServiceId(service.id);
-                                      setAddServiceCategoryId(ancillaryCat.id);
-                                      setAddServiceCategoryType("ancillary");
-                                      setAddServiceCategoryName(ancillaryCat.name);
-                                      setAddServiceCategoryVatRate(ancillaryCat.vat_rate ?? null);
-                                      setShowAddModal(true);
-                                    }
-                                  }}
-                                  className="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors"
-                                  title="Add ancillary service (baggage, seat, meal)"
-                                >
-                                  + Add-on
-                                </button>
-                              )}
                             </td>
                             {/* Terms */}
-                            <td className="px-2 py-0.5 text-xs leading-tight">
+                            <td className="px-2 py-1 text-sm">
                               {(() => {
                                 const policy = service.refundPolicy || "non_ref";
                                 const freeCancelDate = service.freeCancellationUntil || null;
@@ -2532,7 +2513,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 
                                 return badge ? (
                                   <span
-                                    className={`inline-flex rounded px-1 py-px text-[10px] font-medium cursor-help ${badgeClass}`}
+                                    className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium cursor-help ${badgeClass}`}
                                     title={tooltipParts.join("\n")}
                                   >
                                     {badge}
@@ -2796,6 +2777,19 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               // Refetch after short delay so backend has committed; noCache so Itinerary gets fresh dates
               setTimeout(() => fetchServices(true), 150);
             }}
+            onDeleteService={userRole === "supervisor" ? async (serviceId: string) => {
+              const { data: { session } } = await supabase.auth.getSession();
+              const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`, {
+                method: "DELETE",
+                headers: { ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+              });
+              if (res.ok) {
+                fetchServices();
+                fetchTravellers();
+              } else {
+                alert("Failed to delete service");
+              }
+            } : undefined}
           />
         </>
       )}
@@ -3059,6 +3053,21 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     </svg>
                     Cancel Services
                   </button>
+                  {userRole === "supervisor" && (
+                    <>
+                      <div className="border-t border-gray-100 my-2" />
+                      <div className="px-3 py-1.5 text-xs font-medium text-red-400 uppercase tracking-wider">Danger</div>
+                      <button
+                        onClick={() => { setBulkAction("delete"); setShowBulkActions(false); }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Permanently
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -3254,6 +3263,40 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         />
       )}
       
+      {bulkAction === "delete" && (
+        <ConfirmModal
+          isOpen={true}
+          onCancel={() => setBulkAction(null)}
+          onConfirm={async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            let deletedCount = 0;
+            for (const serviceId of selectedServiceIds) {
+              const response = await fetch(
+                `/api/orders/${encodeURIComponent(orderCode)}/services/${serviceId}`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                  },
+                }
+              );
+              if (response.ok) deletedCount++;
+            }
+            if (deletedCount < selectedServiceIds.length) {
+              alert(`Deleted ${deletedCount} of ${selectedServiceIds.length} services. Some could not be deleted.`);
+            }
+            setSelectedServiceIds([]);
+            fetchServices();
+            fetchTravellers();
+            setBulkAction(null);
+          }}
+          title="Delete Services Permanently"
+          message={`Are you sure you want to permanently delete ${selectedServiceIds.length} service(s)? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+        />
+      )}
+
       {/* Set Payer Popover */}
       {bulkAction === "payer" && (
         <>

@@ -699,8 +699,8 @@ export function generateInvoiceHTML(
         return `
         <tr>
           <td>${(item.service_dates_text && String(item.service_dates_text).trim()) ? String(item.service_dates_text).trim() : formatDatesCell(item.service_date_from, item.service_date_to)}</td>
-          <td style="word-wrap: break-word; white-space: normal;">${serviceText}</td>
-          <td>${item.service_client || "-"}</td>
+          <td style="word-wrap: break-word; white-space: pre-line;">${serviceText}</td>
+          <td style="white-space: pre-line;">${(item.service_client || "-").replace(/\s*,\s*/g, "<br>")}</td>
           <td class="amount">${formatCurrency(item.line_total)}</td>
         </tr>
       `;

@@ -1,57 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
-
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-  const cookieHeader = request.headers.get("cookie") || "";
-  if (cookieHeader) {
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookieHeader } },
-    });
-    const { data, error } = await authClient.auth.getUser();
-    if (!error && data?.user) return data.user;
-  }
-  return null;
-}
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .single();
-  if (data?.company_id) return data.company_id;
-
-  const { data: d2 } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .single();
-  return d2?.company_id || null;
-}
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) return NextResponse.json({ error: "No company" }, { status: 400 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId, userId, scope } = apiUser;
+    const isOwnScope = scope === "own";
 
     const { searchParams } = new URL(request.url);
     const periodStart = searchParams.get("periodStart");
@@ -60,12 +16,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "periodStart and periodEnd required" }, { status: 400 });
     }
 
-    const { data: services, error } = await supabaseAdmin
+    let servicesQ = supabaseAdmin
       .from("order_services")
-      .select("client_price, service_price, res_status, orders!inner(id, company_id, created_at)")
+      .select("client_price, service_price, res_status, orders!inner(id, company_id, created_at, owner_user_id, manager_user_id)")
       .eq("orders.company_id", companyId)
       .gte("orders.created_at", periodStart)
       .lte("orders.created_at", periodEnd + "T23:59:59");
+    if (isOwnScope) {
+      servicesQ = servicesQ.or(`owner_user_id.eq.${userId},manager_user_id.eq.${userId}`, { referencedTable: "orders" });
+    }
+    const { data: services, error } = await servicesQ;
 
     if (error) {
       console.error("Chart query error:", error);

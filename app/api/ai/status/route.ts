@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AI_CONFIGS, getAPIKey, AI_FEATURES } from "@/lib/ai/config";
+import { AI_CONFIGS, getAPIKey, AI_FEATURES, MODELS } from "@/lib/ai/config";
 
 /**
  * GET /api/ai/status
@@ -10,11 +10,11 @@ export async function GET() {
   const providers = {
     openai: {
       configured: !!getAPIKey("openai"),
-      models: ["gpt-4o", "gpt-4o-mini"],
+      models: [MODELS.OPENAI_VISION, MODELS.OPENAI_FAST],
     },
     anthropic: {
       configured: !!getAPIKey("anthropic"),
-      models: ["claude-3-opus", "claude-3-sonnet"],
+      models: [MODELS.ANTHROPIC_FAST, MODELS.ANTHROPIC_CHAT],
     },
   };
 

@@ -34,7 +34,7 @@ export default function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
-      <div ref={trapRef} className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+      <div ref={trapRef} role="dialog" aria-modal="true" className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
         <h3 className="mb-2 text-lg font-semibold text-gray-900">{title}</h3>
         <p className="mb-6 text-sm text-gray-600">{message}</p>
         <div className="flex justify-end gap-3">

@@ -192,6 +192,15 @@ function parseBaggage(text: string, cabinClass?: string): string {
     }
   }
   
+  // Pattern: "30 Kilograms 1 Piece" or "N Piece(s) x M Kilograms" (Turkish Airlines PDF)
+  const kilogramsMatch = text.match(/(\d+)\s*Kilogram/i);
+  const pieceMatch = text.match(/(\d+)\s*Piece/i);
+  if (kilogramsMatch) {
+    const pieces = pieceMatch ? parseInt(pieceMatch[1]) : 1;
+    if (pieces <= 1) return "personal+cabin+1bag";
+    return `personal+cabin+${pieces}bags`;
+  }
+
   // Pattern: "baggage allowance: 23kg" or "1x23kg"
   const kgMatch = text.match(/(\d+)\s*x?\s*(\d+)\s*kg/i) || text.match(/baggage.*?(\d+)\s*kg/i);
   if (kgMatch) {
@@ -2002,16 +2011,223 @@ function parseEmirates(text: string): ParseResult | null {
 // TURKISH AIRLINES (TK)
 // ============================================
 function parseTurkishAirlines(text: string): ParseResult | null {
-  if (!text.includes("Turkish Airlines") && !text.includes("Türk Hava Yolları") && !text.match(/TK\s?\d{3,4}/i)) {
+  if (!text.includes("Turkish Airlines") && !text.includes("Türk Hava Yolları") && !text.match(/TK\s?0?\d{3,4}/i)) {
     return null;
   }
   
-  const bookingRefMatch = text.match(/(?:Booking|PNR|Rezervasyon)[\s:]+([A-Z0-9]{6})/i);
-  const ticketMatch = text.match(/(?:Ticket|Bilet)[\s:]+(\d{13})/i);
-  const priceMatch = text.match(/(?:Total|Toplam)[\s:]+(?:TRY|EUR|USD)\s*([\d.,]+)/i);
+  const bookingRefMatch = text.match(/(?:Booking|PNR|Rezervasyon|Confirmation)[\s:]+([A-Z0-9]{6})/i);
+  const pdfOrderIdMatch = text.match(/Order\s*ID[:\s]+([A-Z0-9]{5,6})\b/);
+  const ticketMatch = text.match(/(?:Ticket|Bilet|E-ticket)[\s:]+(\d{13})/i);
+  const priceMatch = text.match(/(?:Total(?:\s+Fare)?|Toplam)[:\s]+(?:TRY|EUR|USD)\s*([\d.,]+)/i);
   
-  const flightPattern = /TK\s?(\d{3,4})/gi;
   const segments: ParsedSegment[] = [];
+
+  // Format 1: Turkish Airlines Journey/Flight block format (from website booking summary)
+  // Pattern:
+  //   N. Flight  OPEN/CONFIRMED
+  //   City (IATA) - City (IATA)
+  //   DD Mon Day | HH:mm → HH:mm | X Class | - | ECONOMY/BUSINESS
+  //   TK0409
+  const flightBlockPattern = /\d+\.\s*Flight\s+(?:OPEN|CONFIRMED|OK)\s*\n\s*(.+?)\s*\(([A-Z]{3})\)\s*[-–]\s*(.+?)\s*\(([A-Z]{3})\)\s*\n\s*(\d{1,2})\s+(\w{3})\s+\w{3}\s*\|\s*(\d{1,2}:\d{2})\s*→\s*(\d{1,2}:\d{2})\s*\|\s*([A-Z])\s+Class\s*\|[^|]*\|\s*(\w[\w\s]*?)\s*\n\s*TK\s*(\d{3,4})/gi;
+
+  let blockMatch;
+  let idx = 0;
+  const currentYear = new Date().getFullYear();
+
+  while ((blockMatch = flightBlockPattern.exec(text)) !== null) {
+    const depCityName = blockMatch[1].trim();
+    const depCode = blockMatch[2];
+    const arrCityName = blockMatch[3].trim();
+    const arrCode = blockMatch[4];
+    const day = blockMatch[5];
+    const monthStr = blockMatch[6].toLowerCase();
+    const depTime = parseTime(blockMatch[7]) || blockMatch[7];
+    const arrTime = parseTime(blockMatch[8]) || blockMatch[8];
+    const cabinStr = blockMatch[10].trim().toLowerCase();
+    const flightNum = blockMatch[11];
+
+    const month = MONTHS[monthStr] || MONTHS[monthStr.slice(0, 3)];
+    if (!month) continue;
+
+    const depDate = `${currentYear}-${month}-${day.padStart(2, "0")}`;
+    // Determine arrival date (check if crosses midnight)
+    const [dH, dM] = depTime.split(":").map(Number);
+    const [aH, aM] = arrTime.split(":").map(Number);
+    let arrDate = depDate;
+    if (aH * 60 + aM < dH * 60 + dM) {
+      const next = new Date(`${depDate}T12:00:00`);
+      next.setDate(next.getDate() + 1);
+      arrDate = next.toISOString().slice(0, 10);
+    }
+
+    // Duration accounting for timezone differences
+    const depTz = getAirportTimezoneOffset(depCode);
+    const arrTz = getAirportTimezoneOffset(arrCode);
+    const depUtc = dH * 60 + dM - depTz * 60;
+    const arrUtc = aH * 60 + aM - arrTz * 60;
+    let durationMin = arrUtc - depUtc;
+    if (durationMin < 0) durationMin += 24 * 60;
+    const durH = Math.floor(durationMin / 60);
+    const durM = durationMin % 60;
+
+    let cabinClass: "economy" | "premium_economy" | "business" | "first" | undefined;
+    if (cabinStr.includes("business")) cabinClass = "business";
+    else if (cabinStr.includes("first")) cabinClass = "first";
+    else if (cabinStr.includes("premium")) cabinClass = "premium_economy";
+    else cabinClass = "economy";
+
+    segments.push({
+      id: `seg-${Date.now()}-${idx}`,
+      flightNumber: `TK${flightNum}`,
+      airline: "Turkish Airlines",
+      departure: depCode,
+      departureCity: depCityName,
+      arrival: arrCode,
+      arrivalCity: arrCityName,
+      departureDate: depDate,
+      departureTimeScheduled: depTime,
+      arrivalDate: arrDate,
+      arrivalTimeScheduled: arrTime,
+      duration: `${durH}h ${durM.toString().padStart(2, "0")}m`,
+      cabinClass,
+      bookingRef: bookingRefMatch?.[1],
+      ticketNumber: ticketMatch?.[1],
+    });
+    idx++;
+  }
+
+  if (segments.length > 0) {
+    return {
+      success: true,
+      segments,
+      booking: {
+        bookingRef: bookingRefMatch?.[1] || "",
+        airline: "Turkish Airlines",
+        totalPrice: priceMatch ? parseFloat(priceMatch[1].replace(",", ".")) : null,
+        currency: "EUR",
+        ticketNumbers: ticketMatch ? [ticketMatch[1]] : [],
+        cabinClass: segments[0]?.cabinClass || "economy",
+        refundPolicy: detectRefundPolicy(text),
+        baggage: parseBaggage(text, segments[0]?.cabinClass),
+      },
+      parser: "turkish_airlines_journey",
+    };
+  }
+
+  // Format 2: Turkish Airlines PDF e-ticket receipt
+  // Flight line:  TK1982  London (LGW) • 10:15  Istanbul (IST) • 17:15  Turkish Airlines  -
+  // Date line:    Airbus A321neo  18 Mar, Wed  18 Mar, Wed  O,O | ECONOMY
+  if (segments.length === 0) {
+    const allTickets: string[] = [];
+    const tktRe = /\b(\d{13})\b/g;
+    let tktM;
+    while ((tktM = tktRe.exec(text)) !== null) {
+      if (!allTickets.includes(tktM[1])) allTickets.push(tktM[1]);
+    }
+
+    const yearMatch = text.match(/\d{1,2}\s+\w{3},?\s+(\d{4})/);
+    const docYear = yearMatch ? parseInt(yearMatch[1]) : currentYear;
+
+    const pdfFlightRe = /TK(\d{3,4})\s+(.+?)\s*\(([A-Z]{3})\)\s*[^\d(]{0,3}\s*(\d{1,2}:\d{2})\s+(.+?)\s*\(([A-Z]{3})\)\s*[^\d(]{0,3}\s*(\d{1,2}:\d{2})/g;
+
+    let pdfM;
+    while ((pdfM = pdfFlightRe.exec(text)) !== null) {
+      const flightNum = pdfM[1];
+      const depCityName = pdfM[2].trim();
+      const depCode = pdfM[3];
+      const depTime = parseTime(pdfM[4]) || pdfM[4];
+      const arrCityName = pdfM[5].trim();
+      const arrCode = pdfM[6];
+      const arrTime = parseTime(pdfM[7]) || pdfM[7];
+
+      const after = text.slice(pdfM.index + pdfM[0].length, pdfM.index + pdfM[0].length + 300);
+      const dateLineMatch = after.match(/(\d{1,2})\s+(\w{3}),?\s+\w{3,9}\s+(\d{1,2})\s+(\w{3}),?\s+\w{3,9}\s+[A-Z],[A-Z]\s*\|\s*(\w+)/);
+
+      let depDate = "";
+      let arrDate = "";
+      let cabinClass: "economy" | "premium_economy" | "business" | "first" | undefined = "economy";
+
+      if (dateLineMatch) {
+        const depDay = dateLineMatch[1];
+        const depMonStr = dateLineMatch[2].toLowerCase().slice(0, 3);
+        const arrDay = dateLineMatch[3];
+        const arrMonStr = dateLineMatch[4].toLowerCase().slice(0, 3);
+        const classStr = dateLineMatch[5].toLowerCase();
+
+        const depMonth = MONTHS[depMonStr];
+        const arrMonth = MONTHS[arrMonStr];
+
+        if (depMonth) depDate = `${docYear}-${depMonth}-${depDay.padStart(2, "0")}`;
+        if (arrMonth) arrDate = `${docYear}-${arrMonth}-${arrDay.padStart(2, "0")}`;
+
+        if (classStr.includes("business")) cabinClass = "business";
+        else if (classStr.includes("first")) cabinClass = "first";
+        else if (classStr.includes("premium")) cabinClass = "premium_economy";
+      }
+
+      const [dH2, dM2] = depTime.split(":").map(Number);
+      const [aH2, aM2] = arrTime.split(":").map(Number);
+      const depTz2 = getAirportTimezoneOffset(depCode);
+      const arrTz2 = getAirportTimezoneOffset(arrCode);
+      const depUtc2 = dH2 * 60 + dM2 - depTz2 * 60;
+      const arrUtc2 = aH2 * 60 + aM2 - arrTz2 * 60;
+      let durMin2 = arrUtc2 - depUtc2;
+      if (durMin2 < 0) durMin2 += 24 * 60;
+      const durH2 = Math.floor(durMin2 / 60);
+      const durM2 = durMin2 % 60;
+
+      if (!arrDate && depDate && aH2 * 60 + aM2 < dH2 * 60 + dM2) {
+        const next = new Date(`${depDate}T12:00:00`);
+        next.setDate(next.getDate() + 1);
+        arrDate = next.toISOString().slice(0, 10);
+      }
+      if (!arrDate) arrDate = depDate;
+
+      segments.push({
+        id: `seg-${Date.now()}-${idx}`,
+        flightNumber: `TK${flightNum}`,
+        airline: "Turkish Airlines",
+        departure: depCode,
+        departureCity: depCityName,
+        arrival: arrCode,
+        arrivalCity: arrCityName,
+        departureDate: depDate,
+        departureTimeScheduled: depTime,
+        arrivalDate: arrDate,
+        arrivalTimeScheduled: arrTime,
+        duration: `${durH2}h ${durM2.toString().padStart(2, "0")}m`,
+        cabinClass,
+        bookingRef: pdfOrderIdMatch?.[1] || bookingRefMatch?.[1],
+        ticketNumber: allTickets[0],
+      });
+      idx++;
+    }
+
+    if (segments.length > 0) {
+      const pnr = pdfOrderIdMatch?.[1] || bookingRefMatch?.[1] || "";
+      const currency = priceMatch?.[0]?.match(/(?:TRY|EUR|USD)/i)?.[0] || "EUR";
+      const totalPrice = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, "")) : null;
+
+      return {
+        success: true,
+        segments,
+        booking: {
+          bookingRef: pnr,
+          airline: "Turkish Airlines",
+          totalPrice,
+          currency,
+          ticketNumbers: allTickets,
+          cabinClass: segments[0]?.cabinClass || "economy",
+          refundPolicy: detectRefundPolicy(text),
+          baggage: parseBaggage(text, segments[0]?.cabinClass),
+        },
+        parser: "turkish_airlines_pdf",
+      };
+    }
+  }
+
+  // Format 3: Generic fallback — extract TK flight numbers and match routes/dates/times
+  const flightPattern = /TK\s?(\d{3,4})/gi;
   let flightMatch;
   const matches: string[] = [];
   
@@ -2746,6 +2962,53 @@ export function parseFlightBooking(text: string): ParseResult | null {
   }
   
   return null;
+}
+
+// Extract booking metadata (PNR, price, baggage) even when segment parsing fails
+export function extractBookingMetadata(text: string): {
+  bookingRef: string;
+  totalPrice: number | null;
+  currency: string;
+  baggage: string;
+  ticketNumbers: string[];
+  airline: string;
+} {
+  const refMatch =
+    text.match(/Order\s*ID[:\s]+([A-Z0-9]{5,6})\b/) ||
+    text.match(/(?:Booking|PNR|Rezervasyon|Confirmation)[\s:]+([A-Z0-9]{6})/i);
+  const bookingRef = refMatch?.[1] || "";
+
+  const priceMatch = text.match(
+    /(?:Total(?:\s+Fare)?|Toplam|Grand\s+Total)[:\s]+(?:TRY|EUR|USD)\s*([\d.,]+)/i
+  );
+  const currencyMatch = priceMatch?.[0]?.match(/(?:TRY|EUR|USD)/i);
+  const totalPrice = priceMatch
+    ? parseFloat(priceMatch[1].replace(/,/g, ""))
+    : null;
+  const currency = currencyMatch?.[0]?.toUpperCase() || "EUR";
+
+  const allTickets: string[] = [];
+  const tktRe = /\b(\d{13})\b/g;
+  let tktM;
+  while ((tktM = tktRe.exec(text)) !== null) {
+    if (!allTickets.includes(tktM[1])) allTickets.push(tktM[1]);
+  }
+
+  const baggage = parseBaggage(text);
+
+  let airline = "";
+  if (/turkish\s*airlines/i.test(text) || /\bTK\d{3,4}\b/.test(text)) airline = "Turkish Airlines";
+  else if (/lufthansa/i.test(text) || /\bLH\d{3,4}\b/.test(text)) airline = "Lufthansa";
+  else if (/air\s*france/i.test(text) || /\bAF\d{3,4}\b/.test(text)) airline = "Air France";
+  else if (/british\s*airways/i.test(text) || /\bBA\d{3,4}\b/.test(text)) airline = "British Airways";
+  else if (/airbaltic/i.test(text) || /\bBT\d{3,4}\b/.test(text)) airline = "airBaltic";
+  else if (/ryanair/i.test(text)) airline = "Ryanair";
+  else if (/easyjet/i.test(text)) airline = "easyJet";
+  else if (/wizz\s*air/i.test(text)) airline = "Wizz Air";
+  else if (/emirates/i.test(text) || /\bEK\d{3,4}\b/.test(text)) airline = "Emirates";
+  else if (/flydubai/i.test(text) || /\bFZ\d{3,4}\b/.test(text)) airline = "flydubai";
+
+  return { bookingRef, totalPrice, currency, baggage, ticketNumbers: allTickets, airline };
 }
 
 // List of supported airlines

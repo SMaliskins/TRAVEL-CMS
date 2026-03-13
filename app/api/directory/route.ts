@@ -4,6 +4,7 @@ import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
 import { createClient } from "@supabase/supabase-js";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { getSearchPatterns, getSemanticQueryVariants, matchesSearch } from "@/lib/directory/searchNormalize";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -132,11 +133,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const offset = (page - 1) * limit;
 
-    // Get current user for tenant isolation
+    // Get current user for tenant isolation + role
     const user = await getCurrentUser(request);
-    let userCompanyId: string | null = null;
+    const apiUser = await getApiUser(request);
+    let userCompanyId: string | null = apiUser?.companyId || null;
+    const isSubagent = apiUser?.role === "subagent";
     
-    if (user) {
+    if (!userCompanyId && user) {
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("company_id")
@@ -145,15 +148,36 @@ export async function GET(request: NextRequest) {
       userCompanyId = profile?.company_id || null;
     }
 
-    // Build base query – select only columns needed for list (avoids heavy payload)
+    // For subagent: restrict list view to own-orders clients; allow full-company search for dedup
+    let subagentPartyIds: string[] | null = null;
+    if (isSubagent && apiUser && !search) {
+      const { data: travellers } = await supabaseAdmin
+        .from("order_travellers")
+        .select("party_id, orders!inner(owner_user_id, manager_user_id)")
+        .or(`owner_user_id.eq.${apiUser.userId},manager_user_id.eq.${apiUser.userId}`, { referencedTable: "orders" });
+
+      const ids = new Set<string>();
+      for (const t of travellers || []) {
+        if (t.party_id) ids.add(t.party_id);
+      }
+      subagentPartyIds = [...ids];
+    }
+
+    // Build base query
     const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country,bank_accounts";
     let query = supabaseAdmin
       .from("party")
       .select(partyColumns, { count: "exact" });
     
-    // Apply tenant isolation if user is authenticated
     if (userCompanyId) {
       query = query.eq("company_id", userCompanyId);
+    }
+
+    if (subagentPartyIds !== null) {
+      if (subagentPartyIds.length === 0) {
+        return NextResponse.json({ data: [], total: 0, page, limit });
+      }
+      query = query.in("id", subagentPartyIds);
     }
 
     // Apply filters
@@ -448,8 +472,30 @@ export async function GET(request: NextRequest) {
       return record;
     });
 
+    // Subagent: strip sensitive fields from list view
+    const safeRecords = isSubagent
+      ? records.map((r) => ({
+          ...r,
+          email: undefined,
+          phone: undefined,
+          personalCode: undefined,
+          passportNumber: undefined,
+          passportIssueDate: undefined,
+          passportExpiryDate: undefined,
+          passportIssuingCountry: undefined,
+          passportFullName: undefined,
+          nationality: undefined,
+          bankAccounts: undefined,
+          bankName: undefined,
+          iban: undefined,
+          swift: undefined,
+          corporateAccounts: undefined,
+          loyaltyCards: undefined,
+        }))
+      : records;
+
     return NextResponse.json({
-      data: records,
+      data: safeRecords,
       total: count || 0,
       page,
       limit,

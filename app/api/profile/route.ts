@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
         last_name,
         phone,
         avatar_url,
+        email_signature,
         is_active,
         created_at,
         last_login_at,
@@ -98,7 +99,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { firstName, lastName, phone, avatar_url } = body;
+    const { firstName, lastName, phone, avatar_url, email_signature } = body;
 
     // Build update object
     const updateData: Record<string, unknown> = {
@@ -109,6 +110,7 @@ export async function PATCH(request: NextRequest) {
     if (lastName !== undefined) updateData.last_name = lastName;
     if (phone !== undefined) updateData.phone = phone || null;
     if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+    if (email_signature !== undefined) updateData.email_signature = email_signature;
 
     // Update profile
     const { data: updated, error } = await supabaseAdmin
@@ -121,6 +123,7 @@ export async function PATCH(request: NextRequest) {
         last_name,
         phone,
         avatar_url,
+        email_signature,
         is_active,
         created_at,
         updated_at,

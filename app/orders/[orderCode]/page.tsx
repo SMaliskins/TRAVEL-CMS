@@ -18,8 +18,11 @@ import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUNTRY_TO_ISO } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
@@ -119,6 +122,11 @@ export default function OrderPage({
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
+  const currentRole = useCurrentUserRole();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   // Company currency from Company Settings / Regional Settings / Currency (default_currency); used by service modals
   const [companyCurrencyCode, setCompanyCurrencyCode] = useState<string>("EUR");
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
@@ -506,6 +514,37 @@ export default function OrderPage({
     }
   };
 
+  const handleDeleteOrder = async () => {
+    if (!deletePassword.trim()) {
+      setDeleteError("Enter password");
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setDeleteError(data.error || "Failed to delete");
+        setIsDeleting(false);
+        return;
+      }
+      showToast(`Order ${orderCode} deleted`, "success");
+      router.push("/orders");
+    } catch {
+      setDeleteError("Network error");
+      setIsDeleting(false);
+    }
+  };
+
   // Fetch company settings (Order Source, Regional Settings / Currency) so service modals use company currency
   useEffect(() => {
     const fetchCompanySettings = async () => {
@@ -662,6 +701,16 @@ export default function OrderPage({
                     onChange={effectiveStatus !== "Completed" ? handleStatusChange : undefined}
                     readonly={effectiveStatus === "Completed" || isSaving}
                   />
+                )}
+                {order && (currentRole === "supervisor" || currentRole === "director") && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowDeleteModal(true); setDeletePassword(""); setDeleteError(""); }}
+                    title="Delete order"
+                    className="ml-1 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 )}
               </div>
               {/* Created date + Agent - directly under order code */}
@@ -1308,6 +1357,7 @@ export default function OrderPage({
                 orderDateFrom={order?.date_from}
                 orderDateTo={order?.date_to}
                 stickyTopOffset={stickyHeaderBottom}
+                userRole={currentRole}
                 itineraryDestinations={itineraryDestinations}
                 orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 companyCurrencyCode={companyCurrencyCode}
@@ -1440,6 +1490,75 @@ export default function OrderPage({
 
       </div>
 
+      {/* Delete Order Modal */}
+      {showDeleteModal && (
+        <DeleteOrderModal
+          isOpen={showDeleteModal}
+          orderCode={orderCode}
+          password={deletePassword}
+          error={deleteError}
+          isDeleting={isDeleting}
+          onPasswordChange={setDeletePassword}
+          onConfirm={handleDeleteOrder}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
+
+    </div>
+  );
+}
+
+function DeleteOrderModal({
+  isOpen, orderCode, password, error, isDeleting,
+  onPasswordChange, onConfirm, onCancel,
+}: {
+  isOpen: boolean;
+  orderCode: string;
+  password: string;
+  error: string;
+  isDeleting: boolean;
+  onPasswordChange: (v: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEscapeKey(onCancel, isOpen);
+  const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
+
+  return (
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
+      <div ref={trapRef} role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+        <h3 className="mb-1 text-lg font-semibold text-gray-900">Delete Order</h3>
+        <p className="mb-4 text-sm text-gray-600">
+          Order <strong>{orderCode}</strong> will be permanently deleted along with all services, invoices, payments and documents. Invoice numbers will be released.
+        </p>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input
+          type="password"
+          autoFocus
+          value={password}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onConfirm(); }}
+          placeholder="Enter password to confirm"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500"
+        />
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={isDeleting}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isDeleting || !password.trim()}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isDeleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   Users,
   Settings,
   Hotel,
+  Upload,
 } from "lucide-react";
 
 interface NavItem {
@@ -47,6 +48,7 @@ const navConfig: NavElement[] = [
     icon: <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} />,
     children: [
       { name: "Invoices", nameKey: "invoices.title", href: "/finances/invoices", icon: <FileText size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Suppliers Invoices", nameKey: "invoices.suppliersInvoices", href: "/finances/suppliers-invoices", icon: <Upload size={18} strokeWidth={ICON_STROKE} /> },
       { name: "Payments", nameKey: "payments.title", href: "/finances/payments", icon: <CreditCard size={18} strokeWidth={ICON_STROKE} /> },
       { name: "Cash Flow", nameKey: "cashflow.title", href: "/finances/cashflow", icon: <TrendingUp size={18} strokeWidth={ICON_STROKE} /> },
       { name: "IATA", nameKey: "iata.title", href: "/finances/iata", icon: <Plane size={18} strokeWidth={ICON_STROKE} /> },
@@ -184,19 +186,29 @@ export default function Sidebar() {
     return pathname === item.href || pathname?.startsWith(item.href + "/");
   };
 
-  // Filter nav items by role permissions (Finances visible for finance/manager/supervisor/agent)
-  const visibleNavItems = navConfig.filter((item) => {
-    if (item.name === "Finances") {
-      // Show while loading to avoid flash; hide only when we know user lacks permission
+  // Filter nav items by role permissions
+  const roleKey = (userRole || "").toLowerCase();
+  const visibleNavItems = navConfig
+    .filter((item) => {
       if (userRole === null) return true;
-      const roleKey = (userRole || "").toLowerCase();
-      return (
-        roleHasPermission(roleKey, "invoices.view") ||
-        roleHasPermission(roleKey, "payments.view")
-      );
-    }
-    return true;
-  });
+
+      if (item.name === "Finances") {
+        return (
+          roleHasPermission(roleKey, "invoices.view") ||
+          roleHasPermission(roleKey, "payments.view")
+        );
+      }
+      if (item.name === "Hotels Booking" && roleKey === "subagent") {
+        return false;
+      }
+      return true;
+    })
+    .map((item) => {
+      if (roleKey === "subagent" && item.name === "Finances" && item.children) {
+        return { ...item, children: item.children.filter((c) => c.name === "Invoices" || c.name === "Suppliers Invoices") };
+      }
+      return item;
+    });
 
   // Helper function to render navigation items
   const renderNavItems = (options: { showTooltip?: boolean; onItemClick?: () => void }) => {

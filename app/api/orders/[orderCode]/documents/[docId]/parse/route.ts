@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { logAiUsage } from "@/lib/aiUsageLogger";
+import { MODELS } from "@/lib/ai/config";
 
-const OPENAI_MODEL = "gpt-4o";
+const OPENAI_MODEL = MODELS.OPENAI_VISION;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";

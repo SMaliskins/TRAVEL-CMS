@@ -120,7 +120,7 @@ export default function DirectoryMergeModal({
   }, [isOpen]);
 
   const trapRef = useFocusTrap<HTMLDivElement>(true);
-  useModalOverlay();
+  useModalOverlay(isOpen);
 
   const handleMerge = async () => {
     if (!selectedSource || !selectedTarget) return;

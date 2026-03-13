@@ -109,6 +109,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Dedup check: look for existing record with the same display_name in the company
+    const skipDedupCheck = body.skipDedupCheck === true;
+    if (!skipDedupCheck) {
+      const { data: existingParties } = await supabaseAdmin
+        .from("party")
+        .select("id, display_name, display_id")
+        .eq("company_id", companyId)
+        .ilike("display_name", displayName)
+        .eq("status", "active")
+        .limit(5);
+
+      if (existingParties && existingParties.length > 0) {
+        return NextResponse.json(
+          {
+            error: "duplicate_found",
+            message: `A contact with the name "${displayName}" already exists (ID: ${String(existingParties[0].display_id || "").padStart(5, "0")}). Use the existing record or confirm creation.`,
+            duplicates: existingParties.map((p) => ({
+              id: p.id,
+              displayName: p.display_name,
+              displayId: p.display_id,
+            })),
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Create party record
     const partyData: any = {
       display_name: displayName,

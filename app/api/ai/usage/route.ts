@@ -18,9 +18,9 @@ async function getAuthInfo(request: NextRequest): Promise<{ userId: string; comp
   const userId = data.user.id;
   const adminClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
   const { data: profile } = await adminClient
-    .from("profiles")
+    .from("user_profiles")
     .select("company_id")
-    .eq("user_id", userId)
+    .eq("id", userId)
     .single();
   
   if (!profile?.company_id) return null;

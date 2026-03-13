@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseMrzToPassportData } from "@/lib/passport/parseMrz";
+import { MODELS } from "@/lib/ai/config";
 
 /**
  * AI-powered passport parsing
@@ -327,7 +328,7 @@ export async function POST(request: NextRequest) {
           "Authorization": `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: MODELS.OPENAI_VISION,
           messages,
           max_tokens: 1000,
           temperature: 0.1,
@@ -376,7 +377,7 @@ export async function POST(request: NextRequest) {
                 { type: "text" as const, text: "Extract all passport information from this image. Return JSON only." },
               ];
           const msg = await anthropic.messages.create({
-            model: "claude-3-5-haiku-20241022",
+            model: MODELS.ANTHROPIC_FAST,
             max_tokens: 1000,
             system: SYSTEM_PROMPT,
             messages: [{ role: "user", content: userContent }],

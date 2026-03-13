@@ -23,8 +23,8 @@ export default function AvatarUpload({
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const trapRef = useFocusTrap<HTMLDivElement>(true);
-  useModalOverlay();
+  const trapRef = useFocusTrap<HTMLDivElement>(showModal || showDeleteConfirm);
+  useModalOverlay(showModal || showDeleteConfirm);
 
   const sizeClass = size === "sm" ? "h-12 w-12 text-lg" : size === "md" ? "h-14 w-14 text-xl" : "h-16 w-16 text-2xl";
 

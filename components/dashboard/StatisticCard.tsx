@@ -19,6 +19,7 @@ interface StatisticCardProps {
   icon?: React.ReactNode;
   onClick?: () => void;
   className?: string;
+  valueClassName?: string;
   cardPeriod?: CardPeriodType;
   onCardPeriodChange?: (period: CardPeriodType) => void;
 }
@@ -31,6 +32,7 @@ export default function StatisticCard({
   icon,
   onClick,
   className = "",
+  valueClassName,
   cardPeriod,
   onCardPeriodChange,
 }: StatisticCardProps) {
@@ -120,7 +122,7 @@ export default function StatisticCard({
               )}
             </div>
           )}
-          <p className="mt-1 text-3xl font-black text-gray-900">
+          <p className={`mt-1 text-3xl font-black ${valueClassName || "text-gray-900"}`}>
             {formatValue(value)}
           </p>
           {previousValue !== undefined && (

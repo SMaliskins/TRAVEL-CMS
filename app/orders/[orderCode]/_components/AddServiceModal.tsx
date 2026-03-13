@@ -572,6 +572,11 @@ export default function AddServiceModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [isAIParsing, setIsAIParsing] = useState(false);
+  const [showAIParsedBanner, setShowAIParsedBanner] = useState(false);
+  const [correctionMode, setCorrectionMode] = useState(false);
+  const [correctedFields, setCorrectedFields] = useState<Set<string>>(new Set());
+  const [replacingClientIdx, setReplacingClientIdx] = useState<number | null>(null);
+  const parseSourceTextRef = useRef<string>("");
   const flightFileInputRef = useRef<HTMLInputElement>(null);
   const flightPasteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -931,7 +936,6 @@ export default function AddServiceModal({
     const marginPerNight = units > 0 ? Math.round((totalMargin / units) * 100) / 100 : 0;
     const newMarge = isHotelPerNight ? marginPerNight.toFixed(2) : totalMargin.toFixed(2);
     setMarge(newMarge);
-    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, clientPrice, priceUnits]);
 
   // Non-Tour: when Cost changes, recalculate Sale = Cost + Marge.
@@ -945,7 +949,6 @@ export default function AddServiceModal({
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
 
   // Non-Tour: when user edits Marge, recalculate Sale = Cost + Marge.
@@ -959,7 +962,6 @@ export default function AddServiceModal({
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
 
   // Auto-confirm when all tickets filled (Flight) or ref_nr filled (Hotel)
@@ -1036,17 +1038,18 @@ export default function AddServiceModal({
     const updated = [...clients];
     updated[index] = { id, name };
     setClients(updated);
+    markCorrected("clients");
   };
   
   const removeClient = (index: number) => {
     const next = clients.filter((_, i) => i !== index);
     if (categoryType === "hotel") {
-      // For hotel, allow removing all accompanying persons
       setClients(next.length > 0 ? next : [{ id: null, name: "" }]);
     } else {
       if (clients.length <= 1) return;
       setClients(next);
     }
+    markCorrected("clients");
   };
 
   // Determine which fields to show based on category
@@ -1107,17 +1110,25 @@ export default function AddServiceModal({
     return () => { clearTimeout(hintTimer); clearTimeout(modalTimer); };
   }, [showTransferFields, flightServices?.length, hotelServices?.length]);
 
-  // Auto-generate service name (route) from flight segments — full city names, format: "date city - city / date city - city"
+  // Auto-generate service name (route) from flight segments — IATA format: "DD.MM IATA-IATA-IATA / DD.MM IATA-IATA"
   useEffect(() => {
     if (categoryType === "flight" && flightSegments.length > 0) {
-      const resolveCity = (code: string, cityName?: string): string => {
-        if (cityName?.trim()) return cityName.trim();
-        if (!code) return "";
-        return getCityByIATA(code)?.name || code;
-      };
+      // Auto-set dates from segments first (used as fallback for route dates)
+      const firstDep = flightSegments[0]?.departureDate;
+      const lastArr = flightSegments[flightSegments.length - 1]?.arrivalDate || firstDep;
+      if (firstDep && !dateFrom) setDateFrom(firstDep);
+      if (lastArr && !dateTo) setDateTo(lastArr);
+
+      // Ensure every segment has a departureDate; fall back to neighbour or service date
+      const fallbackDate = firstDep || dateFrom || "";
+      const enriched = flightSegments.map((seg, i) => {
+        if (seg.departureDate) return seg;
+        const prev = (i > 0 ? flightSegments[i - 1]?.departureDate : null) || fallbackDate;
+        return { ...seg, departureDate: prev };
+      });
 
       const groupedByDate: Record<string, FlightSegment[]> = {};
-      flightSegments.forEach(seg => {
+      enriched.forEach(seg => {
         const date = seg.departureDate || "unknown";
         if (!groupedByDate[date]) groupedByDate[date] = [];
         groupedByDate[date].push(seg);
@@ -1125,27 +1136,17 @@ export default function AddServiceModal({
       
       const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
         const dateStr = formatDateShort(segs[0]?.departureDate || "");
-        const cities = [
-          resolveCity(segs[0].departure, segs[0].departureCity),
-          ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
-        ].filter(Boolean);
-        const routeStr = cities.join(" - ");
+        const codes = [
+          segs[0].departure || "",
+          ...segs.map(s => s.arrival || ""),
+        ].filter(Boolean).map(c => c.toUpperCase());
+        const routeStr = codes.join("-");
         return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
       });
       
       const newRoute = routeParts.join(" / ");
       if (newRoute && newRoute !== serviceName) {
         setServiceName(newRoute);
-      }
-      
-      // Auto-set dates from segments
-      const firstDep = flightSegments[0]?.departureDate;
-      const lastArr = flightSegments[flightSegments.length - 1]?.arrivalDate || firstDep;
-      if (firstDep && !dateFrom) {
-        setDateFrom(firstDep);
-      }
-      if (lastArr && !dateTo) {
-        setDateTo(lastArr);
       }
     }
   }, [flightSegments, category, dateFrom, dateTo]); // removed serviceName from deps to allow auto-update
@@ -1166,6 +1167,19 @@ export default function AddServiceModal({
     setServicePrice(String(Math.round(perCost * n * 100) / 100));
     setClientPrice(String(Math.round(perSale * n * 100) / 100));
   }, [categoryType, hotelPricePer, dateFrom, dateTo, priceUnits, servicePrice, clientPrice]);
+
+  const markCorrected = useCallback((field: string) => {
+    if (correctionMode) {
+      setCorrectedFields(prev => { const n = new Set(prev); n.add(field); return n; });
+    }
+  }, [correctionMode]);
+
+  const fieldRingClass = useCallback((field: string) => {
+    if (correctedFields.has(field)) return "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30";
+    if (parsedFields.has(field)) return "ring-2 ring-green-300 border-green-400";
+    if (parseAttemptedButEmpty.has(field)) return "ring-2 ring-red-300 border-red-400 bg-red-50/50";
+    return "border-gray-300 focus:border-blue-500";
+  }, [correctedFields, parsedFields, parseAttemptedButEmpty]);
 
   // Parse with regex for 14 supported airlines (free, instant)
   // Supported: BA, LH, AF, KL, BT, LO, AY, SK, FZ, EK, TK, FR, U2, W6, AMADEUS
@@ -1374,13 +1388,56 @@ export default function AddServiceModal({
     const file = files[0];
     const fileName = file.name.toLowerCase();
     
-    // Check if it's a PDF or text file
+    const autoParseText = async (text: string) => {
+      parseSourceTextRef.current = text;
+      const regexResult = parseWithRegex(text);
+      if (regexResult && regexResult.segments.length > 0) {
+        applyParsedData(regexResult.segments, regexResult.booking);
+        setShowAIParsedBanner(true);
+        setParsedFields((prev) => {
+          const next = new Set(prev);
+          if (regexResult.segments[0]?.departureDate) next.add("dateFrom");
+          const last = regexResult.segments[regexResult.segments.length - 1];
+          if (last?.arrivalDate || last?.departureDate) next.add("dateTo");
+          return next;
+        });
+        setShowPasteInput(false);
+        setPasteText("");
+        return;
+      }
+      setIsAIParsing(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch("/api/ai/parse-flight-itinerary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({ text }),
+        });
+        const aiData = await res.json();
+        if (res.ok && aiData.segments?.length > 0) {
+          applyParsedData(aiData.segments, aiData.booking || {});
+          setShowAIParsedBanner(true);
+          setParsedFields((prev) => {
+            const next = new Set(prev);
+            if (aiData.segments[0]?.departureDate) next.add("dateFrom");
+            const last = aiData.segments[aiData.segments.length - 1];
+            if (last?.arrivalDate || last?.departureDate) next.add("dateTo");
+            return next;
+          });
+          setShowPasteInput(false);
+          setPasteText("");
+          return;
+        }
+      } catch (e) { console.error("AI flight parse error:", e); } finally { setIsAIParsing(false); }
+      setPasteText(text);
+      setShowPasteInput(true);
+    };
+
     if (fileName.endsWith('.pdf')) {
       setIsLoadingPdf(true);
       setParseError(null);
       
       try {
-        // Send to API to extract text from PDF
         const formData = new FormData();
         formData.append('file', file);
         
@@ -1397,9 +1454,12 @@ export default function AddServiceModal({
           return;
         }
         
-        const { text } = data;
-        setPasteText(text || '');
-        setShowPasteInput(true);
+        const extractedText = (data.text || '').trim();
+        if (!extractedText) {
+          setParseError('PDF is empty or could not be read.');
+          return;
+        }
+        await autoParseText(extractedText);
       } catch (error) {
         console.error('PDF parsing error:', error);
         setParseError('Failed to read PDF. Try copying text manually.');
@@ -1407,12 +1467,11 @@ export default function AddServiceModal({
         setIsLoadingPdf(false);
       }
     } else if (fileName.endsWith('.txt') || fileName.endsWith('.eml')) {
-      // Read text file directly
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        setPasteText(text);
-        setShowPasteInput(true);
+      reader.onload = async (event) => {
+        const text = (event.target?.result as string || '').trim();
+        if (!text) return;
+        await autoParseText(text);
       };
       reader.readAsText(file);
     } else {
@@ -1432,17 +1491,19 @@ export default function AddServiceModal({
     setIsDragging(false);
   };
   
-  // Parse pasted flight booking text — try AI first, fallback to regex
+  // Parse pasted flight booking text — try regex first, fallback to AI
   const handleParseFlight = async () => {
     if (!pasteText.trim()) return;
     
     setParseError(null);
     const text = pasteText.trim();
+    parseSourceTextRef.current = text;
 
     // Try regex first — instant, free, deterministic (handles Amadeus PNR, airline confirmations)
     const regexResult = parseWithRegex(text);
     if (regexResult && regexResult.segments.length > 0) {
       applyParsedData(regexResult.segments, regexResult.booking);
+      setShowAIParsedBanner(true);
       const segs = regexResult.segments;
       setParsedFields((prev) => {
         const next = new Set(prev);
@@ -1473,6 +1534,7 @@ export default function AddServiceModal({
       if (res.ok && data.segments?.length > 0) {
         const booking = data.booking || {};
         applyParsedData(data.segments, booking);
+        setShowAIParsedBanner(true);
         const segs = data.segments;
         setParsedFields((prev) => {
           const next = new Set(prev);
@@ -2027,6 +2089,21 @@ export default function AddServiceModal({
           clientPartyId: data.service.clientPartyId,
           clientName: data.service.clientName,
         });
+        // Save corrected parse template if text was parsed
+        if (parseSourceTextRef.current && flightSegments.length > 0) {
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          fetch("/api/ai/save-parse-template", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}) },
+            body: JSON.stringify({
+              text: parseSourceTextRef.current,
+              segments: flightSegments,
+              booking: { bookingRef: refNr, airline: supplierName, totalPrice: servicePrice, baggage, cabinClass, refundPolicy },
+              correctedFields: correctedFields.size > 0 ? [...correctedFields] : undefined,
+            }),
+          }).catch(() => {});
+          parseSourceTextRef.current = "";
+        }
         onServiceAdded(data.service);
         onClose();
       } else {
@@ -2195,6 +2272,24 @@ export default function AddServiceModal({
               {error}
             </div>
           )}
+          {showAIParsedBanner && (
+            <div className={`mb-3 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${correctionMode ? "bg-amber-100 border-amber-300 text-amber-900" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+              {correctionMode ? (
+                <>
+                  <span>✏️ Correction mode — fields you edit are highlighted in <strong>orange</strong>. Click <strong>Save</strong> when done.</span>
+                  <button type="button" onClick={() => setCorrectionMode(false)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 shrink-0">Done</button>
+                </>
+              ) : (
+                <>
+                  <span>📋 Data parsed from document. To correct missing or wrong fields, click <strong>Edit Form</strong>.</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button type="button" onClick={() => setCorrectionMode(true)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700">Edit Form</button>
+                    <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Two-column layout: Left = BASIC INFO + CLIENTS & PAYER (hotel/flight) + Supplier/Preferences, Right = PARTIES (tour/other only) + PRICING + REFERENCES */}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -2210,9 +2305,9 @@ export default function AddServiceModal({
                     <input
                       type="text"
                       value={serviceName}
-                      onChange={(e) => setServiceName(e.target.value)}
+                      onChange={(e) => { setServiceName(e.target.value); markCorrected("serviceName"); }}
                       placeholder="e.g. RIX - FRA - NCE / NCE - FRA - RIX or paste below"
-                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${fieldRingClass("serviceName")}`}
                     />
                   </div>
                   {/* Paste & Parse — drop zone or textarea */}
@@ -2329,6 +2424,7 @@ export default function AddServiceModal({
                         onChange={(from, to) => {
                           setDateFrom(from);
                           setDateTo(to);
+                          markCorrected("dateFrom");
                           if (flightSegments.length > 0) {
                             setFlightSegments((prev) => {
                               const next = prev.map((seg, i) => {
@@ -2340,15 +2436,15 @@ export default function AddServiceModal({
                             });
                           }
                         }}
-                        triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
+                        triggerClassName={correctedFields.has("dateFrom") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Cabin Class</label>
                       <select
                         value={cabinClass}
-                        onChange={(e) => setCabinClass(e.target.value as "economy" | "premium_economy" | "business" | "first")}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("cabinClass") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                        onChange={(e) => { setCabinClass(e.target.value as "economy" | "premium_economy" | "business" | "first"); markCorrected("cabinClass"); }}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 ${fieldRingClass("cabinClass")}`}
                       >
                         <option value="economy">Economy</option>
                         <option value="premium_economy">Premium Economy</option>
@@ -2362,9 +2458,9 @@ export default function AddServiceModal({
                     <input
                       type="text"
                       value={baggage}
-                      onChange={(e) => setBaggage(e.target.value)}
+                      onChange={(e) => { setBaggage(e.target.value); markCorrected("baggage"); }}
                       placeholder="e.g., personal+cabin+1bag"
-                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parsedFields.has("baggage") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 ${fieldRingClass("baggage")}`}
                     />
                   </div>
                 </div>
@@ -2508,12 +2604,30 @@ export default function AddServiceModal({
                         {clients.filter(c => c.id || c.name).map((client) => {
                           const realIndex = clients.indexOf(client);
                           const displayName = toTitleCaseForDisplay(client.name || "") || "—";
-                          return (
-                            <span key={client.id || realIndex} className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40]">
+                          return replacingClientIdx === realIndex ? (
+                            <div key={client.id || realIndex} className="w-48">
+                              <PartySelect
+                                value={client.id}
+                                onChange={(id, name) => {
+                                  if (id) updateClient(realIndex, id, name);
+                                  setReplacingClientIdx(null);
+                                }}
+                                roleFilter="client"
+                                initialDisplayName={displayName}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                              />
+                            </div>
+                          ) : (
+                            <span
+                              key={client.id || realIndex}
+                              className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] cursor-pointer hover:bg-[#dee2e6] transition-colors"
+                              onClick={() => setReplacingClientIdx(realIndex)}
+                              title="Click to replace client"
+                            >
                               {displayName}
                               <button
                                 type="button"
-                                onClick={() => removeClient(realIndex)}
+                                onClick={(e) => { e.stopPropagation(); removeClient(realIndex); }}
                                 className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
                                 aria-label={`Remove ${displayName}`}
                               >
@@ -2580,9 +2694,9 @@ export default function AddServiceModal({
                         <input
                           type="text"
                           value={refNr}
-                          onChange={(e) => setRefNr(e.target.value)}
+                          onChange={(e) => { setRefNr(e.target.value); markCorrected("refNr"); }}
                           placeholder="Booking ref"
-                          className={`w-full rounded-md border px-2.5 py-1.5 text-sm ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-[#CED4DA] focus:border-[#FFC107] focus:ring-1 focus:ring-amber-400"}`}
+                          className={`w-full rounded-md border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-amber-400 ${fieldRingClass("refNr")}`}
                         />
                       </div>
                       <div>
@@ -3055,17 +3169,37 @@ export default function AddServiceModal({
                   </div>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {clients.filter(c => c.id || c.name).map((client, index) => {
+                      const realIdx = clients.indexOf(client);
                       const displayName = toTitleCaseForDisplay(client.name || (index === 0 ? defaultClientName : "") || "") || "-";
                       return (
                         <div key={client.id || index} className="flex items-center gap-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-md text-sm">
-                            {displayName}
-                            {clients.filter(c => c.id || c.name).length > 1 && (
-                              <button type="button" onClick={() => { const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || "")); if (idx >= 0) removeClient(idx); }} className="text-gray-400 hover:text-red-600" aria-label={`Remove ${displayName}`}>
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                            )}
-                          </span>
+                          {replacingClientIdx === realIdx ? (
+                            <div className="w-48">
+                              <PartySelect
+                                value={client.id}
+                                onChange={(id, name) => {
+                                  if (id) updateClient(realIdx, id, name);
+                                  setReplacingClientIdx(null);
+                                }}
+                                roleFilter="client"
+                                initialDisplayName={displayName}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                              />
+                            </div>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm cursor-pointer hover:bg-gray-200 transition-colors ${correctedFields.has("clients") ? "bg-amber-100 ring-1 ring-amber-400" : "bg-gray-100"}`}
+                              onClick={() => setReplacingClientIdx(realIdx)}
+                              title="Click to replace client"
+                            >
+                              {displayName}
+                              {clients.filter(c => c.id || c.name).length > 1 && (
+                                <button type="button" onClick={(e) => { e.stopPropagation(); const idx = clients.findIndex(c => (c.id || "") === (client.id || "") && (c.name || "") === (client.name || "")); if (idx >= 0) removeClient(idx); }} className="text-gray-400 hover:text-red-600" aria-label={`Remove ${displayName}`}>
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              )}
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -3095,19 +3229,38 @@ export default function AddServiceModal({
                       const displayName = toTitleCaseForDisplay(client.name || "") || "-";
                       return (
                         <div key={client.id || realIndex} className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0">
-                            {displayName}
-                            <button
-                              type="button"
-                              onClick={() => removeClient(realIndex)}
-                              className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
-                              aria-label={`Remove ${displayName}`}
+                          {replacingClientIdx === realIndex ? (
+                            <div className="w-48">
+                              <PartySelect
+                                value={client.id}
+                                onChange={(id, name) => {
+                                  if (id) updateClient(realIndex, id, name);
+                                  setReplacingClientIdx(null);
+                                }}
+                                roleFilter="client"
+                                initialDisplayName={displayName}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                              />
+                            </div>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0 cursor-pointer hover:bg-[#dee2e6] transition-colors ${correctedFields.has("clients") ? "bg-amber-100 ring-1 ring-amber-400" : "bg-[#E9ECEF]"}`}
+                              onClick={() => setReplacingClientIdx(realIndex)}
+                              title="Click to replace client"
                             >
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </span>
+                              {displayName}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeClient(realIndex); }}
+                                className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
+                                aria-label={`Remove ${displayName}`}
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </span>
+                          )}
                           <input
                             type="text"
                             value={ticketEntry?.ticketNr ?? ""}
@@ -3533,7 +3686,10 @@ export default function AddServiceModal({
                             step="0.01"
                             min="0"
                             value={agentDiscountValue}
-                            onChange={(e) => setAgentDiscountValue(e.target.value)}
+                            onChange={(e) => {
+                              pricingLastEditedRef.current = "agent";
+                              setAgentDiscountValue(e.target.value);
+                            }}
                             placeholder="0"
                             className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           />
@@ -4024,7 +4180,7 @@ export default function AddServiceModal({
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Cost</span>
-                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(e.target.value); markCorrected("servicePrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Marge</span>
@@ -4032,7 +4188,7 @@ export default function AddServiceModal({
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Sale</span>
-                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("clientPrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(e.target.value); markCorrected("clientPrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                     </div>
                     )}

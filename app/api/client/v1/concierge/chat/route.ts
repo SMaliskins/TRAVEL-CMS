@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { MODELS } from '@/lib/ai/config'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
 import { conciergeTools } from '@/lib/client-concierge/tools'
 import { buildConciergeSystemPrompt } from '@/lib/client-concierge/systemPrompt'
@@ -401,7 +402,7 @@ export async function POST(req: NextRequest) {
 
     for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5',
+        model: MODELS.ANTHROPIC_CHAT,
         max_tokens: 1024,
         system: systemPrompt,
         tools: conciergeTools,

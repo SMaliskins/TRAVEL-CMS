@@ -7,11 +7,12 @@ import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import StatisticCard, { CardPeriodType } from "@/components/dashboard/StatisticCard";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import ProfitOrdersChart from "@/components/dashboard/ProfitOrdersChart";
-import TargetSpeedometer from "@/components/dashboard/TargetSpeedometer";
+import TargetSpeedometer, { AgentTarget } from "@/components/dashboard/TargetSpeedometer";
 import TouristsMap from "@/components/dashboard/TouristsMap";
 import RecentlyCompletedList from "@/components/dashboard/RecentlyCompletedList";
 import CalendarWithDots from "@/components/dashboard/CalendarWithDots";
 import AIWindowPlaceholder from "@/components/dashboard/AIWindowPlaceholder";
+import FinanceDashboard from "@/components/dashboard/FinanceDashboard";
 import "../hotels-booking/modern-booking.css";
 
 interface DashboardStatistics {
@@ -20,6 +21,7 @@ interface DashboardStatistics {
   revenue: number;
   profit: number;
   vat: number;
+  totalCommission: number;
   overdueAmount: number;
   targetProfitMonthly: number;
   targetRevenueMonthly: number;
@@ -75,7 +77,11 @@ export default function DashboardPage() {
   const [touristLocations, setTouristLocations] = useState<TouristLocation[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
-  const showTargets = currentRole === "supervisor" || currentRole === "admin" || currentRole === "director";
+  const showTargets = !!currentRole;
+  const showAgentBreakdown = currentRole === "supervisor" || currentRole === "admin" || currentRole === "director";
+  const isSubagent = currentRole === "subagent";
+  const isFinance = currentRole === "finance";
+  const [agentTargets, setAgentTargets] = useState<AgentTarget[]>([]);
 
   // Per-card period overrides
   type CardKey = "orders" | "bookings" | "revenue" | "overdue";
@@ -207,9 +213,9 @@ export default function DashboardPage() {
     fetchPreviousYear();
   }, [periodStart, periodEnd]);
 
-  // Fetch chart data
+  // Fetch chart data (skip for finance role)
   useEffect(() => {
-    if (!periodStart || !periodEnd) return;
+    if (!periodStart || !periodEnd || isFinance) return;
 
     const fetchChart = async () => {
       try {
@@ -231,10 +237,12 @@ export default function DashboardPage() {
     };
 
     fetchChart();
-  }, [periodStart, periodEnd]);
+  }, [periodStart, periodEnd, isFinance]);
 
-  // Fetch real tourist locations
+  // Fetch real tourist locations (skip for finance role)
   useEffect(() => {
+    if (isFinance) return;
+
     const fetchLocations = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -258,10 +266,12 @@ export default function DashboardPage() {
     };
 
     fetchLocations();
-  }, []);
+  }, [isFinance]);
 
-  // Fetch calendar events
+  // Fetch calendar events (skip for finance role)
   useEffect(() => {
+    if (isFinance) return;
+
     const fetchCalendar = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -281,7 +291,29 @@ export default function DashboardPage() {
     };
 
     fetchCalendar();
-  }, []);
+  }, [isFinance]);
+
+  // Fetch agent targets for supervisor/admin (skip for finance)
+  useEffect(() => {
+    if (!showAgentBreakdown || !periodStart || !periodEnd || isFinance) return;
+    const fetchAgentTargets = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const res = await fetch(
+          `/api/dashboard/agent-targets?periodStart=${periodStart}&periodEnd=${periodEnd}`,
+          { headers: { Authorization: `Bearer ${session.access_token}` } }
+        );
+        if (res.ok) {
+          const json = await res.json();
+          setAgentTargets(json.agents || []);
+        }
+      } catch (err) {
+        console.error("Error fetching agent targets:", err);
+      }
+    };
+    fetchAgentTargets();
+  }, [showAgentBreakdown, periodStart, periodEnd]);
 
   // Helper to calculate dates for a card period
   const calcCardDates = (cp: CardPeriodType): { start: string; end: string } => {
@@ -446,121 +478,145 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 1: Statistic Cards & Target */}
-        <div className={`grid gap-4 grid-cols-2 md:grid-cols-3 ${showTargets ? "lg:grid-cols-5" : "lg:grid-cols-4"} relative z-0`}>
-          <StatisticCard
-            title="Orders"
-            value={getStats("orders")?.ordersCount || 0}
-            previousValue={getPrev("orders")?.ordersCount}
-            changePercent={
-              getPrev("orders")
-                ? calculateChangePercent(
-                  getStats("orders")?.ordersCount || 0,
-                  getPrev("orders")!.ordersCount
-                )
-                : undefined
-            }
-            cardPeriod={cardPeriods.orders}
-            onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, orders: p }))}
-            onClick={() => {
-              const d = getCardEffectiveDates("orders");
-              router.push(`/orders?createdFrom=${d.start}&createdTo=${d.end}`);
-            }}
+        {/* Finance-specific Dashboard */}
+        {isFinance ? (
+          <FinanceDashboard
+            periodStart={periodStart}
+            periodEnd={periodEnd}
+            statistics={statistics ? { revenue: statistics.revenue, overdueAmount: statistics.overdueAmount } : null}
+            previousYear={previousYear ? { revenue: previousYear.revenue } : null}
+            calcCardDates={calcCardDates}
+            calculateChangePercent={calculateChangePercent}
           />
-          <StatisticCard
-            title="Active Bookings"
-            value={getStats("bookings")?.activeBookings || 0}
-            previousValue={getPrev("bookings")?.activeBookings}
-            changePercent={
-              getPrev("bookings")
-                ? calculateChangePercent(
-                  getStats("bookings")?.activeBookings || 0,
-                  getPrev("bookings")!.activeBookings
-                )
-                : undefined
-            }
-            cardPeriod={cardPeriods.bookings}
-            onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, bookings: p }))}
-            onClick={() => router.push("/orders?status=Active")}
-          />
-          <StatisticCard
-            title="Revenue"
-            value={`€${(getStats("revenue")?.revenue || 0).toLocaleString()}`}
-            previousValue={`€${(getPrev("revenue")?.revenue || 0).toLocaleString()}`}
-            changePercent={
-              getPrev("revenue")
-                ? calculateChangePercent(
-                  getStats("revenue")?.revenue || 0,
-                  getPrev("revenue")!.revenue
-                )
-                : undefined
-            }
-            cardPeriod={cardPeriods.revenue}
-            onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, revenue: p }))}
-            onClick={() => {
-              const d = getCardEffectiveDates("revenue");
-              router.push(`/orders?createdFrom=${d.start}&createdTo=${d.end}`);
-            }}
-          />
-          <StatisticCard
-            title="Overdue Payments"
-            value={`€${(getStats("overdue")?.overdueAmount || 0).toLocaleString()}`}
-            cardPeriod={cardPeriods.overdue}
-            onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, overdue: p }))}
-            onClick={() => router.push("/finances/invoices?status=overdue")}
-          />
-          {showTargets && (() => {
-            const monthlyTarget = statistics?.targetProfitMonthly || 0;
-            if (period === "currentMonth" || period === "lastMonth") {
-              return (
-                <TargetSpeedometer
-                  current={statistics?.profit || 0}
-                  target={monthlyTarget}
-                  label="Monthly Target"
-                  vat={statistics?.vat || 0}
-                />
-              );
-            }
-            const days = periodStart && periodEnd
-              ? Math.max(1, Math.round((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / 86400000) + 1)
-              : 30;
-            const months = days / 30.44;
-            const scaledTarget = Math.round(monthlyTarget * months * 100) / 100;
-            const lbl = months <= 3.5 ? "Quarter Target" : months <= 6.5 ? "Half-Year Target" : months <= 13 ? "Annual Target" : "Period Target";
-            return (
-              <TargetSpeedometer
-                current={statistics?.profit || 0}
-                target={scaledTarget}
-                label={lbl}
-                vat={statistics?.vat || 0}
+        ) : (
+          <>
+            {/* Row 1: Statistic Cards & Target */}
+            <div className={`grid gap-4 grid-cols-2 md:grid-cols-3 ${isSubagent ? "lg:grid-cols-6" : showTargets ? "lg:grid-cols-5" : "lg:grid-cols-4"} relative z-0`}>
+              <StatisticCard
+                title="Orders"
+                value={getStats("orders")?.ordersCount || 0}
+                previousValue={getPrev("orders")?.ordersCount}
+                changePercent={
+                  getPrev("orders")
+                    ? calculateChangePercent(
+                      getStats("orders")?.ordersCount || 0,
+                      getPrev("orders")!.ordersCount
+                    )
+                    : undefined
+                }
+                cardPeriod={cardPeriods.orders}
+                onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, orders: p }))}
+                onClick={() => {
+                  const d = getCardEffectiveDates("orders");
+                  router.push(`/orders?createdFrom=${d.start}&createdTo=${d.end}`);
+                }}
               />
-            );
-          })()}
-        </div>
+              <StatisticCard
+                title="Active Bookings"
+                value={getStats("bookings")?.activeBookings || 0}
+                previousValue={getPrev("bookings")?.activeBookings}
+                changePercent={
+                  getPrev("bookings")
+                    ? calculateChangePercent(
+                      getStats("bookings")?.activeBookings || 0,
+                      getPrev("bookings")!.activeBookings
+                    )
+                    : undefined
+                }
+                cardPeriod={cardPeriods.bookings}
+                onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, bookings: p }))}
+                onClick={() => router.push("/orders?status=Active")}
+              />
+              <StatisticCard
+                title="Revenue"
+                value={`€${(getStats("revenue")?.revenue || 0).toLocaleString()}`}
+                previousValue={`€${(getPrev("revenue")?.revenue || 0).toLocaleString()}`}
+                changePercent={
+                  getPrev("revenue")
+                    ? calculateChangePercent(
+                      getStats("revenue")?.revenue || 0,
+                      getPrev("revenue")!.revenue
+                    )
+                    : undefined
+                }
+                cardPeriod={cardPeriods.revenue}
+                onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, revenue: p }))}
+                onClick={() => {
+                  const d = getCardEffectiveDates("revenue");
+                  router.push(`/orders?createdFrom=${d.start}&createdTo=${d.end}`);
+                }}
+              />
+              <StatisticCard
+                title="Overdue Payments"
+                value={`€${(getStats("overdue")?.overdueAmount || 0).toLocaleString()}`}
+                valueClassName="text-red-600"
+                cardPeriod={cardPeriods.overdue}
+                onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, overdue: p }))}
+                onClick={!isSubagent ? () => router.push("/finances/invoices?status=overdue") : undefined}
+              />
+              {isSubagent && (
+                <StatisticCard
+                  title="Commission"
+                  value={`€${(statistics?.totalCommission || 0).toLocaleString()}`}
+                />
+              )}
+              {showTargets && !isFinance && (() => {
+                const monthlyTarget = statistics?.targetProfitMonthly || 0;
+                if (period === "currentMonth" || period === "lastMonth") {
+                  return (
+                    <TargetSpeedometer
+                      current={statistics?.profit || 0}
+                      target={monthlyTarget}
+                      label="Target"
+                      vat={statistics?.vat || 0}
+                      agents={showAgentBreakdown ? agentTargets : undefined}
+                      showAgentSelector={showAgentBreakdown}
+                    />
+                  );
+                }
+                const days = periodStart && periodEnd
+                  ? Math.max(1, Math.round((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / 86400000) + 1)
+                  : 30;
+                const months = days / 30.44;
+                const scaledTarget = Math.round(monthlyTarget * months * 100) / 100;
+                return (
+                  <TargetSpeedometer
+                    current={statistics?.profit || 0}
+                    target={scaledTarget}
+                    label="Target"
+                    vat={statistics?.vat || 0}
+                    agents={showAgentBreakdown ? agentTargets : undefined}
+                    showAgentSelector={showAgentBreakdown}
+                  />
+                );
+              })()}
+            </div>
 
-        {/* Row 2: Map and Calendar */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <TouristsMap locations={touristLocations} />
-          </div>
-          <div>
-            <CalendarWithDots events={calendarEvents} />
-          </div>
-        </div>
+            {/* Row 2: Map and Calendar */}
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <TouristsMap locations={touristLocations} />
+              </div>
+              <div>
+                <CalendarWithDots events={calendarEvents} />
+              </div>
+            </div>
 
-        {/* Row 3: Chart */}
-        <div className="grid gap-4">
-          <ProfitOrdersChart data={chartData} />
-        </div>
+            {/* Row 3: Chart */}
+            <div className="grid gap-4">
+              <ProfitOrdersChart data={chartData} />
+            </div>
 
-        {/* Recently Completed Row */}
-        <RecentlyCompletedList travelers={touristLocations} />
+            {/* Recently Completed Row */}
+            <RecentlyCompletedList travelers={touristLocations} />
+          </>
+        )}
 
         {/* AI Window */}
         <div className="flex justify-end">
           <AIWindowPlaceholder />
         </div>
       </div>
-    </div >
+    </div>
   );
 }

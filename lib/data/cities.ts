@@ -152,6 +152,16 @@ export const CITIES: City[] = [
   { name: "Mykonos", country: "Greece", countryCode: "GR", lat: 37.4467, lng: 25.3289, iataCode: "JMK" },
   { name: "Rhodes", country: "Greece", countryCode: "GR", lat: 36.4349, lng: 28.2176, iataCode: "RHO" },
   { name: "Crete", country: "Greece", countryCode: "GR", lat: 35.2401, lng: 24.8093, iataCode: "HER" },
+  { name: "Corfu", country: "Greece", countryCode: "GR", lat: 39.6243, lng: 19.9217, iataCode: "CFU" },
+  { name: "Zakynthos", country: "Greece", countryCode: "GR", lat: 37.7870, lng: 20.8979, iataCode: "ZTH" },
+  { name: "Kos", country: "Greece", countryCode: "GR", lat: 36.8935, lng: 27.0914, iataCode: "KGS" },
+  { name: "Lefkada", country: "Greece", countryCode: "GR", lat: 38.8337, lng: 20.7069 },
+  { name: "Kefalonia", country: "Greece", countryCode: "GR", lat: 38.1794, lng: 20.4894, iataCode: "EFL" },
+  { name: "Skiathos", country: "Greece", countryCode: "GR", lat: 39.1617, lng: 23.4918, iataCode: "JSI" },
+  { name: "Paros", country: "Greece", countryCode: "GR", lat: 37.0858, lng: 25.1522, iataCode: "PAS" },
+  { name: "Naxos", country: "Greece", countryCode: "GR", lat: 37.1036, lng: 25.3762, iataCode: "JNX" },
+  { name: "Chania", country: "Greece", countryCode: "GR", lat: 35.5138, lng: 24.0180, iataCode: "CHQ" },
+  { name: "Heraklion", country: "Greece", countryCode: "GR", lat: 35.3387, lng: 25.1442, iataCode: "HER" },
   
   // Turkey
   { name: "Istanbul", country: "Turkey", countryCode: "TR", lat: 41.0082, lng: 28.9784, iataCode: "IST" },

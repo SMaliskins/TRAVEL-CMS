@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { City, searchCities, countryCodeToFlag, loadWorldCities } from "@/lib/data/cities";
+import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 
 export interface CityWithCountry {
   city: string;
@@ -11,10 +12,20 @@ export interface CityWithCountry {
   lng?: number;
 }
 
+interface ExternalCity {
+  name: string;
+  country: string;
+  countryCode: string;
+  lat: number;
+  lng: number;
+  iataCode?: string;
+  source: "local" | "db" | "external";
+}
+
 interface CityMultiSelectProps {
-  selectedCities: CityWithCountry[]; // Array of city+country objects
+  selectedCities: CityWithCountry[];
   onChange: (cities: CityWithCountry[]) => void;
-  onCountryChange?: (countries: string[]) => void; // Array of unique countries
+  onCountryChange?: (countries: string[]) => void;
   error?: string;
   placeholder?: string;
 }
@@ -29,15 +40,16 @@ export default function CityMultiSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
+  const [apiResults, setApiResults] = useState<ExternalCity[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Load extended world cities on mount (enables search for Tashkent, etc.)
   useEffect(() => {
     loadWorldCities().then(() => setWorldCitiesLoaded(true));
   }, []);
 
-  // Get unique countries from selected cities (preserving order of first appearance)
   const selectedCountries = useMemo(() => {
     const countries: string[] = [];
     const seen = new Set<string>();
@@ -50,14 +62,12 @@ export default function CityMultiSelect({
     return countries;
   }, [selectedCities]);
 
-  // Notify parent about country change
   useEffect(() => {
     if (onCountryChange) {
       onCountryChange(selectedCountries);
     }
   }, [selectedCountries, onCountryChange]);
 
-  // Filter cities based on search (exclude already selected)
   const filteredCities = useMemo(() => {
     if (!searchQuery || searchQuery.length < 2) {
       return [];
@@ -68,7 +78,68 @@ export default function CityMultiSelect({
     );
   }, [searchQuery, selectedCities, worldCitiesLoaded]);
 
-  // Click outside to close
+  // API fallback: when local results are insufficient, search DB + Nominatim
+  const searchApi = useCallback(async (query: string) => {
+    if (query.length < 3) {
+      setApiResults([]);
+      return;
+    }
+    setApiLoading(true);
+    try {
+      const res = await fetchWithAuth(`/api/geo/city-search?q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setApiResults(data.cities || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setApiLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (filteredCities.length >= 3 || searchQuery.length < 3) {
+      setApiResults([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(() => {
+      searchApi(searchQuery);
+    }, 350);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery, filteredCities.length, searchApi]);
+
+  // Merge local + API results, deduplicating
+  const allResults = useMemo(() => {
+    const selectedCityNames = new Set(selectedCities.map((c) => c.city.toLowerCase()));
+    const localAsCities: (City & { source?: string })[] = filteredCities.map((c) => ({ ...c, source: "local" }));
+    const seenKeys = new Set(localAsCities.map((c) => `${c.name.toLowerCase()}|${c.countryCode.toLowerCase()}`));
+
+    const merged = [...localAsCities];
+    for (const ext of apiResults) {
+      const key = `${ext.name.toLowerCase()}|${ext.countryCode.toLowerCase()}`;
+      if (!seenKeys.has(key) && !selectedCityNames.has(ext.name.toLowerCase())) {
+        seenKeys.add(key);
+        merged.push({
+          name: ext.name,
+          country: ext.country,
+          countryCode: ext.countryCode,
+          lat: ext.lat,
+          lng: ext.lng,
+          iataCode: ext.iataCode,
+          source: ext.source,
+        });
+      }
+    }
+    return merged;
+  }, [filteredCities, apiResults, selectedCities]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -86,7 +157,7 @@ export default function CityMultiSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const handleSelectCity = (city: City) => {
+  const handleSelectCity = (city: City & { source?: string }) => {
     const cityWithCountry: CityWithCountry = {
       city: city.name,
       country: city.country,
@@ -98,7 +169,25 @@ export default function CityMultiSelect({
     if (!alreadySelected) {
       onChange([...selectedCities, cityWithCountry]);
     }
+
+    // Auto-save external cities to DB for future use
+    if (city.source === "external" || city.source === "db") {
+      fetchWithAuth("/api/geo/city-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: city.name,
+          country: city.country,
+          countryCode: city.countryCode,
+          lat: city.lat,
+          lng: city.lng,
+          iataCode: city.iataCode,
+        }),
+      }).catch(() => {});
+    }
+
     setSearchQuery("");
+    setApiResults([]);
     inputRef.current?.focus();
   };
 
@@ -108,7 +197,6 @@ export default function CityMultiSelect({
 
   return (
     <div ref={containerRef} className="space-y-2">
-      {/* Selected cities as chips with flags */}
       {selectedCities.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedCities.map((item) => (
@@ -132,7 +220,6 @@ export default function CityMultiSelect({
         </div>
       )}
 
-      {/* Input with dropdown */}
       <div className="relative">
         <input
           ref={inputRef}
@@ -152,11 +239,11 @@ export default function CityMultiSelect({
               : "border-gray-300 focus:border-black focus:ring-black"
           }`}
         />
-        {isOpen && filteredCities.length > 0 && (
+        {isOpen && (allResults.length > 0 || apiLoading) && (
           <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-300 bg-white shadow-lg">
-            {filteredCities.map((city) => (
+            {allResults.map((city) => (
               <button
-                key={`${city.name}-${city.country}`}
+                key={`${city.name}-${city.countryCode}-${city.source}`}
                 type="button"
                 onClick={() => handleSelectCity(city)}
                 className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
@@ -166,10 +253,20 @@ export default function CityMultiSelect({
                     <span className="mr-1.5">{countryCodeToFlag(city.countryCode)}</span>
                     {city.name}
                   </span>
-                  <span className="text-xs text-gray-500">{city.country}</span>
+                  <span className="text-xs text-gray-500">
+                    {city.country}
+                    {city.source === "external" && (
+                      <span className="ml-1 text-blue-500" title="Found via search, will be saved">+</span>
+                    )}
+                  </span>
                 </div>
               </button>
             ))}
+            {apiLoading && (
+              <div className="px-3 py-2 text-xs text-gray-400 text-center">
+                Searching...
+              </div>
+            )}
           </div>
         )}
       </div>

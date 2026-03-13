@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 
 function toTitleCase(str: string): string {
   if (!str) return str;
@@ -43,6 +44,10 @@ export default function PartySelect({
   initialDisplayName = "",
   prioritizedParties = [],
 }: PartySelectProps) {
+  const currentRole = useCurrentUserRole();
+  const isSubagentUser = currentRole === "subagent";
+  const minSearchChars = isSubagentUser ? 3 : 2;
+  const maxResults = isSubagentUser ? 5 : 10;
   // Initialize inputValue with initialDisplayName if provided
   const [inputValue, setInputValue] = useState(initialDisplayName);
   const [parties, setParties] = useState<Party[]>([]);
@@ -66,6 +71,7 @@ export default function PartySelect({
   const [createRegNumber, setCreateRegNumber] = useState("");
   const [createError, setCreateError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [duplicates, setDuplicates] = useState<{ id: string; displayName: string; displayId?: number }[]>([]);
   // Supplier-specific: service areas
   const [createServiceAreas, setCreateServiceAreas] = useState<string[]>([]);
   
@@ -106,7 +112,7 @@ export default function PartySelect({
           (p.last_name || "").toLowerCase().includes(q)
         );
 
-    if (q.length < 2) {
+    if (q.length < minSearchChars) {
       setParties(matchingPrioritized);
       setShowCreateOption(false);
       return;
@@ -116,7 +122,7 @@ export default function PartySelect({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const params = new URLSearchParams({ search: query, limit: "10" });
+      const params = new URLSearchParams({ search: query, limit: String(maxResults) });
       if (roleFilter) params.set("role", roleFilter);
       
       const response = await fetch(`/api/directory?${params.toString()}`, {
@@ -145,15 +151,15 @@ export default function PartySelect({
         const exactMatch = transformedResults.some((p: Party) => 
           (p.display_name || "").toLowerCase() === query.toLowerCase()
         );
-        setShowCreateOption(!exactMatch && query.length >= 2);
+        setShowCreateOption(!exactMatch && query.length >= minSearchChars);
       } else {
         setParties(matchingPrioritized);
-        setShowCreateOption(query.length >= 2);
+        setShowCreateOption(query.length >= minSearchChars);
       }
     } catch (err) {
       console.error("Party search error:", err);
       setParties(matchingPrioritized);
-      setShowCreateOption(query.length >= 2);
+      setShowCreateOption(query.length >= minSearchChars);
     } finally {
       setIsLoading(false);
     }
@@ -254,7 +260,6 @@ export default function PartySelect({
           ? `${createFirstName.trim()} ${createLastName.trim()}`
           : createCompanyName.trim();
         
-        // API returns { ok: true, record: { id, display_name } }
         const partyId = data.record?.id || data.id || data.party?.id;
         
         if (!partyId) {
@@ -272,6 +277,15 @@ export default function PartySelect({
         handleSelect(newParty);
         setShowCreateForm(false);
         resetCreateForm();
+        setDuplicates([]);
+      } else if (response.status === 409) {
+        const errData = await response.json().catch(() => ({}));
+        if (errData.error === "duplicate_found" && errData.duplicates?.length > 0) {
+          setDuplicates(errData.duplicates);
+          setCreateError(errData.message || "A contact with this name already exists.");
+        } else {
+          setCreateError(errData.message || "Duplicate found");
+        }
       } else {
         const errData = await response.json().catch(() => ({}));
         setCreateError(errData.error || "Failed to create");
@@ -295,6 +309,71 @@ export default function PartySelect({
     setCreateRegNumber("");
     setCreateServiceAreas([]);
     setCreateError("");
+    setDuplicates([]);
+  };
+
+  const handleForceCreate = async () => {
+    setDuplicates([]);
+    setCreateError("");
+    setIsCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const payload: Record<string, unknown> = {
+        type: createType,
+        roles: roleFilter ? [roleFilter] : ["client"],
+        isActive: true,
+        skipDedupCheck: true,
+      };
+      if (createType === "person") {
+        payload.firstName = toTitleCase(createFirstName.trim());
+        payload.lastName = toTitleCase(createLastName.trim());
+        if (createPersonalCode.trim()) payload.personalCode = createPersonalCode.trim();
+        if (createPhone.trim()) payload.phone = createPhone.trim();
+        if (createEmail.trim()) payload.email = createEmail.trim();
+      } else {
+        payload.companyName = toTitleCase(createCompanyName.trim());
+        if (createAddress.trim()) payload.legalAddress = toTitleCase(createAddress.trim());
+        if (createRegNumber.trim()) payload.regNumber = createRegNumber.trim();
+      }
+      if (roleFilter === "supplier" && createServiceAreas.length > 0) {
+        payload.serviceAreas = createServiceAreas;
+      }
+      const response = await fetch("/api/directory/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const displayName = createType === "person"
+          ? `${createFirstName.trim()} ${createLastName.trim()}`
+          : createCompanyName.trim();
+        const partyId = data.record?.id || data.id || data.party?.id;
+        if (partyId) {
+          handleSelect({ id: partyId, display_name: displayName, party_type: createType });
+          setShowCreateForm(false);
+          resetCreateForm();
+        }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setCreateError(errData.error || "Failed to create");
+      }
+    } catch (err) {
+      console.error("Force create error:", err);
+      setCreateError("Network error");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleSelectDuplicate = (dup: { id: string; displayName: string }) => {
+    handleSelect({ id: dup.id, display_name: dup.displayName });
+    setShowCreateForm(false);
+    resetCreateForm();
   };
   
   // Service area options for suppliers — loaded from Settings > Travel Services
@@ -385,7 +464,7 @@ export default function PartySelect({
   }, []);
 
   useEffect(() => {
-    if (isOpen && (inputValue.length >= 2 || parties.length > 0 || isLoading) && !showCreateForm) {
+    if (isOpen && (inputValue.length >= minSearchChars || parties.length > 0 || isLoading) && !showCreateForm) {
       updateDropdownPosition();
       const onScrollOrResize = () => updateDropdownPosition();
       window.addEventListener("scroll", onScrollOrResize, true);
@@ -433,8 +512,7 @@ export default function PartySelect({
           onChange={handleInputChange}
           onFocus={() => {
             setIsOpen(true);
-            // Trigger search on focus if there's already text
-            if (inputValue.length >= 2) {
+            if (inputValue.length >= minSearchChars) {
               searchParties(inputValue);
             }
           }}
@@ -459,7 +537,7 @@ export default function PartySelect({
       </div>
 
       {/* Dropdown — render via portal so it's not clipped by modal overflow */}
-      {isOpen && (inputValue.length >= 2 || parties.length > 0 || isLoading) && !showCreateForm && dropdownStyle && typeof document !== "undefined" && createPortal(
+      {isOpen && (inputValue.length >= minSearchChars || parties.length > 0 || isLoading) && !showCreateForm && dropdownStyle && typeof document !== "undefined" && createPortal(
         <div
           ref={dropdownRef}
           className="fixed z-[99999] rounded-lg border border-gray-200 bg-white shadow-xl max-h-[min(400px,calc(100vh-120px))] overflow-y-auto"
@@ -474,7 +552,7 @@ export default function PartySelect({
             <div className="px-3 py-2 text-sm text-gray-500">Searching...</div>
           )}
 
-          {!isLoading && parties.length === 0 && inputValue.length >= 2 && (
+          {!isLoading && parties.length === 0 && inputValue.length >= minSearchChars && (
             <div className="px-3 py-2 text-sm text-gray-500">No results found</div>
           )}
 
@@ -514,6 +592,8 @@ export default function PartySelect({
         >
           <div
             ref={createFormTrapRef}
+            role="dialog"
+            aria-modal="true"
             className="bg-white rounded-lg border border-gray-200 shadow-xl p-4 w-full max-w-md max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -640,8 +720,39 @@ export default function PartySelect({
             </div>
           )}
 
-          {createError && (
+          {createError && !duplicates.length && (
             <p className="text-xs text-red-600 mt-2">{createError}</p>
+          )}
+
+          {duplicates.length > 0 && (
+            <div className="mt-3 p-3 rounded-lg border border-amber-300 bg-amber-50">
+              <p className="text-xs font-semibold text-amber-800 mb-2">
+                A contact with this name already exists:
+              </p>
+              {duplicates.map((dup) => (
+                <button
+                  key={dup.id}
+                  type="button"
+                  onClick={() => handleSelectDuplicate(dup)}
+                  className="flex w-full items-center justify-between rounded px-2 py-1.5 text-sm text-left hover:bg-amber-100 transition-colors"
+                >
+                  <span className="font-medium text-gray-900">{dup.displayName}</span>
+                  <span className="text-xs text-gray-500">
+                    ID: {String(dup.displayId || "").padStart(5, "0")}
+                  </span>
+                </button>
+              ))}
+              <div className="flex gap-2 mt-2 pt-2 border-t border-amber-200">
+                <button
+                  type="button"
+                  onClick={handleForceCreate}
+                  disabled={isCreating}
+                  className="flex-1 px-2 py-1 text-xs font-medium text-amber-700 border border-amber-300 rounded hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {isCreating ? "Creating..." : "Create anyway"}
+                </button>
+              </div>
+            </div>
           )}
 
           <div className="flex justify-end gap-2 mt-3">
@@ -653,14 +764,16 @@ export default function PartySelect({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleCreateSubmit}
-              disabled={isCreating}
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isCreating ? "Creating..." : "Save"}
-            </button>
+            {!duplicates.length && (
+              <button
+                type="button"
+                onClick={handleCreateSubmit}
+                disabled={isCreating}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isCreating ? "Creating..." : "Save"}
+              </button>
+            )}
           </div>
           </div>
         </div>,

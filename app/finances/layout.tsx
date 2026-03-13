@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { t } from "@/lib/i18n";
 
-const tabs = [
+const allTabs = [
   { nameKey: "invoices.title", href: "/finances/invoices" },
   { nameKey: "invoices.suppliersInvoices", href: "/finances/suppliers-invoices" },
   { nameKey: "payments.title", href: "/finances/payments" },
@@ -13,6 +14,8 @@ const tabs = [
   { nameKey: "iata.title", href: "/finances/iata" },
   { nameKey: "reconciliation.title", href: "/finances/reconciliation" },
 ];
+
+const subagentTabs = new Set(["/finances/invoices", "/finances/suppliers-invoices"]);
 
 export default function FinancesLayout({
   children,
@@ -22,6 +25,10 @@ export default function FinancesLayout({
   const pathname = usePathname();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const currentRole = useCurrentUserRole();
+  const tabs = currentRole === "subagent"
+    ? allTabs.filter((tab) => subagentTabs.has(tab.href))
+    : allTabs;
 
   return (
     <div>

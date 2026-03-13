@@ -20,7 +20,9 @@ interface Service {
   dateTo?: string | null;
   supplier?: string | null;
   supplierPartyId?: string | null;
+  client?: string | null;
   clientPartyId?: string | null;
+  payer?: string | null;
   payerPartyId?: string | null;
   flightSegments?: FlightSegment[];
 }
@@ -103,7 +105,9 @@ export default function CancelServiceModal({
           supplierPartyId: service.supplierPartyId,
           supplierName: service.supplier,
           clientPartyId: service.clientPartyId,
+          clientName: service.client,
           payerPartyId: service.payerPartyId,
+          payerName: service.payer,
           servicePrice: -refund, // Negative = money back from supplier
           clientPrice: clientPriceNum, // Negative = credit to client
           resStatus: 'confirmed',

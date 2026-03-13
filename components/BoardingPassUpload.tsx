@@ -47,8 +47,8 @@ export default function BoardingPassUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const trapRef = useFocusTrap<HTMLDivElement>(true);
-  useModalOverlay();
+  const trapRef = useFocusTrap<HTMLDivElement>(showMenu || showPreview);
+  useModalOverlay(showMenu || showPreview);
 
   // Find ALL passes for this client AND this flight
   const clientPasses = existingPasses.filter(

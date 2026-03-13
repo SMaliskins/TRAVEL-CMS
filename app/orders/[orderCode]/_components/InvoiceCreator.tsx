@@ -1613,22 +1613,45 @@ export default function InvoiceCreator({
                 />
               )}
             </div>
-            {(calculatedDeposit !== null || (depositType === "amount" && depositValue != null && total > 0)) ? (
-              <div className="flex flex-col gap-0.5 justify-end pb-1.5">
-                <label className="text-sm text-gray-500">
-                  {depositType === "percent" ? `Amount (${currencySymbol})` : "Percentage (%)"}
-                </label>
-                <div className="w-24 rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 min-h-[34px] flex items-center">
-                  {depositType === "percent"
-                    ? formatCurrency(calculatedDeposit ?? 0)
-                    : total > 0 && depositValue != null
-                      ? `${(Math.round((depositValue / total) * 1000) / 10).toFixed(1)}%`
-                      : ""}
-                </div>
-              </div>
-            ) : (
-              <div />
-            )}
+            <div className="flex flex-col gap-0.5 justify-end pb-1.5">
+              <label className="text-sm text-gray-500">
+                {depositType === "percent" ? `Amount (${currencySymbol})` : "Percentage (%)"}
+              </label>
+              {depositType === "percent" ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={calculatedDeposit != null ? calculatedDeposit : ""}
+                  onChange={(e) => {
+                    const amt = e.target.value ? parseFloat(e.target.value) : null;
+                    if (amt != null && total > 0) {
+                      const pct = Math.round((amt / total) * 10000) / 100;
+                      setDepositValue(pct);
+                    } else {
+                      setDepositValue(null);
+                    }
+                  }}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              ) : (
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={100}
+                  value={total > 0 && depositValue != null ? (Math.round((depositValue / total) * 1000) / 10).toFixed(1) : ""}
+                  onChange={(e) => {
+                    const pct = e.target.value ? parseFloat(e.target.value) : null;
+                    if (pct != null && total > 0) {
+                      setDepositValue(Math.round((total * pct / 100) * 100) / 100);
+                    } else {
+                      setDepositValue(null);
+                    }
+                  }}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              )}
+            </div>
             <div className="min-w-0">
               <SingleDatePicker
                 label="Deposit Date"
@@ -1711,23 +1734,53 @@ export default function InvoiceCreator({
                 />
               )}
             </div>
-            {(calculatedFinalPayment !== null || (depositType === "amount" && total > 0 && (finalPaymentAmount != null || calculatedFinalPayment != null))) ? (
-              <div className="flex flex-col gap-0.5 justify-end pb-1.5">
-                <label className="text-sm text-gray-500">
-                  {depositType === "percent" ? `Amount (${currencySymbol})` : "Percentage (%)"}
-                </label>
-                <div className="w-24 rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 min-h-[34px] flex items-center">
-                  {depositType === "percent"
-                    ? formatCurrency(isFinalPaymentManual ? (finalPaymentAmount ?? 0) : (calculatedFinalPayment ?? 0))
-                    : (() => {
-                        const fp = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
-                        return total > 0 && fp != null ? `${(Math.round((fp / total) * 1000) / 10).toFixed(1)}%` : "";
-                      })()}
-                </div>
-              </div>
-            ) : (
-              <div />
-            )}
+            <div className="flex flex-col gap-0.5 justify-end pb-1.5">
+              <label className="text-sm text-gray-500">
+                {depositType === "percent" ? `Amount (${currencySymbol})` : "Percentage (%)"}
+              </label>
+              {depositType === "percent" ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={isFinalPaymentManual ? (finalPaymentAmount ?? "") : (calculatedFinalPayment ?? "")}
+                  onChange={(e) => {
+                    const amt = e.target.value ? parseFloat(e.target.value) : null;
+                    setFinalPaymentAmount(amt);
+                    setIsFinalPaymentManual(true);
+                    if (amt != null && total > 0) {
+                      const newDeposit = Math.round((total - amt) * 100) / 100;
+                      if (newDeposit >= 0) setDepositValue(Math.round((newDeposit / total) * 10000) / 100);
+                    }
+                  }}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              ) : (
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={100}
+                  value={(() => {
+                    const fp = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
+                    return total > 0 && fp != null ? (Math.round((fp / total) * 1000) / 10).toFixed(1) : "";
+                  })()}
+                  onChange={(e) => {
+                    const pct = e.target.value ? parseFloat(e.target.value) : null;
+                    if (pct != null && total > 0) {
+                      const fpAmt = Math.round((total * pct / 100) * 100) / 100;
+                      setFinalPaymentAmount(fpAmt);
+                      setIsFinalPaymentManual(true);
+                      const newDeposit = Math.round((total - fpAmt) * 100) / 100;
+                      if (newDeposit >= 0) setDepositValue(newDeposit);
+                    } else {
+                      setFinalPaymentAmount(null);
+                      setIsFinalPaymentManual(false);
+                    }
+                  }}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              )}
+            </div>
             <div className="min-w-0">
               <SingleDatePicker
                 label={isFullPayment ? "Full Payment Date" : "Final Payment Date"}
@@ -2111,7 +2164,7 @@ export default function InvoiceCreator({
                             onMouseDown={(e) => e.stopPropagation()}
                             onDragStart={(e) => e.stopPropagation()}
                             rows={3}
-                            placeholder="Напр. Flight: Riga - Zurich - Riga или свой текст"
+                            placeholder="e.g. Flight: Riga - Zurich - Riga or custom text"
                             className="w-full min-h-[3rem] bg-transparent border-b border-dashed border-gray-300 focus:border-blue-500 focus:outline-none text-gray-900 resize-y block break-words px-2 py-2 cursor-text select-text"
                             style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
                           />

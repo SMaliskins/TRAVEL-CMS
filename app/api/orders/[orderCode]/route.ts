@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -461,6 +462,72 @@ export async function PATCH(
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Order PATCH error:", errorMsg);
+    return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
+  }
+}
+
+const DELETE_PASSWORD = "admin";
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string }> }
+) {
+  try {
+    const { orderCode } = await params;
+    const body = await request.json();
+
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (apiUser.role !== "supervisor" && apiUser.role !== "director") {
+      return NextResponse.json({ error: "Only Supervisor can delete orders" }, { status: 403 });
+    }
+
+    if (body.password !== DELETE_PASSWORD) {
+      return NextResponse.json({ error: "Incorrect password" }, { status: 403 });
+    }
+
+    const { data: order, error: findErr } = await supabaseAdmin
+      .from("orders")
+      .select("id, order_code")
+      .eq("company_id", apiUser.companyId)
+      .eq("order_code", orderCode)
+      .single();
+
+    if (findErr || !order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // 1. Delete invoices first (CASCADE removes invoice_items, freeing order_services FK)
+    const { error: invErr } = await supabaseAdmin
+      .from("invoices")
+      .delete()
+      .eq("order_id", order.id);
+
+    if (invErr) {
+      console.error("Delete invoices error:", invErr);
+      return NextResponse.json({ error: `Failed to delete invoices: ${invErr.message}` }, { status: 500 });
+    }
+
+    // 2. Delete the order (CASCADE: order_services, order_access, payments, travellers, documents, invoice_reservations)
+    const { error: delErr } = await supabaseAdmin
+      .from("orders")
+      .delete()
+      .eq("id", order.id);
+
+    if (delErr) {
+      console.error("Delete order error:", delErr);
+      return NextResponse.json({ error: `Failed to delete order: ${delErr.message}` }, { status: 500 });
+    }
+
+    console.log(`[Order DELETE] Order ${orderCode} (${order.id}) deleted by user ${apiUser.userId}`);
+
+    return NextResponse.json({ success: true, orderCode });
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Order DELETE error:", errorMsg);
     return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
   }
 }

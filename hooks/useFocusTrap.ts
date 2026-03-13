@@ -33,6 +33,13 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
 
     previousFocus.current = document.activeElement as HTMLElement | null;
 
+    if (!container.getAttribute("role")) {
+      container.setAttribute("role", "dialog");
+    }
+    if (!container.getAttribute("aria-modal")) {
+      container.setAttribute("aria-modal", "true");
+    }
+
     const getFocusables = () =>
       Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
         (el) => el.offsetParent !== null,

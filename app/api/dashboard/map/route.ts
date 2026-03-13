@@ -1,49 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
-
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-  const cookieHeader = request.headers.get("cookie") || "";
-  if (cookieHeader) {
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookieHeader } },
-    });
-    const { data, error } = await authClient.auth.getUser();
-    if (!error && data?.user) return data.user;
-  }
-  return null;
-}
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .single();
-  if (data?.company_id) return data.company_id;
-
-  const { data: d2 } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .single();
-  return d2?.company_id || null;
-}
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 const CITY_COORDS: Record<string, [number, number]> = {
   "london": [51.5074, -0.1278],
@@ -176,22 +133,25 @@ function geocodeCity(cityName: string): [number, number] | null {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) return NextResponse.json({ error: "No company" }, { status: 400 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId, userId, scope } = apiUser;
+    const isOwnScope = scope === "own";
 
     const today = new Date().toISOString().slice(0, 10);
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentStr = thirtyDaysAgo.toISOString().slice(0, 10);
 
-    const { data: orders, error } = await supabaseAdmin
+    let mapQ = supabaseAdmin
       .from("orders")
-      .select("id, order_code, client_display_name, countries_cities, date_from, date_to, status")
+      .select("id, order_code, client_display_name, countries_cities, date_from, date_to, status, owner_user_id, manager_user_id")
       .eq("company_id", companyId)
       .or(`date_to.gte.${recentStr},date_from.gte.${recentStr}`);
+    if (isOwnScope) {
+      mapQ = mapQ.or(`owner_user_id.eq.${userId},manager_user_id.eq.${userId}`);
+    }
+    const { data: orders, error } = await mapQ;
 
     if (error) {
       console.error("Map query error:", error);

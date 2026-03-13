@@ -1,22 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type } from "lucide-react";
+import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Brain } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { t } from "@/lib/i18n";
 
 const SETTINGS_SECTIONS = [
-  { nameKey: "settings.company", descKey: "settings.companyDesc", href: "/settings/company", icon: Building2 },
-  { nameKey: "settings.users", descKey: "settings.usersDesc", href: "/settings/users", icon: UsersRound },
-  { nameKey: "settings.billing", descKey: "settings.billingDesc", href: "/settings/billing", icon: CreditCard },
+  { nameKey: "settings.company", descKey: "settings.companyDesc", href: "/settings/company", icon: Building2, minRole: "manager" },
+  { nameKey: "settings.users", descKey: "settings.usersDesc", href: "/settings/users", icon: UsersRound, minRole: "supervisor" },
+  { nameKey: "settings.billing", descKey: "settings.billingDesc", href: "/settings/billing", icon: CreditCard, minRole: "manager" },
   { nameKey: "settings.profileLink", descKey: "settings.profileDesc", href: "/settings/profile", icon: UserCircle },
-  { nameKey: "settings.travelServices", descKey: "settings.travelServicesDesc", href: "/settings/travel-services", icon: Plane },
+  { nameKey: "settings.travelServices", descKey: "settings.travelServicesDesc", href: "/settings/travel-services", icon: Plane, minRole: "agent" },
   { nameKey: "settings.accessibility", descKey: "settings.accessibilityDesc", href: "/settings/accessibility", icon: Type },
+  { nameKey: "settings.aiParsing", descKey: "settings.aiParsingDesc", href: "/settings/ai-parsing", icon: Brain, minRole: "supervisor" },
 ];
+
+const ROLE_LEVEL: Record<string, number> = { subagent: 1, agent: 2, finance: 3, manager: 4, supervisor: 5 };
 
 export default function SettingsPage() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const userRole = useCurrentUserRole();
+  const userLevel = ROLE_LEVEL[(userRole || "").toLowerCase()] || 0;
 
   return (
     <div className="bg-gray-50 p-6">
@@ -26,7 +32,11 @@ export default function SettingsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {SETTINGS_SECTIONS.map((section) => (
+          {SETTINGS_SECTIONS.filter((s) => {
+            if (!s.minRole) return true;
+            if (userRole === null) return true;
+            return userLevel >= (ROLE_LEVEL[s.minRole] || 0);
+          }).map((section) => (
             <Link
               key={section.href}
               href={section.href}

@@ -10,6 +10,7 @@ import { formatPhoneForDisplay } from "@/utils/phone";
 import "../hotels-booking/modern-booking.css";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 
 // Role colors for badges
 const roleColors: Record<string, string> = {
@@ -31,6 +32,8 @@ interface DirectoryStats {
 
 export default function DirectoryPage() {
   const router = useRouter();
+  const currentRole = useCurrentUserRole();
+  const isSubagent = currentRole === "subagent";
   const [records, setRecords] = useState<DirectoryRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -365,7 +368,7 @@ export default function DirectoryPage() {
                 >
                   ← Back to contacts
                 </button>
-              ) : (
+              ) : !isSubagent ? (
                 <div className="relative" ref={actionsMenuRef}>
                   <button
                     type="button"
@@ -432,7 +435,7 @@ export default function DirectoryPage() {
                     </div>
                   )}
                 </div>
-              )}
+              ) : null}
             </div>
             <div className="flex items-center gap-4">
               <button
@@ -470,8 +473,8 @@ export default function DirectoryPage() {
           </div>
         )}
 
-        {/* Statistics Dashboard (hidden in archive view) */}
-        {!showArchiveView && (
+        {/* Statistics Dashboard (hidden in archive view and for subagent) */}
+        {!showArchiveView && !isSubagent && (
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -656,8 +659,8 @@ export default function DirectoryPage() {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roles</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                  {!isSubagent && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>}
+                  {!isSubagent && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>}
                   {showArchiveView && (
                     <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   )}
@@ -721,12 +724,16 @@ export default function DirectoryPage() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className="text-sm text-gray-500">{record.email || "-"}</span>
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <span className="text-sm text-gray-500">{record.phone ? formatPhoneForDisplay(record.phone) || "-" : "-"}</span>
-                      </td>
+                      {!isSubagent && (
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <span className="text-sm text-gray-500">{record.email || "-"}</span>
+                        </td>
+                      )}
+                      {!isSubagent && (
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <span className="text-sm text-gray-500">{record.phone ? formatPhoneForDisplay(record.phone) || "-" : "-"}</span>
+                        </td>
+                      )}
                       {showArchiveView && (
                         <td className="px-4 py-2 whitespace-nowrap text-right">
                           <button

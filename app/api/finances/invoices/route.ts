@@ -1,43 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 // GET /api/finances/invoices - Get all invoices for company (for Finances section)
 export async function GET(request: NextRequest) {
   try {
-    // Get user from auth header
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (userError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get company_id from profile (try profiles first, then user_profiles as fallback)
-    let companyId: string | null = null;
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (profile?.company_id) {
-      companyId = profile.company_id as string;
-    }
-    if (!companyId) {
-      const { data: userProfile } = await supabaseAdmin
-        .from("user_profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      companyId = userProfile?.company_id as string | null;
-    }
-    if (!companyId) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    }
+    const { companyId, userId, scope } = apiUser;
+    const isOwnScope = scope === "own";
 
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get("dateFrom");
@@ -47,7 +20,7 @@ export async function GET(request: NextRequest) {
       .from("invoices")
       .select(`
         *,
-        orders(order_code),
+        orders!inner(order_code, owner_user_id, manager_user_id),
         invoice_items (
           id,
           service_name,
@@ -59,6 +32,10 @@ export async function GET(request: NextRequest) {
       `)
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
+
+    if (isOwnScope) {
+      query = query.or(`owner_user_id.eq.${userId},manager_user_id.eq.${userId}`, { referencedTable: "orders" });
+    }
 
     if (dateFrom) query = query.gte("invoice_date", dateFrom);
     if (dateTo) query = query.lte("invoice_date", dateTo);

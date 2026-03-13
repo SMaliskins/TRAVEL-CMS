@@ -1,14 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-// Pricing per 1M tokens (OpenAI + Anthropic, as of 2024)
-const PRICING: Record<string, { input: number; output: number }> = {
-  "gpt-4o": { input: 2.50, output: 10.00 },
-  "gpt-4o-mini": { input: 0.15, output: 0.60 },
-  "gpt-4-turbo": { input: 10.00, output: 30.00 },
-  "gpt-4": { input: 30.00, output: 60.00 },
-  "gpt-3.5-turbo": { input: 0.50, output: 1.50 },
-  "claude-3-5-haiku-20241022": { input: 0.80, output: 4.00 },
-};
+import { MODEL_PRICING, MODELS } from "@/lib/ai/config";
 
 interface UsageLogParams {
   companyId: string;
@@ -38,7 +29,7 @@ export async function logAiUsage(params: UsageLogParams): Promise<void> {
   } = params;
 
   // Calculate estimated cost
-  const pricing = PRICING[model] || PRICING["gpt-4o"];
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING[MODELS.OPENAI_VISION];
   const estimatedCostUsd =
     (inputTokens / 1_000_000) * pricing.input +
     (outputTokens / 1_000_000) * pricing.output;

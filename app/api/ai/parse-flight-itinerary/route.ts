@@ -2,30 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { logAiUsage } from "@/lib/aiUsageLogger";
 import { requireModule } from "@/lib/modules/checkModule";
+import { MODELS } from "@/lib/ai/config";
+import { findSimilarTemplates, buildFewShotExamples, saveTemplate } from "@/lib/flights/parseTemplates";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 async function getAuthInfo(request: NextRequest): Promise<{ userId: string; companyId: string } | null> {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  
-  const token = authHeader.replace("Bearer ", "");
-  const authClient = createClient(supabaseUrl, supabaseAnonKey);
-  const { data, error } = await authClient.auth.getUser(token);
-  if (error || !data?.user) return null;
-  
-  const userId = data.user.id;
-  const adminClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-  const { data: profile } = await adminClient
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .single();
-  
-  if (!profile?.company_id) return null;
-  return { userId, companyId: profile.company_id };
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) return null;
+    
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (error || !data?.user) return null;
+    
+    const userId = data.user.id;
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: profile } = await adminClient
+      .from("user_profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .single();
+    
+    if (!profile?.company_id) return null;
+    return { userId, companyId: profile.company_id };
+  } catch {
+    return null;
+  }
 }
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
@@ -226,8 +232,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check if OpenAI API key is configured
-    const openaiKey = process.env.OPENAI_API_KEY;
+    // Resolve API key: company-specific key first, then global fallback
+    let openaiKey = process.env.OPENAI_API_KEY;
+    if (authInfo) {
+      try {
+        const adminClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+        const { data: company } = await adminClient
+          .from("companies")
+          .select("openai_api_key_encrypted")
+          .eq("id", authInfo.companyId)
+          .single();
+        if (company?.openai_api_key_encrypted) {
+          openaiKey = company.openai_api_key_encrypted;
+        }
+      } catch {
+        // Non-fatal: fall back to global key
+      }
+    }
     
     if (!openaiKey) {
       return NextResponse.json(
@@ -236,15 +257,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use cheaper model for text, vision model for images
+    const selectedModel = textContent ? MODELS.OPENAI_FAST : MODELS.OPENAI_VISION;
+
     try {
       let messages;
       
       if (textContent) {
-        // Text-based parsing
+        // Look up similar templates for few-shot learning
+        let fewShotSuffix = "";
+        try {
+          const templates = await findSimilarTemplates(textContent, authInfo?.companyId);
+          fewShotSuffix = buildFewShotExamples(templates);
+        } catch (e) {
+          console.error("Template lookup error (non-fatal):", e);
+        }
+
         messages = [
           {
             role: "system",
-            content: getSystemPrompt(),
+            content: getSystemPrompt() + fewShotSuffix,
           },
           {
             role: "user",
@@ -307,7 +339,7 @@ export async function POST(request: NextRequest) {
           "Authorization": `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: selectedModel,
           messages,
           max_tokens: 2000,
           temperature: 0.1,
@@ -333,7 +365,7 @@ export async function POST(request: NextRequest) {
           companyId: authInfo.companyId,
           userId: authInfo.userId,
           operation: "parse_flight",
-          model: "gpt-4o",
+          model: selectedModel,
           inputTokens: usage.prompt_tokens || 0,
           outputTokens: usage.completion_tokens || 0,
           totalTokens: usage.total_tokens || 0,
@@ -398,21 +430,30 @@ export async function POST(request: NextRequest) {
             }
           );
 
-          return NextResponse.json({ 
-            segments,
-            booking: {
-              bookingRef: booking.bookingRef || "",
-              airline: booking.airline || "",
-              totalPrice: booking.totalPrice || null,
-              currency: booking.currency || "EUR",
-              ticketNumbers: booking.ticketNumbers || [],
-              passengers: booking.passengers || [],
-              cabinClass: booking.cabinClass || "economy",
-              refundPolicy: booking.refundPolicy || "non_ref",
-              changeFee: booking.changeFee || null,
-              baggage: booking.baggage || "",
-            }
-          });
+          const responseBooking = {
+            bookingRef: booking.bookingRef || "",
+            airline: booking.airline || "",
+            totalPrice: booking.totalPrice || null,
+            currency: booking.currency || "EUR",
+            ticketNumbers: booking.ticketNumbers || [],
+            passengers: booking.passengers || [],
+            cabinClass: booking.cabinClass || "economy",
+            refundPolicy: booking.refundPolicy || "non_ref",
+            changeFee: booking.changeFee || null,
+            baggage: booking.baggage || "",
+          };
+
+          // Save as template for future few-shot learning
+          if (textContent && segments.length > 0) {
+            saveTemplate(
+              textContent,
+              { segments: segments.slice(0, 4), booking: responseBooking },
+              "ai",
+              authInfo?.companyId
+            ).catch((e) => console.error("Template save error (non-fatal):", e));
+          }
+
+          return NextResponse.json({ segments, booking: responseBooking });
         }
       } catch (parseErr) {
         console.error("Failed to parse AI response:", parseErr, "Content:", content);
@@ -425,13 +466,12 @@ export async function POST(request: NextRequest) {
       });
     } catch (aiError) {
       console.error("OpenAI API call failed:", aiError);
-      // Log failed usage
       if (authInfo) {
         await logAiUsage({
           companyId: authInfo.companyId,
           userId: authInfo.userId,
           operation: "parse_flight",
-          model: "gpt-4o",
+          model: selectedModel,
           success: false,
           errorMessage: aiError instanceof Error ? aiError.message : "AI service unavailable",
         });
@@ -443,13 +483,13 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error("Parse flight itinerary error:", err);
-    // Log failed usage
+    const fallbackModel = textContent ? MODELS.OPENAI_FAST : MODELS.OPENAI_VISION;
     if (authInfo) {
       await logAiUsage({
         companyId: authInfo.companyId,
         userId: authInfo.userId,
         operation: "parse_flight",
-        model: "gpt-4o",
+        model: fallbackModel,
         success: false,
         errorMessage: err instanceof Error ? err.message : "Internal server error",
       });

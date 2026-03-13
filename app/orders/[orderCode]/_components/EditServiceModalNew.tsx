@@ -219,6 +219,8 @@ interface EditServiceModalProps {
   hotelServices?: { id: string; hotelName?: string; dateFrom?: string; dateTo?: string }[];
   /** Order travellers to suggest first for Client, Payer, Supplier */
   orderTravellers?: { id: string; firstName?: string; lastName?: string }[];
+  /** Supervisor-only: permanently delete this service */
+  onDeleteService?: (serviceId: string) => void;
 }
 
 // Fallback categories used when API is not available
@@ -265,6 +267,7 @@ export default function EditServiceModalNew({
   flightServices = [],
   hotelServices = [],
   orderTravellers = [],
+  onDeleteService,
 }: EditServiceModalProps) {
   useModalOverlay();
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
@@ -461,7 +464,9 @@ export default function EditServiceModalNew({
     (service.ticketNumbers || []).map((t) => ({ ...t, clientId: t.clientId ?? null }))
   );
   const [showAddAccompanyingModal, setShowAddAccompanyingModal] = useState(false);
-  
+  const [hotelEmailModal, setHotelEmailModal] = useState<{ to: string; subject: string; message: string } | null>(null);
+  const [hotelEmailSending, setHotelEmailSending] = useState(false);
+
   // Hotel-specific fields
   const [hotelName, setHotelName] = useState(service.hotelName || "");
   const [hotelAddress, setHotelAddress] = useState(service.hotelAddress || "");
@@ -800,6 +805,11 @@ export default function EditServiceModalNew({
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [isParsingFlight, setIsParsingFlight] = useState(false);
+  const [showAIParsedBanner, setShowAIParsedBanner] = useState(false);
+  const [correctionMode, setCorrectionMode] = useState(false);
+  const [correctedFields, setCorrectedFields] = useState<Set<string>>(new Set());
+  const [replacingClientIdx, setReplacingClientIdx] = useState<number | null>(null);
+  const parseSourceTextRef = useRef<string>("");
   const flightFileInputRef = useRef<HTMLInputElement>(null);
   const flightPasteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -820,6 +830,16 @@ export default function EditServiceModalNew({
   const [paymentDeadlineDeposit, setPaymentDeadlineDeposit] = useState(service.paymentDeadlineDeposit || "");
   const [paymentDeadlineFinal, setPaymentDeadlineFinal] = useState(service.paymentDeadlineFinal || "");
   const [paymentTerms, setPaymentTerms] = useState(service.paymentTerms || "");
+  if (typeof window !== "undefined") {
+    console.log("[EditService] Booking terms from DB:", {
+      paymentDeadlineDeposit: service.paymentDeadlineDeposit,
+      paymentDeadlineFinal: service.paymentDeadlineFinal,
+      paymentTerms: service.paymentTerms,
+      commissionName: service.commissionName,
+      commissionRate: service.commissionRate,
+      commissionAmount: service.commissionAmount,
+    });
+  }
 
   // Terms & Conditions fields
   const [priceType, setPriceType] = useState<"ebd" | "regular" | "spo">(service.priceType || "regular");
@@ -844,13 +864,13 @@ export default function EditServiceModalNew({
       const saleTotal = Number(service.clientPrice ?? 0) || 0;
       const margeTotal = saleTotal - costTotal;
       setPricingPerClient(prev => {
-        const hasAnyData = prev.some(p => parsePrice(p.cost) > 0 || parsePrice(p.sale) > 0);
+        const hasAnyData = prev.some(p => parsePrice(p.cost) !== 0 || parsePrice(p.sale) !== 0);
         const next = validClients.map((_, idx) => {
           const existing = prev[idx];
           if (existing && ((existing.cost && parseFloat(existing.cost)) || (existing.sale && parseFloat(existing.sale)))) {
             return existing;
           }
-          if (!hasAnyData && validClients.length === 1 && (costTotal > 0 || saleTotal > 0)) {
+          if (!hasAnyData && validClients.length === 1 && (costTotal !== 0 || saleTotal !== 0)) {
             return {
               cost: costTotal ? String(costTotal) : "",
               marge: margeTotal ? String(Math.round(margeTotal * 100) / 100) : "",
@@ -971,38 +991,40 @@ export default function EditServiceModalNew({
     }
   }, [flightSegments, category, clients]);
 
-  // Auto-update service name (route) from flight segments — full city names, format: "date city - city / date city - city"
+  // Auto-update service name (route) from flight segments — IATA format: "DD.MM IATA-IATA-IATA / DD.MM IATA-IATA"
   useEffect(() => {
     if (categoryType !== "flight" || flightSegments.length === 0) return;
-    const resolveCity = (code: string, cityName?: string): string => {
-      if (cityName?.trim()) return cityName.trim();
-      if (!code) return "";
-      return getCityByIATA(code)?.name || code;
-    };
+    if (isCancellationService) return;
+
+    // Ensure every segment has a departureDate; fall back to service dateFrom/dateTo or neighbour
+    const enriched = flightSegments.map((seg, i) => {
+      if (seg.departureDate) return seg;
+      const fallback = (i === 0 ? dateFrom : flightSegments[i - 1]?.departureDate) || dateFrom || "";
+      return { ...seg, departureDate: fallback };
+    });
 
     const groupedByDate: Record<string, FlightSegment[]> = {};
-    flightSegments.forEach(seg => {
+    enriched.forEach(seg => {
       const date = seg.departureDate || "unknown";
       if (!groupedByDate[date]) groupedByDate[date] = [];
       groupedByDate[date].push(seg);
     });
     const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
       const dateStr = formatDateShort(segs[0]?.departureDate || "");
-      const cities = [
-        resolveCity(segs[0].departure, segs[0].departureCity),
-        ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
-      ].filter(Boolean);
-      const routeStr = cities.join(" - ");
+      const codes = [
+        segs[0].departure || "",
+        ...segs.map(s => s.arrival || ""),
+      ].filter(Boolean).map(c => c.toUpperCase());
+      const routeStr = codes.join("-");
       return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
     });
     const newRoute = routeParts.join(" / ").trim();
-    // Only update if we produced a meaningful route (not just dates with empty cities)
-    const hasAnyCities = routeParts.some(p => {
+    const hasAnyCodes = routeParts.some(p => {
       const withoutDate = p.replace(/^\d{2}\.\d{2}\s*/, "").trim();
       return withoutDate.length > 0;
     });
-    if (newRoute && hasAnyCities && newRoute !== serviceName) setServiceName(newRoute);
-  }, [flightSegments, categoryType]); // serviceName intentionally omitted so segment edits update the name
+    if (newRoute && hasAnyCodes && newRoute !== serviceName) setServiceName(newRoute);
+  }, [flightSegments, categoryType, dateFrom]); // serviceName intentionally omitted so segment edits update the name
 
   // Effective Service Price: Service Price (base) + sum of line items. Line items ADD to Service Price, do not replace.
   const effectiveServicePrice = useMemo(() => {
@@ -1090,7 +1112,6 @@ export default function EditServiceModalNew({
     const marginPerNight = units > 0 ? Math.round((totalMargin / units) * 100) / 100 : 0;
     const newMarge = isHotelPerNight ? marginPerNight.toFixed(2) : totalMargin.toFixed(2);
     setMarge(newMarge);
-    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, clientPrice, priceUnits]);
 
   // Non-Tour: when Cost changes, recalculate Sale = Cost + Marge.
@@ -1104,7 +1125,6 @@ export default function EditServiceModalNew({
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
 
   // Non-Tour: when user edits Marge, recalculate Sale = Cost + Marge.
@@ -1118,7 +1138,6 @@ export default function EditServiceModalNew({
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-    pricingLastEditedRef.current = null;
   }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
 
   // Auto-confirm when all tickets filled (Flight) or ref_nr filled (Hotel)
@@ -1672,7 +1691,9 @@ export default function EditServiceModalNew({
   }, [service.paymentTerms]);
 
   // Tour: init from persisted commission only. Never auto-fetch; load only on dropdown open.
-  // Support: (name+rate), (name+amount), or (amount only) - derive rate from amount/cost for display
+  // Support: (name+rate), (name+amount), or (amount only) - derive rate from amount/cost for display.
+  // Uses service.servicePrice (prop) for rate derivation — NOT the servicePrice state,
+  // so editing the price doesn't reset the commission dropdown.
   useEffect(() => {
     if (categoryType !== "tour" || !supplierPartyId) {
       setSupplierCommissions([]);
@@ -1682,7 +1703,8 @@ export default function EditServiceModalNew({
     const name = service.commissionName;
     let rate = Number(service.commissionRate) || 0;
     const amount = Number(service.commissionAmount) || 0;
-    const cost = parseFloat(servicePrice) || parseFloat(String(service.servicePrice)) || 0;
+    const cost = parseFloat(String(service.servicePrice)) || 0;
+    console.log("[EditService] Commission init:", { name, rate, amount, cost, supplierPartyId });
     if (rate <= 0 && amount > 0 && cost > 0) {
       rate = Math.round((amount / cost) * 10000) / 100;
     }
@@ -1694,7 +1716,8 @@ export default function EditServiceModalNew({
       setSupplierCommissions([]);
       setSelectedCommissionIndex(-1);
     }
-  }, [categoryType, supplierPartyId, service.commissionName, service.commissionRate, service.commissionAmount, servicePrice]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryType, supplierPartyId, service.commissionName, service.commissionRate, service.commissionAmount]);
 
   const loadSupplierCommissions = useCallback(async () => {
     if (categoryType !== "tour" || !supplierPartyId) return;
@@ -1710,14 +1733,35 @@ export default function EditServiceModalNew({
       const list = raw
         .filter((c) => c.isActive !== false && c.is_active !== false)
         .map((c) => ({ name: c.name, rate: c.rate ?? 0, isActive: c.isActive ?? c.is_active ?? true })) as SupplierCommission[];
+
+      const savedName = service.commissionName;
+      const savedRate = Number(service.commissionRate) || 0;
+      const savedAmount = Number(service.commissionAmount) || 0;
+
       if (list.length > 0) {
-        setSupplierCommissions(list);
-        const existingName = service.commissionName;
-        const idx = existingName ? list.findIndex((c: SupplierCommission) => c.name === existingName) : -1;
-        setSelectedCommissionIndex(idx >= 0 ? idx : 0);
+        const idx = savedName ? list.findIndex((c: SupplierCommission) => c.name === savedName) : -1;
+        if (idx < 0 && savedName && (savedRate > 0 || savedAmount > 0)) {
+          list.push({ name: savedName, rate: savedRate, isActive: true });
+          setSupplierCommissions(list);
+          setSelectedCommissionIndex(list.length - 1);
+        } else {
+          setSupplierCommissions(list);
+          setSelectedCommissionIndex(idx >= 0 ? idx : -1);
+        }
+      } else if (savedName && (savedRate > 0 || savedAmount > 0)) {
+        setSupplierCommissions([{ name: savedName, rate: savedRate, isActive: true }]);
+        setSelectedCommissionIndex(0);
       }
     } catch {}
-  }, [categoryType, supplierPartyId, service.commissionName]);
+  }, [categoryType, supplierPartyId, service.commissionName, service.commissionRate, service.commissionAmount]);
+
+  // Auto-load supplier commissions on mount for tour services
+  useEffect(() => {
+    if (categoryType === "tour" && supplierPartyId) {
+      loadSupplierCommissions();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryType, supplierPartyId]);
 
   // Legacy: when category (name) changes from elsewhere, sync categoryId (e.g. initial load already set categoryId)
   useEffect(() => {
@@ -1773,6 +1817,7 @@ export default function EditServiceModalNew({
     const updated = [...clients];
     updated[index] = { id, name };
     setClients(updated);
+    markCorrected("clients");
   };
   
   const removeClient = (index: number) => {
@@ -1780,6 +1825,7 @@ export default function EditServiceModalNew({
     if (categoryType === "flight") {
       setTicketNumbers((prev) => prev.filter((_, i) => i !== index));
     }
+    markCorrected("clients");
     if (categoryType === "hotel") {
       setClients(next.length > 0 ? next : [{ id: null, name: "" }]);
     } else {
@@ -1880,9 +1926,66 @@ export default function EditServiceModalNew({
           return;
         }
 
-        const { text } = data;
-        setPasteText(text || '');
-        setShowPasteInput(true);
+        const extractedText = (data.text || '').trim();
+        if (!extractedText) {
+          setParseError('PDF is empty or could not be read.');
+          return;
+        }
+        parseSourceTextRef.current = extractedText;
+
+        // Try auto-parsing the extracted text
+        const result = parseFlightBooking(extractedText);
+        if (result && result.segments.length > 0) {
+          const segments: FlightSegment[] = result.segments.map(seg => ({
+            id: seg.id, flightNumber: seg.flightNumber, airline: seg.airline,
+            departure: seg.departure, departureCity: seg.departureCity,
+            arrival: seg.arrival, arrivalCity: seg.arrivalCity,
+            departureDate: seg.departureDate, departureTimeScheduled: seg.departureTimeScheduled,
+            arrivalDate: seg.arrivalDate, arrivalTimeScheduled: seg.arrivalTimeScheduled,
+            departureTerminal: seg.departureTerminal, arrivalTerminal: seg.arrivalTerminal,
+            duration: seg.duration, cabinClass: seg.cabinClass,
+            baggage: seg.baggage, bookingRef: seg.bookingRef,
+            ticketNumber: seg.ticketNumber, departureStatus: "scheduled", arrivalStatus: "scheduled",
+          }));
+          applyParsedFlightData(segments, {
+            bookingRef: result.booking.bookingRef, airline: result.booking.airline,
+            totalPrice: result.booking.totalPrice, ticketNumbers: result.booking.ticketNumbers,
+            passengers: result.booking.passengers, cabinClass: result.booking.cabinClass,
+            baggage: result.booking.baggage, refundPolicy: result.booking.refundPolicy,
+          });
+          setShowAIParsedBanner(true);
+          setShowPasteInput(false);
+          setPasteText('');
+        } else {
+          // Regex failed — auto-trigger AI parsing
+          setIsParsingFlight(true);
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch("/api/ai/parse-flight-itinerary", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+              },
+              body: JSON.stringify({ text: extractedText }),
+            });
+            const aiData = await res.json();
+            if (res.ok && aiData.segments?.length > 0) {
+              applyParsedFlightData(aiData.segments, aiData.booking || {});
+              setShowAIParsedBanner(true);
+              setShowPasteInput(false);
+              setPasteText('');
+              return;
+            }
+          } catch (e) {
+            console.error("AI flight parse error:", e);
+          } finally {
+            setIsParsingFlight(false);
+          }
+          // AI also failed — show text for manual review
+          setPasteText(extractedText);
+          setShowPasteInput(true);
+        }
       } catch (error) {
         console.error('PDF parsing error:', error);
         setParseError('Failed to read PDF. Try copying text manually.');
@@ -1891,10 +1994,49 @@ export default function EditServiceModalNew({
       }
     } else if (fileName.endsWith('.txt') || fileName.endsWith('.eml')) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        setPasteText(text);
-        setShowPasteInput(true);
+      reader.onload = async (event) => {
+        const text = (event.target?.result as string || '').trim();
+        if (!text) return;
+        parseSourceTextRef.current = text;
+        const regexResult = parseFlightBooking(text);
+        if (regexResult && regexResult.segments.length > 0) {
+          const segments: FlightSegment[] = regexResult.segments.map(seg => ({
+            id: seg.id, flightNumber: seg.flightNumber, airline: seg.airline,
+            departure: seg.departure, departureCity: seg.departureCity,
+            arrival: seg.arrival, arrivalCity: seg.arrivalCity,
+            departureDate: seg.departureDate, departureTimeScheduled: seg.departureTimeScheduled,
+            arrivalDate: seg.arrivalDate, arrivalTimeScheduled: seg.arrivalTimeScheduled,
+            departureTerminal: seg.departureTerminal, arrivalTerminal: seg.arrivalTerminal,
+            duration: seg.duration, cabinClass: seg.cabinClass,
+            baggage: seg.baggage, bookingRef: seg.bookingRef,
+            ticketNumber: seg.ticketNumber, departureStatus: "scheduled", arrivalStatus: "scheduled",
+          }));
+          applyParsedFlightData(segments, {
+            bookingRef: regexResult.booking.bookingRef, airline: regexResult.booking.airline,
+            totalPrice: regexResult.booking.totalPrice, ticketNumbers: regexResult.booking.ticketNumbers,
+            passengers: regexResult.booking.passengers, cabinClass: regexResult.booking.cabinClass,
+            baggage: regexResult.booking.baggage, refundPolicy: regexResult.booking.refundPolicy,
+          });
+          setShowAIParsedBanner(true);
+        } else {
+          setIsParsingFlight(true);
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch("/api/ai/parse-flight-itinerary", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+              body: JSON.stringify({ text }),
+            });
+            const aiData = await res.json();
+            if (res.ok && aiData.segments?.length > 0) {
+              applyParsedFlightData(aiData.segments, aiData.booking || {});
+              setShowAIParsedBanner(true);
+              return;
+            }
+          } catch (e) { console.error("AI flight parse error:", e); } finally { setIsParsingFlight(false); }
+          setPasteText(text);
+          setShowPasteInput(true);
+        }
       };
       reader.readAsText(file);
     } else {
@@ -1969,30 +2111,32 @@ export default function EditServiceModalNew({
         setTicketNumbers(updated);
       }
     }
-    if (segments[0]?.departureDate) setDateFrom(segments[0].departureDate);
+    const firstDate = segments[0]?.departureDate || "";
+    if (firstDate) setDateFrom(firstDate);
     if (segments.length > 0) {
       const lastSeg = segments[segments.length - 1];
       if (lastSeg.arrivalDate) setDateTo(lastSeg.arrivalDate);
     }
     if (segments.length > 0) {
-      const resolveCity = (code: string, cityName?: string): string => {
-        if (cityName?.trim()) return cityName.trim();
-        if (!code) return "";
-        return getCityByIATA(code)?.name || code;
-      };
+      // Ensure every segment has a departureDate; fall back to first segment or neighbour
+      const enriched = segments.map((seg, i) => {
+        if (seg.departureDate) return seg;
+        const fallback = (i === 0 ? firstDate : segments[i - 1]?.departureDate) || firstDate;
+        return { ...seg, departureDate: fallback };
+      });
       const groupedByDate: Record<string, FlightSegment[]> = {};
-      segments.forEach(seg => {
+      enriched.forEach(seg => {
         const date = seg.departureDate || "unknown";
         if (!groupedByDate[date]) groupedByDate[date] = [];
         groupedByDate[date].push(seg);
       });
       const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
         const dateStr = formatDateShort(segs[0]?.departureDate || "");
-        const cities = [
-          resolveCity(segs[0].departure, segs[0].departureCity),
-          ...segs.map(s => resolveCity(s.arrival, s.arrivalCity)),
-        ].filter(Boolean);
-        const routeStr = cities.join(" - ");
+        const codes = [
+          segs[0].departure || "",
+          ...segs.map(s => s.arrival || ""),
+        ].filter(Boolean).map(c => c.toUpperCase());
+        const routeStr = codes.join("-");
         return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
       });
       setServiceName(routeParts.join(" / "));
@@ -2001,12 +2145,26 @@ export default function EditServiceModalNew({
     setPasteText("");
   };
 
-  // Parse flight booking text — try AI first, fallback to regex
+  const markCorrected = useCallback((field: string) => {
+    if (correctionMode) {
+      setCorrectedFields(prev => { const n = new Set(prev); n.add(field); return n; });
+    }
+  }, [correctionMode]);
+
+  const fieldRingClass = useCallback((field: string) => {
+    if (correctedFields.has(field)) return "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30";
+    if (parsedFields.has(field)) return "ring-2 ring-green-300 border-green-400";
+    if (parseAttemptedButEmpty.has(field)) return "ring-2 ring-red-300 border-red-400 bg-red-50/50";
+    return "border-gray-300 focus:border-blue-500";
+  }, [correctedFields, parsedFields, parseAttemptedButEmpty]);
+
+  // Parse flight booking text — try regex first, fallback to AI
   const handleParseFlight = async () => {
     if (!pasteText.trim()) return;
     
     setParseError(null);
     const text = pasteText.trim();
+    parseSourceTextRef.current = text;
 
     // Try regex first — instant, free, deterministic
     const result = parseFlightBooking(text);
@@ -2043,6 +2201,7 @@ export default function EditServiceModalNew({
         baggage: result.booking.baggage,
         refundPolicy: result.booking.refundPolicy,
       });
+      setShowAIParsedBanner(true);
       return;
     }
 
@@ -2062,6 +2221,7 @@ export default function EditServiceModalNew({
       
       if (res.ok && data.segments?.length > 0) {
         applyParsedFlightData(data.segments, data.booking || {});
+        setShowAIParsedBanner(true);
         return;
       }
     } catch (e) {
@@ -2136,12 +2296,16 @@ export default function EditServiceModalNew({
         clients: resolvedClients.filter(c => c.id).map(c => ({ id: c.id, name: c.name })),
         payer_party_id: payerPartyId,
         payer_name: payerName,
-        service_price: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
-          ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
-          : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
-        client_price: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
-          ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
-          : parseFloat(clientPrice) || 0,
+        service_price: isCancellationService
+          ? -(parseFloat(amendRefundAmount) || 0)
+          : (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
+            ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
+            : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
+        client_price: isCancellationService
+          ? -(parseFloat(amendRefundAmount) || 0) + (parseFloat(amendCancellationFee) || 0)
+          : (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
+            ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
+            : parseFloat(clientPrice) || 0,
         quantity: categoryType === "flight" || categoryType === "tour" || categoryType === "transfer" || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
         vat_rate: vatRate,
         res_status: resStatus || "booked",
@@ -2250,14 +2414,14 @@ export default function EditServiceModalNew({
         console.log("[EditService] Sending cabin_class:", cabinClass, "category:", category);
       }
       
-      // Add payment deadline fields
+      // Payment deadline fields (snake_case to match PATCH handler)
       payload.payment_deadline_deposit = paymentDeadlineDeposit || null;
       payload.payment_deadline_final = paymentDeadlineFinal || null;
       payload.payment_terms = categoryType === "tour" && (depositPercent || finalPercent)
         ? `${depositPercent || 0}% deposit, ${finalPercent || 100}% final`
         : (paymentTerms?.trim() || null);
 
-      // Add terms & conditions fields
+      // Terms & conditions fields (snake_case to match PATCH handler)
       payload.price_type = priceType;
       payload.refund_policy = refundPolicy;
       payload.free_cancellation_until = freeCancellationUntil || null;
@@ -2382,6 +2546,12 @@ export default function EditServiceModalNew({
           hotelRoomsNextTo: showHotelFields ? (hotelPreferences.roomsNextTo || undefined) : undefined,
           hotelParking: showHotelFields ? hotelPreferences.parking ?? undefined : undefined,
           hotelPreferencesFreeText: showHotelFields ? (hotelPreferences.freeText || undefined) : undefined,
+          // Booking terms
+          paymentDeadlineDeposit: paymentDeadlineDeposit || null,
+          paymentDeadlineFinal: paymentDeadlineFinal || null,
+          paymentTerms: categoryType === "tour" && (depositPercent || finalPercent)
+            ? `${depositPercent || 0}% deposit, ${finalPercent || 100}% final`
+            : (paymentTerms?.trim() || null),
           // Tour: commission accepts null
           commissionName: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.name ?? null : null) : undefined,
           commissionRate: categoryType === "tour" ? (selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex]?.rate ?? null : null) : undefined,
@@ -2391,6 +2561,21 @@ export default function EditServiceModalNew({
           servicePriceLineItems: categoryType === "tour" ? servicePriceLineItems : undefined,
           _keepModalOpen: categoryType === "tour",
         });
+        // Save corrected parse template if text was parsed
+        if (parseSourceTextRef.current && flightSegments.length > 0) {
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          fetch("/api/ai/save-parse-template", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...(s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {}) },
+            body: JSON.stringify({
+              text: parseSourceTextRef.current,
+              segments: flightSegments,
+              booking: { bookingRef: refNr, airline: supplierName, totalPrice: servicePrice, baggage, cabinClass, refundPolicy },
+              correctedFields: correctedFields.size > 0 ? [...correctedFields] : undefined,
+            }),
+          }).catch(() => {});
+          parseSourceTextRef.current = "";
+        }
         if (categoryType !== "tour") onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -2574,6 +2759,24 @@ export default function EditServiceModalNew({
               {error}
             </div>
           )}
+          {showAIParsedBanner && (
+            <div className={`mb-3 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${correctionMode ? "bg-amber-100 border-amber-300 text-amber-900" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+              {correctionMode ? (
+                <>
+                  <span>✏️ Correction mode — fields you edit are highlighted in <strong>orange</strong>. Click <strong>Save</strong> when done.</span>
+                  <button type="button" onClick={() => setCorrectionMode(false)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 shrink-0">Done</button>
+                </>
+              ) : (
+                <>
+                  <span>📋 Data parsed from document. To correct missing or wrong fields, click <strong>Edit Form</strong>.</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button type="button" onClick={() => setCorrectionMode(true)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700">Edit Form</button>
+                    <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             
@@ -2587,9 +2790,9 @@ export default function EditServiceModalNew({
                     <input
                       type="text"
                       value={serviceName}
-                      onChange={(e) => setServiceName(e.target.value)}
+                      onChange={(e) => { setServiceName(e.target.value); markCorrected("serviceName"); }}
                       placeholder="25.01 RIX-FRA-NCE / 02.02 NCE-FRA-RIX"
-                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${fieldRingClass("serviceName")}`}
                     />
                   </div>
                   {/* Paste & Parse — drop zone or textarea (same as Add) */}
@@ -2732,6 +2935,7 @@ export default function EditServiceModalNew({
                         onChange={(from, to) => {
                           setDateFrom(from);
                           setDateTo(to);
+                          markCorrected("dateFrom");
                           if (flightSegments.length > 0) {
                             setFlightSegments((prev) => {
                               const next = prev.map((seg, i) => {
@@ -2743,7 +2947,7 @@ export default function EditServiceModalNew({
                             });
                           }
                         }}
-                        triggerClassName={parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
+                        triggerClassName={correctedFields.has("dateFrom") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("dateFrom") || parseAttemptedButEmpty.has("dateTo") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : (parsedFields.has("dateFrom") || parsedFields.has("dateTo")) ? "ring-2 ring-green-300 border-green-400" : undefined}
                       />
                     </div>
                     <div>
@@ -2753,8 +2957,9 @@ export default function EditServiceModalNew({
                         onChange={(e) => {
                           cabinClassUpdateRef.current = true;
                           setCabinClass(e.target.value as "economy" | "premium_economy" | "business" | "first");
+                          markCorrected("cabinClass");
                         }}
-                        className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 bg-white ${fieldRingClass("cabinClass")}`}
                       >
                         <option value="economy">Economy</option>
                         <option value="premium_economy">Premium Economy</option>
@@ -2768,9 +2973,9 @@ export default function EditServiceModalNew({
                     <input
                       type="text"
                       value={baggage}
-                      onChange={(e) => setBaggage(e.target.value)}
+                      onChange={(e) => { setBaggage(e.target.value); markCorrected("baggage"); }}
                       placeholder="e.g., personal+cabin+1bag"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 bg-white ${fieldRingClass("baggage")}`}
                     />
                     {baggage && (
                       <div className="text-[10px] text-gray-500 mt-0.5">
@@ -2923,14 +3128,33 @@ export default function EditServiceModalNew({
                             </p>
                           )}
                           <div className="flex flex-wrap gap-1.5">
-                            {clients.filter(c => c.id || c.name).map((client, _, arr) => {
+                            {clients.filter(c => c.id || c.name).map((client) => {
                               const realIndex = clients.indexOf(client);
-                              return (
-                                <span key={realIndex} className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40]">
-                                  {toTitleCaseForDisplay(client.name || "")}
+                              const dn = toTitleCaseForDisplay(client.name || "");
+                              return replacingClientIdx === realIndex ? (
+                                <div key={realIndex} className="w-48">
+                                  <PartySelect
+                                    value={client.id}
+                                    onChange={(id, name) => {
+                                      if (id) updateClient(realIndex, id, name);
+                                      setReplacingClientIdx(null);
+                                    }}
+                                    roleFilter="client"
+                                    initialDisplayName={dn}
+                                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                                  />
+                                </div>
+                              ) : (
+                                <span
+                                  key={realIndex}
+                                  className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] cursor-pointer hover:bg-[#dee2e6] transition-colors"
+                                  onClick={() => setReplacingClientIdx(realIndex)}
+                                  title="Click to replace client"
+                                >
+                                  {dn}
                                   <button
                                     type="button"
-                                    onClick={() => removeClient(realIndex)}
+                                    onClick={(e) => { e.stopPropagation(); removeClient(realIndex); }}
                                     className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
                                     aria-label="Remove"
                                   >
@@ -2999,9 +3223,9 @@ export default function EditServiceModalNew({
                         <input
                           type="text"
                           value={refNr}
-                          onChange={(e) => setRefNr(e.target.value)}
+                          onChange={(e) => { setRefNr(e.target.value); markCorrected("refNr"); }}
                           placeholder="Booking ref"
-                          className={`w-full rounded-md border px-2.5 py-1.5 text-sm ${parseAttemptedButEmpty.has("refNr") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("refNr") ? "ring-2 ring-green-300 border-green-400" : "border-[#CED4DA] focus:border-[#FFC107] focus:ring-1 focus:ring-amber-400"}`}
+                          className={`w-full rounded-md border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-amber-400 ${fieldRingClass("refNr")}`}
                         />
                       </div>
                       <div>
@@ -3065,13 +3289,36 @@ export default function EditServiceModalNew({
                     />
                     <button
                       type="button"
-                      onClick={async () => {
+                      onClick={() => {
                         const preferencesList = Object.entries(hotelPreferences)
                           .filter(([key, value]) => key !== "roomsNextTo" && key !== "freeText" && value === true)
                           .map(([key]) => key.replace(/([A-Z])/g, " $1").toLowerCase())
                           .join(", ");
-                        const message = `We have a reservation for ${hotelName}. Please confirm the reservation exists and consider the following preferences:\n\nRoom: ${hotelRoom || "Not specified"}\nBoard: ${hotelBoard}\nBed Type: ${hotelBedType}\nPreferences: ${preferencesList || "None"}${hotelPreferences.freeText ? `\nAdditional: ${hotelPreferences.freeText}` : ""}`;
-                        alert(`Message to hotel:\n\n${message}\n\n(Will be saved to Communication tab)`);
+                        const guestNames = clients.filter(c => c.name).map(c => toTitleCaseForDisplay(c.name)).join(", ");
+                        const nights = dateFrom && dateTo ? nightsBetween(dateFrom, dateTo) : "";
+                        const message = [
+                          `Dear Hotel,`,
+                          ``,
+                          `We have a reservation at ${hotelName || "your hotel"}.`,
+                          ``,
+                          `Guest: ${guestNames || "—"}`,
+                          `Check-in: ${dateFrom ? formatDateDDMMYYYY(dateFrom) : "—"}`,
+                          `Check-out: ${dateTo ? formatDateDDMMYYYY(dateTo) : "—"}${nights ? ` (${nights} night${Number(nights) > 1 ? "s" : ""})` : ""}`,
+                          `Room: ${hotelRoom || "—"}`,
+                          `Board: ${hotelBoard || "—"}`,
+                          `Bed type: ${hotelBedType || "—"}`,
+                          preferencesList ? `Preferences: ${preferencesList}` : "",
+                          hotelPreferences.freeText ? `Additional: ${hotelPreferences.freeText}` : "",
+                          ``,
+                          `Please confirm the reservation.`,
+                          ``,
+                          `Best regards`,
+                        ].filter(Boolean).join("\n");
+                        setHotelEmailModal({
+                          to: hotelEmail || "",
+                          subject: `Reservation confirmation — ${hotelName || "Hotel"}${dateFrom ? ` — ${formatDateDDMMYYYY(dateFrom)}` : ""}`,
+                          message,
+                        });
                       }}
                       className="modal-primary-btn px-3 py-1.5 text-xs font-medium text-[#FF8C00] border border-[#FF8C00] hover:bg-[#FF8C00] hover:text-white rounded-md inline-flex items-center gap-1.5"
                     >
@@ -3081,7 +3328,19 @@ export default function EditServiceModalNew({
                   </div>
 
                   {/* Cancel / Save */}
-                  <div className="flex justify-end gap-2 pt-1">
+                  <div className="flex items-center gap-2 pt-1">
+                    {onDeleteService && (
+                      <button
+                        type="button"
+                        onClick={() => { if (confirm(`Permanently delete "${serviceName}"? This cannot be undone.`)) { onDeleteService(service.id); onClose(); } }}
+                        disabled={isSubmitting}
+                        className="px-3 py-2 text-sm text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Delete
+                      </button>
+                    )}
+                    <div className="flex-1" />
                     <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
                       Cancel
                     </button>
@@ -3519,19 +3778,38 @@ export default function EditServiceModalNew({
                       const displayName = toTitleCaseForDisplay(client.name || "") || "-";
                       return (
                         <div key={client.id ?? realIndex} className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1 bg-[#E9ECEF] rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0">
-                            {displayName}
-                            <button
-                              type="button"
-                              onClick={() => removeClient(realIndex)}
-                              className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
-                              aria-label="Remove"
+                          {replacingClientIdx === realIndex ? (
+                            <div className="w-48">
+                              <PartySelect
+                                value={client.id}
+                                onChange={(id, name) => {
+                                  if (id) updateClient(realIndex, id, name);
+                                  setReplacingClientIdx(null);
+                                }}
+                                roleFilter="client"
+                                initialDisplayName={displayName}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                              />
+                            </div>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-xl pl-3 pr-1.5 py-1 text-[13px] text-[#343A40] shrink-0 cursor-pointer hover:bg-[#dee2e6] transition-colors ${correctedFields.has("clients") ? "bg-amber-100 ring-1 ring-amber-400" : "bg-[#E9ECEF]"}`}
+                              onClick={() => setReplacingClientIdx(realIndex)}
+                              title="Click to replace client"
                             >
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </span>
+                              {displayName}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeClient(realIndex); }}
+                                className="text-[#6C757D] hover:text-red-600 ml-0.5 leading-none"
+                                aria-label="Remove"
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </span>
+                          )}
                           <input
                             type="text"
                             value={ticketEntry?.ticketNr ?? ""}
@@ -4425,7 +4703,7 @@ export default function EditServiceModalNew({
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Cost</span>
-                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(e.target.value); markCorrected("servicePrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Marge</span>
@@ -4433,7 +4711,7 @@ export default function EditServiceModalNew({
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Sale</span>
-                        <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(e.target.value); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("clientPrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(e.target.value); markCorrected("clientPrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                     </div>
                     )}
@@ -4580,6 +4858,18 @@ export default function EditServiceModalNew({
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
+                    {onDeleteService && (
+                      <button
+                        type="button"
+                        onClick={() => { if (confirm(`Permanently delete "${serviceName}"? This cannot be undone.`)) { onDeleteService(service.id); onClose(); } }}
+                        disabled={isSubmitting}
+                        className="px-3 py-2 text-sm text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
+                        title="Delete permanently (Supervisor)"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Delete
+                      </button>
+                    )}
                     <button 
                       type="button" 
                       onClick={handleSave} 
@@ -5045,7 +5335,19 @@ export default function EditServiceModalNew({
 
           {/* Actions - Sticky Footer (hidden for Hotel and Flight — buttons are in right column) */}
           {categoryType !== "hotel" && categoryType !== "flight" && (
-            <div className="mt-4 pt-3 border-t flex justify-end gap-2">
+            <div className="mt-4 pt-3 border-t flex items-center gap-2">
+              {onDeleteService && (
+                <button
+                  type="button"
+                  onClick={() => { if (confirm(`Permanently delete "${serviceName}"? This cannot be undone.`)) { onDeleteService(service.id); onClose(); } }}
+                  disabled={isSubmitting}
+                  className="px-3 py-2 text-sm text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  Delete
+                </button>
+              )}
+              <div className="flex-1" />
               <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
                 Cancel
               </button>
@@ -5151,6 +5453,106 @@ export default function EditServiceModalNew({
           }}
           onClose={() => setShowAddAccompanyingModal(false)}
         />
+      )}
+
+      {hotelEmailModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40" onClick={() => setHotelEmailModal(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-[#FF8C00]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                <h3 className="text-base font-semibold text-gray-900">Send to Hotel</h3>
+              </div>
+              <button onClick={() => setHotelEmailModal(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <input
+                  type="email"
+                  value={hotelEmailModal.to}
+                  onChange={(e) => setHotelEmailModal(prev => prev ? { ...prev, to: e.target.value } : prev)}
+                  placeholder="hotel@example.com"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={hotelEmailModal.subject}
+                  onChange={(e) => setHotelEmailModal(prev => prev ? { ...prev, subject: e.target.value } : prev)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={hotelEmailModal.message}
+                  onChange={(e) => setHotelEmailModal(prev => prev ? { ...prev, message: e.target.value } : prev)}
+                  rows={10}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setHotelEmailModal(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={hotelEmailSending || !hotelEmailModal.to.trim()}
+                onClick={async () => {
+                  if (!hotelEmailModal.to.trim()) return;
+                  setHotelEmailSending(true);
+                  try {
+                    const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}/send-to-hotel`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        to: hotelEmailModal.to.trim(),
+                        subject: hotelEmailModal.subject,
+                        message: hotelEmailModal.message,
+                      }),
+                    });
+                    if (res.ok) {
+                      setHotelEmailModal(null);
+                      if (!hotelEmail && hotelEmailModal.to.trim()) {
+                        setHotelEmail(hotelEmailModal.to.trim());
+                      }
+                    } else {
+                      const err = await res.json().catch(() => ({ error: "Failed to send" }));
+                      alert(err.error || "Failed to send email");
+                    }
+                  } catch {
+                    alert("Network error — could not send email");
+                  } finally {
+                    setHotelEmailSending(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#FF8C00] rounded-lg hover:bg-[#e07e00] disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {hotelEmailSending ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                    Send
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -3,6 +3,9 @@
  *
  * Centralized AI configuration for Travel CMS.
  * Supports OpenAI, Anthropic, and local models.
+ *
+ * ALL model identifiers live here. When a provider deprecates a model,
+ * update ONLY this file — every API route imports from here.
  */
 
 export type AIProvider = "openai" | "anthropic" | "local";
@@ -15,38 +18,63 @@ export interface AIConfig {
   temperature: number;
 }
 
-// Configs for different task types
+export const MODELS = {
+  OPENAI_VISION: "gpt-4o",
+  OPENAI_FAST: "gpt-4o-mini",
+  OPENAI_COMPLEX: "gpt-4o",
+  ANTHROPIC_FAST: "claude-3-haiku-20240307",
+  ANTHROPIC_CHAT: "claude-sonnet-4-5",
+} as const;
+
+export type ModelId = (typeof MODELS)[keyof typeof MODELS];
+
+export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  [MODELS.OPENAI_VISION]:   { input: 2.50,  output: 10.00 },
+  [MODELS.OPENAI_FAST]:     { input: 0.15,  output: 0.60  },
+  [MODELS.OPENAI_COMPLEX]:  { input: 2.50,  output: 10.00 },
+  [MODELS.ANTHROPIC_FAST]:  { input: 0.25,  output: 1.25  },
+  [MODELS.ANTHROPIC_CHAT]:  { input: 3.00,  output: 15.00 },
+  "gpt-4-turbo":            { input: 10.00, output: 30.00 },
+  "gpt-4":                  { input: 30.00, output: 60.00 },
+  "gpt-3.5-turbo":          { input: 0.50,  output: 1.50  },
+};
+
 export const AI_CONFIGS = {
-  // Image parsing (requires vision)
   vision: {
     provider: "openai" as AIProvider,
-    model: "gpt-4o",
+    model: MODELS.OPENAI_VISION,
     maxTokens: 2000,
     temperature: 0.1,
   },
-  
-  // Fast tasks (data extraction, classification)
   fast: {
     provider: "openai" as AIProvider,
-    model: "gpt-4o-mini",
+    model: MODELS.OPENAI_FAST,
     maxTokens: 1000,
     temperature: 0.2,
   },
-  
-  // Complex tasks (text generation, analysis)
   complex: {
     provider: "openai" as AIProvider,
-    model: "gpt-4o",
+    model: MODELS.OPENAI_COMPLEX,
     maxTokens: 4000,
     temperature: 0.7,
   },
-  
-  // Chat assistant
   chat: {
     provider: "openai" as AIProvider,
-    model: "gpt-4o",
+    model: MODELS.OPENAI_COMPLEX,
     maxTokens: 2000,
     temperature: 0.8,
+  },
+  parsing: {
+    provider: "anthropic" as AIProvider,
+    model: MODELS.ANTHROPIC_FAST,
+    maxTokens: 3000,
+    temperature: 0.1,
+  },
+  concierge: {
+    provider: "anthropic" as AIProvider,
+    model: MODELS.ANTHROPIC_CHAT,
+    maxTokens: 2000,
+    temperature: 0.7,
   },
 };
 
