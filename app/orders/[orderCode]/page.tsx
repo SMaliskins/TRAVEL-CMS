@@ -537,7 +537,7 @@ export default function OrderPage({
         setIsDeleting(false);
         return;
       }
-      showToast(`Order ${orderCode} deleted`, "success");
+      showToast("success", `Order ${orderCode} deleted`);
       router.push("/orders");
     } catch {
       setDeleteError("Network error");

@@ -31,7 +31,6 @@ export type ModelId = (typeof MODELS)[keyof typeof MODELS];
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   [MODELS.OPENAI_VISION]:   { input: 2.50,  output: 10.00 },
   [MODELS.OPENAI_FAST]:     { input: 0.15,  output: 0.60  },
-  [MODELS.OPENAI_COMPLEX]:  { input: 2.50,  output: 10.00 },
   [MODELS.ANTHROPIC_FAST]:  { input: 0.25,  output: 1.25  },
   [MODELS.ANTHROPIC_CHAT]:  { input: 3.00,  output: 15.00 },
   "gpt-4-turbo":            { input: 10.00, output: 30.00 },

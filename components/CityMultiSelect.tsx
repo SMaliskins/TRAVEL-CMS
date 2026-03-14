@@ -44,7 +44,7 @@ export default function CityMultiSelect({
   const [apiLoading, setApiLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     loadWorldCities().then(() => setWorldCitiesLoaded(true));

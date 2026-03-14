@@ -655,8 +655,8 @@ export default function FinanceDashboard({
           isOpen={!!processConfirm}
           title="Process Invoice"
           message={`Mark invoice ${processConfirm.invoiceNumber} as processed?`}
-          confirmLabel="Confirm"
-          cancelLabel="Cancel"
+          confirmText="Confirm"
+          cancelText="Cancel"
           onConfirm={() => handleProcessInvoice(processConfirm.invoiceId)}
           onCancel={() => setProcessConfirm(null)}
         />
