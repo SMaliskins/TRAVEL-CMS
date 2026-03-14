@@ -39,7 +39,7 @@ export default function LayoutClientWrapper({
   const pathname = usePathname();
   
   // Pages that should not have sidebar margins (exact match for / to avoid matching all paths)
-  const skipLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login");
+  const skipLayout = pathname === "/" || pathname === "/register" || pathname?.startsWith("/login") || pathname?.startsWith("/superadmin");
 
   // Apply styles immediately on mount and when mode changes
   useLayoutEffect(() => {

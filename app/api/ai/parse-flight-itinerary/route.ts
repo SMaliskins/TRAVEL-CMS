@@ -483,7 +483,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error("Parse flight itinerary error:", err);
-    const fallbackModel = textContent ? MODELS.OPENAI_FAST : MODELS.OPENAI_VISION;
+    const fallbackModel = MODELS.OPENAI_FAST;
     if (authInfo) {
       await logAiUsage({
         companyId: authInfo.companyId,

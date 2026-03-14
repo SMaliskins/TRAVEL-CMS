@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+function isExternalApp(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return pathname.startsWith("/superadmin");
+}
+
 function isPublicPath(pathname: string | null): boolean {
   if (!pathname) return false;
   return pathname === "/" || pathname === "/register" || pathname.startsWith("/login");
@@ -15,8 +20,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const externalApp = isExternalApp(pathname);
+
   useEffect(() => {
-    // Check if current path is public
+    if (externalApp) {
+      setIsLoading(false);
+      return;
+    }
+
     const publicPath = isPublicPath(pathname);
 
     const checkAuth = async () => {
@@ -70,9 +81,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     checkAuth();
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (externalApp) return;
         if (event === "SIGNED_OUT") {
           setIsAuthenticated(false);
           if (!publicPath) {
@@ -90,9 +101,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [pathname, router, externalApp]);
 
-  // Show loading spinner while checking auth
+  if (externalApp) {
+    return <>{children}</>;
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -104,14 +118,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // For public paths, render children regardless of auth state
   if (isPublicPath(pathname)) {
     return <>{children}</>;
   }
 
-  // For protected paths, only render if authenticated
   if (!isAuthenticated) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   return <>{children}</>;

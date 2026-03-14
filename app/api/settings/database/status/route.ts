@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     .select(`
       id, name,
       tariff_plan_id, supabase_configured, supabase_status, supabase_region,
-      subscription_status, storage_used_bytes, storage_checked_at
+      subscription_status, storage_used_bytes, storage_checked_at, trial_ends_at
     `)
     .eq("id", user.companyId)
     .single();

@@ -222,29 +222,29 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
             <PricingCard
-              name="Free"
+              name="Trial"
               price="0"
-              description="For getting started"
-              features={["Up to 2 users", "Basic orders & services", "Standard reports", "Email support"]}
+              description="7-day free trial"
+              features={["1 user", "Up to 50 orders", "Full access to all features", "No credit card required"]}
             />
             <PricingCard
               name="Starter"
-              price="29"
-              description="For small agencies"
-              features={["Up to 5 users", "Client notifications", "Extended reports", "Priority support"]}
+              price="39"
+              description="For solo travel agents"
+              features={["1 user", "Unlimited orders", "Invoices & finances", "Email support"]}
             />
             <PricingCard
-              name="Pro"
-              price="99"
+              name="Professional"
+              price="79"
               description="For growing agencies"
-              features={["Up to 20 users", "AI document parsing", "PTAC & IATA reports", "AI assistant", "API access"]}
+              features={["Up to 2 users", "Boarding passes", "Dashboard analytics", "White-label branding", "Priority support"]}
               featured
             />
             <PricingCard
               name="Enterprise"
-              price="299"
-              description="For large organizations"
-              features={["Unlimited users", "All features", "Custom integrations", "Dedicated support", "SLA guarantee"]}
+              price="149"
+              description="For established agencies"
+              features={["Unlimited users", "All features", "Dedicated Supabase DB", "Custom integrations", "SLA guarantee"]}
             />
           </div>
         </div>

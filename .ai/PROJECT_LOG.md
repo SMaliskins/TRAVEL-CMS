@@ -1010,3 +1010,43 @@ const debt = totalSpent - amountPaid;
 
 ---
 
+## [2026-03-13 14:00] CW — PRICING-ADDONS: Pricing UI, Add-ons, Trial Implementation
+
+**Task:** PRICING-ADDONS | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Created migration `update_tariff_plans_and_addons.sql`: updated tariff plans (Trial/Starter/Professional/Enterprise with EUR pricing), created `plan_addons` table (14 add-ons), `company_addons` table, added `trial_ends_at` to companies
+- Redesigned `app/settings/database/page.tsx`: 4-tier plan grid with feature comparison, EUR currency, trial countdown, add-ons marketplace with toggle activation, grouped by category
+- Created 3 new API routes: `GET /api/settings/database/addons` (list all + active), `POST .../activate` (Stripe subscription item or checkout), `POST .../deactivate` (remove from Stripe + DB)
+- Updated `app/api/settings/database/provision/route.ts`: Trial activation (no payment, 7-day expiry), plan upgrades via Stripe subscription update, new checkout for first-time paid plans
+- Updated `app/api/settings/database/status/route.ts`: returns `trial_ends_at`
+- Updated `app/api/stripe/webhook/route.ts`: handles add-on checkout sessions (inserts into `company_addons`)
+
+**Результат:** Full pricing system with 4 tiers, 14 add-ons, trial flow, Stripe integration. Migration needs to be applied.
+
+**Next Step:** Apply migration `update_tariff_plans_and_addons.sql` in Supabase SQL Editor, QA
+
+---
+
+## [2026-03-14 12:00] CW — SUPERADMIN-DASHBOARD: Comprehensive Admin Dashboard
+
+**Task:** SUPERADMIN-DASHBOARD | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🔴
+
+**Действия:**
+- Created comprehensive API at `app/api/superadmin/dashboard/route.ts`: aggregates companies, subscriptions, plans, add-ons, AI usage, storage, registrations, alerts into single endpoint with period filtering (week/month/year/custom)
+- Redesigned `app/superadmin/page.tsx` into a full admin command center with 4 tabs: Overview, Companies, Subscriptions & Add-ons, Billing & Revenue
+- Overview: 10 KPI cards (total/active/trial/MRR/storage/AI), plan distribution bars, recent registrations, alert banner
+- Companies: full table with search, status/plan filters, sortable columns, expandable rows with add-ons/storage/Stripe/Supabase details
+- Subscriptions: status distribution, plan breakdown table with revenue calc, add-ons marketplace popularity by category
+- Billing: revenue by plan bars, key metrics (conversion rate, avg revenue, AI margin), storage by plan, top revenue companies
+
+**Результат:** Complete superadmin dashboard — single page to monitor and manage all sub-agent companies, subscriptions, payments, usage, and alerts.
+
+**Next Step:** QA
+
+---
+

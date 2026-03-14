@@ -41,6 +41,58 @@ export async function POST(request: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const companyId = session.metadata?.company_id;
+        const metaType = session.metadata?.type;
+
+        // --- Add-on checkout ---
+        if (metaType === "addon" && companyId) {
+          const addonId = session.metadata?.addon_id;
+          const subscriptionId = session.subscription as string;
+          const customerId = session.customer as string;
+
+          if (addonId && subscriptionId) {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const itemId = sub.items.data[0]?.id;
+
+            const { data: existingAddon } = await supabaseAdmin
+              .from("company_addons")
+              .select("id")
+              .eq("company_id", companyId)
+              .eq("addon_id", addonId)
+              .single();
+
+            if (existingAddon) {
+              await supabaseAdmin
+                .from("company_addons")
+                .update({
+                  is_active: true,
+                  stripe_subscription_item_id: itemId || null,
+                  activated_at: new Date().toISOString(),
+                  deactivated_at: null,
+                })
+                .eq("id", existingAddon.id);
+            } else {
+              await supabaseAdmin.from("company_addons").insert({
+                company_id: companyId,
+                addon_id: addonId,
+                quantity: 1,
+                stripe_subscription_item_id: itemId || null,
+                is_active: true,
+              });
+            }
+
+            if (customerId) {
+              await supabaseAdmin
+                .from("companies")
+                .update({ stripe_customer_id: customerId })
+                .eq("id", companyId);
+            }
+
+            console.log(`[Stripe Webhook] Add-on ${addonId} activated for company ${companyId}`);
+          }
+          break;
+        }
+
+        // --- Plan checkout ---
         const planId = session.metadata?.plan_id;
 
         if (!companyId || !planId) {

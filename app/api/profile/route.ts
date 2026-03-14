@@ -67,11 +67,93 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error || !profile) {
-      console.error("Error fetching profile:", error);
-      return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
-      );
+      // Auto-provision: find company from old profiles table or approved registration
+      let companyId: string | null = null;
+
+      const { data: oldProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (oldProfile?.company_id) {
+        companyId = oldProfile.company_id;
+      } else if (user.email) {
+        const { data: regs } = await supabaseAdmin
+          .from("company_registrations")
+          .select("users_data, created_company_id")
+          .eq("status", "approved")
+          .not("created_company_id", "is", null)
+          .order("reviewed_at", { ascending: false })
+          .limit(20);
+
+        if (regs) {
+          for (const reg of regs) {
+            const users = (reg.users_data as { email?: string }[]) || [];
+            if (users.some((u) => u.email?.toLowerCase() === user.email?.toLowerCase())) {
+              companyId = reg.created_company_id as string;
+              break;
+            }
+          }
+        }
+
+        if (!companyId) {
+          const { data: firstCompany } = await supabaseAdmin
+            .from("companies")
+            .select("id")
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .single();
+          companyId = firstCompany?.id || null;
+        }
+      }
+
+      if (!companyId) {
+        console.error("Cannot auto-create profile: no company found for user", user.id);
+        return NextResponse.json(
+          { error: "Profile not found. No company associated with this account. Please contact administrator." },
+          { status: 404 }
+        );
+      }
+
+      const { data: defaultRole } = await supabaseAdmin
+        .from("roles")
+        .select("id")
+        .eq("name", "supervisor")
+        .single();
+
+      const { data: newProfile, error: createError } = await supabaseAdmin
+        .from("user_profiles")
+        .insert({
+          id: user.id,
+          company_id: companyId,
+          first_name: user.user_metadata?.first_name || user.email?.split("@")[0] || "",
+          last_name: user.user_metadata?.last_name || "",
+          role_id: defaultRole?.id || null,
+          is_active: true,
+        })
+        .select(`
+          id, first_name, last_name, phone, avatar_url, email_signature,
+          is_active, created_at, last_login_at,
+          role:roles(id, name, display_name, display_name_en, level, color),
+          company:companies(id, name, trading_name, legal_name)
+        `)
+        .single();
+
+      if (createError || !newProfile) {
+        console.error("Error auto-creating profile:", createError);
+        return NextResponse.json(
+          { error: "Profile not found and could not be created", details: createError?.message },
+          { status: 404 }
+        );
+      }
+
+      console.log("[Profile] Auto-created profile for user", user.id, "company", companyId);
+
+      return NextResponse.json({
+        ...newProfile,
+        email: user.email,
+      });
     }
 
     return NextResponse.json({

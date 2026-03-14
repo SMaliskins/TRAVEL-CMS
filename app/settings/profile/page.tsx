@@ -8,6 +8,9 @@ import { useUser } from "@/contexts/UserContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import RoleBadge from "@/components/users/RoleBadge";
+import dynamic from "next/dynamic";
+
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), { ssr: false });
 
 interface Profile {
   id: string;
@@ -66,8 +69,6 @@ export default function ProfilePage() {
   const [emailSignature, setEmailSignature] = useState("");
   const [isSavingSignature, setIsSavingSignature] = useState(false);
   const [signatureSuccess, setSignatureSuccess] = useState(false);
-  const [signatureTab, setSignatureTab] = useState<"edit" | "preview">("edit");
-  const signatureLogoInputRef = useRef<HTMLInputElement>(null);
 
   // Avatar upload
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -248,23 +249,30 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSignatureLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { setError("Please select an image file"); return; }
-    if (file.size > 2 * 1024 * 1024) { setError("Image must be less than 2MB"); return; }
-    try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `signature-logo-${profile?.id}-${Date.now()}.${fileExt}`;
-      const filePath = `signatures/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, { upsert: true });
-      if (uploadError) throw new Error(uploadError.message);
-      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(filePath);
-      setEmailSignature(prev => prev + `\n<img src="${publicUrl}" alt="Logo" style="max-height:60px;" />`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload logo");
-    }
-    if (signatureLogoInputRef.current) signatureLogoInputRef.current.value = "";
+  const handleSignatureImageUpload = async (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async (ev) => {
+        const file = (ev.target as HTMLInputElement).files?.[0];
+        if (!file) { resolve(null); return; }
+        if (file.size > 2 * 1024 * 1024) { setError("Image must be less than 2MB"); resolve(null); return; }
+        try {
+          const fileExt = file.name.split(".").pop();
+          const fileName = `signature-logo-${profile?.id}-${Date.now()}.${fileExt}`;
+          const filePath = `signatures/${fileName}`;
+          const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, { upsert: true });
+          if (uploadError) throw new Error(uploadError.message);
+          const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(filePath);
+          resolve(publicUrl);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to upload image");
+          resolve(null);
+        }
+      };
+      input.click();
+    });
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -609,67 +617,21 @@ export default function ProfilePage() {
 
         {/* Email Signature — full width */}
         <div className="rounded-lg bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Email Signature</h2>
-              <p className="text-sm text-gray-500 mt-0.5">HTML signature appended to outgoing emails. Supports images and links.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setSignatureTab("edit")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md ${signatureTab === "edit" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setSignatureTab("preview")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md ${signatureTab === "preview" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-              >
-                Preview
-              </button>
-            </div>
+          <div className="border-b border-gray-200 px-6 py-4">
+            <h2 className="text-lg font-semibold text-gray-900">Email Signature</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Your signature is appended to outgoing emails. Use the toolbar to format text and insert images.</p>
           </div>
           <div className="p-6">
             {signatureSuccess && (
               <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">Signature saved successfully.</div>
             )}
 
-            {signatureTab === "edit" ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => signatureLogoInputRef.current?.click()}
-                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 inline-flex items-center gap-1.5"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    Insert Logo
-                  </button>
-                  <input ref={signatureLogoInputRef} type="file" accept="image/*" onChange={handleSignatureLogoUpload} className="hidden" />
-                  <span className="text-xs text-gray-400">Write HTML directly — supports &lt;img&gt;, &lt;a&gt;, &lt;b&gt;, &lt;i&gt;, inline styles</span>
-                </div>
-                <textarea
-                  value={emailSignature}
-                  onChange={(e) => setEmailSignature(e.target.value)}
-                  rows={10}
-                  placeholder={'<div style="font-family: Arial, sans-serif; font-size: 13px; color: #333;">\n  <p><b>John Smith</b></p>\n  <p>Travel Consultant</p>\n  <p>Phone: +371 20000000</p>\n  <img src="https://..." alt="Logo" style="max-height: 60px;" />\n</div>'}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"
-                />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs text-gray-400 mb-2">This is how your signature will look in emails:</p>
-                <div className="rounded-lg border border-gray-200 p-4 bg-white min-h-[100px]">
-                  {emailSignature ? (
-                    <div dangerouslySetInnerHTML={{ __html: emailSignature }} />
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">No signature configured yet.</p>
-                  )}
-                </div>
-              </div>
-            )}
+            <RichTextEditor
+              content={emailSignature}
+              onChange={setEmailSignature}
+              placeholder="Type your signature here..."
+              onImageUpload={handleSignatureImageUpload}
+            />
 
             <div className="mt-4 flex items-center gap-3">
               <button

@@ -59,7 +59,8 @@ function getTitleFromPath(path: string): string {
     "/settings/users": "User Management",
     "/settings/profile": "My Profile",
     "/settings/ai-parsing": "AI Parsing",
-    "/settings/database": "Database & Storage",
+    "/settings/email-templates": "Email Templates",
+    "/settings/database": "Billing",
     "/analytics/orders": "Analytics",
   };
   

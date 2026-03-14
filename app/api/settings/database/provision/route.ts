@@ -14,10 +14,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Only supervisors can manage database plans" }, { status: 403 });
   }
 
-  if (!isStripeConfigured() || !stripe) {
-    return NextResponse.json({ error: "Payment system is not configured" }, { status: 503 });
-  }
-
   const body = await request.json();
   const { planId } = body;
 
@@ -35,13 +31,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Plan not found" }, { status: 404 });
   }
 
-  if (plan.slug === "starter") {
-    return NextResponse.json({ error: "Starter plan uses shared database — no payment needed" }, { status: 400 });
-  }
-
   const { data: company } = await supabaseAdmin
     .from("companies")
-    .select("id, name, supabase_configured, supabase_status, stripe_customer_id")
+    .select("id, name, supabase_configured, supabase_status, stripe_customer_id, stripe_subscription_id, tariff_plan_id, trial_ends_at")
     .eq("id", user.companyId)
     .single();
 
@@ -49,8 +41,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
-  if (company.supabase_configured && company.supabase_status === "active") {
-    return NextResponse.json({ error: "Database already provisioned. Contact support to change plans." }, { status: 400 });
+  // --- Trial activation (no payment) ---
+  if (plan.slug === "trial") {
+    if (company.trial_ends_at) {
+      return NextResponse.json({ error: "Trial has already been used" }, { status: 400 });
+    }
+
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 7);
+
+    await supabaseAdmin
+      .from("companies")
+      .update({
+        tariff_plan_id: plan.id,
+        trial_ends_at: trialEndsAt.toISOString(),
+        subscription_status: "trialing",
+      })
+      .eq("id", company.id);
+
+    return NextResponse.json({ activated: true, trialEndsAt: trialEndsAt.toISOString() });
+  }
+
+  // --- Paid plans require Stripe ---
+  if (!isStripeConfigured() || !stripe) {
+    return NextResponse.json({ error: "Payment system is not configured" }, { status: 503 });
   }
 
   if (!plan.stripe_price_id_monthly) {
@@ -60,6 +74,45 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Existing subscription: upgrade via Stripe ---
+  if (company.stripe_subscription_id) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(company.stripe_subscription_id);
+      const mainItem = subscription.items.data[0];
+
+      if (!mainItem) {
+        return NextResponse.json({ error: "No subscription items found. Contact support." }, { status: 500 });
+      }
+
+      await stripe.subscriptions.update(company.stripe_subscription_id, {
+        items: [{ id: mainItem.id, price: plan.stripe_price_id_monthly }],
+        proration_behavior: "create_prorations",
+        metadata: {
+          company_id: user.companyId,
+          plan_id: planId,
+          tariff_plan_id: planId,
+        },
+      });
+
+      await supabaseAdmin
+        .from("companies")
+        .update({
+          tariff_plan_id: planId,
+          subscription_status: "active",
+        })
+        .eq("id", company.id);
+
+      return NextResponse.json({ upgraded: true });
+    } catch (err) {
+      console.error("[Provision] Subscription upgrade error:", err);
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Failed to upgrade subscription" },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- New subscription via Stripe Checkout ---
   try {
     const sessionParams: Record<string, unknown> = {
       mode: "subscription",
@@ -95,7 +148,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    console.error("[Database Provision] Stripe error:", err);
+    console.error("[Provision] Stripe error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to create payment session" },
       { status: 500 }
