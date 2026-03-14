@@ -125,12 +125,14 @@ async function sendStorageAlert(
   for (const supervisor of supervisors) {
     if (!supervisor.email) continue;
     try {
-      await sendEmail({
-        to: supervisor.email,
+      await sendEmail(
+        supervisor.email,
         subject,
-        html: body,
-        companyId: company.id,
-      });
+        body,
+        undefined,
+        undefined,
+        { companyId: company.id }
+      );
     } catch (err) {
       console.error(`[Storage Alert] Failed to send to ${supervisor.email}:`, err);
     }
