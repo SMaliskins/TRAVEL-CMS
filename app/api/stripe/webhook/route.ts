@@ -278,7 +278,8 @@ export async function POST(request: NextRequest) {
 
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
-        const paidSubId = invoice.subscription as string;
+        const parentSub = invoice.parent?.subscription_details?.subscription;
+        const paidSubId = typeof parentSub === "string" ? parentSub : parentSub?.id || "";
         if (paidSubId) {
           const { data: paidCompany } = await supabaseAdmin
             .from("companies")
@@ -297,7 +298,8 @@ export async function POST(request: NextRequest) {
 
       case "invoice.payment_failed": {
         const failedInvoice = event.data.object as Stripe.Invoice;
-        const failedSubId = failedInvoice.subscription as string;
+        const failedParentSub = failedInvoice.parent?.subscription_details?.subscription;
+        const failedSubId = typeof failedParentSub === "string" ? failedParentSub : failedParentSub?.id || "";
         if (failedSubId) {
           const { data: failedCompany } = await supabaseAdmin
             .from("companies")
