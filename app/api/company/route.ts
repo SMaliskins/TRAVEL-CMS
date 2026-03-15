@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { encryptSecret, hasDataEncryptionKey } from "@/lib/security/secrets";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
@@ -8,6 +9,31 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
+
+const COMPANY_SECRET_FIELDS = new Set([
+  "resend_api_key",
+  "resend_api_key_ciphertext",
+  "openai_api_key_encrypted",
+  "openai_api_key_ciphertext",
+  "anthropic_api_key_encrypted",
+  "anthropic_api_key_ciphertext",
+  "supabase_anon_key_ciphertext",
+  "supabase_service_role_key",
+  "supabase_service_role_key_ciphertext",
+]);
+
+function sanitizeCompanyForResponse(company: Record<string, unknown>) {
+  const sanitized: Record<string, unknown> = { ...company };
+
+  for (const field of COMPANY_SECRET_FIELDS) {
+    delete sanitized[field];
+  }
+
+  sanitized.resend_api_key_set = Boolean(
+    company.resend_api_key || company.resend_api_key_ciphertext
+  );
+  return sanitized;
+}
 
 // Get user from request
 async function getUser(request: NextRequest) {
@@ -76,13 +102,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to get company" }, { status: 500 });
     }
 
-    const sanitized = { ...company };
-    if (sanitized.resend_api_key) {
-      sanitized.resend_api_key_set = true;
-      delete sanitized.resend_api_key;
-    } else {
-      sanitized.resend_api_key_set = false;
-    }
+    const sanitized = sanitizeCompanyForResponse(company as Record<string, unknown>);
 
     return NextResponse.json({ company: sanitized });
   } catch (error) {
@@ -159,6 +179,22 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Store company email API key in ciphertext when encryption key is configured.
+    if (body.resend_api_key !== undefined) {
+      const rawValue = String(body.resend_api_key || "").trim();
+      if (!rawValue) {
+        updateData.resend_api_key = null;
+        updateData.resend_api_key_ciphertext = null;
+      } else if (hasDataEncryptionKey()) {
+        updateData.resend_api_key_ciphertext = encryptSecret(rawValue);
+        updateData.resend_api_key = null;
+      } else {
+        // Backward-compatible fallback for environments without APP_DATA_ENCRYPTION_KEY.
+        updateData.resend_api_key = rawValue;
+        updateData.resend_api_key_ciphertext = null;
+      }
+    }
+
     // Auto-sync `name` from trading_name or legal_name
     const newTradingName = updateData.trading_name ?? body.trading_name;
     const newLegalName = updateData.legal_name ?? body.legal_name;
@@ -178,13 +214,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: `Failed to update company: ${error.message}` }, { status: 500 });
     }
 
-    const sanitized = { ...company };
-    if (sanitized.resend_api_key) {
-      sanitized.resend_api_key_set = true;
-      delete sanitized.resend_api_key;
-    } else {
-      sanitized.resend_api_key_set = false;
-    }
+    const sanitized = sanitizeCompanyForResponse(company as Record<string, unknown>);
 
     return NextResponse.json({ company: sanitized });
   } catch (error) {

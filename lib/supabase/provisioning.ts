@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { encryptSecret, hasDataEncryptionKey } from "@/lib/security/secrets";
 
 const SUPABASE_API = "https://api.supabase.com/v1";
 
@@ -210,18 +211,28 @@ export async function provisionCompanyDatabase(
 
     await applySchemaToProject(projectUrl, keys.serviceRoleKey);
 
-    await supabaseAdmin
-      .from("companies")
-      .update({
-        supabase_project_ref: projectRef,
-        supabase_url: projectUrl,
-        supabase_anon_key: keys.anonKey,
-        supabase_service_role_key: keys.serviceRoleKey,
-        supabase_configured: true,
-        supabase_status: "active",
-        supabase_region: actualRegion,
-      })
-      .eq("id", companyId);
+    const encryptEnabled = hasDataEncryptionKey();
+    const updatePayload: Record<string, unknown> = {
+      supabase_project_ref: projectRef,
+      supabase_url: projectUrl,
+      supabase_configured: true,
+      supabase_status: "active",
+      supabase_region: actualRegion,
+    };
+
+    if (encryptEnabled) {
+      updatePayload.supabase_anon_key_ciphertext = encryptSecret(keys.anonKey);
+      updatePayload.supabase_service_role_key_ciphertext = encryptSecret(keys.serviceRoleKey);
+      updatePayload.supabase_anon_key = null;
+      updatePayload.supabase_service_role_key = null;
+    } else {
+      updatePayload.supabase_anon_key = keys.anonKey;
+      updatePayload.supabase_service_role_key = keys.serviceRoleKey;
+      updatePayload.supabase_anon_key_ciphertext = null;
+      updatePayload.supabase_service_role_key_ciphertext = null;
+    }
+
+    await supabaseAdmin.from("companies").update(updatePayload).eq("id", companyId);
 
     return {
       projectRef,
@@ -297,6 +308,8 @@ export async function archiveCompanyDatabase(companyId: string): Promise<void> {
       supabase_url: null,
       supabase_anon_key: null,
       supabase_service_role_key: null,
+      supabase_anon_key_ciphertext: null,
+      supabase_service_role_key_ciphertext: null,
     })
     .eq("id", companyId);
 }

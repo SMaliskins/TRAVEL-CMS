@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     .from("companies")
     .select(`
       id, name, supabase_project_ref, supabase_configured, supabase_status,
-      tariff_plan_id, resend_api_key,
+      tariff_plan_id,
       tariff_plans:tariff_plan_id (storage_limit_gb)
     `)
     .eq("supabase_configured", true)
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
 }
 
 async function sendStorageAlert(
-  company: { id: string; name: string; resend_api_key?: string },
+  company: { id: string; name: string },
   usagePercent: number,
   usedBytes: number,
   limitBytes: number,

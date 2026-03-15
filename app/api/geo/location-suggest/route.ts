@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchAirports } from "@/lib/airports";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 interface LocationSuggestion {
   type: "airport" | "hotel" | "region";
@@ -30,6 +31,11 @@ async function geocodeName(name: string): Promise<{ lat: number; lon: number } |
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getApiUser(request);
+  if (!user) {
+    return NextResponse.json({ data: [], error: "Unauthorized" }, { status: 401 });
+  }
+
   const q = request.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 2) {
     return NextResponse.json({ data: [] });

@@ -6,6 +6,7 @@
  * the company's own key. Falls back to global `RESEND_API_KEY` env var.
  */
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { decryptSecret } from "@/lib/security/secrets";
 
 export type SendEmailResult =
   | { success: true; id?: string }
@@ -37,17 +38,18 @@ export async function resolveEmailConfig(
   if (companyId) {
     const { data: company } = await supabaseAdmin
       .from("companies")
-      .select("resend_api_key, invoice_email_from, legal_name, trading_name, name")
+      .select("resend_api_key, resend_api_key_ciphertext, invoice_email_from, legal_name, trading_name, name")
       .eq("id", companyId)
       .single();
 
-    if (company?.resend_api_key) {
+    const companyApiKey = decryptSecret(company?.resend_api_key_ciphertext) || company?.resend_api_key || null;
+    if (companyApiKey) {
       const displayName = company.legal_name || company.trading_name || company.name || "";
       const emailAddr = company.invoice_email_from?.trim();
       const from = emailAddr && displayName
         ? `${displayName} <${emailAddr}>`
         : emailAddr || overrideFrom?.trim() || defaultFrom;
-      return { apiKey: company.resend_api_key, from };
+      return { apiKey: companyApiKey, from };
     }
   }
 

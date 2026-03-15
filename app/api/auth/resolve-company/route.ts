@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { decryptSecret } from "@/lib/security/secrets";
 
 /**
  * POST /api/auth/resolve-company
@@ -30,20 +31,22 @@ export async function POST(request: NextRequest) {
 
   const { data: company } = await supabaseAdmin
     .from("companies")
-    .select("supabase_configured, supabase_url, supabase_anon_key, supabase_status")
+    .select("supabase_configured, supabase_url, supabase_anon_key, supabase_anon_key_ciphertext, supabase_status")
     .eq("id", mapping.company_id)
     .single();
+
+  const anonKey = decryptSecret(company?.supabase_anon_key_ciphertext) || company?.supabase_anon_key;
 
   if (
     company?.supabase_configured &&
     company.supabase_status === "active" &&
     company.supabase_url &&
-    company.supabase_anon_key
+    anonKey
   ) {
     return NextResponse.json({
       dedicated: true,
       supabaseUrl: company.supabase_url,
-      supabaseAnonKey: company.supabase_anon_key,
+      supabaseAnonKey: anonKey,
     });
   }
 

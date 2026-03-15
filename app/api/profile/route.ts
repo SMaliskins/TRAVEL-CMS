@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error || !profile) {
-      // Auto-provision: find company from old profiles table or approved registration
+      // Auto-provision: find company from trusted mappings only
       let companyId: string | null = null;
 
       const { data: oldProfile } = await supabaseAdmin
@@ -97,15 +97,6 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        if (!companyId) {
-          const { data: firstCompany } = await supabaseAdmin
-            .from("companies")
-            .select("id")
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .single();
-          companyId = firstCompany?.id || null;
-        }
       }
 
       if (!companyId) {
@@ -116,10 +107,12 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      // Security hardening:
+      // never auto-assign supervisor on profile bootstrap
       const { data: defaultRole } = await supabaseAdmin
         .from("roles")
         .select("id")
-        .eq("name", "supervisor")
+        .eq("name", "agent")
         .single();
 
       const { data: newProfile, error: createError } = await supabaseAdmin

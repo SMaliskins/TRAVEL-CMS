@@ -1,14 +1,35 @@
 import { SignJWT, jwtVerify } from 'jose'
 import crypto from 'crypto'
 
+const DEV_ACCESS_FALLBACK = 'dev-access-secret-change-in-prod'
+const DEV_REFRESH_FALLBACK = 'dev-refresh-secret-change-in-prod'
+const DEV_INVITATION_FALLBACK = 'dev-invitation-secret-change-in-prod'
+
+function readJwtSecret(envName: "CLIENT_JWT_ACCESS_SECRET" | "CLIENT_JWT_REFRESH_SECRET" | "CLIENT_JWT_INVITATION_SECRET", devFallback: string): string {
+  const value = process.env[envName]?.trim()
+  const isProd = process.env.NODE_ENV === 'production'
+
+  if (value && value !== devFallback) return value
+
+  if (isProd) {
+    throw new Error(`[SECURITY] ${envName} must be set in production`)
+  }
+
+  if (!value) {
+    console.warn(`[SECURITY] ${envName} is not set. Using development fallback secret.`)
+  }
+
+  return devFallback
+}
+
 const ACCESS_SECRET = new TextEncoder().encode(
-  process.env.CLIENT_JWT_ACCESS_SECRET ?? 'dev-access-secret-change-in-prod'
+  readJwtSecret('CLIENT_JWT_ACCESS_SECRET', DEV_ACCESS_FALLBACK)
 )
 const REFRESH_SECRET = new TextEncoder().encode(
-  process.env.CLIENT_JWT_REFRESH_SECRET ?? 'dev-refresh-secret-change-in-prod'
+  readJwtSecret('CLIENT_JWT_REFRESH_SECRET', DEV_REFRESH_FALLBACK)
 )
 const INVITATION_SECRET = new TextEncoder().encode(
-  process.env.CLIENT_JWT_INVITATION_SECRET ?? 'dev-invitation-secret-change-in-prod'
+  readJwtSecret('CLIENT_JWT_INVITATION_SECRET', DEV_INVITATION_FALLBACK)
 )
 
 export interface ClientTokenPayload {

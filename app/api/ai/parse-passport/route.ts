@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseMrzToPassportData } from "@/lib/passport/parseMrz";
 import { MODELS } from "@/lib/ai/config";
+import { getApiUser } from "@/lib/auth/getApiUser";
+import { consumeRateLimit } from "@/lib/security/rateLimit";
 
 /**
  * AI-powered passport parsing
@@ -194,6 +196,23 @@ function applyMrzOverrides(
 
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await getApiUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const rl = consumeRateLimit({
+      bucket: "ai-parse-passport",
+      key: authUser.userId,
+      limit: 12,
+      windowMs: 60_000,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again shortly." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+      );
+    }
+
     const contentType = request.headers.get("content-type") || "";
     
     let imageBase64: string | null = null;

@@ -1,44 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-  return null;
-}
-
-async function getCompanyId(userId: string) {
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .single();
-  return data?.company_id || null;
-}
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const companyId = await getCompanyId(user.id);
+    const companyId = apiUser.companyId;
     if (!companyId) {
-      console.error("[Statistics] Company not found for user:", user.id);
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
-
-    console.log("[Statistics] Fetching stats for company_id:", companyId);
 
     // First, get active party IDs only (exclude archived/inactive)
     const { data: parties, error: partiesError } = await supabaseAdmin
@@ -56,7 +30,6 @@ export async function GET(request: NextRequest) {
     }
 
     const partyIds = (parties || []).map(p => p.id);
-    console.log("[Statistics] Found", partyIds.length, "parties for company");
 
     if (partyIds.length === 0) {
       return NextResponse.json({
@@ -104,7 +77,6 @@ export async function GET(request: NextRequest) {
     if (clientsError) console.error("[Statistics] Error counting clients:", clientsError);
     if (suppliersError) console.error("[Statistics] Error counting suppliers:", suppliersError);
     if (subagentsError) console.error("[Statistics] Error counting subagents:", subagentsError);
-    console.log("[Statistics] Counts:", { clientsCount, suppliersCount, subagentsCount });
 
     const clientPartyIds = (clientParties || []).map((cp: { party_id: string }) => cp.party_id);
     const supplierPartyIds = (supplierParties || []).map((sp: { party_id: string }) => sp.party_id);

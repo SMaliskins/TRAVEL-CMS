@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -103,13 +104,18 @@ export async function GET(request: NextRequest) {
     // Company AI settings
     const { data: company } = await admin
       .from("companies")
-      .select("openai_api_key_encrypted, anthropic_api_key_encrypted, ai_model_preference")
+      .select(
+        "openai_api_key_encrypted, openai_api_key_ciphertext, anthropic_api_key_encrypted, anthropic_api_key_ciphertext, ai_model_preference"
+      )
       .eq("id", authInfo.companyId)
       .single();
 
-    const hasOwnOpenAIKey = !!company?.openai_api_key_encrypted;
-    const hasOwnAnthropicKey = !!company?.anthropic_api_key_encrypted;
+    const hasOwnOpenAIKey = !!(company?.openai_api_key_ciphertext || company?.openai_api_key_encrypted);
+    const hasOwnAnthropicKey = !!(company?.anthropic_api_key_ciphertext || company?.anthropic_api_key_encrypted);
     const modelPreference = company?.ai_model_preference || "auto";
+
+    // Get AI usage limit status
+    const usageLimit = await checkAiUsageLimit(authInfo.companyId);
 
     return NextResponse.json({
       templates: templates || [],
@@ -117,6 +123,7 @@ export async function GET(request: NextRequest) {
         allTime: { totalCalls, totalTokens, totalCost, byModel, byOperation },
         thisMonth: { calls: monthCalls, cost: monthCost },
         recentLogs: (usageThisMonth || []).slice(0, 20),
+        limit: usageLimit,
       },
       config: {
         hasOwnOpenAIKey,

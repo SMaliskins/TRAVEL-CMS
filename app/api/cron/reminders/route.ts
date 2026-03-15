@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   try {
     const { data: companies } = await supabaseAdmin
       .from("companies")
-      .select("id, invoice_email_from, resend_api_key, name, trading_name, legal_name, currency");
+      .select("id, invoice_email_from, name, trading_name, legal_name, currency");
 
     for (const company of companies || []) {
       const agencyEmail = company.invoice_email_from;
@@ -308,7 +308,6 @@ async function insertNotification(
 interface CompanyRow {
   id: string;
   invoice_email_from: string | null;
-  resend_api_key: string | null;
   name: string | null;
   trading_name: string | null;
   legal_name: string | null;

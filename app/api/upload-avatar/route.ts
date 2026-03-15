@@ -4,11 +4,52 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { randomUUID } from "crypto";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+
+async function getCurrentUser(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (!error && data?.user) return data.user;
+  }
+
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Cookie: cookieHeader } },
+    });
+    const { data, error } = await authClient.auth.getUser();
+    if (!error && data?.user) return data.user;
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("user_profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.company_id) {
+      return NextResponse.json({ error: "Company not found" }, { status: 403 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
@@ -37,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename
     const ext = file.name.split(".").pop() || "jpg";
-    const filename = `passport-${randomUUID()}.${ext}`;
+    const filename = `${profile.company_id}/${user.id}/avatar-${randomUUID()}.${ext}`;
 
     // Convert to buffer
     const buffer = Buffer.from(await file.arrayBuffer());

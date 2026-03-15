@@ -39,6 +39,7 @@ export default function SuperAdminLayout({
           <NavLink href="/superadmin/subscriptions" icon="credit-card">Subscriptions</NavLink>
           <NavLink href="/superadmin/ai-usage" icon="cpu">AI Usage</NavLink>
           <NavLink href="/superadmin/billing" icon="receipt">Billing</NavLink>
+          <NavLink href="/superadmin/import" icon="upload">Data Import</NavLink>
           
           <div className="pt-4 border-t border-slate-700 mt-4">
             <NavLink href="/superadmin/settings" icon="settings">Settings</NavLink>
@@ -112,6 +113,11 @@ function Icon({ name }: { name: string }) {
     receipt: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+      </svg>
+    ),
+    upload: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
       </svg>
     ),
     settings: (

@@ -42,6 +42,7 @@ interface DashboardData {
       byOperation: Record<string, ModelStats>;
     };
     thisMonth: { calls: number; cost: number };
+    limit: { allowed: boolean; limit: number; used: number; remaining: number } | null;
     recentLogs: UsageLog[];
   };
   config: {
@@ -152,6 +153,45 @@ export default function AiParsingPage() {
             </p>
           </div>
         </div>
+
+        {/* Usage Limit Bar */}
+        {usage.limit && usage.limit.limit > 0 && (
+          <div className={`rounded-lg border p-4 ${usage.limit.allowed ? "bg-white border-gray-200" : "bg-red-50 border-red-200"}`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-700">
+                Monthly AI Limit
+              </p>
+              <p className={`text-sm font-semibold ${usage.limit.allowed ? "text-gray-900" : "text-red-600"}`}>
+                {usage.limit.used} / {usage.limit.limit} calls
+              </p>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div
+                className={`rounded-full h-2.5 transition-all ${
+                  !usage.limit.allowed ? "bg-red-500"
+                    : usage.limit.used / usage.limit.limit > 0.8 ? "bg-amber-500"
+                    : "bg-emerald-500"
+                }`}
+                style={{ width: `${Math.min(100, (usage.limit.used / usage.limit.limit) * 100)}%` }}
+              />
+            </div>
+            {!usage.limit.allowed && (
+              <p className="text-xs text-red-600 mt-2">
+                Limit reached. Upgrade your plan or purchase an AI add-on for more calls.
+              </p>
+            )}
+            {usage.limit.allowed && usage.limit.remaining <= 10 && usage.limit.remaining > 0 && (
+              <p className="text-xs text-amber-600 mt-2">
+                {usage.limit.remaining} calls remaining this month.
+              </p>
+            )}
+          </div>
+        )}
+        {usage.limit && usage.limit.limit === -1 && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <p className="text-sm text-emerald-700 font-medium">Unlimited AI calls (Enterprise plan)</p>
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

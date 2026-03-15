@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { decryptSecret } from "@/lib/security/secrets";
 
 interface CachedClient {
   client: SupabaseClient;
@@ -47,7 +48,9 @@ export async function getCompanySupabaseAdmin(companyId: string): Promise<Supaba
 
   const { data: company } = await supabaseAdmin
     .from("companies")
-    .select("supabase_configured, supabase_url, supabase_service_role_key, supabase_status")
+    .select(
+      "supabase_configured, supabase_url, supabase_service_role_key, supabase_service_role_key_ciphertext, supabase_status"
+    )
     .eq("id", companyId)
     .single();
 
@@ -55,11 +58,13 @@ export async function getCompanySupabaseAdmin(companyId: string): Promise<Supaba
     return supabaseAdmin;
   }
 
-  if (!company.supabase_url || !company.supabase_service_role_key) {
+  const serviceRoleKey =
+    decryptSecret(company.supabase_service_role_key_ciphertext) || company.supabase_service_role_key;
+  if (!company.supabase_url || !serviceRoleKey) {
     return supabaseAdmin;
   }
 
-  const client = createClient(company.supabase_url, company.supabase_service_role_key, {
+  const client = createClient(company.supabase_url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
@@ -80,15 +85,16 @@ export async function getCompanySupabaseClient(companyId: string): Promise<{
 }> {
   const { data: company } = await supabaseAdmin
     .from("companies")
-    .select("supabase_configured, supabase_url, supabase_anon_key, supabase_status")
+    .select("supabase_configured, supabase_url, supabase_anon_key, supabase_anon_key_ciphertext, supabase_status")
     .eq("id", companyId)
     .single();
 
+  const anonKey = decryptSecret(company?.supabase_anon_key_ciphertext) || company?.supabase_anon_key;
   if (
     !company?.supabase_configured ||
     company.supabase_status !== "active" ||
     !company.supabase_url ||
-    !company.supabase_anon_key
+    !anonKey
   ) {
     return {
       url: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -99,7 +105,7 @@ export async function getCompanySupabaseClient(companyId: string): Promise<{
 
   return {
     url: company.supabase_url,
-    anonKey: company.supabase_anon_key,
+    anonKey,
     isDedicated: true,
   };
 }

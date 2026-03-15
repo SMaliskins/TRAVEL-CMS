@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { MODELS } from '@/lib/ai/config'
+import { checkAiUsageLimit } from '@/lib/ai/usageLimit'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
 import { conciergeTools } from '@/lib/client-concierge/tools'
 import { buildConciergeSystemPrompt } from '@/lib/client-concierge/systemPrompt'
@@ -395,6 +396,17 @@ export async function POST(req: NextRequest) {
       companyId: party?.company_id ?? undefined,
       sessionId: session.id,
       hotelMarkup,
+    }
+
+    // Check AI usage limit
+    if (toolCtx.companyId) {
+      const usage = await checkAiUsageLimit(toolCtx.companyId)
+      if (!usage.allowed) {
+        return Response.json(
+          { data: null, error: 'AI_LIMIT_REACHED', message: `AI usage limit reached (${usage.used}/${usage.limit} this month).` },
+          { status: 429 }
+        )
+      }
     }
 
     let assistantText = ''

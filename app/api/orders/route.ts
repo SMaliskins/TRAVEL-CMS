@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const orderType = searchParams.get("order_type");
     const search = searchParams.get("search");
+    const page = parseInt(searchParams.get("page") || "1") || 1;
+    const pageSize = Math.min(parseInt(searchParams.get("pageSize") || "200") || 200, 500);
 
     // Check role for subagent scope
     const apiUser = await getApiUser(request);
@@ -99,7 +101,7 @@ export async function GET(request: NextRequest) {
     // Build query - only select columns that definitely exist
     let query = supabaseAdmin
       .from("orders")
-      .select("id, order_code, order_number, client_display_name, countries_cities, date_from, date_to, amount_total, amount_paid, profit_estimated, status, order_type, owner_user_id, manager_user_id, created_at, updated_at, client_payment_due_date")
+      .select("id, order_code, order_number, client_display_name, countries_cities, date_from, date_to, amount_total, amount_paid, profit_estimated, status, order_type, owner_user_id, manager_user_id, created_at, updated_at, client_payment_due_date", { count: "exact" })
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
@@ -114,7 +116,14 @@ export async function GET(request: NextRequest) {
     if (orderType) {
       query = query.eq("order_type", orderType);
     }
-    const { data: allOrders, error } = await query;
+
+    // Apply pagination unless searching (search needs all records for in-memory filter)
+    if (!search) {
+      const from = (page - 1) * pageSize;
+      query = query.range(from, from + pageSize - 1);
+    }
+
+    const { data: allOrders, error, count: totalCount } = await query;
 
     if (error) {
       console.error("Orders fetch error:", error);
@@ -330,7 +339,16 @@ export async function GET(request: NextRequest) {
       initials: name.split(" ").map(w => w[0]).join("").toUpperCase(),
     }));
 
-    return NextResponse.json({ orders: transformedOrders, agents });
+    return NextResponse.json({
+      orders: transformedOrders,
+      agents,
+      pagination: {
+        page,
+        pageSize,
+        total: totalCount ?? transformedOrders.length,
+        totalPages: Math.ceil((totalCount ?? transformedOrders.length) / pageSize),
+      },
+    });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Orders GET error:", errorMsg);

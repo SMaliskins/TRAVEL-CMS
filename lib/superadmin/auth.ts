@@ -3,8 +3,27 @@ import { SignJWT, jwtVerify } from "jose";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import bcrypt from "bcryptjs";
 
+const DEV_SUPERADMIN_FALLBACK = "superadmin-secret-change-me";
+
+function readSuperAdminJwtSecret(): string {
+  const secret = process.env.SUPERADMIN_JWT_SECRET || process.env.JWT_SECRET;
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (secret && secret !== DEV_SUPERADMIN_FALLBACK) return secret;
+
+  if (isProd) {
+    throw new Error("[SECURITY] SUPERADMIN_JWT_SECRET (or JWT_SECRET) must be set in production");
+  }
+
+  if (!secret) {
+    console.warn("[SECURITY] SUPERADMIN_JWT_SECRET is not set. Using development fallback secret.");
+  }
+
+  return DEV_SUPERADMIN_FALLBACK;
+}
+
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.SUPERADMIN_JWT_SECRET || process.env.JWT_SECRET || "superadmin-secret-change-me"
+  readSuperAdminJwtSecret()
 );
 
 const COOKIE_NAME = "superadmin_token";

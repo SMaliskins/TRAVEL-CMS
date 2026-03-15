@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { suggestHotels } from "@/lib/ratehawk/client";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getApiUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized", data: null }, { status: 401 });
+    }
+
     const keyId = process.env.RATEHAWK_KEY_ID;
     const apiKey = process.env.RATEHAWK_API_KEY;
     if (!keyId || !apiKey) {

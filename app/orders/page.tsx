@@ -452,7 +452,9 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string; initials: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<{ page: number; total: number; totalPages: number } | null>(null);
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
   const [semanticOrderCodes, setSemanticOrderCodes] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
@@ -490,16 +492,19 @@ export default function OrdersPage() {
   }, []);
 
   // Fetch orders from API
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (page = 1, append = false) => {
     try {
-      setIsLoading(true);
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
       setLoadError(null);
 
-      // Get session token
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token || null;
 
-      const response = await fetch("/api/orders", {
+      const response = await fetch(`/api/orders?page=${page}&pageSize=200`, {
         headers: {
           ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
         },
@@ -512,13 +517,25 @@ export default function OrdersPage() {
       }
 
       const data = await response.json();
-      setOrders(data.orders || []);
-      setAgents(data.agents || []);
+      if (append) {
+        setOrders(prev => [...prev, ...(data.orders || [])]);
+      } else {
+        setOrders(data.orders || []);
+      }
+      setAgents(prev => {
+        const merged = new Map(prev.map(a => [a.id, a]));
+        (data.agents || []).forEach((a: { id: string; name: string; initials: string }) => merged.set(a.id, a));
+        return Array.from(merged.values());
+      });
+      if (data.pagination) {
+        setPagination({ page: data.pagination.page, total: data.pagination.total, totalPages: data.pagination.totalPages });
+      }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
       setLoadError(error instanceof Error ? error.message : t(lang, "orders.loadError"));
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }, []);
 
@@ -1433,6 +1450,22 @@ export default function OrdersPage() {
             <p className="text-sm text-gray-500">No orders match current filters</p>
             <button onClick={clearAllFilters} className="mt-2 text-xs text-blue-600 hover:underline">
               Clear all filters
+            </button>
+          </div>
+        )}
+
+        {/* Load more */}
+        {pagination && pagination.page < pagination.totalPages && (
+          <div className="flex items-center justify-center py-4 gap-3">
+            <span className="text-xs text-gray-400">
+              {t(lang, "orders.showing")} {orders.length} {t(lang, "orders.of")} {pagination.total}
+            </span>
+            <button
+              onClick={() => fetchOrders(pagination.page + 1, true)}
+              disabled={isLoadingMore}
+              className="px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition"
+            >
+              {isLoadingMore ? `${t(lang, "orders.loading")}...` : t(lang, "orders.loadMore")}
             </button>
           </div>
         )}

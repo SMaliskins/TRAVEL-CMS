@@ -1,38 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { logAiUsage } from "@/lib/aiUsageLogger";
 import { requireModule } from "@/lib/modules/checkModule";
+import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
 import { MODELS } from "@/lib/ai/config";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-async function getAuthInfo(request: NextRequest): Promise<{ userId: string; companyId: string } | null> {
-  try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) return null;
-    
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (error || !data?.user) return null;
-    
-    const userId = data.user.id;
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: profile } = await adminClient
-      .from("user_profiles")
-      .select("company_id")
-      .eq("id", userId)
-      .single();
-    
-    if (!profile?.company_id) return null;
-    return { userId, companyId: profile.company_id };
-  } catch {
-    return null;
-  }
-}
+import { getApiUser } from "@/lib/auth/getApiUser";
+import { consumeRateLimit } from "@/lib/security/rateLimit";
 
 /**
  * Package Tour document parser - multi-operator, multi-format
@@ -162,14 +135,39 @@ Tez Tour specific (Latvian "LĪGUMS Par tūrisma pakalpojumu sniegšanu", PAKALP
 - Only return valid JSON, no other text`;
 
 export async function POST(request: NextRequest) {
-  // Get auth info for usage logging and module check
-  const authInfo = await getAuthInfo(request);
+  const authInfo = await getApiUser(request);
+  if (!authInfo) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const rl = consumeRateLimit({
+    bucket: "ai-parse-package-tour",
+    key: authInfo.userId,
+    limit: 12,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again shortly." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+    );
+  }
   
   // Check if company has ai_parsing module (skip in development for easier testing)
   if (authInfo && process.env.NODE_ENV === "production") {
     const moduleError = await requireModule(authInfo.companyId, "ai_parsing");
     if (moduleError) {
       return NextResponse.json({ error: moduleError.error }, { status: moduleError.status });
+    }
+  }
+
+  // Check AI usage limit
+  if (authInfo) {
+    const usage = await checkAiUsageLimit(authInfo.companyId);
+    if (!usage.allowed) {
+      return NextResponse.json(
+        { error: `AI usage limit reached (${usage.used}/${usage.limit} calls this month). Upgrade your plan or purchase an AI add-on.` },
+        { status: 429 }
+      );
     }
   }
   
