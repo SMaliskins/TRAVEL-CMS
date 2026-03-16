@@ -58,7 +58,6 @@ export async function GET(
       .select(`
         *,
         orders(order_code, client_display_name),
-        invoices(invoice_number),
         company_bank_accounts(account_name, bank_name)
       `)
       .eq("id", id)
@@ -67,6 +66,18 @@ export async function GET(
 
     if (paymentError || !payment) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+    }
+
+    // Resolve linked invoice number separately (payments.invoice_id has no FK in schema)
+    let linkedInvoiceNumber: string | null = null;
+    const paymentInvoiceId = (payment as Record<string, unknown>).invoice_id as string | null;
+    if (paymentInvoiceId) {
+      const { data: inv } = await supabaseAdmin
+        .from("invoices")
+        .select("invoice_number")
+        .eq("id", paymentInvoiceId)
+        .maybeSingle();
+      linkedInvoiceNumber = (inv as { invoice_number?: string } | null)?.invoice_number ?? null;
     }
 
     const { data: company } = await supabaseAdmin
@@ -125,7 +136,6 @@ export async function GET(
 
     const paymentRow = payment as Record<string, unknown>;
     const orderRow = (paymentRow.orders as Record<string, unknown>) || {};
-    const invoiceRow = (paymentRow.invoices as Record<string, unknown>) || {};
     const accountRow = (paymentRow.company_bank_accounts as Record<string, unknown>) || {};
 
     const paidAt = String(paymentRow.paid_at || new Date().toISOString());
@@ -144,7 +154,7 @@ export async function GET(
         currency: String(paymentRow.currency || "EUR"),
         paymentMethod: String(paymentRow.method || "bank").toUpperCase(),
         note: (paymentRow.note as string) || null,
-        invoiceNumber: (invoiceRow.invoice_number as string) || null,
+        invoiceNumber: linkedInvoiceNumber,
         accountName: (accountRow.account_name as string) || null,
         accountBankName: (accountRow.bank_name as string) || null,
         dateFormat,
