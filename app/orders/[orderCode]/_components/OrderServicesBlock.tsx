@@ -1692,11 +1692,15 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
   // Handle new service added
   const handleServiceAdded = (service: ServiceData) => {
+    const raw = service as unknown as Record<string, unknown>;
     const newService: Service = {
       id: service.id,
       dateFrom: service.dateFrom || "",
       dateTo: service.dateTo || service.dateFrom || "",
       category: service.category || "Other",
+      categoryId: (service.categoryId ?? (raw.categoryId as string) ?? null) as string | null,
+      categoryType: (service.categoryType ?? (raw.categoryType as string) ?? null) as Service["categoryType"],
+      vatRate: ((raw.vatRate ?? raw.vat_rate) ?? null) as number | null,
       name: service.serviceName,
       supplier: service.supplierName || "-",
       client: service.clientName || "-",
@@ -1711,11 +1715,28 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       resStatus: service.resStatus || "booked",
       refNr: service.refNr || "",
       ticketNr: service.ticketNr || "",
+      ticketNumbers: service.ticketNumbers || [],
       assignedTravellerIds: service.travellerIds || [],
+      serviceType: ((raw.serviceType ?? raw.service_type) || "original") as Service["serviceType"],
+      parentServiceId: (service.parentServiceId ?? null) as string | null,
+      flightSegments: (service.flightSegments ?? (raw.flightSegments as FlightSegment[]) ?? []) as FlightSegment[],
+      cabinClass: (service.cabinClass ?? (raw.cabinClass as string) ?? "economy") as Service["cabinClass"],
+      baggage: (service.baggage ?? (raw.baggage as string) ?? "") as string,
+      airlineChannel: !!(service.airlineChannel ?? raw.airlineChannel),
+      airlineChannelSupplierId: (service.airlineChannelSupplierId ?? null) as string | null,
+      airlineChannelSupplierName: (service.airlineChannelSupplierName ?? "") as string,
+      pricingPerClient: (raw.pricingPerClient ?? raw.pricing_per_client ?? null) as Service["pricingPerClient"],
+      hotelName: ((raw.hotelName ?? raw.hotel_name) || undefined) as string | undefined,
+      hotelRoom: ((raw.hotelRoom ?? raw.hotel_room) || undefined) as string | undefined,
+      hotelBoard: ((raw.hotelBoard ?? raw.hotel_board) || undefined) as string | undefined,
+      hotelAddress: ((raw.hotelAddress ?? raw.hotel_address) || undefined) as string | undefined,
+      transferRoutes: (Array.isArray(raw.transferRoutes ?? raw.transfer_routes) ? (raw.transferRoutes ?? raw.transfer_routes) : []) as Service["transferRoutes"],
     };
     setServices(prev => [...prev, newService]);
     // Refresh travellers so new clients appear in TRAVELLERS column (they're added to order_travellers by API)
     fetchTravellers();
+    // Refetch full service data so Edit modal has all fields (same pattern as handleServiceUpdated)
+    setTimeout(() => fetchServices(true), 150);
   };
 
   const selectedService = services.find((s) => s.id === modalServiceId);
