@@ -6,7 +6,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { Pencil, Ban, Plus, Landmark, Banknote, CreditCard } from "lucide-react";
+import { Pencil, Ban, Landmark, Banknote, CreditCard, Printer } from "lucide-react";
 import AddPaymentModal, { type EditPaymentData } from "@/app/finances/payments/_components/AddPaymentModal";
 
 interface Payment {
@@ -141,6 +141,38 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
     }
   };
 
+  const handlePrintDepositReceipt = async (paymentId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/finances/payments/${paymentId}/receipt`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!response.ok) throw new Error("Failed to generate receipt");
+
+      const contentType = response.headers.get("content-type") || "";
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+
+      if (contentType.includes("application/pdf")) {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = "deposit-receipt.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(objectUrl, "_blank", "noopener,noreferrer");
+      }
+
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      console.error("Failed to print deposit receipt:", error);
+      showToast("error", "Failed to generate deposit receipt");
+    }
+  };
+
   if (loading) return <div className="text-sm text-gray-400 py-2">Loading payments...</div>;
 
   if (payments.length === 0) return (
@@ -242,6 +274,9 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
                 <td className="py-1.5 px-2">
                   {!isCancelled && (
                     <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => handlePrintDepositReceipt(p.id)} className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Print deposit receipt">
+                        <Printer size={14} />
+                      </button>
                       <button onClick={() => handleEdit(p)} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit">
                         <Pencil size={14} />
                       </button>

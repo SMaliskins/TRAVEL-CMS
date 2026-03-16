@@ -9,7 +9,7 @@ import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelecto
 import AddPaymentModal, { type EditPaymentData } from "./_components/AddPaymentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { Landmark, Banknote, CreditCard, Trash2, Pencil } from "lucide-react";
+import { Landmark, Banknote, CreditCard, Trash2, Pencil, Printer } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -147,6 +147,44 @@ export default function PaymentsPage() {
 
     if (res.ok) {
       loadPayments();
+    }
+  };
+
+  const handlePrintDepositReceipt = async (paymentId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch(`/api/finances/payments/${paymentId}/receipt`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate receipt");
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+
+      if (contentType.includes("application/pdf")) {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = "deposit-receipt.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(objectUrl, "_blank", "noopener,noreferrer");
+      }
+
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      console.error("Failed to print deposit receipt:", error);
+      alert("Failed to generate deposit receipt");
     }
   };
 
@@ -304,6 +342,13 @@ export default function PaymentsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handlePrintDepositReceipt(p.id)}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                        title="Print deposit receipt"
+                      >
+                        <Printer size={15} />
+                      </button>
                       <button
                         onClick={() => handleEdit(p)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"

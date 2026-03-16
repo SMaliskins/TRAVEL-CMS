@@ -5,6 +5,57 @@
 
 ---
 
+## [2026-03-16 11:20] CODE WRITER — O7-IMPL: Deposit receipt document
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Analyze current payments flow and invoice PDF style
+- Implement printable deposit receipt document from payment record
+
+**Результат:** In progress
+
+**Next Step:** Implement API route + UI print action
+
+---
+
+## [2026-03-16 11:30] CODE WRITER — O7-IMPL: Deposit receipt document
+
+**Task:** O7-IMPL | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Added new receipt generator `lib/invoices/generateDepositReceiptHTML.ts` with invoice-like layout and payment metadata
+- Added API route `GET /api/finances/payments/[id]/receipt` with auth + tenant check, PDF generation and HTML fallback
+- Added "Print deposit receipt" action button in both `app/finances/payments/page.tsx` and `app/orders/[orderCode]/_components/OrderPaymentsList.tsx`
+
+**Результат:** Deposit receipt document can be downloaded/printed directly from payment rows.
+
+**Next Step:** Build verification and QA handoff
+
+---
+
+## [2026-03-16 11:31] CODE WRITER — O7-IMPL: Deposit receipt document
+
+**Task:** O7-IMPL | **Status:** SUCCESS (TEST)
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Ran production build: `npm run build` (passed)
+- Checked lints for modified files (no diagnostics)
+
+**Результат:** SCORE: 9/10
+**Defect List:**
+- None found in build/lint verification scope
+
+**Next Step:** QA validation in UI flow (create deposit -> print receipt)
+
+---
+
 ### 📅 [2026-03-05] | Fix invoice number gaps — cross-order released pool reuse
 **Agent:** Code Writer
 **Task:** Fix sequential invoice numbering gaps
