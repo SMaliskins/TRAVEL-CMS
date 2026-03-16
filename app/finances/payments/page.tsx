@@ -62,6 +62,7 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editPayment, setEditPayment] = useState<EditPaymentData | null>(null);
+  const [receiptLangMenu, setReceiptLangMenu] = useState<string | null>(null);
 
   const [filterMethod, setFilterMethod] = useState<string>(() => loadPaymentsFilters()?.filterMethod ?? "all");
   const [period, setPeriod] = useState<PeriodType>(() => loadPaymentsFilters()?.period ?? "currentMonth");
@@ -150,7 +151,8 @@ export default function PaymentsPage() {
     }
   };
 
-  const handlePrintDepositReceipt = async (paymentId: string) => {
+  const handlePrintDepositReceipt = async (paymentId: string, receiptLang = "en") => {
+    setReceiptLangMenu(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -158,7 +160,7 @@ export default function PaymentsPage() {
         return;
       }
 
-      const response = await fetch(`/api/finances/payments/${paymentId}/receipt`, {
+      const response = await fetch(`/api/finances/payments/${paymentId}/receipt?lang=${receiptLang}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
@@ -342,13 +344,35 @@ export default function PaymentsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => handlePrintDepositReceipt(p.id)}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                        title="Print deposit receipt"
-                      >
-                        <Printer size={15} />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setReceiptLangMenu(receiptLangMenu === p.id ? null : p.id)}
+                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          title="Print deposit receipt"
+                        >
+                          <Printer size={15} />
+                        </button>
+                        {receiptLangMenu === p.id && (
+                          <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded shadow-lg z-50 py-1 min-w-[90px]">
+                            {[
+                              { code: "en", label: "EN" },
+                              { code: "lv", label: "LV" },
+                              { code: "ru", label: "RU" },
+                              { code: "de", label: "DE" },
+                              { code: "fr", label: "FR" },
+                              { code: "es", label: "ES" },
+                            ].map((l) => (
+                              <button
+                                key={l.code}
+                                onClick={() => handlePrintDepositReceipt(p.id, l.code)}
+                                className="block w-full text-left px-3 py-1 text-xs hover:bg-indigo-50 hover:text-indigo-700"
+                              >
+                                {l.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleEdit(p)}
                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"

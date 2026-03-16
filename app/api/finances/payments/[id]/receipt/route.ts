@@ -28,6 +28,7 @@ export async function GET(
     const companyId = apiUser.companyId;
 
     const { id } = await params;
+    const lang = new URL(request.url).searchParams.get("lang") || "en";
 
     const { data: payment, error: paymentError } = await supabaseAdmin
       .from("payments")
@@ -135,6 +136,7 @@ export async function GET(
         accountName: (accountRow.account_name as string) || null,
         accountBankName: (accountRow.bank_name as string) || null,
         dateFormat,
+        language: lang,
       },
       companyLogoUrl,
       companyInfo
