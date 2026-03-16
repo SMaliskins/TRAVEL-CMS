@@ -8,12 +8,12 @@ import { createClient } from "@supabase/supabase-js";
 import { Plane, Eye, EyeOff, Loader2 } from "lucide-react";
 
 const LOGIN_VIDEOS = [
-  "/Vid/856382-hd_1920_1080_30fps.mp4",
-  "/Vid/856486-hd_1920_1080_30fps.mp4",
-  "/Vid/856813-hd_1920_1080_30fps.mp4",
-  "/Vid/2325093-hd_1920_1080_25fps.mp4",
-  "/Vid/3125396-uhd_3840_2160_25fps.mp4",
-  "/Vid/3130284-uhd_3840_2160_30fps.mp4",
+  "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/856382-hd_1920_1080_30fps.mp4",
+  "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/856486-hd_1920_1080_30fps.mp4",
+  "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/856813-hd_1920_1080_30fps.mp4",
+  "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/2325093-hd_1920_1080_25fps.mp4",
+  "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/3125396-uhd_3840_2160_25fps.mp4",
+  "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/3130284-uhd_3840_2160_30fps.mp4",
 ];
 
 export default function LoginPage() {
