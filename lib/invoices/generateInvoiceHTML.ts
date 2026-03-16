@@ -544,12 +544,25 @@ export function numberToWords(amount: number, lang: string): string {
  * Shared between PDF route and email route.
  * Uses invoice.language for labels (en, lv, ru, de, fr, es); falls back to en.
  * @param company When provided, Beneficiary and Banking Details use company (the issuer); otherwise fallback to invoice fields (legacy)
+ * @param templateId Optional template ID — when provided, delegates to generateTemplatedInvoiceHTML
+ * @param accentColor Optional accent color hex — used together with templateId
  */
 export function generateInvoiceHTML(
   invoice: any,
   companyLogoUrl: string | null = null,
-  company: InvoiceCompanyInfo | null = null
+  company: InvoiceCompanyInfo | null = null,
+  templateId?: string,
+  accentColor?: string
 ): string {
+  // Delegate to template system when templateId is provided
+  if (templateId && templateId !== "classic") {
+    const { generateTemplatedInvoiceHTML } = require("./invoiceTemplates");
+    return generateTemplatedInvoiceHTML(invoice, companyLogoUrl, company, templateId, accentColor || "#1e40af");
+  }
+  if (templateId === "classic") {
+    const { generateTemplatedInvoiceHTML } = require("./invoiceTemplates");
+    return generateTemplatedInvoiceHTML(invoice, companyLogoUrl, company, "classic", accentColor || "#1e40af");
+  }
   const lang = (invoice?.language && typeof invoice.language === "string") ? invoice.language.trim().toLowerCase() : "en";
   const t = INVOICE_LABELS[lang] || INVOICE_LABELS.en;
   /** Use company country to decide totals template (e.g. Latvia = detailed VAT block). Language is only for labels. */

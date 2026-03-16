@@ -82,6 +82,8 @@ export async function POST(
     let companyLogoUrl: string | null = null;
     let companyInfo: InvoiceCompanyInfo | null = null;
     let emailFrom: string | null = null;
+    let invoiceTemplateId: string | undefined;
+    let invoiceAccentColor: string | undefined;
     if (companyId) {
       const { data: company } = await supabaseAdmin
         .from("companies")
@@ -120,10 +122,12 @@ export async function POST(
           bankAccounts: bankAccounts ?? [],
           country: (company as { country?: string }).country ?? null,
         };
+        invoiceTemplateId = (company as { invoice_template?: string }).invoice_template ?? undefined;
+        invoiceAccentColor = (company as { invoice_accent_color?: string }).invoice_accent_color ?? undefined;
       }
     }
 
-    const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo);
+    const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo, invoiceTemplateId, invoiceAccentColor);
     const emailSubject = subject?.trim() || `Invoice ${invoice.invoice_number}`;
     const emailHtml =
       (message?.trim()
