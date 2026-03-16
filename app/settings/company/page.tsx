@@ -7,6 +7,7 @@ import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 import { setGlobalDateFormat, DateFormatPattern } from "@/utils/dateFormat";
 import BankAccountsManager from "./_components/BankAccountsManager";
+import { INVOICE_TEMPLATES } from "@/lib/invoices/invoiceTemplates";
 
 // Company types for classification
 const COMPANY_TYPES = [
@@ -148,6 +149,8 @@ interface Company {
   resend_api_key?: string;
   resend_api_key_set?: boolean;
   email_domain_verified?: boolean;
+  invoice_template?: string;
+  invoice_accent_color?: string;
 }
 
 export default function CompanySettingsPage() {
@@ -1466,7 +1469,96 @@ export default function CompanySettingsPage() {
             </div>
           </div>
 
+          {/* Invoice Design — full-width section */}
+          <div className="col-span-1 lg:col-span-2 xl:col-span-3 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Invoice Design</h3>
+            <p className="text-sm text-gray-500 mb-4">Choose a template and accent color for your invoices.</p>
 
+            <div className="flex flex-col lg:flex-row gap-6">
+              {/* Left: template grid + accent color */}
+              <div className="flex-shrink-0 lg:w-[340px] space-y-4">
+                {/* Accent Color */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Accent Color</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={formData.invoice_accent_color || "#1e40af"}
+                      onChange={(e) => updateField("invoice_accent_color", e.target.value)}
+                      disabled={readonly}
+                      className="h-9 w-14 cursor-pointer rounded border border-gray-300 p-0.5 disabled:cursor-not-allowed"
+                    />
+                    <input
+                      type="text"
+                      value={formData.invoice_accent_color || "#1e40af"}
+                      onChange={(e) => updateField("invoice_accent_color", e.target.value)}
+                      disabled={readonly}
+                      className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="#1e40af"
+                    />
+                  </div>
+                </div>
+
+                {/* Template list */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Template</label>
+                  <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
+                    {INVOICE_TEMPLATES.map((tpl) => {
+                      const isSelected = (formData.invoice_template || "classic") === tpl.id;
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          disabled={readonly}
+                          onClick={() => updateField("invoice_template", tpl.id)}
+                          className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+                              : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`h-3 w-3 rounded-full border-2 flex-shrink-0 ${
+                                isSelected ? "border-blue-500 bg-blue-500" : "border-gray-300"
+                              }`}
+                            />
+                            <div>
+                              <div className={`text-sm font-medium ${isSelected ? "text-blue-900" : "text-gray-900"}`}>
+                                {tpl.name}
+                              </div>
+                              <div className="text-xs text-gray-500">{tpl.description}</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: live preview */}
+              <div className="flex-1 min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Live Preview</label>
+                <div className="relative rounded-lg border border-gray-200 bg-gray-50 overflow-hidden" style={{ height: "580px" }}>
+                  <iframe
+                    key={`${formData.invoice_template || "classic"}-${formData.invoice_accent_color || "#1e40af"}`}
+                    src={`/api/invoice-preview?template=${encodeURIComponent(formData.invoice_template || "classic")}&accent=${encodeURIComponent(formData.invoice_accent_color || "#1e40af")}`}
+                    className="absolute inset-0 w-full h-full border-0"
+                    style={{
+                      width: "210mm",
+                      height: "297mm",
+                      transform: "scale(0.48)",
+                      transformOrigin: "top left",
+                    }}
+                    title="Invoice Preview"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-2 text-center">A4 preview with sample data. Actual invoices will use your company information.</p>
+              </div>
+            </div>
+          </div>
 
 
         </div>
