@@ -566,46 +566,46 @@ export default function AddPaymentModal({
                 tabIndex={-1}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Payment Method <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 min-w-0">
                 <button
                   type="button"
                   onClick={() => setMethod("bank")}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                  className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
                     method === "bank"
                       ? "bg-blue-50 text-blue-700 border-blue-500 shadow-sm"
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <Landmark size={16} className="shrink-0" />
-                  Bank
+                  <Landmark size={14} className="shrink-0" />
+                  <span className="truncate">Bank</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMethod("cash")}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                  className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
                     method === "cash"
                       ? "bg-green-50 text-green-700 border-green-500 shadow-sm"
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <Banknote size={16} className="shrink-0" />
-                  Cash
+                  <Banknote size={14} className="shrink-0" />
+                  <span className="truncate">Cash</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMethod("card")}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                  className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
                     method === "card"
                       ? "bg-purple-50 text-purple-700 border-purple-500 shadow-sm"
                       : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
-                  <CreditCard size={16} className="shrink-0" />
-                  Card
+                  <CreditCard size={14} className="shrink-0" />
+                  <span className="truncate">Card</span>
                 </button>
               </div>
             </div>
