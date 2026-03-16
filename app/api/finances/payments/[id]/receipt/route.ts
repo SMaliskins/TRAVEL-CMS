@@ -1,35 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 import { generateDepositReceiptHTML } from "@/lib/invoices/generateDepositReceiptHTML";
 import type { InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
 import type { DateFormatPattern } from "@/utils/dateFormat";
-
-async function getCompanyId(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const token = authHeader.replace("Bearer ", "");
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (profile?.company_id) return profile.company_id as string;
-
-  const { data: userProfile } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  return userProfile?.company_id ?? null;
-}
 
 function buildReceiptNumber(paymentId: string, paidAt: string | null): string {
   const date = paidAt ? new Date(paidAt) : new Date();
@@ -46,10 +21,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const companyId = await getCompanyId(request);
-    if (!companyId) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const companyId = apiUser.companyId;
 
     const { id } = await params;
 
@@ -65,7 +41,8 @@ export async function GET(
       .single();
 
     if (paymentError || !payment) {
-      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+      console.error("[receipt] payment query error:", paymentError?.message, "id:", id, "company:", companyId);
+      return NextResponse.json({ error: "Payment not found", detail: paymentError?.message }, { status: 404 });
     }
 
     // Resolve linked invoice number separately (payments.invoice_id has no FK in schema)
@@ -181,7 +158,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("[payments] receipt GET:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    console.error("[payments] receipt GET error:", error instanceof Error ? error.message : error, error instanceof Error ? error.stack : "");
+    return NextResponse.json({ error: "Internal server error", detail: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

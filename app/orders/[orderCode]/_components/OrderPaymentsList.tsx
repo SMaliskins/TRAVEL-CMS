@@ -149,7 +149,11 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
       const response = await fetch(`/api/finances/payments/${paymentId}/receipt`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!response.ok) throw new Error("Failed to generate receipt");
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        console.error("Receipt API error:", response.status, errBody);
+        throw new Error(errBody?.detail || errBody?.error || "Failed to generate receipt");
+      }
 
       const contentType = response.headers.get("content-type") || "";
       const blob = await response.blob();
@@ -169,7 +173,7 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
       console.error("Failed to print deposit receipt:", error);
-      showToast("error", "Failed to generate deposit receipt");
+      showToast("error", error instanceof Error ? error.message : "Failed to generate deposit receipt");
     }
   };
 
