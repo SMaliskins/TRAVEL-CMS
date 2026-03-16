@@ -157,6 +157,22 @@ export async function GET(
       }
     }
 
+    // Batch lookup category types from travel_service_categories for services with category_id
+    const categoryIds = [...new Set((services || []).map((s: { category_id?: string | null }) => (s as { category_id?: string }).category_id).filter((id): id is string => !!id))];
+    let categoryMap: Record<string, { type: string; vat_rate: number }> = {};
+    if (categoryIds.length > 0) {
+      const { data: cats } = await supabaseAdmin
+        .from("travel_service_categories")
+        .select("id, type, vat_rate")
+        .in("id", categoryIds);
+      if (cats) {
+        categoryMap = cats.reduce((acc, c) => {
+          acc[c.id] = { type: c.type, vat_rate: c.vat_rate };
+          return acc;
+        }, {} as Record<string, { type: string; vat_rate: number }>);
+      }
+    }
+
     // Enrich hotel services with contacts from hotel_contact_overrides when order_services has hotel_hid
     const hotelHids = [...new Set((services || []).map((s: { hotel_hid?: number | null }) => (s as { hotel_hid?: number }).hotel_hid).filter((hid): hid is number => hid != null))];
     let contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }> = {};
@@ -238,6 +254,9 @@ export async function GET(
       return {
         id: s.id,
         category: s.category || "",
+        categoryId: (row as { category_id?: string | null }).category_id ?? null,
+        categoryType: ((row as { category_id?: string | null }).category_id && categoryMap[(row as { category_id: string }).category_id]?.type) || null,
+        vatRate: ((row as { category_id?: string | null }).category_id && categoryMap[(row as { category_id: string }).category_id]?.vat_rate) ?? null,
         serviceName: s.service_name,
         dateFrom: s.service_date_from,
         dateTo: s.service_date_to,
@@ -384,6 +403,7 @@ export async function POST(
       company_id: companyId,
       order_id: orderId,
       category: body.category || null,
+      category_id: body.categoryId || null,
       service_name: body.serviceName,
       service_date_from: body.dateFrom || null,
       service_date_to: body.dateTo || null,
@@ -589,11 +609,29 @@ export async function POST(
       }).catch((e: unknown) => console.error("[Push] fire-and-forget:", e));
     }
 
-    const inserted = service as { ticket_numbers?: unknown };
+    const inserted = service as Record<string, unknown>;
+    // Look up category type and vat_rate from travel_service_categories
+    let resolvedCategoryType: string | null = null;
+    let resolvedVatRate: number | null = null;
+    if (inserted.category_id) {
+      const { data: cat } = await supabaseAdmin
+        .from("travel_service_categories")
+        .select("type, vat_rate")
+        .eq("id", inserted.category_id)
+        .single();
+      if (cat) {
+        resolvedCategoryType = cat.type ?? null;
+        resolvedVatRate = cat.vat_rate ?? null;
+      }
+    }
     return NextResponse.json({
       service: {
         id: service.id,
         category: service.category,
+        categoryId: inserted.category_id ?? null,
+        categoryType: resolvedCategoryType,
+        vatRate: resolvedVatRate,
+        serviceType: inserted.service_type ?? "original",
         serviceName: service.service_name,
         dateFrom: service.service_date_from,
         dateTo: service.service_date_to,
@@ -611,6 +649,25 @@ export async function POST(
         ticketNr: service.ticket_nr,
         ticketNumbers: Array.isArray(inserted.ticket_numbers) ? inserted.ticket_numbers : [],
         travellerIds: effectiveTravellerIds,
+        flightSegments: Array.isArray(inserted.flight_segments) ? inserted.flight_segments : [],
+        cabinClass: inserted.cabin_class ?? null,
+        baggage: inserted.baggage ?? null,
+        airlineChannel: !!inserted.airline_channel,
+        airlineChannelSupplierId: inserted.airline_channel_supplier_id ?? null,
+        airlineChannelSupplierName: inserted.airline_channel_supplier_name ?? null,
+        pricingPerClient: Array.isArray(inserted.pricing_per_client) ? inserted.pricing_per_client : null,
+        parentServiceId: inserted.parent_service_id ?? null,
+        ancillaryType: inserted.ancillary_type ?? null,
+        hotelName: inserted.hotel_name ?? null,
+        hotelHid: inserted.hotel_hid ?? null,
+        hotelRoom: inserted.hotel_room ?? null,
+        hotelBoard: inserted.hotel_board ?? null,
+        hotelAddress: inserted.hotel_address ?? null,
+        hotelPhone: inserted.hotel_phone ?? null,
+        hotelEmail: inserted.hotel_email ?? null,
+        transferRoutes: Array.isArray(inserted.transfer_routes) ? inserted.transfer_routes : [],
+        transferMode: inserted.transfer_mode ?? null,
+        vehicleClass: inserted.vehicle_class ?? null,
       }
     });
   } catch (error: unknown) {
