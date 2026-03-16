@@ -26,6 +26,7 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
   const [uploading, setUploading] = useState(false);
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Underline,
