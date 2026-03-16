@@ -44,6 +44,8 @@ export async function GET(
 
     let companyLogoUrl: string | null = null;
     let companyInfo: InvoiceCompanyInfo | null = null;
+    let invoiceTemplateId: string | undefined;
+    let invoiceAccentColor: string | undefined;
     if (companyId) {
       const { data: company } = await supabaseAdmin
         .from("companies")
@@ -78,10 +80,12 @@ export async function GET(
           bankAccounts: bankAccounts ?? [],
           country: (company as { country?: string }).country ?? null,
         } satisfies InvoiceCompanyInfo;
+        invoiceTemplateId = (company as { invoice_template?: string }).invoice_template ?? undefined;
+        invoiceAccentColor = (company as { invoice_accent_color?: string }).invoice_accent_color ?? undefined;
       }
     }
 
-    const html = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo);
+    const html = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo, invoiceTemplateId, invoiceAccentColor);
     const pdfBuffer = await generatePDFFromHTML(html);
 
     if (pdfBuffer && pdfBuffer.length > 0) {

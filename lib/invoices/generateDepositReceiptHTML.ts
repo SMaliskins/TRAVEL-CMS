@@ -35,8 +35,12 @@ function formatAmount(amount: number, currency: string): string {
 export function generateDepositReceiptHTML(
   receipt: DepositReceiptData,
   companyLogoUrl: string | null = null,
-  company: InvoiceCompanyInfo | null = null
+  company: InvoiceCompanyInfo | null = null,
+  templateId?: string,
+  accentColor?: string
 ): string {
+  const _accentColor = accentColor || "#1e40af";
+  const _templateId = templateId || "classic";
   const companyName = company?.name || "Company";
   const payerName = receipt.payerName || receipt.orderClient || "-";
   const dateFormat = receipt.dateFormat;
@@ -77,7 +81,7 @@ export function generateDepositReceiptHTML(
     .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
     .items-table { width: 100%; border-collapse: collapse; margin: 8px 0 16px 0; font-size: 12px; }
     .items-table th, .items-table td { padding: 8px 10px; border: 1px solid #ddd; font-size: 12px; }
-    .items-table th { text-align: left; background: #f5f5f5; font-weight: 600; text-transform: uppercase; color: #444; }
+    .items-table th { text-align: left; background: #f5f5f5; font-weight: 600; text-transform: uppercase; color: #444; border-top: 3px solid ${_accentColor}; }
     .items-table th:last-child, .items-table td.amount { text-align: right; width: 140px; min-width: 140px; }
     .totals-wrap { display: flex; justify-content: flex-end; margin-top: 8px; }
     .totals-table { border-collapse: collapse; font-size: 12px; width: 340px; }

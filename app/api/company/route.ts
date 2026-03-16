@@ -166,7 +166,10 @@ export async function PATCH(request: NextRequest) {
       // Dashboard targets
       "target_profit_monthly",
       "target_revenue_monthly",
-      "target_orders_monthly"
+      "target_orders_monthly",
+      // Invoice design
+      "invoice_template",
+      "invoice_accent_color"
     ];
 
     const updateData: Record<string, unknown> = {
