@@ -57,7 +57,17 @@ const navConfig: NavElement[] = [
   },
   // Analytics page hidden — dashboard cards link directly to /orders with filters
   { name: "Directory", nameKey: "nav.directory", href: "/directory", icon: <Users size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
-  { name: "Hotels Booking", nameKey: "nav.hotelsBooking", href: "/hotels-booking", icon: <Hotel size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  {
+    name: "Hotels",
+    nameKey: "nav.hotels",
+    href: "/hotels",
+    icon: <Hotel size={ICON_SIZE} strokeWidth={ICON_STROKE} />,
+    children: [
+      { name: "Search Hotels", nameKey: "nav.hotelsSearch", href: "/hotels", icon: <Hotel size={18} strokeWidth={ICON_STROKE} /> },
+      { name: "Hotels Booking", nameKey: "nav.hotelsBooking", href: "/hotels-booking", icon: <Hotel size={18} strokeWidth={ICON_STROKE} /> },
+    ],
+  },
+  { name: "Flights", nameKey: "nav.flights", href: "/flights", icon: <Plane size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
 ];
 
 function getModeLabel(mode: SidebarMode, lang: string): string {

@@ -5,13 +5,13 @@ import bcrypt from "bcryptjs";
 
 const DEV_SUPERADMIN_FALLBACK = "superadmin-secret-change-me";
 
-function readSuperAdminJwtSecret(): string {
+function readSuperAdminJwtSecret(strict: boolean): string {
   const secret = process.env.SUPERADMIN_JWT_SECRET || process.env.JWT_SECRET;
   const isProd = process.env.NODE_ENV === "production";
 
   if (secret && secret !== DEV_SUPERADMIN_FALLBACK) return secret;
 
-  if (isProd) {
+  if (isProd && strict) {
     throw new Error("[SECURITY] SUPERADMIN_JWT_SECRET (or JWT_SECRET) must be set in production");
   }
 
@@ -22,9 +22,9 @@ function readSuperAdminJwtSecret(): string {
   return DEV_SUPERADMIN_FALLBACK;
 }
 
-const JWT_SECRET = new TextEncoder().encode(
-  readSuperAdminJwtSecret()
-);
+function superAdminJwtSecret(): Uint8Array {
+  return new TextEncoder().encode(readSuperAdminJwtSecret(true));
+}
 
 const COOKIE_NAME = "superadmin_token";
 const TOKEN_EXPIRY = "24h";
@@ -43,7 +43,7 @@ export async function createSuperAdminToken(payload: SuperAdminPayload): Promise
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(TOKEN_EXPIRY)
-    .sign(JWT_SECRET);
+    .sign(superAdminJwtSecret());
 }
 
 /**
@@ -51,7 +51,7 @@ export async function createSuperAdminToken(payload: SuperAdminPayload): Promise
  */
 export async function verifySuperAdminToken(token: string): Promise<SuperAdminPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, superAdminJwtSecret());
     return {
       id: payload.id as string,
       email: payload.email as string,

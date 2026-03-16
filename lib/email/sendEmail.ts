@@ -43,7 +43,7 @@ export async function resolveEmailConfig(
       .single();
 
     const companyApiKey = decryptSecret(company?.resend_api_key_ciphertext) || company?.resend_api_key || null;
-    if (companyApiKey) {
+    if (company && companyApiKey) {
       const displayName = company.legal_name || company.trading_name || company.name || "";
       const emailAddr = company.invoice_email_from?.trim();
       const from = emailAddr && displayName

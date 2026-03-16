@@ -828,7 +828,9 @@ export default function OrdersPage() {
           <div className="rounded-lg bg-red-50 border border-red-200 p-4">
             <p className="text-red-700">{loadError}</p>
             <button
-              onClick={fetchOrders}
+              onClick={() => {
+                void fetchOrders();
+              }}
               className="mt-2 text-sm text-red-600 underline hover:text-red-800"
             >
               {t(lang, "orders.tryAgain")}

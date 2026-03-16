@@ -5,13 +5,17 @@ const DEV_ACCESS_FALLBACK = 'dev-access-secret-change-in-prod'
 const DEV_REFRESH_FALLBACK = 'dev-refresh-secret-change-in-prod'
 const DEV_INVITATION_FALLBACK = 'dev-invitation-secret-change-in-prod'
 
-function readJwtSecret(envName: "CLIENT_JWT_ACCESS_SECRET" | "CLIENT_JWT_REFRESH_SECRET" | "CLIENT_JWT_INVITATION_SECRET", devFallback: string): string {
+function readJwtSecret(
+  envName: "CLIENT_JWT_ACCESS_SECRET" | "CLIENT_JWT_REFRESH_SECRET" | "CLIENT_JWT_INVITATION_SECRET",
+  devFallback: string,
+  strict: boolean
+): string {
   const value = process.env[envName]?.trim()
   const isProd = process.env.NODE_ENV === 'production'
 
   if (value && value !== devFallback) return value
 
-  if (isProd) {
+  if (isProd && strict) {
     throw new Error(`[SECURITY] ${envName} must be set in production`)
   }
 
@@ -22,15 +26,15 @@ function readJwtSecret(envName: "CLIENT_JWT_ACCESS_SECRET" | "CLIENT_JWT_REFRESH
   return devFallback
 }
 
-const ACCESS_SECRET = new TextEncoder().encode(
-  readJwtSecret('CLIENT_JWT_ACCESS_SECRET', DEV_ACCESS_FALLBACK)
-)
-const REFRESH_SECRET = new TextEncoder().encode(
-  readJwtSecret('CLIENT_JWT_REFRESH_SECRET', DEV_REFRESH_FALLBACK)
-)
-const INVITATION_SECRET = new TextEncoder().encode(
-  readJwtSecret('CLIENT_JWT_INVITATION_SECRET', DEV_INVITATION_FALLBACK)
-)
+function accessSecret(strict = true): Uint8Array {
+  return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_ACCESS_SECRET', DEV_ACCESS_FALLBACK, strict))
+}
+function refreshSecret(strict = true): Uint8Array {
+  return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_REFRESH_SECRET', DEV_REFRESH_FALLBACK, strict))
+}
+function invitationSecret(strict = true): Uint8Array {
+  return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_INVITATION_SECRET', DEV_INVITATION_FALLBACK, strict))
+}
 
 export interface ClientTokenPayload {
   clientId: string      // client_profiles.id
@@ -44,7 +48,7 @@ export async function signAccessToken(payload: ClientTokenPayload): Promise<stri
     .setSubject(payload.clientId)
     .setIssuedAt()
     .setExpirationTime('15m')
-    .sign(ACCESS_SECRET)
+    .sign(accessSecret())
 }
 
 export async function signRefreshToken(payload: ClientTokenPayload): Promise<string> {
@@ -53,7 +57,7 @@ export async function signRefreshToken(payload: ClientTokenPayload): Promise<str
     .setSubject(payload.clientId)
     .setIssuedAt()
     .setExpirationTime('30d')
-    .sign(REFRESH_SECRET)
+    .sign(refreshSecret())
 }
 
 export async function signInvitationToken(crmClientId: string, agentId: string): Promise<string> {
@@ -61,11 +65,11 @@ export async function signInvitationToken(crmClientId: string, agentId: string):
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('24h')
-    .sign(INVITATION_SECRET)
+    .sign(invitationSecret())
 }
 
 export async function verifyAccessToken(token: string): Promise<ClientTokenPayload> {
-  const { payload } = await jwtVerify(token, ACCESS_SECRET)
+  const { payload } = await jwtVerify(token, accessSecret())
   return {
     clientId: payload['clientId'] as string,
     crmClientId: payload['crmClientId'] as string,
@@ -74,7 +78,7 @@ export async function verifyAccessToken(token: string): Promise<ClientTokenPaylo
 }
 
 export async function verifyRefreshToken(token: string): Promise<ClientTokenPayload> {
-  const { payload } = await jwtVerify(token, REFRESH_SECRET)
+  const { payload } = await jwtVerify(token, refreshSecret())
   return {
     clientId: payload['clientId'] as string,
     crmClientId: payload['crmClientId'] as string,
@@ -87,7 +91,7 @@ export async function verifyInvitationToken(token: string): Promise<{
   agentId: string
   type: string
 }> {
-  const { payload } = await jwtVerify(token, INVITATION_SECRET)
+  const { payload } = await jwtVerify(token, invitationSecret())
   return {
     crmClientId: payload['crmClientId'] as string,
     agentId: payload['agentId'] as string,
