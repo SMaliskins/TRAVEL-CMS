@@ -2540,7 +2540,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                                     (stats.balance ?? 0) > 0.01 ? "text-red-600" : (stats.balance ?? 0) < -0.01 ? "text-green-600" : "text-gray-900"
                                   }`}>
                                     {(stats.balance ?? 0) > 0.01 ? `Debt €${(stats.balance ?? 0).toFixed(2)}` :
-                                     (stats.balance ?? 0) < -0.01 ? `Overpayment €${Math.abs(stats.balance ?? 0).toFixed(2)}` : "—"}
+                                     (stats.balance ?? 0) < -0.01 ? `Deposit €${Math.abs(stats.balance ?? 0).toFixed(2)}` : "—"}
                                   </span>
                                 </div>
                                 {stats.overdueInvoices && stats.overdueInvoices.length > 0 && (
