@@ -1867,8 +1867,11 @@ export default function AddServiceModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!serviceName.trim()) {
+
+    const effectiveServiceName =
+      serviceName.trim() || (categoryType === "hotel" ? hotelName.trim() : "");
+
+    if (!effectiveServiceName) {
       setError("Service name is required");
       return;
     }
@@ -1885,7 +1888,7 @@ export default function AddServiceModal({
       const payload: Record<string, unknown> = {
         category,
         categoryId, // UUID reference to travel_service_categories
-        serviceName: serviceName.trim(),
+        serviceName: effectiveServiceName,
         dateFrom: dateFrom || null,
         dateTo: dateTo || dateFrom || null,
         supplierPartyId,

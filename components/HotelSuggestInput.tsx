@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { countryCodeToFlag } from "@/lib/data/cities";
+import { supabase } from "@/lib/supabaseClient";
 
 interface RegionSuggestion {
   id: number | string;
@@ -66,6 +67,18 @@ export default function HotelSuggestInput({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentFetchIdRef = useRef(0);
 
+  const getAuthHeaders = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+    return headers;
+  }, []);
+
   // Sync query with value when value changes externally
   useEffect(() => {
     setQuery(value);
@@ -89,9 +102,10 @@ export default function HotelSuggestInput({
     }
     setLoading(true);
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch("/api/ratehawk/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ query: q.trim(), language: "en" }),
       });
       const json = await res.json();
@@ -114,7 +128,7 @@ export default function HotelSuggestInput({
           const fetchId = contentFetchIdRef.current;
           fetch("/api/ratehawk/hotel-content", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders },
             body: JSON.stringify({ hids: hotels.slice(0, 5).map((h) => h.hid), language: "en" }),
           })
             .then((r) => r.json())
@@ -148,7 +162,7 @@ export default function HotelSuggestInput({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
@@ -172,9 +186,10 @@ export default function HotelSuggestInput({
 
     setFetchingContent(true);
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch("/api/ratehawk/hotel-content", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ hids: [hotel.hid], language: "en" }),
       });
       const json = await res.json();
