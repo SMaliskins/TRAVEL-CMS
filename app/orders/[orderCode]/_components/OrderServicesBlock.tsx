@@ -2210,9 +2210,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                   {t(lang, "order.servName")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servSupplier")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servClient")}
                 </th>
                 <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
@@ -2223,6 +2220,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 </th>
                 <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servServicePrice")}
+                </th>
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
+                  {t(lang, "order.servSupplier")}
                 </th>
                 <th className="min-w-[180px] px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servTravellers")}
@@ -2393,19 +2393,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </div>
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
-                              onClick={(e) => {
-                                if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
-                                  e.preventDefault();
-                                  router.push(`/directory/${service.supplierPartyId}`);
-                                }
-                              }}
-                              onMouseEnter={() => service.supplierPartyId && setHoveredPartyId(`supplier-${service.id}`)}
-                              onMouseLeave={() => setHoveredPartyId(null)}
-                            >
-                              {service.supplier}
-                            </td>
-                            <td 
                               className={`px-2 py-1 text-sm ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 const partyId = displayClientPartyId ?? service.clientPartyId;
@@ -2437,6 +2424,19 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             </td>
                             <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700">
                               {formatCurrency(service.servicePrice)}
+                            </td>
+                            <td 
+                              className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              onClick={(e) => {
+                                if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
+                                  e.preventDefault();
+                                  router.push(`/directory/${service.supplierPartyId}`);
+                                }
+                              }}
+                              onMouseEnter={() => service.supplierPartyId && setHoveredPartyId(`supplier-${service.id}`)}
+                              onMouseLeave={() => setHoveredPartyId(null)}
+                            >
+                              {service.supplier}
                             </td>
                             <td 
                               className="min-w-[180px] px-2 py-1 cursor-pointer hover:bg-blue-50 transition-colors"
