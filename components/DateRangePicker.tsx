@@ -130,6 +130,12 @@ export default function DateRangePicker({
   };
 
   const handleApply = () => {
+    // Treat single selected day as a valid same-day range.
+    if (tempStart && !tempEnd) {
+      onChange(tempStart, tempStart);
+      setIsCalendarOpen(false);
+      return;
+    }
     onChange(tempStart, tempEnd);
     setIsCalendarOpen(false);
   };
