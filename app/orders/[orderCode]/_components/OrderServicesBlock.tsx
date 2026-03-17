@@ -2219,10 +2219,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                   {t(lang, "order.servPayer")}
                 </th>
                 <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servServicePrice")}
+                  {t(lang, "order.servClientPrice")}
                 </th>
                 <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servClientPrice")}
+                  {t(lang, "order.servServicePrice")}
                 </th>
                 <th className="min-w-[180px] px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   {t(lang, "order.servTravellers")}
@@ -2432,11 +2432,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700">
-                              {formatCurrency(service.servicePrice)}
-                            </td>
                             <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium text-gray-900">
                               {formatCurrency(service.clientPrice)}
+                            </td>
+                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700">
+                              {formatCurrency(service.servicePrice)}
                             </td>
                             <td 
                               className="min-w-[180px] px-2 py-1 cursor-pointer hover:bg-blue-50 transition-colors"

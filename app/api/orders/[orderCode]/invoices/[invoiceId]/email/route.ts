@@ -125,26 +125,29 @@ export async function POST(
 
     const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo);
     const emailSubject = subject?.trim() || `Invoice ${invoice.invoice_number}`;
-    const emailHtml =
-      (message?.trim()
-        ? `<p>${message.replace(/\n/g, "<br>")}</p><hr style="margin:16px 0">${htmlBody}`
-        : `<p>Please find attached invoice ${invoice.invoice_number}.</p><hr style="margin:16px 0">${htmlBody}`);
+    const emailHtml = message?.trim()
+      ? `<p>${message.replace(/\n/g, "<br>")}</p><p style="margin-top:12px;color:#6b7280">Invoice is attached as a PDF file.</p>`
+      : `<p>Please find attached invoice ${invoice.invoice_number}.</p>`;
 
     const attachments: { filename: string; content: Buffer }[] = [];
     const pdfBuffer = await generatePDFFromHTML(htmlBody);
-    if (pdfBuffer && pdfBuffer.length > 0) {
-      attachments.push({
-        filename: `${(invoice.invoice_number as string).replace(/\s+/g, "-")}.pdf`,
-        content: pdfBuffer,
-      });
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      return NextResponse.json(
+        { error: "Failed to generate invoice PDF attachment. Email was not sent." },
+        { status: 500 }
+      );
     }
+    attachments.push({
+      filename: `${(invoice.invoice_number as string).replace(/\s+/g, "-")}.pdf`,
+      content: pdfBuffer,
+    });
 
     const result = await sendEmail(
       to.trim(),
       emailSubject,
       emailHtml,
       undefined,
-      attachments.length ? attachments : undefined,
+      attachments,
       { from: emailFrom || undefined, companyId: companyId || undefined }
     );
 
