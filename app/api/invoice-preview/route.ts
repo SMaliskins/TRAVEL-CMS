@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateTemplatedInvoiceHTML } from "@/lib/invoices/invoiceTemplates";
 import type { InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
 
-// GET /api/invoice-preview?template=classic&accent=%231e40af
-// Returns a full HTML page of a fake invoice using the specified template and accent color.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const templateId = searchParams.get("template") || "classic";

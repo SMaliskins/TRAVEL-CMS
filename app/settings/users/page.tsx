@@ -70,7 +70,8 @@ export default function UsersPage() {
           router.push("/login");
           return;
         }
-        throw new Error("Failed to fetch profile");
+        const errBody = await profileRes.text().catch(() => "");
+        throw new Error(`Failed to fetch profile (${profileRes.status}): ${errBody}`);
       }
 
       const profileData = await profileRes.json();

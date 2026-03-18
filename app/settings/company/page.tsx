@@ -1578,7 +1578,106 @@ export default function CompanySettingsPage() {
             </div>
           </div>
 
+          {/* Invoice Design — full-width section */}
+          <div className="col-span-1 lg:col-span-2 xl:col-span-3 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Invoice Design</h3>
+            <p className="text-sm text-gray-500 mb-5">Choose a template and accent color. Changes are shown instantly in the preview.</p>
 
+            <div className="grid grid-cols-1 xl:grid-cols-[380px_minmax(0,1fr)] gap-6">
+              <div className="space-y-5">
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Accent Color</label>
+                  <div className="flex items-center gap-3 mb-3">
+                    <input
+                      type="color"
+                      value={formData.invoice_accent_color || "#1e40af"}
+                      onChange={(e) => updateField("invoice_accent_color", e.target.value)}
+                      disabled={readonly}
+                      className="h-10 w-16 cursor-pointer rounded border border-gray-300 p-0.5 disabled:cursor-not-allowed"
+                    />
+                    <input
+                      type="text"
+                      value={formData.invoice_accent_color || "#1e40af"}
+                      onChange={(e) => updateField("invoice_accent_color", e.target.value)}
+                      disabled={readonly}
+                      className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="#1e40af"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {["#1e40af", "#0f766e", "#7c3aed", "#be123c", "#334155", "#b45309"].map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => updateField("invoice_accent_color", color)}
+                        disabled={readonly}
+                        className={`h-7 w-7 rounded border-2 ${formData.invoice_accent_color === color ? "border-gray-900" : "border-white"} shadow-sm disabled:cursor-not-allowed`}
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Template</label>
+                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                    {INVOICE_TEMPLATES.map((tpl) => {
+                      const isSelected = (formData.invoice_template || "classic") === tpl.id;
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          disabled={readonly}
+                          onClick={() => updateField("invoice_template", tpl.id)}
+                          className={`w-full text-left rounded-lg border px-3 py-3 transition-all ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+                              : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className={`text-sm font-semibold ${isSelected ? "text-blue-900" : "text-gray-900"}`}>{tpl.name}</div>
+                              <div className="text-xs text-gray-500 mt-0.5">{tpl.description}</div>
+                            </div>
+                            {isSelected && (
+                              <span className="text-[11px] font-medium rounded-full bg-blue-600 text-white px-2 py-0.5">Selected</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Live Preview</label>
+                  <span className="text-xs text-gray-500">
+                    Template: {INVOICE_TEMPLATES.find((t) => t.id === (formData.invoice_template || "classic"))?.name || "Classic Business"}
+                  </span>
+                </div>
+                <div className="relative rounded-lg border border-gray-200 bg-gray-50 overflow-auto" style={{ height: "760px" }}>
+                  <iframe
+                    key={`${formData.invoice_template || "classic"}-${formData.invoice_accent_color || "#1e40af"}`}
+                    src={`/api/invoice-preview?template=${encodeURIComponent(formData.invoice_template || "classic")}&accent=${encodeURIComponent(formData.invoice_accent_color || "#1e40af")}`}
+                    className="absolute top-0 left-0 border-0"
+                    style={{
+                      width: "210mm",
+                      height: "297mm",
+                      transform: "scale(0.62)",
+                      transformOrigin: "top left",
+                    }}
+                    title="Invoice Preview"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-2 text-center">A4 preview with sample data. Actual invoices use company and invoice data.</p>
+              </div>
+            </div>
+          </div>
 
 
         </div>

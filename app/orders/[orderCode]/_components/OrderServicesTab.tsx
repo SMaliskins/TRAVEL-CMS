@@ -192,19 +192,19 @@ export default function OrderServicesTab() {
                     Name
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
-                    Supplier
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
                     Client
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
                     Payer
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-700">
-                    Service Price
+                    Client Price
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-700">
-                    Client Price
+                    Service Price
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                    Supplier
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
                     Res Status
@@ -240,19 +240,19 @@ export default function OrderServicesTab() {
                       {service.name}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      {service.supplier}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
                       {service.client}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {service.payer}
                     </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">
+                      {formatCurrency(service.clientPrice)}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-700">
                       {formatCurrency(service.servicePrice)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">
-                      {formatCurrency(service.clientPrice)}
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {service.supplier}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span
