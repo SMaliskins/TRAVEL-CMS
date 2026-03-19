@@ -62,12 +62,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ unreadCount: count || 0 });
   }
 
-  const { data, error } = await supabaseAdmin
+  const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 500);
+  const typeFilter = searchParams.get("type");
+
+  let query = supabaseAdmin
     .from("staff_notifications")
     .select("*")
     .eq("company_id", auth.companyId)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(limit);
+
+  if (typeFilter) {
+    query = query.eq("type", typeFilter);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });

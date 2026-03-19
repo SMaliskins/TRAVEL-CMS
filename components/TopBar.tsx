@@ -388,6 +388,14 @@ export default function TopBar() {
                     })
                   )}
                 </div>
+                <div className="border-t border-gray-100 px-4 py-2">
+                  <button
+                    onClick={() => { setNotifOpen(false); router.push("/notifications"); }}
+                    className="w-full text-center text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    {prefs.language === "ru" ? "Все уведомления" : prefs.language === "lv" ? "Visi paziņojumi" : "View all notifications"}
+                  </button>
+                </div>
               </div>
             )}
           </div>

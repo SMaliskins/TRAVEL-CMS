@@ -23,6 +23,7 @@ import {
   Settings,
   Hotel,
   Upload,
+  Bell,
 } from "lucide-react";
 
 interface NavItem {
@@ -68,6 +69,7 @@ const navConfig: NavElement[] = [
     ],
   },
   { name: "Flights", nameKey: "nav.flights", href: "/flights", icon: <Plane size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
+  { name: "Notifications", nameKey: "nav.notifications", href: "/notifications", icon: <Bell size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
 ];
 
 function getModeLabel(mode: SidebarMode, lang: string): string {
