@@ -1,31 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createClient } from "@supabase/supabase-js";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-  return null;
-}
-
-async function getCompanyId(userId: string) {
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .single();
-  return data?.company_id || null;
-}
 
 // Simple CSV parser (handles quoted values with commas)
 function parseCSV(csvText: string): Record<string, string>[] {
@@ -116,15 +93,11 @@ function mapCSVRowToRecord(row: Record<string, string>, companyId: string, userI
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    }
+    const { companyId, userId } = apiUser;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -148,7 +121,7 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
-        const recordData = mapCSVRowToRecord(row, companyId, user.id);
+        const recordData = mapCSVRowToRecord(row, companyId, userId);
 
         // Validate required fields
         if (recordData.type === 'person') {
@@ -178,6 +151,30 @@ export async function POST(request: NextRequest) {
           ? `${fn} ${ln}`.trim()
           : recordData.companyName || '';
 
+        // Dedup check: skip row if matching record already exists
+        const orFilters: string[] = [];
+        if (displayName) orFilters.push(`display_name.ilike.${displayName}`);
+        const rowEmail = (recordData.email || "").trim().toLowerCase();
+        if (rowEmail) orFilters.push(`email.ilike.${rowEmail}`);
+        const rowPhone = (recordData.phone || "").trim().replace(/[\s\-()]/g, "");
+        if (rowPhone && rowPhone.length >= 6) orFilters.push(`phone.ilike.%${rowPhone.slice(-8)}%`);
+
+        if (orFilters.length > 0) {
+          const { data: dupes } = await supabaseAdmin
+            .from("party")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("status", "active")
+            .or(orFilters.join(","))
+            .limit(1);
+
+          if (dupes && dupes.length > 0) {
+            errors.push(`Row ${i + 2}: Skipped — matching record already exists (${displayName})`);
+            failed++;
+            continue;
+          }
+        }
+
         // Create party record
         const partyData: any = {
           display_name: displayName,
@@ -189,7 +186,7 @@ export async function POST(request: NextRequest) {
           country: recordData.country || null,
           service_areas: recordData.supplierExtras?.serviceAreas || null,
           supplier_commissions: null,
-          created_by: user.id,
+          created_by: userId,
         };
 
         const { data: party, error: partyError } = await supabaseAdmin

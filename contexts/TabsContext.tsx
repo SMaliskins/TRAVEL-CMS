@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 export interface Tab {
@@ -217,18 +217,18 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [tabs, router]);
 
+  const contextValue = useMemo(() => ({
+    tabs,
+    activeTabId,
+    openTab,
+    closeTab,
+    closeAllTabs,
+    setActiveTab: handleSetActiveTab,
+    isTabOpen,
+  }), [tabs, activeTabId, openTab, closeTab, closeAllTabs, handleSetActiveTab, isTabOpen]);
+
   return (
-    <TabsContext.Provider
-      value={{
-        tabs,
-        activeTabId,
-        openTab,
-        closeTab,
-        closeAllTabs,
-        setActiveTab: handleSetActiveTab,
-        isTabOpen,
-      }}
-    >
+    <TabsContext.Provider value={contextValue}>
       {children}
     </TabsContext.Provider>
   );

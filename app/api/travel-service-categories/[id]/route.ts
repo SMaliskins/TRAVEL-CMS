@@ -1,29 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-  return null;
-}
-
-async function getCompanyId(userId: string) {
-  const { data } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .single();
-  return data?.company_id || null;
-}
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 // PATCH - Update category
 export async function PATCH(
@@ -31,15 +8,11 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    }
+    const { companyId } = apiUser;
 
     const resolvedParams = await context.params;
     const categoryId = resolvedParams.id;
@@ -99,15 +72,11 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    }
+    const { companyId } = apiUser;
 
     const resolvedParams = await context.params;
     const categoryId = resolvedParams.id;

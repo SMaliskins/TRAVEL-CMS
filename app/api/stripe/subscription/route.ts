@@ -1,36 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { getCompanyIdForUser } from "@/lib/stripe";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
-
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-
-  const cookieHeader = request.headers.get("cookie") || "";
-  if (cookieHeader) {
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookieHeader } },
-    });
-    const { data, error } = await authClient.auth.getUser();
-    if (!error && data?.user) return data.user;
-  }
-
-  return null;
-}
+import { getApiUser } from "@/lib/auth/getApiUser";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 /**
  * GET /api/stripe/subscription
@@ -38,18 +8,11 @@ async function getUser(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyIdForUser(user.id);
-    if (!companyId) {
-      return NextResponse.json(
-        { error: "User has no company assigned" },
-        { status: 400 }
-      );
-    }
+    const { companyId } = apiUser;
 
     // Get current subscription
     const { data: subscription } = await supabaseAdmin

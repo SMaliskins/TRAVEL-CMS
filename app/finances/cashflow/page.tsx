@@ -282,8 +282,25 @@ export default function CashFlowPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="text-gray-500">{t(lang, "common.loading")}</div>
+        <div className="mx-auto max-w-[1800px] space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="flex gap-2">
+              <div className="h-10 w-28 bg-gray-200 rounded animate-pulse" />
+              <div className="h-10 w-28 bg-gray-200 rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg border">
+            <div className="h-12 border-b bg-gray-50 rounded-t-lg" />
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 p-4 border-b last:border-0">
+                <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-100 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : tab === "cash" && calendarByMonth.length > 0 ? (
         <div className="space-y-4">

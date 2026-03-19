@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
 
     if (dateFrom) query = query.gte("invoice_date", dateFrom);
     if (dateTo) query = query.lte("invoice_date", dateTo);
+    query = query.limit(500);
 
     const [invoicesResult, commsResult, paymentsResult] = await Promise.all([
       query,
@@ -47,12 +48,14 @@ export async function GET(request: NextRequest) {
         .select("invoice_id, delivery_status, delivered_at, opened_at, open_count, sent_at")
         .eq("company_id", companyId)
         .not("invoice_id", "is", null)
-        .order("sent_at", { ascending: false }),
+        .order("sent_at", { ascending: false })
+        .limit(500),
       supabaseAdmin
         .from("payments")
         .select("invoice_id, amount, status")
         .eq("company_id", companyId)
-        .not("invoice_id", "is", null),
+        .not("invoice_id", "is", null)
+        .limit(500),
     ]);
 
     const { data: invoices, error: invoicesError } = invoicesResult;

@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { SupplierDocument } from "@/lib/types/directory";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 const BUCKET_NAME = "supplier-documents";
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
@@ -20,30 +17,6 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 const ALLOWED_EXT = ["pdf", "png", "jpg", "jpeg", "webp", "doc", "docx", "xls", "xlsx"];
-
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const token = authHeader.substring(7);
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-  const { data: { user } } = await supabase.auth.getUser(token);
-  return user;
-}
-
-async function getCompanyIdForUser(userId: string): Promise<string | null> {
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (profile?.company_id) return profile.company_id;
-  const { data: userProfile } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .maybeSingle();
-  return userProfile?.company_id ?? null;
-}
 
 async function verifyPartyAccess(partyId: string, userCompanyId: string | null) {
   let query = supabaseAdmin.from("party").select("id, company_id, supplier_documents").eq("id", partyId);
@@ -70,8 +43,11 @@ export async function POST(
   try {
     const { id: partyId } = await params;
 
-    const user = await getCurrentUser(request);
-    const userCompanyId = user ? await getCompanyIdForUser(user.id) : null;
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userCompanyId = apiUser.companyId;
 
     const { party, error: accessError } = await verifyPartyAccess(partyId, userCompanyId);
     if (accessError || !party) {
@@ -173,8 +149,11 @@ export async function DELETE(
       return NextResponse.json({ error: "docId is required" }, { status: 400 });
     }
 
-    const user = await getCurrentUser(request);
-    const userCompanyId = user ? await getCompanyIdForUser(user.id) : null;
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userCompanyId = apiUser.companyId;
 
     const { party, error: accessError } = await verifyPartyAccess(partyId, userCompanyId);
     if (accessError || !party) {

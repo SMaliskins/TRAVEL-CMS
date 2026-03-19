@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -80,6 +80,8 @@ export default function FinancesInvoicesPage() {
   const isFinance = userRole === "finance" || userRole === "admin";
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [attentionInvoices, setAttentionInvoices] = useState<Invoice[]>([]);
+  const tokenRef = useRef<string | null>(null);
+  const allInvoicesRef = useRef<Invoice[]>([]);
   const [processConfirm, setProcessConfirm] = useState<{ invoiceId: string; invoiceNumber: string } | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -129,23 +131,41 @@ export default function FinancesInvoicesPage() {
 
   const loadInvoices = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
+      let token = tokenRef.current;
+      if (!token) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { router.push('/login'); return; }
+        token = session.access_token;
+        tokenRef.current = token;
       }
 
       const params = new URLSearchParams();
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
 
-      const invRes = await fetch(`/api/finances/invoices?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const hasDateFilter = !!dateFrom || !!dateTo;
+      const fetches: Promise<Response>[] = [
+        fetch(`/api/finances/invoices?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ];
+      if (hasDateFilter && isFinance) {
+        fetches.push(
+          fetch(`/api/finances/invoices`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        );
+      }
+
+      const results = await Promise.all(fetches);
+      const invRes = results[0];
+
+      let parsedInvoices: Invoice[] = [];
 
       if (invRes.ok) {
         const data = await invRes.json();
-        let filtered = data.invoices || [];
+        parsedInvoices = data.invoices || [];
+        let filtered = [...parsedInvoices];
         if (filterStatus === 'overdue') {
           const todayStr = new Date().toISOString().slice(0, 10);
           filtered = filtered.filter((inv: Invoice) => {
@@ -161,59 +181,46 @@ export default function FinancesInvoicesPage() {
         }
         setInvoices(filtered);
       }
-    } catch (error) {
-      console.error('Error loading invoices:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterStatus, activeOnly, dateFrom, dateTo, router]);
 
-  useEffect(() => {
-    loadInvoices();
-  }, [loadInvoices]);
-
-  const loadAttentionInvoices = useCallback(async () => {
-    if (!isFinance) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch(`/api/finances/invoices`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const all: Invoice[] = data.invoices || [];
+      if (isFinance) {
+        let all: Invoice[] = parsedInvoices;
+        if (results[1] && results[1].ok) {
+          const allData = await results[1].json();
+          all = allData.invoices || [];
+        }
+        allInvoicesRef.current = all;
         setAttentionInvoices(all.filter((inv) =>
           inv.status === "amended" ||
           (inv.status === "cancelled" && inv.processed_at != null && inv.processed_total != null)
         ));
       }
-    } catch (e) {
-      console.error("Error loading attention invoices:", e);
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [isFinance]);
+  }, [filterStatus, activeOnly, dateFrom, dateTo, router, isFinance]);
 
   useEffect(() => {
-    loadAttentionInvoices();
-  }, [loadAttentionInvoices]);
+    loadInvoices();
+  }, [loadInvoices]);
 
   const handleMarkProcessed = async (invoiceId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const token = tokenRef.current;
+      if (!token) return;
 
       const response = await fetch(`/api/finances/invoices/${invoiceId}/process`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ processed: true }),
       });
 
       if (response.ok) {
         loadInvoices();
-        loadAttentionInvoices();
       }
     } catch (error) {
       console.error('Error marking invoice as processed:', error);
@@ -222,15 +229,15 @@ export default function FinancesInvoicesPage() {
 
   const handlePreview = async (invoiceId: string, orderCode: string | null | undefined) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const token = tokenRef.current;
+      if (!token) return;
       if (!orderCode) {
         alert("Order code not found for this invoice.");
         return;
       }
       setPreviewLoading(true);
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         const blob = await response.blob();
@@ -256,8 +263,8 @@ export default function FinancesInvoicesPage() {
 
   const handleExportPDF = async (invoiceId: string, orderCode: string | null | undefined) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const token = tokenRef.current;
+      if (!token) return;
       if (!orderCode) {
         alert('Order code not found for this invoice. Cannot export PDF.');
         return;
@@ -265,7 +272,7 @@ export default function FinancesInvoicesPage() {
 
       const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/pdf`, {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -391,8 +398,27 @@ export default function FinancesInvoicesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">{t(lang, "invoices.loading")}</div>
+      <div className="p-6">
+        <div className="mx-auto max-w-[1800px] space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="flex gap-2">
+              <div className="h-10 w-28 bg-gray-200 rounded animate-pulse" />
+              <div className="h-10 w-28 bg-gray-200 rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg border">
+            <div className="h-12 border-b bg-gray-50 rounded-t-lg" />
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 p-4 border-b last:border-0">
+                <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-100 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

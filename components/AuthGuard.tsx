@@ -32,38 +32,38 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const checkAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const [sessionRes, userRes] = await Promise.all([
+          supabase.auth.getSession(),
+          supabase.auth.getUser(),
+        ]);
+
+        const session = sessionRes.data.session;
+        const user = userRes.data.user;
+        const userError = userRes.error;
+
         if (!session) {
           setIsAuthenticated(false);
-          if (!publicPath) {
-            router.push("/login");
-            return;
-          }
+          if (!publicPath) { router.push("/login"); return; }
           setIsLoading(false);
           return;
         }
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error || !user) {
-          const isRefreshTokenError = error && (
-            (error as { message?: string }).message?.includes("Refresh Token") ||
-            (error as { code?: string }).code === "refresh_token_not_found"
+
+        if (userError || !user) {
+          const isRefreshTokenError = userError && (
+            (userError as { message?: string }).message?.includes("Refresh Token") ||
+            (userError as { code?: string }).code === "refresh_token_not_found"
           );
           if (isRefreshTokenError) {
             await supabase.auth.signOut({ scope: "local" }).catch(() => {});
           }
           setIsAuthenticated(false);
-          if (!publicPath) {
-            router.push("/login");
-            return;
-          }
+          if (!publicPath) { router.push("/login"); return; }
           setIsLoading(false);
           return;
         }
+
         setIsAuthenticated(true);
-        if (publicPath) {
-          router.push("/dashboard");
-          return;
-        }
+        if (publicPath) { router.push("/dashboard"); return; }
       } catch (error) {
         const msg = error && typeof error === "object" && "message" in error ? String((error as { message?: string }).message || "") : "";
         const isRefreshTokenError = msg.includes("Refresh Token") || msg.includes("refresh_token_not_found");
@@ -71,10 +71,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut({ scope: "local" }).catch(() => {});
         }
         setIsAuthenticated(false);
-        if (!publicPath) {
-          router.push("/login");
-          return;
-        }
+        if (!publicPath) { router.push("/login"); return; }
       }
       setIsLoading(false);
     };
@@ -108,11 +105,29 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (isLoading) {
+    if (isPublicPath(pathname)) {
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
+        </div>
+      );
+    }
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
-          <span className="text-sm text-gray-500">Loading...</span>
+      <div className="flex min-h-screen">
+        <div className="w-[72px] min-h-screen bg-gray-900" />
+        <div className="flex-1">
+          <div className="h-14 border-b border-gray-200 bg-white" />
+          <div className="p-6">
+            <div className="mx-auto max-w-[1800px] space-y-4">
+              <div className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
+              <div className="grid grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+              <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
+            </div>
+          </div>
         </div>
       </div>
     );

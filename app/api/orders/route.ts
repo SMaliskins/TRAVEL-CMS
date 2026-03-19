@@ -5,37 +5,11 @@ import { getApiUser } from "@/lib/auth/getApiUser";
 
 // Placeholder URLs for build-time
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key";
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
-
-// Get company_id from user's profile
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!profileError && profileData?.company_id) {
-    return profileData.company_id as string;
-  }
-
-  // Compatibility fallback for environments that use user_profiles(id).
-  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (userProfileError || !userProfileData?.company_id) {
-    return null;
-  }
-  return userProfileData.company_id as string;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,45 +20,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get authenticated user
-    let user = null;
-    
-    const authHeader = request.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const authClient = createClient(supabaseUrl, supabaseAnonKey);
-      const { data, error } = await authClient.auth.getUser(token);
-      if (!error && data?.user) {
-        user = data.user;
-      }
-    }
-
-    if (!user) {
-      const cookieHeader = request.headers.get("cookie") || "";
-      if (cookieHeader) {
-        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: { persistSession: false },
-          global: { headers: { Cookie: cookieHeader } },
-        });
-        const { data, error } = await authClient.auth.getUser();
-        if (!error && data?.user) {
-          user = data.user;
-        }
-      }
-    }
-
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    // Get company_id
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json(
-        { error: "User has no company assigned" },
-        { status: 400 }
-      );
-    }
+    const { userId, companyId, role } = apiUser;
+    const isSubagent = role === "subagent";
 
     // Parse query params
     const { searchParams } = new URL(request.url);
@@ -94,10 +35,6 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1") || 1;
     const pageSize = Math.min(parseInt(searchParams.get("pageSize") || "200") || 200, 500);
 
-    // Check role for subagent scope
-    const apiUser = await getApiUser(request);
-    const isSubagent = apiUser?.role === "subagent";
-
     // Build query - only select columns that definitely exist
     let query = supabaseAdmin
       .from("orders")
@@ -106,7 +43,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (isSubagent) {
-      query = query.or(`owner_user_id.eq.${user.id},manager_user_id.eq.${user.id}`);
+      query = query.or(`owner_user_id.eq.${userId},manager_user_id.eq.${userId}`);
     }
 
     // Apply filters
@@ -169,8 +106,8 @@ export async function GET(request: NextRequest) {
         .neq("status", "cancelled"),
     ]);
 
-    const servicesData = servicesResult.data;
-    const invoicesData = invoicesResult.data;
+    const servicesData = servicesResult.data || [];
+    const invoicesData = invoicesResult.data || [];
     
     // Build owner name lookup
     const ownerNames = new Map<string, string>();
@@ -178,6 +115,20 @@ export async function GET(request: NextRequest) {
       const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown";
       ownerNames.set(p.id, name);
     });
+
+    // Pre-build lookup maps (O(n) instead of O(n²) per-order filtering)
+    const servicesByOrder = new Map<string, any[]>();
+    servicesData.forEach((s: any) => {
+      const arr = servicesByOrder.get(s.order_id);
+      if (arr) { arr.push(s); } else { servicesByOrder.set(s.order_id, [s]); }
+    });
+    const invoicesByOrder = new Map<string, any[]>();
+    invoicesData.forEach((i: any) => {
+      const arr = invoicesByOrder.get(i.order_id);
+      if (arr) { arr.push(i); } else { invoicesByOrder.set(i.order_id, [i]); }
+    });
+    const orderMap = new Map<string, Record<string, unknown>>();
+    (orders || []).forEach((o: any) => orderMap.set(o.id, o));
     
     // Build invoice statistics and due dates per order
     const invoiceStats = new Map<string, {
@@ -194,8 +145,8 @@ export async function GET(request: NextRequest) {
     const serviceStats = new Map<string, { amount: number; profit: number; vat: number }>();
     
     orderIds.forEach((orderId: string) => {
-      const services = (servicesData || []).filter((s: any) => s.order_id === orderId);
-      const invoices = (invoicesData || []).filter((i: any) => i.order_id === orderId);
+      const services = servicesByOrder.get(orderId) || [];
+      const invoices = invoicesByOrder.get(orderId) || [];
       
       const activeServices = services.filter((s: any) => s.res_status !== 'cancelled');
       const totalServices = activeServices.length;
@@ -234,7 +185,7 @@ export async function GET(request: NextRequest) {
       );
 
       // Due date: from order.client_payment_due_date or latest invoice final_payment_date / due_date
-      const orderRec = orders.find((o: any) => o.id === orderId);
+      const orderRec = orderMap.get(orderId);
       let dueDate: string | null = (orderRec?.client_payment_due_date as string) || null;
       if (!dueDate && invoices.length > 0) {
         const dates = invoices
@@ -256,7 +207,7 @@ export async function GET(request: NextRequest) {
 
     // Aggregate payer names per order for search
     const payerNamesMap = new Map<string, string[]>();
-    (servicesData || []).forEach((s: any) => {
+    servicesData.forEach((s: any) => {
       if (!s.payer_name || s.res_status === "cancelled") return;
       const names = payerNamesMap.get(s.order_id) || [];
       if (!names.includes(s.payer_name)) names.push(s.payer_name);
@@ -268,8 +219,8 @@ export async function GET(request: NextRequest) {
     (orders || []).forEach((order: Record<string, unknown>) => {
       const orderId = order.id as string;
       if (order.date_from && order.date_to) return;
-      const activeServices = (servicesData || []).filter(
-        (s: any) => s.order_id === orderId && s.res_status !== "cancelled"
+      const activeServices = (servicesByOrder.get(orderId) || []).filter(
+        (s: any) => s.res_status !== "cancelled"
       );
       const froms = activeServices.map((s: any) => s.service_date_from).filter(Boolean).sort();
       const tos = activeServices.map((s: any) => s.service_date_to).filter(Boolean).sort();

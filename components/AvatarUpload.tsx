@@ -32,7 +32,14 @@ export default function AvatarUpload({
     if (!file.type.startsWith("image/")) return null;
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch("/api/upload-avatar", { method: "POST", body: formData });
+    const { supabase } = await import("@/lib/supabaseClient");
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch("/api/upload-avatar", {
+      method: "POST",
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      credentials: "include",
+      body: formData,
+    });
     if (!response.ok) return null;
     const result = await response.json();
     return result?.url || result?.data?.url || null;

@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const BUCKET_NAME = "order-documents";
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg", "image/webp"];
 const ALLOWED_EXT = ["pdf", "png", "jpg", "jpeg", "webp"];
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: p } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-  if (p?.company_id) return p.company_id as string;
-  const { data: up } = await supabaseAdmin.from("user_profiles").select("company_id").eq("id", userId).maybeSingle();
-  return (up?.company_id as string) ?? null;
-}
 
 async function getOrderAndVerify(
   orderCode: string,
@@ -46,35 +37,15 @@ async function getOrderAndVerify(
   return { orderId: order.id, companyId: order.company_id };
 }
 
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const client = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user } } = await client.auth.getUser(token);
-    return user;
-  }
-  const cookie = request.headers.get("cookie") || "";
-  if (cookie) {
-    const client = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookie } },
-    });
-    const { data: { user } } = await client.auth.getUser();
-    return user;
-  }
-  return null;
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ orderCode: string }> }
 ) {
   try {
     const { orderCode } = await params;
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const companyId = await getCompanyId(user.id);
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId } = apiUser;
     const orderResult = await getOrderAndVerify(orderCode, companyId);
     if ("error" in orderResult) return orderResult.error;
 
@@ -118,10 +89,9 @@ export async function POST(
 ) {
   try {
     const { orderCode } = await params;
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) return NextResponse.json({ error: "Company not found" }, { status: 400 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId, userId } = apiUser;
     const orderResult = await getOrderAndVerify(orderCode, companyId);
     if ("error" in orderResult) return orderResult.error;
 
@@ -181,7 +151,7 @@ export async function POST(
         file_path: filePath,
         file_size: file.size,
         mime_type: file.type || null,
-        uploaded_by: user.id,
+        uploaded_by: userId,
       })
       .select()
       .single();

@@ -1,35 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-async function getCompanyId(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (profile?.company_id) return profile.company_id as string;
-
-  const { data: userProfile } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  return userProfile?.company_id ?? null;
-}
 
 export async function GET(request: NextRequest) {
   try {
-    const companyId = await getCompanyId(request);
-    if (!companyId) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { companyId } = apiUser;
 
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get("dateFrom");
@@ -53,6 +32,7 @@ export async function GET(request: NextRequest) {
     if (dateTo) query = query.lte("paid_at", dateTo + "T23:59:59Z");
     if (method) query = query.eq("method", method);
     if (accountId) query = query.eq("account_id", accountId);
+    query = query.limit(500);
 
     let data: unknown[] | null = null;
     let error: { message?: string } | null = null;
@@ -110,10 +90,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const companyId = await getCompanyId(request);
-    if (!companyId) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { companyId } = apiUser;
 
     const body = await request.json().catch(() => ({}));
     const {

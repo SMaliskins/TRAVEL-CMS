@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
@@ -83,6 +83,8 @@ export default function DashboardPage() {
   const isFinance = currentRole === "finance";
   const [agentTargets, setAgentTargets] = useState<AgentTarget[]>([]);
 
+  const tokenRef = useRef<string | null>(null);
+
   // Per-card period overrides
   type CardKey = "orders" | "bookings" | "revenue" | "overdue";
   const [cardPeriods, setCardPeriods] = useState<Record<CardKey, CardPeriodType>>({
@@ -163,14 +165,14 @@ export default function DashboardPage() {
 
     const fetchStatistics = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const token = tokenRef.current;
+        if (!token) return;
 
         const response = await fetch(
           `/api/dashboard/statistics?periodStart=${periodStart}&periodEnd=${periodEnd}`,
           {
             headers: {
-              Authorization: `Bearer ${session.access_token}`,
+              Authorization: `Bearer ${token}`,
             },
           }
         );
@@ -193,12 +195,12 @@ export default function DashboardPage() {
 
     const fetchPreviousYear = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const token = tokenRef.current;
+        if (!token) return;
 
         const response = await fetch(
           `/api/dashboard/previous-year?periodStart=${periodStart}&periodEnd=${periodEnd}`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (response.ok) {
@@ -219,12 +221,12 @@ export default function DashboardPage() {
 
     const fetchChart = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const token = tokenRef.current;
+        if (!token) return;
 
         const response = await fetch(
           `/api/dashboard/chart?periodStart=${periodStart}&periodEnd=${periodEnd}`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (response.ok) {
@@ -245,12 +247,12 @@ export default function DashboardPage() {
 
     const fetchLocations = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const token = tokenRef.current;
+        if (!token) return;
 
         const response = await fetch('/api/dashboard/map', {
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -274,11 +276,11 @@ export default function DashboardPage() {
 
     const fetchCalendar = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const token = tokenRef.current;
+        if (!token) return;
 
         const response = await fetch("/api/dashboard/calendar", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
         if (response.ok) {
@@ -298,11 +300,11 @@ export default function DashboardPage() {
     if (!showAgentBreakdown || !periodStart || !periodEnd || isFinance) return;
     const fetchAgentTargets = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+        const token = tokenRef.current;
+        if (!token) return;
         const res = await fetch(
           `/api/dashboard/agent-targets?periodStart=${periodStart}&periodEnd=${periodEnd}`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
         if (res.ok) {
           const json = await res.json();
@@ -353,8 +355,8 @@ export default function DashboardPage() {
   const cardPeriodsKey = JSON.stringify(cardPeriods);
   useEffect(() => {
     const fetchOverrides = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const token = tokenRef.current;
+      if (!token) return;
 
       const cards: CardKey[] = ["orders", "bookings", "revenue", "overdue"];
       const newData: typeof cardOverrideData = { orders: null, bookings: null, revenue: null, overdue: null };
@@ -367,10 +369,10 @@ export default function DashboardPage() {
         try {
           const [statsRes, prevRes] = await Promise.all([
             fetch(`/api/dashboard/statistics?periodStart=${start}&periodEnd=${end}`, {
-              headers: { Authorization: `Bearer ${session.access_token}` }
+              headers: { Authorization: `Bearer ${token}` }
             }),
             fetch(`/api/dashboard/previous-year?periodStart=${start}&periodEnd=${end}`, {
-              headers: { Authorization: `Bearer ${session.access_token}` }
+              headers: { Authorization: `Bearer ${token}` }
             }),
           ]);
           newData[card] = {
@@ -402,7 +404,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
+      const [{ data }, { data: { session } }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.auth.getSession(),
+      ]);
 
       if (!data.user) {
         router.replace("/login");
@@ -410,10 +415,9 @@ export default function DashboardPage() {
       }
 
       setEmail(data.user.email || null);
+      const token = session?.access_token || null;
+      tokenRef.current = token;
 
-      // Fetch user's first name via API (bypasses RLS)
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
       if (token) {
         try {
           const res = await fetch("/api/profile", {
@@ -454,8 +458,24 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading...</div>
+      <div className="booking-modern-container">
+        <div className="mx-auto max-w-[1800px] space-y-6">
+          <div className="booking-modern-header relative !mb-0">
+            <div className="flex items-center justify-between w-full">
+              <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+              <div className="h-10 w-56 bg-gray-200 rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-28 bg-gray-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+            <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />
+          </div>
+        </div>
       </div>
     );
   }

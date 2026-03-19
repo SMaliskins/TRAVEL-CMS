@@ -2,9 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
-import { ClientsByCitizenshipPie } from "@/components/directory/ClientsByCitizenshipPie";
+const ClientsByCitizenshipPie = dynamic(
+  () => import("@/components/directory/ClientsByCitizenshipPie").then(m => m.ClientsByCitizenshipPie),
+  { ssr: false, loading: () => <div className="h-48 bg-gray-100 rounded animate-pulse" /> }
+);
 import DirectoryMergeModal from "@/components/DirectoryMergeModal";
 import { formatPhoneForDisplay } from "@/utils/phone";
 import "../hotels-booking/modern-booking.css";
@@ -644,8 +648,25 @@ export default function DirectoryPage() {
             </div>
           </div>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Loading...</div>
+            <div className="overflow-hidden">
+              <div className="h-12 border-b bg-gray-50" />
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 last:border-0">
+                  <div className="h-4 w-12 bg-gray-100 rounded animate-pulse" />
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse" />
+                    <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                  </div>
+                  <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+                  <div className="flex gap-1">
+                    <div className="h-5 w-14 bg-gray-100 rounded-full animate-pulse" />
+                    <div className="h-5 w-16 bg-gray-100 rounded-full animate-pulse" />
+                  </div>
+                  {!isSubagent && <div className="h-4 w-36 bg-gray-100 rounded animate-pulse" />}
+                  {!isSubagent && <div className="h-4 w-24 bg-gray-100 rounded animate-pulse" />}
+                  {showArchiveView && <div className="ml-auto h-7 w-20 bg-gray-100 rounded animate-pulse" />}
+                </div>
+              ))}
             </div>
           ) : records.length === 0 ? (
             <div className="p-8 text-center">

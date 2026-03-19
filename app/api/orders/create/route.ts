@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
 // Placeholder URLs for build-time (replaced at runtime)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
@@ -28,30 +29,6 @@ interface CreateOrderRequest {
   checkIn: string | null;
   return: string | null;
   status?: string;
-}
-
-// Get company_id from user's profile
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!profileError && profileData?.company_id) {
-    return profileData.company_id as string;
-  }
-
-  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (userProfileError || !userProfileData?.company_id) {
-    return null;
-  }
-  return userProfileData.company_id as string;
 }
 
 // Generate order_no for company+year, returns { order_no, order_code }
@@ -111,36 +88,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get authenticated user
-    let user = null;
-    
-    const authHeader = request.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const authClient = createClient(supabaseUrl, supabaseAnonKey);
-      const { data, error } = await authClient.auth.getUser(token);
-      if (!error && data?.user) {
-        user = data.user;
-      }
-    }
-
-    if (!user) {
-      const cookieHeader = request.headers.get("cookie") || "";
-      if (cookieHeader) {
-        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: { persistSession: false },
-          global: { headers: { Cookie: cookieHeader } },
-        });
-        const { data, error } = await authClient.auth.getUser();
-        if (!error && data?.user) {
-          user = data.user;
-        }
-      }
-    }
-
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { companyId, userId } = apiUser;
 
     const body: CreateOrderRequest = await request.json();
 
@@ -150,15 +102,6 @@ export async function POST(request: NextRequest) {
     }
     if (!body.orderType) {
       return NextResponse.json({ error: "orderType is required" }, { status: 400 });
-    }
-
-    // Get company_id from user's profile
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json(
-        { error: "User has no company assigned. Please contact administrator." },
-        { status: 400 }
-      );
     }
 
     // Generate order number
@@ -203,7 +146,7 @@ export async function POST(request: NextRequest) {
     // Start with required fields only
     const payload: Record<string, unknown> = {
       company_id: companyId,
-      manager_user_id: user.id,
+      manager_user_id: userId,
       order_no: orderNo,
       order_year: orderYear,
       order_code: orderCode,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCompanyIdForCmsUser, getCurrentCmsUser } from "@/lib/hotels/cmsAuth";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { logHotelOfferEvent } from "@/lib/hotels/events";
 
 function makePartnerOrderId() {
@@ -10,15 +10,11 @@ function makePartnerOrderId() {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentCmsUser(request);
-    if (!user) {
-      return NextResponse.json({ data: null, error: "Unauthorized", message: "Auth required" }, { status: 401 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyIdForCmsUser(user.id);
-    if (!companyId) {
-      return NextResponse.json({ data: null, error: "Company not found", message: "User has no company" }, { status: 404 });
-    }
+    const { companyId } = apiUser;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -45,21 +41,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentCmsUser(request);
-    if (!user) {
-      return NextResponse.json({ data: null, error: "Unauthorized", message: "Auth required" }, { status: 401 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyIdForCmsUser(user.id);
-    if (!companyId) {
-      return NextResponse.json({ data: null, error: "Company not found", message: "User has no company" }, { status: 404 });
-    }
+    const { companyId, userId } = apiUser;
 
     const body = await request.json();
     const partnerOrderId = makePartnerOrderId();
     const payload = {
       company_id: companyId,
-      created_by: user.id,
+      created_by: userId,
       client_party_id: body.clientPartyId || null,
       client_name: body.clientName || null,
       client_email: body.clientEmail || null,
@@ -106,7 +98,7 @@ export async function POST(request: NextRequest) {
         tariffType: payload.tariff_type,
         clientAmount: payload.client_amount,
       },
-      createdBy: user.id,
+      createdBy: userId,
     });
 
     return NextResponse.json({ data, error: null, message: "Offer created" });

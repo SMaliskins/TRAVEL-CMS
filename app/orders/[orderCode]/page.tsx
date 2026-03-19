@@ -824,8 +824,23 @@ export default function OrderPage({
 
             {/* Block 2: Client + Itinerary + Dates — занимает оставшееся место, блок тегов справа не сжимается */}
             {!order ? (
-              <div className="flex-1 min-w-0 flex items-center text-gray-500">
-                {orderLoading ? t(lang, "order.loadingOrder") : null}
+              <div className="flex-1 min-w-0">
+                {orderLoading ? (
+                  <div className="space-y-4 p-2">
+                    <div className="flex items-center gap-4">
+                      <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-6 w-20 bg-blue-100 rounded-full animate-pulse" />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="space-y-2">
+                          <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                          <div className="h-5 w-28 bg-gray-100 rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="flex-1 min-w-0">

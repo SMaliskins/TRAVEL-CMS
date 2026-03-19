@@ -49,6 +49,14 @@ export function countryCodeToFlag(countryCode: string): string {
 // Extended cities loaded from /data/world-cities.json (all countries' cities)
 let worldCitiesCache: City[] | null = null;
 
+function normalizeCityNameForKey(name: string): string {
+  return (name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
 /** Load extended world cities from public data (call on app mount for full coverage) */
 export async function loadWorldCities(): Promise<void> {
   if (worldCitiesCache) return;
@@ -65,9 +73,14 @@ export async function loadWorldCities(): Promise<void> {
 
 function getAllCities(): City[] {
   if (!worldCitiesCache) return CITIES;
-  const existingKeys = new Set(CITIES.map((c) => `${c.name.toLowerCase()}|${c.countryCode}`));
+  const existingKeys = new Set(
+    CITIES.map((c) => `${normalizeCityNameForKey(c.name)}|${(c.countryCode || "").toUpperCase()}`)
+  );
   const extended = worldCitiesCache.filter(
-    (w) => !existingKeys.has(`${w.name.toLowerCase()}|${w.countryCode}`)
+    (w) =>
+      !existingKeys.has(
+        `${normalizeCityNameForKey(w.name)}|${(w.countryCode || "").toUpperCase()}`
+      )
   );
   return [...CITIES, ...extended];
 }

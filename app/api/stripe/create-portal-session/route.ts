@@ -1,46 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { getApiUser } from "@/lib/auth/getApiUser";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "http://localhost:3000";
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
-
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) return data.user;
-  }
-  const cookieHeader = request.headers.get("cookie") || "";
-  if (cookieHeader) {
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookieHeader } },
-    });
-    const { data, error } = await authClient.auth.getUser();
-    if (!error && data?.user) return data.user;
-  }
-  return null;
-}
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .single();
-  return data?.company_id || null;
-}
 
 /**
  * POST /api/stripe/create-portal-session
@@ -55,18 +20,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const user = await getUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json(
-        { error: "User has no company assigned" },
-        { status: 400 }
-      );
-    }
+    const { companyId } = apiUser;
 
     const body = await request.json().catch(() => ({}));
     const returnUrl = body.returnUrl || `${appUrl}/settings/billing`;

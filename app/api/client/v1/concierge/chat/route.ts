@@ -6,16 +6,18 @@ import { checkAiUsageLimit } from '@/lib/ai/usageLimit'
 import { getAuthenticatedClient, unauthorizedResponse } from '@/lib/client-auth/middleware'
 import { conciergeTools } from '@/lib/client-concierge/tools'
 import { buildConciergeSystemPrompt } from '@/lib/client-concierge/systemPrompt'
-import {
-  suggestHotels, searchHotelsByRegion, getHotelContentsBatch, getHotelReviewsSummary,
-  prebookFromSerp,
-} from '@/lib/ratehawk/client'
+import { suggestHotels, prebookFromSerp } from '@/lib/ratehawk/client'
+import { searchAll } from '@/lib/providers/aggregator'
+import { createRateHawkProvider } from '@/lib/providers/ratehawk/adapter'
+import { createGoGlobalProvider } from '@/lib/providers/goglobal/adapter'
+import type { HotelProvider, HotelSearchParams } from '@/lib/providers/types'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
 interface SearchResultEntry {
+  provider: string
   hid: number
   name: string
   matchHash?: string
@@ -49,122 +51,116 @@ async function executeToolCall(
 ): Promise<{ result: string; lastSearchResults?: SearchResultEntry[] }> {
   try {
     if (toolName === 'search_hotels') {
-      const keyId = process.env.RATEHAWK_KEY_ID
-      const apiKey = process.env.RATEHAWK_API_KEY
-      if (!keyId || !apiKey) return { result: JSON.stringify({ error: 'Hotel search not configured' }) }
-
       const city = toolInput.city as string
       const checkIn = toolInput.check_in as string
       const checkOut = toolInput.check_out as string
       const guests = (toolInput.guests as number) ?? 2
+      const nationality = (toolInput.nationality as string) ?? undefined
+      const cityCode = (toolInput.city_code as number) ?? undefined
 
-      const suggestions = await suggestHotels(city, 'en', keyId, apiKey)
-      const regions = suggestions.regions ?? []
+      const providers: HotelProvider[] = []
+      let regionId: number | undefined
 
-      if (regions.length === 0) {
-        return { result: JSON.stringify({ error: `No region found for "${city}". Try a different city name.` }) }
+      const rhKeyId = process.env.RATEHAWK_KEY_ID
+      const rhApiKey = process.env.RATEHAWK_API_KEY
+      if (rhKeyId && rhApiKey) {
+        const suggestions = await suggestHotels(city, 'en', rhKeyId, rhApiKey)
+        const regions = suggestions.regions ?? []
+        if (regions.length > 0) {
+          regionId = typeof regions[0].id === 'number'
+            ? regions[0].id
+            : parseInt(String(regions[0].id), 10)
+          providers.push(createRateHawkProvider())
+        }
       }
 
-      const regionId = typeof regions[0].id === 'number'
-        ? regions[0].id
-        : parseInt(String(regions[0].id), 10)
+      if (process.env.GOGLOBAL_AGENCY_ID && process.env.GOGLOBAL_PASSWORD && cityCode) {
+        providers.push(createGoGlobalProvider())
+      }
 
-      const serpHotels = await searchHotelsByRegion(
-        regionId, checkIn, checkOut, guests, keyId, apiKey, 'EUR', 5
-      )
+      if (providers.length === 0) {
+        return { result: JSON.stringify({ error: `No providers available or no region found for "${city}". Try a different city name.` }) }
+      }
 
-      const hids = serpHotels.map((h) => h.hid).filter(Boolean)
+      const searchParams: HotelSearchParams = {
+        cityName: city,
+        regionId,
+        cityCode,
+        checkIn,
+        checkOut,
+        adults: guests,
+        nationality,
+        currency: 'EUR',
+        maxResults: 5,
+      }
 
-      const [hotelContents, reviewSummaries] = await Promise.all([
-        hids.length > 0 ? getHotelContentsBatch(hids, 'en', keyId, apiKey) : [],
-        hids.length > 0 ? getHotelReviewsSummary(hids, 'en', keyId, apiKey) : [],
-      ])
-      const nameMap = new Map(hotelContents.map((c) => [c.hid, c]))
-      const reviewMap = new Map(reviewSummaries.map((r) => [r.hid, r]))
-
+      const aggregated = await searchAll(providers, searchParams)
       const markupMul = 1 + ctx.hotelMarkup / 100
 
       const searchEntries: SearchResultEntry[] = []
-      const result = serpHotels.map((h, idx) => {
-        const content = nameMap.get(h.hid)
-        const review = reviewMap.get(h.hid)
-        const cheapestRate = h.rates?.[0]
-        const payment = cheapestRate?.payment_options?.payment_types?.[0]
-        const rawPrice = payment?.show_amount ?? 0
+      const hotels = aggregated.hotels.map((hotel) => {
+        const bestRate = hotel.rates[0]
+        if (!bestRate) return null
+
         const clientPrice = ctx.hotelMarkup > 0
-          ? Math.ceil(rawPrice * markupMul * 100) / 100
-          : rawPrice
+          ? Math.ceil(hotel.bestPrice * markupMul * 100) / 100
+          : hotel.bestPrice
 
         searchEntries.push({
-          hid: h.hid,
-          name: content?.name || h.name || `Hotel #${h.hid}`,
-          matchHash: cheapestRate?.match_hash,
-          bookHash: cheapestRate?.book_hash,
+          provider: bestRate.provider,
+          hid: bestRate.provider === 'ratehawk' ? parseInt(hotel.id, 10) || 0 : 0,
+          name: hotel.name,
+          matchHash: (bestRate.providerMetadata?.matchHash as string) ?? undefined,
+          bookHash: (bestRate.providerMetadata?.bookHash as string) ?? undefined,
           checkIn, checkOut, guests,
-          ratehawkAmount: rawPrice,
+          ratehawkAmount: bestRate.provider === 'ratehawk' ? bestRate.totalPrice : 0,
           clientAmount: clientPrice,
-          currency: payment?.show_currency_code ?? 'EUR',
-          roomName: cheapestRate?.room_name,
-          meal: cheapestRate?.meal,
-          hotelStars: content?.star_rating ?? h.star_rating,
-          hotelAddress: content?.address || h.address,
-          hotelImage: content?.images?.[0],
+          currency: hotel.currency,
+          roomName: bestRate.roomName,
+          meal: bestRate.mealPlanOriginal || bestRate.mealPlan,
+          hotelStars: hotel.starRating,
+          hotelAddress: hotel.address,
+          hotelImage: hotel.images[0],
         })
 
-        const guestScore = content?.review_score ?? review?.reviewScore ?? null
-        const guestReviewCount = content?.number_of_reviews ?? review?.reviewCount ?? null
-
-        const amenityGroupsSummary = content?.amenity_groups?.map((g) =>
-          `${g.group_name}: ${g.amenities.join(', ')}`
-        ).join('; ') ?? content?.facts?.join(', ') ?? null
-
-        const roomsSummary = content?.room_groups?.map((rg) => {
-          const parts = [rg.name]
-          if (rg.name_struct?.bedding_type) parts.push(`bed: ${rg.name_struct.bedding_type}`)
-          if (rg.room_class && rg.room_class !== 'room') parts.push(`type: ${rg.room_class}`)
-          if (rg.room_amenities?.length) parts.push(`amenities: ${rg.room_amenities.slice(0, 8).join(', ')}`)
-          return parts.join(' | ')
-        }) ?? null
-
-        const roomImages = content?.room_groups
-          ?.flatMap((rg) => (rg.images ?? []).map((url) => ({ room: rg.name, url })))
-          .slice(0, 4) ?? null
+        const providerPrices = hotel.providers.map((prov) => {
+          const provRate = hotel.rates.find((r) => r.provider === prov)
+          if (!provRate) return null
+          const cp = ctx.hotelMarkup > 0
+            ? Math.ceil(provRate.totalPrice * markupMul * 100) / 100
+            : provRate.totalPrice
+          return {
+            provider: prov,
+            price: `${cp} ${provRate.currency}`,
+            cancellation: provRate.cancellationType,
+          }
+        }).filter(Boolean)
 
         return {
-          name: content?.name || h.name || `Hotel #${h.hid}`,
-          stars: content?.star_rating ?? h.star_rating ?? null,
-          guestRating: guestScore,
-          reviewCount: guestReviewCount,
-          kind: content?.kind ?? null,
-          hotelChain: content?.hotel_chain ?? null,
-          yearBuilt: content?.year_built ?? null,
-          yearRenovated: content?.year_renovated ?? null,
-          floorsAndRooms: content?.floors_number || content?.rooms_number
-            ? `${content?.floors_number ?? '?'} floors, ${content?.rooms_number ?? '?'} rooms`
-            : null,
-          distanceToCenter: content?.distance_center
-            ? `${Math.round(content.distance_center / 100) / 10} km`
-            : null,
-          description: content?.description ?? null,
-          address: content?.address || h.address || null,
-          totalPrice: payment ? `${clientPrice} ${payment.show_currency_code}` : 'price unavailable',
-          meal: cheapestRate?.meal ?? 'no meal info',
-          room: cheapestRate?.room_name ?? null,
-          amenities: amenityGroupsSummary,
-          roomTypes: roomsSummary,
-          checkIn: content?.check_in_time ?? null,
-          checkOut: content?.check_out_time ?? null,
-          images: content?.images?.slice(0, 3) ?? null,
-          roomImages: roomImages,
+          name: hotel.name,
+          stars: hotel.starRating,
+          guestRating: hotel.reviewScore,
+          reviewCount: hotel.reviewCount,
+          address: hotel.address,
+          totalPrice: `${clientPrice} ${hotel.currency}`,
+          bestProvider: hotel.bestPriceProvider,
+          providerPrices,
+          meal: bestRate.mealPlanOriginal || bestRate.mealPlan,
+          room: bestRate.roomName,
+          cancellation: bestRate.cancellationType,
+          freeCancellationBefore: bestRate.freeCancellationBefore,
+          images: hotel.images.slice(0, 3),
         }
-      })
+      }).filter(Boolean)
 
       return {
         result: JSON.stringify({
-          region: regions[0].name,
+          city,
           dates: `${checkIn} — ${checkOut}`,
           guests,
-          hotels: result,
+          providers: providers.map((p) => p.name),
+          hotels,
+          errors: aggregated.errors.length > 0 ? aggregated.errors : undefined,
           note: 'If the client wants to book one of these hotels, use select_hotel_for_booking with the hotel number (1-based) and guest name.',
         }),
         lastSearchResults: searchEntries,

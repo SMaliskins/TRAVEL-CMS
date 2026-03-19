@@ -1,36 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const BUCKET_NAME = "order-documents";
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: p } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-  if (p?.company_id) return p.company_id as string;
-  const { data: up } = await supabaseAdmin.from("user_profiles").select("company_id").eq("id", userId).maybeSingle();
-  return (up?.company_id as string) ?? null;
-}
-
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const client = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user } } = await client.auth.getUser(authHeader.replace("Bearer ", ""));
-    return user;
-  }
-  const cookie = request.headers.get("cookie") || "";
-  if (cookie) {
-    const client = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookie } },
-    });
-    const { data: { user } } = await client.auth.getUser();
-    return user;
-  }
-  return null;
-}
 
 /**
  * GET /api/orders/[orderCode]/documents/[docId]/file
@@ -43,10 +15,9 @@ export async function GET(
 ) {
   try {
     const { docId } = await params;
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) return NextResponse.json({ error: "Company not found" }, { status: 400 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId } = apiUser;
 
     const { data: doc, error: fetchErr } = await supabaseAdmin
       .from("order_documents")

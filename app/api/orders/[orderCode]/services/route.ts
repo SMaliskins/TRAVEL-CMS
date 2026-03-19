@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 
@@ -10,29 +11,6 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!profileError && profileData?.company_id) {
-    return profileData.company_id as string;
-  }
-
-  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (userProfileError || !userProfileData?.company_id) {
-    return null;
-  }
-  return userProfileData.company_id as string;
-}
 
 async function syncOrderDatesFromServices(orderId: string) {
   try {
@@ -67,35 +45,6 @@ async function getOrderId(orderCode: string, companyId: string): Promise<string 
     .eq("company_id", companyId)
     .single();
   return data?.id || null;
-}
-
-async function getCurrentUser(request: NextRequest) {
-  let user = null;
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) {
-      user = data.user;
-    }
-  }
-
-  if (!user) {
-    const cookieHeader = request.headers.get("cookie") || "";
-    if (cookieHeader) {
-      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: { persistSession: false },
-        global: { headers: { Cookie: cookieHeader } },
-      });
-      const { data, error } = await authClient.auth.getUser();
-      if (!error && data?.user) {
-        user = data.user;
-      }
-    }
-  }
-
-  return user;
 }
 
 // GET - List services for an order
@@ -378,15 +327,11 @@ export async function POST(
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
-    }
+    const { companyId } = apiUser;
 
     const orderId = await getOrderId(orderCode, companyId);
     if (!orderId) {

@@ -8,6 +8,7 @@ import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { useClock } from "@/hooks/useClock";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/contexts/UserContext";
+import { useCompanyLogo } from "@/contexts/CompanySettingsContext";
 
 interface StaffNotification {
   id: string;
@@ -58,33 +59,9 @@ export default function TopBar() {
   const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory();
   const now = useClock();
   const { profile } = useUser();
-  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const companyLogo = useCompanyLogo();
   const [gitCommitSha, setGitCommitSha] = useState<string>("");
   const shortCommitSha = gitCommitSha ? gitCommitSha.slice(0, 7) : "";
-
-  // Fetch company logo
-  useEffect(() => {
-    const fetchCompanyLogo = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch("/api/company", { 
-          headers: {
-            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-          },
-          credentials: "include" 
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.company?.logo_url) {
-            setCompanyLogo(data.company.logo_url);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch company logo:", err);
-      }
-    };
-    fetchCompanyLogo();
-  }, []);
 
   // Always read commit SHA from server to avoid stale inlined env values.
   useEffect(() => {

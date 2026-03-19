@@ -1,31 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { logAiUsage } from "@/lib/aiUsageLogger";
 import { MODELS } from "@/lib/ai/config";
 
 const OPENAI_MODEL = MODELS.OPENAI_VISION;
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const BUCKET_NAME = "order-documents";
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: p } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-  if (p?.company_id) return p.company_id as string;
-  const { data: up } = await supabaseAdmin.from("user_profiles").select("company_id").eq("id", userId).maybeSingle();
-  return (up?.company_id as string) ?? null;
-}
-
-async function getUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const client = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user } } = await client.auth.getUser(authHeader.replace("Bearer ", ""));
-    return user;
-  }
-  return null;
-}
 
 function extractInvoiceData(text: string): {
   supplier?: string;
@@ -310,10 +291,9 @@ export async function GET(
 ) {
   try {
     const { orderCode, docId } = await params;
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) return NextResponse.json({ error: "Company not found" }, { status: 400 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId, userId } = apiUser;
 
     const { data: doc, error: docErr } = await supabaseAdmin
       .from("order_documents")
@@ -353,7 +333,7 @@ export async function GET(
 
     if (isImage) {
       const mediaType = mime.includes("png") ? "image/png" : mime.includes("webp") ? "image/webp" : "image/jpeg";
-      const aiParsed = await parseImageWithAI(buffer, mediaType, companyId, user.id);
+      const aiParsed = await parseImageWithAI(buffer, mediaType, companyId, userId);
       if (aiParsed && (aiParsed.supplier || aiParsed.amount != null || aiParsed.invoice_number || aiParsed.invoice_date)) {
         await saveParsed(aiParsed);
         return NextResponse.json(aiParsed);
@@ -370,7 +350,7 @@ export async function GET(
 
     if (!text) {
       // Scanned/image PDF: unpdf returns empty text — send PDF directly to GPT-4o
-      const pdfVision = await parsePdfWithAI(buffer, companyId, user.id);
+      const pdfVision = await parsePdfWithAI(buffer, companyId, userId);
       if (pdfVision && (pdfVision.supplier || pdfVision.amount != null || pdfVision.invoice_number || pdfVision.invoice_date)) {
         await saveParsed(pdfVision);
         return NextResponse.json(pdfVision);
@@ -378,7 +358,7 @@ export async function GET(
       return NextResponse.json({ supplier: undefined, amount: undefined, currency: undefined });
     }
 
-    const aiParsed = await parseWithAI(text, companyId, user.id);
+    const aiParsed = await parseWithAI(text, companyId, userId);
     if (aiParsed && (aiParsed.supplier || aiParsed.amount != null || aiParsed.invoice_number || aiParsed.invoice_date)) {
       await saveParsed(aiParsed);
       return NextResponse.json(aiParsed);

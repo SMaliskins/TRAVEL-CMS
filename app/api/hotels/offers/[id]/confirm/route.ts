@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCompanyIdForCmsUser, getCurrentCmsUser } from "@/lib/hotels/cmsAuth";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { logHotelOfferEvent } from "@/lib/hotels/events";
 import { finalizeHotelOfferBooking } from "@/lib/hotels/finalizeBooking";
 
@@ -10,14 +10,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentCmsUser(request);
-    if (!user) {
-      return NextResponse.json({ data: null, error: "Unauthorized", message: "Auth required" }, { status: 401 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const companyId = await getCompanyIdForCmsUser(user.id);
-    if (!companyId) {
-      return NextResponse.json({ data: null, error: "Company not found", message: "User has no company" }, { status: 404 });
-    }
+    const { companyId, userId } = apiUser;
 
     const { data: offer } = await supabaseAdmin
       .from("hotel_offers")
@@ -40,7 +37,7 @@ export async function PATCH(
       await logHotelOfferEvent({
         offerId: id,
         companyId,
-        createdBy: user.id,
+        createdBy: userId,
         eventType: "confirmed",
       });
       return NextResponse.json({ data: { id, status: "confirmed" }, error: null, message: "Offer confirmed" });
@@ -58,7 +55,7 @@ export async function PATCH(
       await logHotelOfferEvent({
         offerId: id,
         companyId,
-        createdBy: user.id,
+        createdBy: userId,
         eventType: "invoice_paid",
       });
       await finalizeHotelOfferBooking(id);

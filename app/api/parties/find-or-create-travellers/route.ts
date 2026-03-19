@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     const results: { name: string; id: string; displayName: string }[] = [];
 
-    // Fetch all client parties for company once
+    // Fetch all person parties for company (not just clients — match any existing person)
     const { data: parties } = await supabase
       .from("party")
       .select("id, display_name")
@@ -102,31 +102,57 @@ export async function POST(request: NextRequest) {
       .eq("party_type", "person")
       .eq("status", "active");
 
-    const clientPartyIds =
-      parties && parties.length > 0
-        ? await supabase
-            .from("client_party")
-            .select("party_id")
-            .in("party_id", parties.map((p) => p.id))
-        : { data: [] };
-    const clientSet = new Set((clientPartyIds.data || []).map((r: { party_id: string }) => r.party_id));
-    const clientParties = (parties || []).filter((p) => clientSet.has(p.id));
+    // Also fetch first_name/last_name for better matching
+    const partyIds = (parties || []).map((p: { id: string }) => p.id);
+    let personDetails: Array<{ party_id: string; first_name: string; last_name: string }> = [];
+    if (partyIds.length > 0) {
+      const { data: pd } = await supabase
+        .from("party_person")
+        .select("party_id, first_name, last_name")
+        .in("party_id", partyIds);
+      personDetails = pd || [];
+    }
+    const personMap = new Map(personDetails.map((p) => [p.party_id, p]));
+
     const normalizedToParty = new Map<string, { id: string; display_name: string }>();
-    for (const p of clientParties) {
+    for (const p of (parties || [])) {
       const dn = (p.display_name || "").trim();
       const norm = normalizeForMatch(dn);
       if (norm && !normalizedToParty.has(norm)) {
         normalizedToParty.set(norm, { id: p.id, display_name: dn });
       }
+      // Also index by "firstName lastName" from party_person (handles cases where display_name differs)
+      const pd = personMap.get(p.id);
+      if (pd) {
+        const fnln = normalizeForMatch(`${pd.first_name || ""} ${pd.last_name || ""}`.trim());
+        const lnfn = normalizeForMatch(`${pd.last_name || ""} ${pd.first_name || ""}`.trim());
+        if (fnln && !normalizedToParty.has(fnln)) normalizedToParty.set(fnln, { id: p.id, display_name: dn });
+        if (lnfn && !normalizedToParty.has(lnfn)) normalizedToParty.set(lnfn, { id: p.id, display_name: dn });
+      }
     }
+
+    // Ensure existing records get client role if missing
+    const clientPartyIds = partyIds.length > 0
+      ? await supabase.from("client_party").select("party_id").in("party_id", partyIds)
+      : { data: [] };
+    const clientSet = new Set((clientPartyIds.data || []).map((r: { party_id: string }) => r.party_id));
 
     for (const entry of uniqueEntries) {
       const { name, firstName, lastName } = entry;
       const normalized = normalizeForMatch(name);
       const displayNorm = firstName && lastName ? normalizeForMatch(`${firstName} ${lastName}`) : normalized;
-      const found = (normalized && normalizedToParty.get(normalized)) || (displayNorm && normalizedToParty.get(displayNorm)) || null;
+      const reverseNorm = firstName && lastName ? normalizeForMatch(`${lastName} ${firstName}`) : null;
+      const found = (normalized && normalizedToParty.get(normalized))
+        || (displayNorm && normalizedToParty.get(displayNorm))
+        || (reverseNorm && normalizedToParty.get(reverseNorm))
+        || null;
 
       if (found) {
+        // Ensure the found party has client role
+        if (!clientSet.has(found.id)) {
+          await supabase.from("client_party").insert({ party_id: found.id, client_type: "person" }).select();
+          clientSet.add(found.id);
+        }
         results.push({ name, id: found.id, displayName: found.display_name });
       } else {
         const created = await createClientParty(supabase, companyId, userId, name, firstName, lastName);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCompanyIdForCmsUser, getCurrentCmsUser } from "@/lib/hotels/cmsAuth";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { logHotelOfferEvent } from "@/lib/hotels/events";
@@ -11,14 +11,11 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = await getCurrentCmsUser(request);
-    if (!user) {
-      return NextResponse.json({ data: null, error: "Unauthorized", message: "Auth required" }, { status: 401 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const companyId = await getCompanyIdForCmsUser(user.id);
-    if (!companyId) {
-      return NextResponse.json({ data: null, error: "Company not found", message: "User has no company" }, { status: 404 });
-    }
+    const { companyId, userId } = apiUser;
 
     const { data: offer, error: offerError } = await supabaseAdmin
       .from("hotel_offers")
@@ -79,7 +76,7 @@ export async function POST(
     await logHotelOfferEvent({
       offerId: offer.id,
       companyId,
-      createdBy: user.id,
+      createdBy: userId,
       eventType: "sent",
       eventPayload: { channel, appConfirmUrl, emailConfirmUrl },
     });

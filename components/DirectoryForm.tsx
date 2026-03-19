@@ -17,6 +17,8 @@ import {
 import { useRipple } from "@/hooks/useRipple";
 import { ValidationIcon } from "@/components/ValidationIcon";
 import PassportDetailsInput, { PassportData } from "@/components/PassportDetailsInput";
+import CompanyDocParser from "@/components/CompanyDocParser";
+import CompanyContactsSection from "@/components/CompanyContactsSection";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
@@ -129,6 +131,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       paymentStatus?: "paid" | "partial" | "unpaid" | "overdue" | "overpaid";
       balance?: number;
       overdueInvoices?: Array<{ invoice_number: string | null; due_date: string; total: number }>;
+      linkedCompanies?: Array<{
+        companyPartyId: string;
+        companyName: string;
+        role: string;
+        isPrimary: boolean;
+        ordersCount?: number;
+        debt?: number;
+      }>;
     } | null>(null);
     const [statsLoading, setStatsLoading] = useState(false);
     
@@ -1130,6 +1140,38 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                 </>
               )}
 
+              {/* Company document AI parsing */}
+              {displayType === "company" && (
+                <div className="md:col-span-2">
+                  <CompanyDocParser
+                    onParsed={(parsed) => {
+                      if (parsed.companyName) { setCompanyName(parsed.companyName); markFieldDirty("companyName"); }
+                      if (parsed.regNumber) { setRegNo(parsed.regNumber); markFieldDirty("regNo"); }
+                      if (parsed.vatNumber) { setVatNo(parsed.vatNumber); markFieldDirty("vatNo"); }
+                      if (parsed.legalAddress) { setAddress(parsed.legalAddress); markFieldDirty("address"); }
+                      if (parsed.country) { setCountry(parsed.country); markFieldDirty("country"); }
+                      if (parsed.contactPerson) { setContactPerson(parsed.contactPerson); markFieldDirty("contactPerson"); }
+                      if (parsed.phone) { setPhone(parsed.phone); markFieldDirty("phone"); }
+                      if (parsed.email) { setEmail(parsed.email); markFieldDirty("email"); }
+                      if (parsed.bankName || parsed.iban || parsed.swift) {
+                        setBankAccounts((prev) => {
+                          const existing = prev.length > 0 ? [...prev] : [{ bank_name: "", iban: "", swift: "", currency: "EUR" }];
+                          existing[0] = {
+                            ...existing[0],
+                            bank_name: parsed.bankName || existing[0].bank_name || "",
+                            iban: parsed.iban || existing[0].iban || "",
+                            swift: parsed.swift || existing[0].swift || "",
+                          };
+                          return existing;
+                        });
+                        markFieldDirty("bankAccounts");
+                      }
+                    }}
+                    readonly={false}
+                  />
+                </div>
+              )}
+
               {/* Company fields */}
               {displayType === "company" && (
                 <>
@@ -1277,32 +1319,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                 </>
               )}
 
-              {/* Contact person + Phone + Email — company only section */}
+              {/* Company Phone + Email */}
               {displayType === "company" && (
                 <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Contact person</h3>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div>
-                      <label className="block mb-1 text-sm font-medium text-gray-700">Name</label>
-                      <div className="relative min-h-[2.5rem]">
-                        <input
-                          type="text"
-                          value={contactPerson}
-                          onChange={(e) => {
-                            setContactPerson(e.target.value);
-                            markFieldDirty("contactPerson");
-                          }}
-                          onBlur={() => { setContactPerson(v => toTitleCase(v)); markFieldTouched("contactPerson"); }}
-                          onFocus={() => markFieldTouched("contactPerson")}
-                          className={`${getInputClasses("contactPerson", false, contactPerson)} ${touchedFields.has("contactPerson") || contactPerson.trim() ? 'pr-10' : ''}`}
-                          aria-label="Contact person"
-                        />
-                        <ValidationIcon
-                          status={getValidationStatus("contactPerson", false, contactPerson, touchedFields.has("contactPerson"))}
-                          show={touchedFields.has("contactPerson") || contactPerson.trim() !== ""}
-                        />
-                      </div>
-                    </div>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Company contact info</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                       <input
@@ -1330,13 +1351,21 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         onChange={(e) => { setEmail(e.target.value); markFieldDirty("email"); }}
                         onBlur={() => markFieldTouched("email")}
                         onFocus={() => markFieldTouched("email")}
-                        placeholder="client@email.com"
+                        placeholder="company@email.com"
                         className={getInputClasses("email", false, email)}
                         aria-label="Email"
                       />
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* Company contacts — financial & administrative */}
+              {displayType === "company" && (
+                <CompanyContactsSection
+                  companyPartyId={record?.id}
+                  mode={mode}
+                />
               )}
 
               {/* Common fields - Phone and Email in one row (person only, company has them in Contact person section) */}
@@ -2558,6 +2587,36 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                                 )}
                               </div>
                             </>
+                          )}
+                          {/* Linked companies for person parties */}
+                          {stats.linkedCompanies && stats.linkedCompanies.length > 0 && (
+                            <div className="border-t border-gray-200/60 pt-3 mt-1 space-y-2">
+                              <span className="text-sm font-medium text-gray-700 block">Linked companies</span>
+                              {stats.linkedCompanies.map((lc, i) => (
+                                <div key={i} className="px-3 py-2 bg-gray-50 rounded-lg space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-900 truncate">
+                                      {lc.companyName}
+                                    </span>
+                                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                      lc.role === "financial"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : "bg-blue-100 text-blue-700"
+                                    }`}>
+                                      {lc.role === "financial" ? "Financial" : "Administrative"}
+                                    </span>
+                                  </div>
+                                  {lc.role === "financial" && (
+                                    <div className="flex gap-4 text-xs text-gray-500">
+                                      <span>Orders: {lc.ordersCount ?? 0}</span>
+                                      <span className={lc.debt && lc.debt > 0 ? "text-red-600" : ""}>
+                                        Debt: €{(lc.debt ?? 0).toFixed(2)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
                       ) : (

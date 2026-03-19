@@ -466,30 +466,15 @@ export default function OrdersPage() {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [surnameInput, setSurnameInput] = useState(searchState.clientLastName || "");
 
-  useEffect(() => { loadWorldCities(); }, []);
-
-  useEffect(() => {
-    const createdFrom = urlSearchParams.get("createdFrom");
-    const createdTo = urlSearchParams.get("createdTo");
-    const status = urlSearchParams.get("status");
-
-    if (createdFrom || createdTo || status) {
-      const patch: Partial<import("@/lib/stores/ordersSearchStore").OrdersSearchState> = {};
-      if (createdFrom || createdTo) {
-        patch.createdAt = { from: createdFrom || undefined, to: createdTo || undefined };
-        setDateGroupMode("created");
+  const countriesFlagsMap = useMemo(() => {
+    const map = new Map<string, React.ReactNode>();
+    orders.forEach(order => {
+      if (order.countriesCities && !map.has(order.countriesCities)) {
+        map.set(order.countriesCities, formatCountriesWithFlags(order.countriesCities));
       }
-      if (status) {
-        patch.status = status;
-      }
-      ordersSearchStore.applyPatch(patch);
-      // Remove URL params so they don't persist on refresh
-      window.history.replaceState({}, "", "/orders");
-    } else {
-      // Direct navigation without params — reset dashboard-applied filters
-      ordersSearchStore.applyPatch({ createdAt: {}, status: "all" });
-    }
-  }, []);
+    });
+    return map;
+  }, [orders]);
 
   // Fetch orders from API
   const fetchOrders = useCallback(async (page = 1, append = false) => {
@@ -544,14 +529,62 @@ export default function OrdersPage() {
     fetchOrders();
   }, [fetchOrders]);
 
-  // Initialize store and subscribe to search store changes
+  // Single init effect: store → URL params → subscribe → defer world cities
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      ordersSearchStore.init();
+    ordersSearchStore.init();
+
+    const createdFrom = urlSearchParams.get("createdFrom");
+    const createdTo = urlSearchParams.get("createdTo");
+    const urlStatus = urlSearchParams.get("status");
+    if (createdFrom || createdTo || urlStatus) {
+      const patch: Partial<import("@/lib/stores/ordersSearchStore").OrdersSearchState> = {};
+      if (createdFrom || createdTo) {
+        patch.createdAt = { from: createdFrom || undefined, to: createdTo || undefined };
+        setDateGroupMode("created");
+      }
+      if (urlStatus) {
+        patch.status = urlStatus;
+      }
+      ordersSearchStore.applyPatch(patch);
+      window.history.replaceState({}, "", "/orders");
+    } else {
+      ordersSearchStore.applyPatch({ createdAt: {}, status: "all" });
     }
-    const unsubscribe = ordersSearchStore.subscribe((state) => {
-      setSearchState(state);
+
+    setSearchState(ordersSearchStore.getState());
+
+    let prev = ordersSearchStore.getState();
+    const unsubscribe = ordersSearchStore.subscribe((next) => {
+      if (
+        prev.queryText === next.queryText &&
+        prev.agentId === next.agentId &&
+        prev.country === next.country &&
+        prev.status === next.status &&
+        prev.orderType === next.orderType &&
+        prev.delegatedToMe === next.delegatedToMe &&
+        prev.hotelName === next.hotelName &&
+        prev.clientLastName === next.clientLastName &&
+        prev.refNr === next.refNr &&
+        prev.checkIn?.from === next.checkIn?.from &&
+        prev.checkIn?.to === next.checkIn?.to &&
+        prev.return?.from === next.return?.from &&
+        prev.return?.to === next.return?.to &&
+        prev.createdAt?.from === next.createdAt?.from &&
+        prev.createdAt?.to === next.createdAt?.to
+      ) {
+        return;
+      }
+      prev = next;
+      setSearchState({ ...next });
     });
+
+    const ric = (window as any).requestIdleCallback;
+    if (ric) {
+      ric(() => loadWorldCities());
+    } else {
+      setTimeout(() => loadWorldCities(), 100);
+    }
+
     return unsubscribe;
   }, []);
 
@@ -643,21 +676,20 @@ export default function OrdersPage() {
       });
     });
     
-    // Merge: preserve existing state for keys not in tree, add new groups from tree
     setExpandedGroups((prev) => {
-      // Keep existing groups that are not in the current tree (for when filters change)
       const merged: Record<string, boolean> = {};
-      
-      // First, preserve existing state for keys not in current tree
       Object.keys(prev).forEach((key) => {
         if (!(key in allGroupKeys)) {
           merged[key] = prev[key];
         }
       });
-      
-      // Then, add/update groups from current tree
       Object.assign(merged, allGroupKeys);
-      
+
+      const mergedKeys = Object.keys(merged);
+      if (mergedKeys.length === Object.keys(prev).length &&
+          mergedKeys.every(k => merged[k] === prev[k])) {
+        return prev;
+      }
       return merged;
     });
   }, [tree]);
@@ -1191,7 +1223,7 @@ export default function OrdersPage() {
                           ) : <span className="text-gray-400">-</span>}
                         </td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-800">{order.client}</td>
-                        <td className="px-1.5 py-0.5 text-sm text-gray-700 max-w-xs"><div className="truncate">{formatCountriesWithFlags(order.countriesCities)}</div></td>
+                        <td className="px-1.5 py-0.5 text-sm text-gray-700 max-w-xs"><div className="truncate">{countriesFlagsMap.get(order.countriesCities) ?? formatCountriesWithFlags(order.countriesCities)}</div></td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">{formatDate(order.datesFrom)} — {formatDate(order.datesTo)}</td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-800">{formatCurrency(order.amount)}</td>
                         <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01 ? "text-purple-700" : "text-gray-800"}`}>{formatCurrency(order.paid)}</td>
@@ -1383,7 +1415,7 @@ export default function OrdersPage() {
                                       </td>
                                       <td className="px-1.5 py-0.5 text-sm text-gray-700 max-w-xs" title={order.countriesCities}>
                                         <div className="truncate">
-                                          {formatCountriesWithFlags(order.countriesCities)}
+                                          {countriesFlagsMap.get(order.countriesCities) ?? formatCountriesWithFlags(order.countriesCities)}
                                         </div>
                                       </td>
                                       <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">

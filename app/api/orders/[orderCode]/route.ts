@@ -11,29 +11,6 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
 
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!profileError && profileData?.company_id) {
-    return profileData.company_id as string;
-  }
-
-  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (userProfileError || !userProfileData?.company_id) {
-    return null;
-  }
-  return userProfileData.company_id as string;
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ orderCode: string }> }
@@ -45,40 +22,11 @@ export async function GET(
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    // Get authenticated user
-    let user = null;
-    const authHeader = request.headers.get("authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const authClient = createClient(supabaseUrl, supabaseAnonKey);
-      const { data, error } = await authClient.auth.getUser(token);
-      if (!error && data?.user) {
-        user = data.user;
-      }
-    }
-
-    if (!user) {
-      const cookieHeader = request.headers.get("cookie") || "";
-      if (cookieHeader) {
-        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: { persistSession: false },
-          global: { headers: { Cookie: cookieHeader } },
-        });
-        const { data, error } = await authClient.auth.getUser();
-        if (!error && data?.user) {
-          user = data.user;
-        }
-      }
-    }
-
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
-    }
+    const { companyId } = apiUser;
 
     // Fetch order by order_code
     const { data: order, error } = await supabaseAdmin
@@ -241,12 +189,16 @@ export async function GET(
       }
     }
     
-    // Ultimate fallback: use current user's name or email
-    if (!ownerName && user) {
-      const meta = user.user_metadata;
-      ownerName = meta?.full_name || meta?.name || 
-                  [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
-                  user.email?.split("@")[0] || null;
+    // Ultimate fallback: use current user's name from user_profiles
+    if (!ownerName && apiUser) {
+      const { data: currentProfile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", apiUser.userId)
+        .single();
+      if (currentProfile) {
+        ownerName = [currentProfile.first_name, currentProfile.last_name].filter(Boolean).join(" ") || null;
+      }
     }
 
     // If order dates were not set, derive from active services: date_from = first service start, date_to = last service end
@@ -303,40 +255,11 @@ export async function PATCH(
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    // Get authenticated user
-    let user = null;
-    const authHeader = request.headers.get("authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const authClient = createClient(supabaseUrl, supabaseAnonKey);
-      const { data, error } = await authClient.auth.getUser(token);
-      if (!error && data?.user) {
-        user = data.user;
-      }
-    }
-
-    if (!user) {
-      const cookieHeader = request.headers.get("cookie") || "";
-      if (cookieHeader) {
-        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: { persistSession: false },
-          global: { headers: { Cookie: cookieHeader } },
-        });
-        const { data, error } = await authClient.auth.getUser();
-        if (!error && data?.user) {
-          user = data.user;
-        }
-      }
-    }
-
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
-    }
+    const { companyId } = apiUser;
 
     // Build update payload - only allow certain fields
     const allowedFields = [

@@ -15,7 +15,10 @@ const gitCommitSha =
   })();
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["unpdf"],
+  serverExternalPackages: ["unpdf", "@nwpr/airport-codes"],
+  experimental: {
+    optimizePackageImports: ["lucide-react", "recharts"],
+  },
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
     NEXT_PUBLIC_GIT_COMMIT_SHA: gitCommitSha,

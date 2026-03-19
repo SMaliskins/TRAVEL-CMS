@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const offset = (page - 1) * limit;
+    const quick = searchParams.get("quick") === "1";
 
     // Get current user for tenant isolation + role
     const user = await getCurrentUser(request);
@@ -229,7 +230,7 @@ export async function GET(request: NextRequest) {
 
     // Semantic search: 2–3 query variants (normalized + typo corrections), merge results
     let semanticPartyIds: string[] = [];
-    if (search && search.trim().length >= 2 && process.env.OPENAI_API_KEY && userCompanyId) {
+    if (!quick && search && search.trim().length >= 2 && process.env.OPENAI_API_KEY && userCompanyId) {
       try {
         const variants = getSemanticQueryVariants(search, 3).filter(Boolean);
         if (variants.length === 0) variants.push(search.trim());

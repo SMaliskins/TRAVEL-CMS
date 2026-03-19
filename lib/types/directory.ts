@@ -51,6 +51,25 @@ export interface BankAccount {
   swift?: string;
 }
 
+export interface CompanyContact {
+  id: string;
+  contactPartyId: string;
+  role: "financial" | "administrative";
+  isPrimary: boolean;
+  displayName: string;
+  email: string;
+  phone: string;
+}
+
+export interface LinkedCompany {
+  companyPartyId: string;
+  companyName: string;
+  role: "financial" | "administrative";
+  isPrimary: boolean;
+  ordersCount?: number;
+  debt?: number;
+}
+
 export interface DirectoryRecord {
   id: string;
   displayId?: number; // Sequential ID (00001, 00002, ...)

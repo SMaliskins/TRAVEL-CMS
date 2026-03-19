@@ -121,7 +121,8 @@ export async function GET(
             last_name,
             title,
             dob,
-            personal_code
+            personal_code,
+            avatar_url
           )
         )
       `)
@@ -145,7 +146,7 @@ export async function GET(
       })
       .map((t) => {
         const partyRaw = t.party as unknown;
-        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string }[] } | null;
+        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string; avatar_url: string }[] } | null;
         const person = party?.party_person?.[0];
         return {
           id: t.party_id,
@@ -156,6 +157,7 @@ export async function GET(
           personalCode: person?.personal_code || null,
           contactNumber: party?.phone || null,
           isMainClient: t.is_main_client || t.party_id === order.client_party_id,
+          avatarUrl: person?.avatar_url || null,
         };
       });
 

@@ -1,41 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-async function getCurrentUser(request: NextRequest) {
-  let user = null;
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await authClient.auth.getUser(token);
-    if (!error && data?.user) user = data.user;
-  }
-  if (!user) {
-    const cookieHeader = request.headers.get("cookie") || "";
-    if (cookieHeader) {
-      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: { persistSession: false },
-        global: { headers: { Cookie: cookieHeader } },
-      });
-      const { data, error } = await authClient.auth.getUser();
-      if (!error && data?.user) user = data.user;
-    }
-  }
-  return user;
-}
-
-async function getCompanyId(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .single();
-  return data?.company_id || null;
-}
 
 /**
  * GET /api/hotel-contact-overrides?hid=123
@@ -43,15 +8,11 @@ async function getCompanyId(userId: string): Promise<string | null> {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "User has no company" }, { status: 400 });
-    }
+    const { companyId } = apiUser;
 
     const { searchParams } = new URL(request.url);
     const hid = searchParams.get("hid");
@@ -87,15 +48,11 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "User has no company" }, { status: 400 });
-    }
+    const { companyId } = apiUser;
 
     const body = await request.json();
     const { hotelHid, hotelName, email, phone, address } = body;

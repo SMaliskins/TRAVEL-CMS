@@ -5,6 +5,41 @@
 
 ---
 
+## [2026-03-17 15:00] CW — DEDUP: Cleanup existing duplicates + fix find-or-create
+
+**Task:** Remove existing duplicate records & fix hidden duplicate source | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Found **hidden duplicate source**: `find-or-create-travellers` API created party records directly, bypassing all dedup checks. Fixed to match against ALL person records (not just clients), including both name orderings (FirstName LastName / LastName FirstName)
+- Created `app/api/directory/cleanup-duplicates/route.ts` — safe merge endpoint with dry-run mode
+- Ran cleanup: **10 duplicate groups found and merged** (Branopolski family x5, Abajeva x1, Felit UAB x1, plus 3 others with `<>` in names)
+- All FK references (order_travellers, orders, order_services, invoices, company_contacts) properly reassigned before deletion
+
+**Результат:** 5195 unique records, 0 duplicates remaining.
+
+**Next Step:** QA — verify directory list shows no duplicates
+
+---
+
+## [2026-03-17 14:00] CW — DEDUP: Prevent duplicate client records
+
+**Task:** Prevent duplicate directory records | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Strengthened dedup in `/api/directory/create`: now checks email, phone, personal_code, reg_number in addition to display_name
+- Added dedup check to `/api/directory/import`: skips CSV rows matching existing records by name/email/phone
+- Added double-confirmation flow in `PartySelect.tsx` "Create anyway" button (requires two clicks, red warning on second)
+
+**Результат:** Three entry points for duplicate creation are now protected.
+
+**Next Step:** QA — verify dedup works in UI
+
+---
+
 ## [2026-03-16 11:20] CODE WRITER — O7-IMPL: Deposit receipt document
 
 **Task:** O7-IMPL | **Status:** START
@@ -1098,6 +1133,29 @@ const debt = totalSpent - amountPaid;
 **Результат:** Complete superadmin dashboard — single page to monitor and manage all sub-agent companies, subscriptions, payments, usage, and alerts.
 
 **Next Step:** QA
+
+---
+
+## [2026-03-17 21:00] CW — GOGLOBAL: GoGlobal Hotel Integration — Multi-Supplier Architecture
+
+**Task:** GoGlobal Integration | **Status:** SUCCESS
+**Agent:** Code Writer (Runner + Architect + CW)
+**Complexity:** ⚫ Critical
+
+**Действия:**
+- **Phase 7 (DB):** Created migration `add_hotel_providers_integration.sql` — `company_hotel_providers` table + `hotel_offers` provider columns
+- **Phase 1 (Abstraction):** Created `lib/providers/` — types, aggregator, normalizer, deduplicator
+- **Phase 2 (GoGlobal):** Created `lib/goglobal/` — SOAP client, XML builder/parser + provider adapters for RateHawk and GoGlobal
+- **Phase 3 (Pricing):** Created `lib/pricing/smartPrice.ts` — multi-provider Smart Price engine
+- **Phase 4 (API):** Rewrote search route for multi-provider. Created valuate, book, booking-status, GoGlobal debug routes
+- **Phase 5 (UI):** 12 components in `components/hotels/` + redesigned `app/hotels/page.tsx` with split map+list view
+- **Phase 6 (Concierge):** Updated tools, prompt, and chat handler for multi-provider search
+
+**Files:** ~35 files. Zero lint errors.
+
+**Результат:** Full multi-supplier hotel integration architecture.
+
+**Next Step:** `npm install`, apply DB migration, test GoGlobal sandbox, QA
 
 ---
 

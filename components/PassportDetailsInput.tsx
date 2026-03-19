@@ -93,8 +93,12 @@ export default function PassportDetailsInput({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      const { supabase } = await import("@/lib/supabaseClient");
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch("/api/ai/parse-passport", {
         method: "POST",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        credentials: "include",
         body: formData,
       });
       const result = await response.json();

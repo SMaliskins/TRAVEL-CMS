@@ -16,6 +16,7 @@ interface Traveller {
   personalCode?: string;
   contactNumber?: string;
   isMainClient?: boolean;
+  avatarUrl?: string | null;
 }
 
 interface Service {
@@ -79,7 +80,9 @@ export default function AssignedTravellersModal({
   // Add traveller search state
   const [showAddSearch, setShowAddSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; phone?: string; email?: string }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; phone?: string; email?: string; avatarUrl?: string }>>([]);
+  const [selectedSearchIds, setSelectedSearchIds] = useState<Set<string>>(new Set());
+  const [isAddingSelected, setIsAddingSelected] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,7 +145,7 @@ export default function AssignedTravellersModal({
           .filter((item: { roles?: string[] }) => 
             item.roles?.includes("client") || !item.roles?.includes("supplier")
           )
-          .map((item: { id: string; firstName?: string; lastName?: string; companyName?: string; phone?: string; email?: string }) => {
+          .map((item: { id: string; firstName?: string; lastName?: string; companyName?: string; phone?: string; email?: string; avatarUrl?: string }) => {
             // Build display name from firstName + lastName or companyName
             let displayName = "";
             if (item.firstName || item.lastName) {
@@ -155,6 +158,7 @@ export default function AssignedTravellersModal({
               name: displayName || "Unknown",
               phone: item.phone,
               email: item.email,
+              avatarUrl: item.avatarUrl,
             };
           });
         setSearchResults(results);
@@ -435,32 +439,39 @@ export default function AssignedTravellersModal({
   };
 
   const handleAddToPool = () => {
-    // Open search instead of creating fake traveller
     setShowAddSearch(true);
     setSearchQuery("");
     setSearchResults([]);
+    setSelectedSearchIds(new Set());
   };
 
-  const handleSelectFromSearch = async (item: { id: string; name: string }) => {
-    // Check if already in order
-    const alreadyInOrder = orderTravellers.some(t => t.id === item.id);
-    
-    if (!alreadyInOrder) {
-      // Fetch full traveller details from API
+  const handleToggleSearchItem = (itemId: string) => {
+    setSelectedSearchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const handleAddSelectedTravellers = async () => {
+    if (selectedSearchIds.size === 0) return;
+    setIsAddingSelected(true);
+
+    const itemsToAdd = searchResults.filter((r) => selectedSearchIds.has(r.id));
+    const { data: { session } } = await supabase.auth.getSession();
+    let addedCount = 0;
+
+    for (const item of itemsToAdd) {
+      if (orderTravellers.some((t) => t.id === item.id)) continue;
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
         const response = await fetch(`/api/directory/${encodeURIComponent(item.id)}`, {
-          headers: {
-            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-          },
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
           credentials: "include",
         });
-
         if (response.ok) {
           const data = await response.json();
           const record = data.data || data;
-          
           const newTraveller: Traveller = {
             id: item.id,
             firstName: record.firstName || item.name.split(" ")[0] || "",
@@ -469,24 +480,25 @@ export default function AssignedTravellersModal({
             dob: record.dob || undefined,
             personalCode: record.personalCode || undefined,
             contactNumber: record.phone || undefined,
+            avatarUrl: record.avatarUrl || item.avatarUrl || null,
           };
-          
-          setOrderTravellers(prev => [...prev, newTraveller]);
-          
-          // Add to order via API
+          setOrderTravellers((prev) => [...prev, newTraveller]);
           addTravellerToOrder(item.id);
-          
-          setToastMessage(`Added ${item.name} to order`);
+          addedCount++;
         }
       } catch (err) {
         console.error("Fetch traveller details error:", err);
       }
-    } else {
-      setToastMessage(`${item.name} is already in order`);
     }
-    
+
+    if (addedCount > 0) {
+      setToastMessage(`Added ${addedCount} traveller${addedCount > 1 ? "s" : ""} to order`);
+    }
+
     setShowAddSearch(false);
     setSearchQuery("");
+    setSelectedSearchIds(new Set());
+    setIsAddingSelected(false);
   };
 
   const travellerExists = (firstName: string, lastName: string): boolean => {
@@ -781,21 +793,72 @@ export default function AssignedTravellersModal({
                   <p className="mt-2 text-sm text-blue-600">Searching...</p>
                 )}
                 {searchResults.length > 0 && (
-                  <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-blue-200 bg-white">
-                    {searchResults.map((item) => (
+                  <div className="mt-3">
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-blue-200 bg-white">
+                      {searchResults.map((item) => {
+                        const isSelected = selectedSearchIds.has(item.id);
+                        const alreadyInOrder = orderTravellers.some((t) => t.id === item.id);
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => !alreadyInOrder && handleToggleSearchItem(item.id)}
+                            disabled={alreadyInOrder}
+                            className={`w-full px-4 py-3 text-left border-b border-blue-100 last:border-b-0 transition-colors ${
+                              alreadyInOrder
+                                ? "opacity-50 cursor-default bg-gray-50"
+                                : isSelected
+                                ? "bg-blue-100"
+                                : "hover:bg-blue-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`flex h-5 w-5 items-center justify-center rounded border shrink-0 ${
+                                alreadyInOrder
+                                  ? "border-gray-300 bg-gray-200"
+                                  : isSelected
+                                  ? "border-blue-500 bg-blue-500"
+                                  : "border-gray-300 bg-white"
+                              }`}>
+                                {(isSelected || alreadyInOrder) && (
+                                  <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                              {item.avatarUrl ? (
+                                <img src={item.avatarUrl} alt={item.name} className="h-9 w-9 rounded-full object-cover border border-blue-200 shrink-0" />
+                              ) : (
+                                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 shrink-0">
+                                  {(item.name || "?").trim().charAt(0).toUpperCase()}
+                                </span>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-gray-900 text-sm truncate">
+                                  {item.name}
+                                  {alreadyInOrder && <span className="ml-1 text-xs text-gray-400">(in order)</span>}
+                                </div>
+                                {(item.phone || item.email) && (
+                                  <div className="text-gray-500 text-sm mt-0.5 truncate">
+                                    {item.phone} {item.email && `• ${item.email}`}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedSearchIds.size > 0 && (
                       <button
-                        key={item.id}
-                        onClick={() => handleSelectFromSearch(item)}
-                        className="w-full px-4 py-3 text-left hover:bg-blue-100 border-b border-blue-100 last:border-b-0 transition-colors"
+                        onClick={handleAddSelectedTravellers}
+                        disabled={isAddingSelected}
+                        className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
                       >
-                        <div className="font-medium text-gray-900 text-sm">{item.name}</div>
-                        {(item.phone || item.email) && (
-                          <div className="text-gray-500 text-sm mt-0.5">
-                            {item.phone} {item.email && `• ${item.email}`}
-                          </div>
-                        )}
+                        {isAddingSelected
+                          ? "Adding..."
+                          : `Add ${selectedSearchIds.size} traveller${selectedSearchIds.size > 1 ? "s" : ""}`}
                       </button>
-                    ))}
+                    )}
                   </div>
                 )}
                 {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
@@ -855,9 +918,13 @@ export default function AssignedTravellersModal({
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700">
-                            {getTravellerInitials(traveller.id)}
-                          </span>
+                          {traveller.avatarUrl ? (
+                            <img src={traveller.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700 shrink-0">
+                              {getTravellerInitials(traveller.id)}
+                            </span>
+                          )}
                           <span className="text-sm font-medium text-gray-900">
                             {traveller.firstName} {traveller.lastName}
                           </span>
@@ -953,9 +1020,13 @@ export default function AssignedTravellersModal({
                           <tr key={traveller.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
-                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700">
-                                  {getTravellerInitials(traveller.id)}
-                                </span>
+                                {traveller.avatarUrl ? (
+                                  <img src={traveller.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                                ) : (
+                                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700 shrink-0">
+                                    {getTravellerInitials(traveller.id)}
+                                  </span>
+                                )}
                                 <div>
                                   <div className="font-medium text-gray-900">
                                     {traveller.firstName} {traveller.lastName}

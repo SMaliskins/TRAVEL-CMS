@@ -6,9 +6,10 @@ import { DateFormatPattern, setGlobalDateFormat } from "@/utils/dateFormat";
 
 interface CompanySettings {
   dateFormat: DateFormatPattern;
+  logoUrl: string | null;
 }
 
-const DEFAULT: CompanySettings = { dateFormat: "dd.mm.yyyy" };
+const DEFAULT: CompanySettings = { dateFormat: "dd.mm.yyyy", logoUrl: null };
 
 const CompanySettingsContext = createContext<CompanySettings>(DEFAULT);
 
@@ -28,11 +29,15 @@ export function CompanySettingsProvider({ children }: { children: ReactNode }) {
         });
         if (!res.ok) return;
         const json = await res.json();
+        if (cancelled) return;
         const fmt = json.company?.date_format as DateFormatPattern | undefined;
-        if (!cancelled && fmt) {
-          setSettings({ dateFormat: fmt });
-          setGlobalDateFormat(fmt);
-        }
+        const logo = json.company?.logo_url as string | undefined;
+        const next: CompanySettings = {
+          dateFormat: fmt || DEFAULT.dateFormat,
+          logoUrl: logo || null,
+        };
+        setSettings(next);
+        if (fmt) setGlobalDateFormat(fmt);
       } catch {
         // keep defaults
       }
@@ -51,4 +56,8 @@ export function CompanySettingsProvider({ children }: { children: ReactNode }) {
 
 export function useDateFormat(): DateFormatPattern {
   return useContext(CompanySettingsContext).dateFormat;
+}
+
+export function useCompanyLogo(): string | null {
+  return useContext(CompanySettingsContext).logoUrl;
 }

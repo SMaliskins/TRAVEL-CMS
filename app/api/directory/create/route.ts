@@ -1,59 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { DirectoryRecord, DirectoryRole } from "@/lib/types/directory";
-import { createClient } from "@supabase/supabase-js";
+import { DirectoryRecord } from "@/lib/types/directory";
+import { getApiUser } from "@/lib/auth/getApiUser";
 import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
-
-// Get current user from auth header
-async function getCurrentUser(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-  const { data: { user } } = await supabase.auth.getUser(token);
-  return user;
-}
-
-// Resolve company_id: profiles first, then user_profiles (same as cmsAuth — supports travel experts)
-async function getCompanyIdForUser(userId: string): Promise<string | null> {
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (profile?.company_id) return profile.company_id;
-
-  const { data: userProfile } = await supabaseAdmin
-    .from("user_profiles")
-    .select("company_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  return userProfile?.company_id ?? null;
-}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const data = body as Partial<DirectoryRecord>;
 
-    // Get current user
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
       );
     }
+    const { companyId, userId } = apiUser;
 
     // Map camelCase to snake_case for API
     const partyType = data.type === "company" ? "company" : "person";
@@ -100,32 +65,108 @@ export async function POST(request: NextRequest) {
       ? `${firstNameTrimmed} ${lastNameTrimmed}`.trim()
       : companyNameTrimmed;
 
-    // Resolve company_id: profiles first, then user_profiles (supports travel experts and other roles)
-    const companyId = await getCompanyIdForUser(user.id);
-    if (!companyId) {
-      return NextResponse.json(
-        { error: "User profile not found or company_id missing. Please contact administrator." },
-        { status: 403 }
-      );
-    }
-
-    // Dedup check: look for existing record with the same display_name in the company
+    // Robust dedup check: match by name, email, phone, personal_code, reg_number
     const skipDedupCheck = body.skipDedupCheck === true;
     if (!skipDedupCheck) {
-      const { data: existingParties } = await supabaseAdmin
-        .from("party")
-        .select("id, display_name, display_id")
-        .eq("company_id", companyId)
-        .ilike("display_name", displayName)
-        .eq("status", "active")
-        .limit(5);
+      const orFilters: string[] = [];
 
-      if (existingParties && existingParties.length > 0) {
+      // 1. Name match
+      if (displayName) {
+        orFilters.push(`display_name.ilike.${displayName}`);
+      }
+
+      // 2. Email match (strong identifier)
+      const emailVal = (data.email ?? "").toString().trim().toLowerCase();
+      if (emailVal) {
+        orFilters.push(`email.ilike.${emailVal}`);
+      }
+
+      // 3. Phone match (strong identifier)
+      const phoneVal = (data.phone ?? "").toString().trim().replace(/[\s\-()]/g, "");
+      if (phoneVal && phoneVal.length >= 6) {
+        orFilters.push(`phone.ilike.%${phoneVal.slice(-8)}%`);
+      }
+
+      let existingParties: Array<{ id: string; display_name: string; display_id: number | null }> = [];
+
+      if (orFilters.length > 0) {
+        const { data: nameEmailPhoneHits } = await supabaseAdmin
+          .from("party")
+          .select("id, display_name, display_id")
+          .eq("company_id", companyId)
+          .eq("status", "active")
+          .or(orFilters.join(","))
+          .limit(10);
+
+        if (nameEmailPhoneHits && nameEmailPhoneHits.length > 0) {
+          existingParties = nameEmailPhoneHits;
+        }
+      }
+
+      // 4. Person-specific: personal_code match
+      if (existingParties.length === 0 && partyType === "person") {
+        const pc = (data.personalCode ?? "").toString().trim();
+        if (pc && pc.length >= 4) {
+          const { data: pcHits } = await supabaseAdmin
+            .from("party_person")
+            .select("party_id, party:party!inner(id, display_name, display_id, company_id, status)")
+            .eq("personal_code", pc)
+            .eq("party.company_id", companyId)
+            .eq("party.status", "active")
+            .limit(5);
+
+          if (pcHits && pcHits.length > 0) {
+            existingParties = pcHits.map((r: Record<string, unknown>) => {
+              const p = r.party as Record<string, unknown>;
+              return {
+                id: String(p.id),
+                display_name: String(p.display_name || ""),
+                display_id: (p.display_id as number) ?? null,
+              };
+            });
+          }
+        }
+      }
+
+      // 5. Company-specific: reg_number match
+      if (existingParties.length === 0 && partyType === "company") {
+        const rn = (data.regNumber ?? "").toString().trim();
+        if (rn && rn.length >= 3) {
+          const { data: rnHits } = await supabaseAdmin
+            .from("party_company")
+            .select("party_id, party:party!inner(id, display_name, display_id, company_id, status)")
+            .eq("reg_number", rn)
+            .eq("party.company_id", companyId)
+            .eq("party.status", "active")
+            .limit(5);
+
+          if (rnHits && rnHits.length > 0) {
+            existingParties = rnHits.map((r: Record<string, unknown>) => {
+              const p = r.party as Record<string, unknown>;
+              return {
+                id: String(p.id),
+                display_name: String(p.display_name || ""),
+                display_id: (p.display_id as number) ?? null,
+              };
+            });
+          }
+        }
+      }
+
+      if (existingParties.length > 0) {
+        // Deduplicate by id
+        const seen = new Set<string>();
+        const unique = existingParties.filter((p) => {
+          if (seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        });
+
         return NextResponse.json(
           {
             error: "duplicate_found",
-            message: `A contact with the name "${displayName}" already exists (ID: ${String(existingParties[0].display_id || "").padStart(5, "0")}). Use the existing record or confirm creation.`,
-            duplicates: existingParties.map((p) => ({
+            message: `A contact matching "${displayName}" already exists (ID: ${String(unique[0].display_id || "").padStart(5, "0")}). Use the existing record or confirm creation.`,
+            duplicates: unique.map((p) => ({
               id: p.id,
               displayName: p.display_name,
               displayId: p.display_id,
@@ -148,7 +189,7 @@ export async function POST(request: NextRequest) {
       phone: (data.phone && data.phone.trim()) ? normalizePhoneForSave(data.phone.trim()) || null : null,
       email_marketing_consent: false,
       phone_marketing_consent: false,
-      created_by: user.id,
+      created_by: userId,
       // Country
       country: data.country || null,
       // Supplier service areas

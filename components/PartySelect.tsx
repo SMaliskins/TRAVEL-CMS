@@ -310,9 +310,18 @@ export default function PartySelect({
     setCreateServiceAreas([]);
     setCreateError("");
     setDuplicates([]);
+    setForceConfirmed(false);
   };
 
+  const [forceConfirmed, setForceConfirmed] = useState(false);
+
   const handleForceCreate = async () => {
+    // Require double confirmation to prevent accidental duplicates
+    if (!forceConfirmed) {
+      setForceConfirmed(true);
+      return;
+    }
+    setForceConfirmed(false);
     setDuplicates([]);
     setCreateError("");
     setIsCreating(true);
@@ -747,10 +756,27 @@ export default function PartySelect({
                   type="button"
                   onClick={handleForceCreate}
                   disabled={isCreating}
-                  className="flex-1 px-2 py-1 text-xs font-medium text-amber-700 border border-amber-300 rounded hover:bg-amber-100 disabled:opacity-50"
+                  className={`flex-1 px-2 py-1 text-xs font-medium rounded disabled:opacity-50 ${
+                    forceConfirmed
+                      ? "text-red-700 border border-red-400 bg-red-50 hover:bg-red-100"
+                      : "text-amber-700 border border-amber-300 hover:bg-amber-100"
+                  }`}
                 >
-                  {isCreating ? "Creating..." : "Create anyway"}
+                  {isCreating
+                    ? "Creating..."
+                    : forceConfirmed
+                    ? "Confirm: create duplicate"
+                    : "Create anyway"}
                 </button>
+                {forceConfirmed && (
+                  <button
+                    type="button"
+                    onClick={() => setForceConfirmed(false)}
+                    className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -107,6 +107,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const [payerLangs, setPayerLangs] = useState<string[]>(["en"]);
   const [payerPartyId, setPayerPartyId] = useState<string | null>(null);
   const [showAllLangs, setShowAllLangs] = useState(false);
+  const [emailRecipients, setEmailRecipients] = useState<Array<{
+    email: string;
+    label: string;
+    role: "company" | "financial" | "administrative";
+  }>>([]);
   const cancelTrapRef = useFocusTrap<HTMLDivElement>(!!cancelConfirm);
   const editTrapRef = useFocusTrap<HTMLDivElement>(!!editingLinesInvoice);
   const actionsTrapRef = useFocusTrap<HTMLDivElement>(!!openActionsInvoiceId);
@@ -425,14 +430,16 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     const pid = invoice.payer_party_id || null;
     setPayerPartyId(pid);
     setShowAllLangs(false);
+    setEmailRecipients([]);
 
     if (pid) {
       try {
         const session = await (await import("@/lib/supabaseClient")).supabase.auth.getSession();
         const token = session.data.session?.access_token;
-        const res = await fetch(`/api/directory/${pid}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const res = await fetch(`/api/directory/${pid}`, { headers });
         if (res.ok) {
           const data = await res.json();
           const rec = data.record || data;
@@ -444,6 +451,35 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             if (!langs.includes(defaultLang)) langs = [defaultLang, ...langs];
           } else {
             defaultLang = langs[0];
+          }
+
+          if (rec.type === "company" || rec.party_type === "company") {
+            const recipients: typeof emailRecipients = [];
+            if (rec.email) {
+              recipients.push({
+                email: rec.email,
+                label: `${rec.companyName || rec.display_name || "Company"} (company)`,
+                role: "company",
+              });
+            }
+            try {
+              const cRes = await fetch(`/api/directory/${pid}/contacts`, { headers });
+              if (cRes.ok) {
+                const cData = await cRes.json();
+                for (const c of cData.contacts || []) {
+                  if (c.email) {
+                    recipients.push({
+                      email: c.email,
+                      label: `${c.displayName} (${c.role})`,
+                      role: c.role,
+                    });
+                  }
+                }
+              }
+            } catch {
+              // non-critical
+            }
+            setEmailRecipients(recipients);
           }
         }
       } catch {
@@ -1190,6 +1226,28 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                {emailRecipients.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {emailRecipients.map((r, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setEmailModal({ ...emailModal, to: r.email })}
+                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-colors ${
+                          emailModal.to === r.email
+                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            : "border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:bg-blue-50"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          r.role === "financial" ? "bg-emerald-500" :
+                          r.role === "administrative" ? "bg-blue-500" : "bg-gray-400"
+                        }`} />
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="email"
                   value={emailModal.to}

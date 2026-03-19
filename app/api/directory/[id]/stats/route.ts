@@ -197,6 +197,73 @@ export async function GET(
               : "unpaid"
             : "paid";
 
+    // 8. Linked companies (for person parties via company_contacts)
+    let linkedCompanies: Array<{
+      companyPartyId: string;
+      companyName: string;
+      role: string;
+      isPrimary: boolean;
+      ordersCount?: number;
+      debt?: number;
+    }> = [];
+
+    try {
+      const { data: links } = await supabaseAdmin
+        .from("company_contacts")
+        .select(`
+          company_party_id,
+          role,
+          is_primary,
+          company:party!company_party_id (
+            id,
+            display_name
+          )
+        `)
+        .eq("contact_party_id", partyId);
+
+      if (links && links.length > 0) {
+        for (const link of links) {
+          const company = link.company as unknown as Record<string, unknown> | null;
+          const entry: (typeof linkedCompanies)[number] = {
+            companyPartyId: link.company_party_id,
+            companyName: (company?.display_name as string) || "",
+            role: link.role,
+            isPrimary: link.is_primary,
+          };
+
+          if (link.role === "financial") {
+            const { data: compOrders } = await supabaseAdmin
+              .from("order_services")
+              .select("order_id")
+              .eq("payer_party_id", link.company_party_id);
+            const compOrderIds = [...new Set(compOrders?.map((s: Record<string, unknown>) => s.order_id) || [])];
+            entry.ordersCount = compOrderIds.length;
+
+            const { data: compSpent } = await supabaseAdmin
+              .from("order_services")
+              .select("client_price, order_id")
+              .eq("payer_party_id", link.company_party_id)
+              .neq("res_status", "cancelled");
+            const compTotal = (compSpent || []).reduce((s: number, r: Record<string, unknown>) => s + (Number(r.client_price) || 0), 0);
+
+            let compPaid = 0;
+            if (compOrderIds.length > 0) {
+              const { data: paidRows } = await supabaseAdmin
+                .from("orders")
+                .select("amount_paid")
+                .in("id", compOrderIds);
+              compPaid = (paidRows || []).reduce((s: number, o: Record<string, unknown>) => s + (Number(o.amount_paid) || 0), 0);
+            }
+            entry.debt = compTotal - compPaid;
+          }
+
+          linkedCompanies.push(entry);
+        }
+      }
+    } catch (e) {
+      console.error("[Stats API] Linked companies error:", e);
+    }
+
     const stats = {
       ordersCount,
       totalSpent,
@@ -214,9 +281,9 @@ export async function GET(
         due_date: inv.due_date,
         total: Number(inv.total) || 0,
       })),
+      linkedCompanies,
     };
 
-    // Return statistics
     return NextResponse.json(stats);
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
