@@ -26,6 +26,7 @@ function notifIcon(type: string): string {
     case "checkin_reminder": return "⏰";
     case "passport_expiry": return "⚠️";
     case "payment_overdue": return "🔴";
+    case "system_update": return "🚀";
     default: return "🔔";
   }
 }
