@@ -634,7 +634,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
   );
 }
 
-// Compact Payer Select component
+// Live-search Payer Select — searches directory API on keystroke
 function PayerSelect({
   parties,
   value,
@@ -650,15 +650,59 @@ function PayerSelect({
 }) {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [liveResults, setLiveResults] = useState<Party[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const selectedParty = parties.find((p) => p.id === value);
   const resolvedName = selectedParty?.display_name || displayName || "";
   const hasValue = !!(value && resolvedName);
 
-  const filteredParties = parties.filter((p) =>
-    p.display_name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Combine pre-loaded parties with live search results (deduped)
+  const allKnown = useMemo(() => {
+    const map = new Map<string, Party>();
+    parties.forEach(p => map.set(p.id, p));
+    liveResults.forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
+  }, [parties, liveResults]);
+
+  const filteredParties = useMemo(() => {
+    if (!search) return allKnown;
+    const q = search.toLowerCase();
+    return allKnown.filter(p => p.display_name.toLowerCase().includes(q));
+  }, [allKnown, search]);
+
+  // Live search directory API
+  useEffect(() => {
+    if (!search || search.length < 2) {
+      setLiveResults([]);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/directory?search=${encodeURIComponent(search)}&limit=20&quick=1`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          credentials: "include",
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const items: Party[] = (json.data || []).map((r: { id: string; companyName?: string; firstName?: string; lastName?: string; type?: string }) => ({
+            id: r.id,
+            display_name: r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown",
+            party_type: r.type || "person",
+            isFromOrder: false,
+          }));
+          setLiveResults(items);
+        }
+      } catch { /* silent */ }
+      setIsSearching(false);
+    }, 250);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -689,15 +733,21 @@ function PayerSelect({
         }`}
       />
       <div className="absolute inset-y-0 right-0 flex items-center pr-1 pointer-events-none">
-        <svg className="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        {isSearching ? (
+          <div className="h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg className="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </div>
 
       {isOpen && (
         <div className="absolute z-20 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200 max-h-48 overflow-auto">
           {filteredParties.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-gray-500">No results</div>
+            <div className="px-3 py-2 text-sm text-gray-500">
+              {isSearching ? "Searching..." : search.length < 2 ? "Type to search..." : "No results"}
+            </div>
           ) : (
             filteredParties.map((party) => (
               <button
