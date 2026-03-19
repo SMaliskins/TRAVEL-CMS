@@ -16,13 +16,40 @@ export function getGlobalDateFormat(): DateFormatPattern {
   return _globalDateFormat;
 }
 
+/**
+ * Normalize date of birth / passport-style dates to YYYY-MM-DD for storage and SingleDatePicker.
+ * Accepts ISO date, DD.MM.YYYY, DD/MM/YYYY (European). Returns undefined if unparseable.
+ */
+export function normalizePersonDobToIso(dateStr: string | null | undefined): string | undefined {
+  if (dateStr == null) return undefined;
+  const s = String(dateStr).trim();
+  if (!s) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const eu = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+  if (eu) {
+    const [, d, mo, y] = eu;
+    const dN = parseInt(d, 10);
+    const moN = parseInt(mo, 10);
+    if (moN >= 1 && moN <= 12 && dN >= 1 && dN <= 31) {
+      const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      const verify = new Date(iso + "T12:00:00");
+      if (!isNaN(verify.getTime())) return iso;
+    }
+  }
+  const date = parseDateSafe(s);
+  if (date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  return undefined;
+}
+
 function parseDateSafe(dateString: string): Date | null {
   try {
     if (!dateString || dateString.length < 8) return null;
     const hasIsoT = /\d{4}-\d{2}-\d{2}T/.test(dateString) || /^\d{2}:\d{2}/.test(dateString.split("T")[1] || "");
     const date = new Date(dateString + (hasIsoT ? "" : "T00:00:00"));
     if (isNaN(date.getTime())) return null;
-    if (date.getFullYear() < 1970 || date.getFullYear() > 2100) return null;
+    if (date.getFullYear() < 1900 || date.getFullYear() > 2100) return null;
     return date;
   } catch {
     return null;

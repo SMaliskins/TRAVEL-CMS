@@ -3,20 +3,20 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
-/** Parse dd.mm.yyyy or d.m.yyyy to YYYY-MM-DD */
+/** Parse dd.mm.yyyy, dd/mm/yyyy or YYYY-MM-DD to YYYY-MM-DD. Extracts date from input (ignores placeholder residue). */
 function parseDDMMYYYY(s: string): string | null {
   const t = s.trim().replace(/\//g, ".");
-  const parts = t.split(".");
-  if (parts.length !== 3) return null;
-  const [d, m, y] = parts.map((p) => p.trim());
-  if (y.length !== 4 || !/^\d+$/.test(d) || !/^\d+$/.test(m) || !/^\d+$/.test(y)) return null;
-  const dd = d.padStart(2, "0");
-  const mm = m.padStart(2, "0");
-  const yy = y;
-  const iso = `${yy}-${mm}-${dd}`;
-  const date = new Date(iso + "T00:00:00");
-  if (isNaN(date.getTime())) return null;
-  return iso;
+  const match = t.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+  if (match) {
+    const [, d, m, y] = match;
+    const dd = d!.padStart(2, "0");
+    const mm = m!.padStart(2, "0");
+    const iso = `${y}-${mm}-${dd}`;
+    const date = new Date(iso + "T00:00:00");
+    if (!isNaN(date.getTime())) return iso;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  return null;
 }
 
 export type ShortcutPreset = "today" | "tomorrow" | "dayAfter";
@@ -224,7 +224,8 @@ export default function SingleDatePicker({
     ];
   }, [relativeToDate]);
 
-  const displayValue = (value ? formatDateDDMMYYYY(value) : placeholder).replace(/\//g, ".");
+  const formatted = value && value.trim() !== "-" ? formatDateDDMMYYYY(value) : "";
+  const displayValue = (formatted && formatted !== "-" ? formatted : placeholder).replace(/\//g, ".");
   const [inputText, setInputText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
@@ -234,7 +235,7 @@ export default function SingleDatePicker({
 
   const handleInputFocus = () => {
     setIsEditing(true);
-    setInputText(displayValue);
+    setInputText(formatted || "");
   };
   const handleInputBlur = () => {
     const trimmed = inputText.trim();

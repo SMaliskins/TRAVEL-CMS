@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useImperativeHandle } from "react";
+import React, { useState, useEffect, useImperativeHandle, useRef } from "react";
 import {
   DirectoryRecord,
   DirectoryType,
@@ -22,7 +22,7 @@ import CompanyContactsSection from "@/components/CompanyContactsSection";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
-import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { formatDateDDMMYYYY, normalizePersonDobToIso } from "@/utils/dateFormat";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { BANK_LIST } from "@/lib/constants/banks";
 import { Check, X, Plus, PanelLeft, Columns } from "lucide-react";
@@ -243,7 +243,14 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [lastName, setLastName] = useState(record?.lastName || "");
     const [gender, setGender] = useState(record?.gender || "");
     const [personalCode, setPersonalCode] = useState(record?.personalCode || "");
-    const [dob, setDob] = useState(record?.dob || "");
+    const [dob, setDob] = useState(() => {
+      const normalized = normalizePersonDobToIso(record?.dob) ?? "";
+      return normalized === "-" || (typeof normalized === "string" && normalized.trim() === "-") ? "" : normalized;
+    });
+    /** Ref to capture DOB synchronously on change — avoids stale state when Save is clicked right after editing */
+    const dobRef = useRef<string | undefined>(undefined);
+    /** Treat "-" and empty as no DOB for display and submit */
+    const isEmptyDob = (v: string | undefined) => !v || (typeof v === "string" && (v.trim() === "" || v.trim() === "-"));
 
     // Person preferences (seat, meal, notes)
     const [seatPreference, setSeatPreference] = useState<"window" | "aisle" | null>(record?.seatPreference ?? null);
@@ -257,7 +264,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       passportExpiryDate: record?.passportExpiryDate || undefined,
       passportIssuingCountry: record?.passportIssuingCountry || undefined,
       passportFullName: record?.passportFullName || undefined,
-      dob: record?.dob || undefined,
+      dob: normalizePersonDobToIso(record?.dob) ?? undefined,
       nationality: record?.nationality || undefined,
       avatarUrl: record?.avatarUrl || undefined,
       personalCode: record?.personalCode || undefined,
@@ -446,13 +453,17 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         setActualAddress(record.actualAddress || "");
         setCorporateAccounts(record.corporateAccounts || []);
         setLoyaltyCards(record.loyaltyCards || []);
+        let normalizedDob = normalizePersonDobToIso(record.dob) ?? undefined;
+        if (normalizedDob === "-" || (normalizedDob && normalizedDob.trim() === "-")) normalizedDob = undefined;
+        dobRef.current = normalizedDob;
+        setDob(normalizedDob ?? "");
         setPassportData({
           passportNumber: record.passportNumber || undefined,
           passportIssueDate: record.passportIssueDate || undefined,
           passportExpiryDate: record.passportExpiryDate || undefined,
           passportIssuingCountry: record.passportIssuingCountry || undefined,
           passportFullName: record.passportFullName || undefined,
-          dob: record.dob || undefined,
+          dob: normalizedDob,
           nationality: record.nationality || undefined,
           avatarUrl: record.avatarUrl || undefined,
           personalCode: record.personalCode || undefined,
@@ -469,6 +480,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           setSupplierCommissions(record.supplierExtras.commissions || []);
         }
       } else if (mode === "create") {
+        dobRef.current = undefined;
         // Reset passport fields in create mode
         setPassportData({
           passportNumber: undefined,
@@ -753,7 +765,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.lastName = toTitleCase(lastName);
         formData.gender = gender || undefined;
         formData.personalCode = personalCode || undefined;
-        formData.dob = dob || undefined;
+        {
+          const effectiveDob = dobRef.current ?? passportData.dob ?? dob;
+          const rawDob = (effectiveDob && effectiveDob.trim() !== "-" ? effectiveDob : "").trim();
+          formData.dob = rawDob ? normalizePersonDobToIso(rawDob) : undefined;
+        }
         
         // Passport fields
         formData.passportNumber = passportData.passportNumber || undefined;
@@ -767,10 +783,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         formData.seatPreference = seatPreference || undefined;
         formData.mealPreference = mealPreference || undefined;
         formData.preferencesNotes = preferencesNotes.trim() || undefined;
-        // dob is already set above, but update from passport if provided
-        if (passportData.dob) {
-          formData.dob = passportData.dob;
-        }
       } else {
         formData.companyName = companyName.trim();
         formData.companyAvatarUrl = record?.companyAvatarUrl || undefined;
@@ -1120,10 +1132,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     <div className="flex-1 min-w-[120px]">
                       <SingleDatePicker
                         label="Date of birth"
-                        value={dob || undefined}
+                        value={isEmptyDob(dob) ? undefined : (dob || undefined)}
                         onChange={(date) => {
+                          const val = date || undefined;
+                          dobRef.current = val;
                           setDob(date || "");
                           markFieldDirty("dob");
+                          setPassportData((prev) => ({ ...prev, dob: val }));
                         }}
                         placeholder="dd.mm.yyyy"
                       />
@@ -1133,7 +1148,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         Zodiac
                       </label>
                       <div className="min-h-[2.25rem] flex items-center text-sm text-gray-600">
-                        {dob && getZodiacSign(dob) ? getZodiacSign(dob) : "—"}
+                        {!isEmptyDob(dob) && getZodiacSign(dob!) ? getZodiacSign(dob!) : "—"}
                       </div>
                     </div>
                   </div>
@@ -1761,7 +1776,15 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     data={passportData}
                     parsedFields={passportParsedFields}
                     onChange={(data, options) => {
-                      setPassportData(data);
+                      setPassportData((prev) => {
+                        const prevN = normalizePersonDobToIso(prev.dob ?? undefined) ?? "";
+                        const nextN = normalizePersonDobToIso(data.dob ?? undefined) ?? "";
+                        if (prevN !== nextN) markFieldDirty("dob");
+                        return data;
+                      });
+                      const normalizedDob = normalizePersonDobToIso(data.dob ?? undefined) ?? undefined;
+                      dobRef.current = normalizedDob;
+                      setDob(normalizedDob ?? "");
                       if (options?.parsedFields) setPassportParsedFields(options.parsedFields);
                       if (data.avatarUrl !== undefined) onAvatarChange?.(data.avatarUrl);
                       if (data.firstName && data.lastName) {
@@ -1769,10 +1792,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         setLastName(data.lastName);
                         markFieldDirty("firstName");
                         markFieldDirty("lastName");
-                      }
-                      if (data.dob) {
-                        setDob(data.dob);
-                        markFieldDirty("dob");
                       }
                       if (data.personalCode) {
                         setPersonalCode(data.personalCode);

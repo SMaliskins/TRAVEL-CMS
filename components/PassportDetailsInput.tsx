@@ -143,8 +143,8 @@ export default function PassportDetailsInput({
       .toLowerCase()
       .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
 
-  const updateField = (field: keyof PassportData, value: string) => {
-    onChange({ ...data, [field]: value });
+  const updateField = (field: keyof PassportData, value: string | undefined) => {
+    onChange({ ...data, [field]: value } as PassportData);
   };
 
   const isParsed = (field: string) => parsedFields?.has(field) ?? false;
@@ -348,7 +348,7 @@ export default function PassportDetailsInput({
                 <SingleDatePicker
                   label="Date of Birth"
                   value={data.dob}
-                  onChange={(date) => updateField("dob", date || "")}
+                  onChange={(date) => updateField("dob", date)}
                   placeholder="dd.mm.yyyy"
                   parsed={isParsed("dob")}
                 />

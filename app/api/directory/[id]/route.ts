@@ -6,6 +6,7 @@ import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { normalizePersonDobToIso } from "@/utils/dateFormat";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -32,9 +33,24 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   if (row.is_supplier) roles.push("supplier");
   if (row.is_subagent) roles.push("subagent");
 
+  const pt = String(row.party_type ?? "").toLowerCase();
+  const isCompanyParty = pt === "company";
+  const isPersonParty = pt === "person";
+  const hasNonEmptyStr = (v: unknown) => v != null && String(v).trim() !== "";
+  const hasPersonRowData =
+    hasNonEmptyStr(row.first_name) ||
+    hasNonEmptyStr(row.last_name) ||
+    row.dob != null ||
+    hasNonEmptyStr(row.passport_number) ||
+    row.passport_issue_date != null ||
+    row.passport_expiry_date != null ||
+    hasNonEmptyStr(row.personal_code);
+  /** Include party_person fields when type is person, or legacy/null type but person row has data (fixes missing dob in API). */
+  const includePersonProfile = isPersonParty || (!isCompanyParty && hasPersonRowData);
+
   const record: DirectoryRecord = {
     id: row.id,
-    type: row.party_type === "company" ? "company" : "person",
+    type: isCompanyParty ? "company" : "person",
     roles,
     isActive: row.status === "active",
     createdAt: row.created_at,
@@ -42,7 +58,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   };
 
   // Person fields
-  if (row.party_type === "person") {
+  if (includePersonProfile) {
     record.title = row.title || undefined;
     record.firstName = row.first_name || undefined;
     record.lastName = row.last_name || undefined;
@@ -83,7 +99,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   }
 
   // Company fields
-  if (row.party_type === "company") {
+  if (isCompanyParty) {
     record.companyName = row.company_name || row.display_name || undefined;
     record.companyAvatarUrl = row.logo_url || undefined;
     record.regNumber = row.reg_number || undefined;
@@ -101,7 +117,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   record.country = row.country || undefined;
 
   // Company: contact person, languages
-  if (row.party_type === "company") {
+  if (isCompanyParty) {
     record.contactPerson = row.contact_person || undefined;
     if (Array.isArray(row.correspondence_languages)) {
       record.correspondenceLanguages = row.correspondence_languages;
@@ -113,7 +129,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.invoiceLanguage = row.invoice_language || undefined;
   }
   // Person clients: languages (from party_person)
-  if (row.party_type === "person") {
+  if (includePersonProfile) {
     if (Array.isArray(row.correspondence_languages) && row.correspondence_languages.length > 0) {
       record.correspondenceLanguages = row.correspondence_languages;
     } else if (row.correspondence_language) {
@@ -689,7 +705,15 @@ export async function PUT(
         personUpdates.last_name = formatNameForDb(String(updates.lastName));
       }
       if (updates.gender !== undefined) personUpdates.gender = updates.gender || null;
-      if (updates.dob !== undefined) personUpdates.dob = updates.dob;
+      if (updates.dob !== undefined) {
+        const raw = updates.dob;
+        if (raw === null || raw === "") {
+          personUpdates.dob = null;
+        } else {
+          const iso = normalizePersonDobToIso(String(raw));
+          if (iso !== undefined) personUpdates.dob = iso;
+        }
+      }
       if (updates.personalCode !== undefined) personUpdates.personal_code = updates.personalCode;
       if (updates.citizenship !== undefined) personUpdates.citizenship = updates.citizenship;
       // Passport fields - always include if defined
@@ -737,10 +761,10 @@ export async function PUT(
 
         const { error: personError } = await supabaseAdmin
           .from("party_person")
-          .upsert({
-            party_id: id,
-            ...personUpdates,
-          });
+          .upsert(
+            { party_id: id, ...personUpdates },
+            { onConflict: "party_id" }
+          );
 
         // If error is about missing nationality column, retry without it
         if (personError && personError.message?.includes("nationality") && nationalityValue !== undefined) {
@@ -750,10 +774,10 @@ export async function PUT(
           // Retry without nationality
           const { error: retryError } = await supabaseAdmin
             .from("party_person")
-            .upsert({
-              party_id: id,
-              ...personUpdates,
-            });
+            .upsert(
+              { party_id: id, ...personUpdates },
+              { onConflict: "party_id" }
+            );
 
           if (retryError) {
             console.error("Error updating person (retry without nationality):", retryError);
