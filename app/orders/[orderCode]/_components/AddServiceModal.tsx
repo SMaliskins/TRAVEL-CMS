@@ -84,7 +84,7 @@ interface AddServiceModalProps {
   flightServices?: { id: string; name: string; flightSegments: FlightSegment[] }[];
   hotelServices?: { id: string; hotelName?: string; dateFrom?: string; dateTo?: string }[];
   /** Order travellers to suggest first for Client, Payer, Supplier */
-  orderTravellers?: { id: string; firstName?: string; lastName?: string }[];
+  orderTravellers?: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }[];
   /** Default payer from existing services in this order */
   defaultPayerId?: string | null;
   defaultPayerName?: string;
@@ -2617,7 +2617,7 @@ export default function AddServiceModal({
                                 }}
                                 roleFilter="client"
                                 initialDisplayName={displayName}
-                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                               />
                             </div>
                           ) : (
@@ -2658,7 +2658,7 @@ export default function AddServiceModal({
                         onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
                         roleFilter=""
                         initialDisplayName={payerName}
-                        prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                        prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                       />
                     </div>
                   </div>
@@ -2687,7 +2687,7 @@ export default function AddServiceModal({
                           onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
                           roleFilter="supplier"
                           initialDisplayName={supplierName || hotelName}
-                          prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                          prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                         />
                       </div>
                     </div>
@@ -3163,7 +3163,7 @@ export default function AddServiceModal({
               <div className="p-3 space-y-2">
                 <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))} />
+                  <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 </div>
                 <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <div className="flex items-center justify-between mb-0.5">
@@ -3186,7 +3186,7 @@ export default function AddServiceModal({
                                 }}
                                 roleFilter="client"
                                 initialDisplayName={displayName}
-                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                               />
                             </div>
                           ) : (
@@ -3211,7 +3211,7 @@ export default function AddServiceModal({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))} />
+                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 </div>
               </div>
                 )}
@@ -3242,7 +3242,7 @@ export default function AddServiceModal({
                                 }}
                                 roleFilter="client"
                                 initialDisplayName={displayName}
-                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                                prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                               />
                             </div>
                           ) : (
@@ -3300,7 +3300,7 @@ export default function AddServiceModal({
                     onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
                     roleFilter=""
                     initialDisplayName={payerName}
-                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                   />
                 </div>
               </div>
@@ -3324,7 +3324,7 @@ export default function AddServiceModal({
                     }}
                     roleFilter="supplier"
                     initialDisplayName={supplierName}
-                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))}
+                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                   />
                 </div>
                 {supplierName.toUpperCase().includes("BSP") && (
@@ -3488,12 +3488,12 @@ export default function AddServiceModal({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))} />
+                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 </div>
               </div>
               <div className="p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">SUPPLIER</h4>
-                <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName }))} />
+                <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref</label>

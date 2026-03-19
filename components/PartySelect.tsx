@@ -33,7 +33,7 @@ interface PartySelectProps {
   /** Initial display name to show without API fetch */
   initialDisplayName?: string;
   /** Order travellers to suggest first (Client/Payer in service forms) */
-  prioritizedParties?: { id: string; display_name?: string; firstName?: string; lastName?: string }[];
+  prioritizedParties?: { id: string; display_name?: string; firstName?: string; lastName?: string; avatarUrl?: string | null }[];
 }
 
 export default function PartySelect({ 
@@ -90,7 +90,7 @@ export default function PartySelect({
     }
   }, [initialDisplayName, inputValue, wasCleared]);
 
-  // Map prioritized parties to Party format
+  // Map prioritized parties to Party format (including avatarUrl)
   const prioritizedAsParties: Party[] = prioritizedParties.map((p) => {
     const dn = p.display_name || [p.firstName, p.lastName].filter(Boolean).join(" ") || p.id;
     return {
@@ -98,6 +98,7 @@ export default function PartySelect({
       display_name: dn,
       first_name: p.firstName,
       last_name: p.lastName,
+      avatarUrl: p.avatarUrl || null,
     };
   });
 
