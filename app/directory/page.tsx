@@ -550,13 +550,13 @@ export default function DirectoryPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Clients by Nationality</h3>
                 {statsLoading ? (
                   <p className="text-gray-500 italic">Loading...</p>
-                ) : stats?.clientsByNationality && stats.clientsByNationality.length > 0 ? (
+                ) : stats?.clientsByNationality && stats!.clientsByNationality.length > 0 ? (
                   <ClientsByCitizenshipPie
-                    data={stats.clientsByNationality.map(({ country, count }) => ({
+                    data={stats!.clientsByNationality.map(({ country, count }) => ({
                       name: country || "Unknown",
                       value: count,
                     }))}
-                    totalClients={stats?.totals?.clients ?? 0}
+                    totalClients={stats!.totals?.clients ?? 0}
                   />
                 ) : (
                   <p className="text-gray-500 text-sm">No nationality data available</p>
@@ -568,9 +568,9 @@ export default function DirectoryPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Suppliers by Country</h3>
                 {statsLoading ? (
                   <p className="text-gray-500 italic">Loading...</p>
-                ) : stats?.suppliersByCountry && stats.suppliersByCountry.length > 0 ? (
+                ) : stats?.suppliersByCountry && stats!.suppliersByCountry.length > 0 ? (
                   <div className="space-y-4">
-                    {stats.suppliersByCountry.slice(0, 8).map((item) => (
+                    {stats!.suppliersByCountry.slice(0, 8).map((item) => (
                       <div key={item.country} className="flex items-center justify-between py-1 border-b border-black/5 last:border-0">
                         <span className="text-sm font-medium text-gray-600">{item.country || "Unknown"}</span>
                         <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">{item.count}</span>
