@@ -9,6 +9,29 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
 
+function computeTravellerTitle(gender: string | null | undefined, dob: string | null | undefined): string {
+  let ageYears: number | null = null;
+  if (dob) {
+    const birth = new Date(dob);
+    const today = new Date();
+    ageYears = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      ageYears--;
+    }
+  }
+
+  if (ageYears !== null && ageYears < 2) return "Inf";
+  if (ageYears !== null && ageYears < 12) return "Chd";
+
+  const g = (gender || "").toLowerCase();
+  if (g === "female" || g === "f") {
+    if (ageYears !== null && ageYears < 18) return "Ms";
+    return "Mrs";
+  }
+  return "Mr";
+}
+
 async function getUserAndCompany(request: NextRequest): Promise<{ userId: string; companyId: string } | null> {
   let user = null;
   
@@ -122,7 +145,8 @@ export async function GET(
             title,
             dob,
             personal_code,
-            avatar_url
+            avatar_url,
+            gender
           )
         )
       `)
@@ -146,13 +170,17 @@ export async function GET(
       })
       .map((t) => {
         const partyRaw = t.party as unknown;
-        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string; avatar_url: string }[] } | null;
-        const person = party?.party_person?.[0];
+        const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw as { id: string; display_name: string; phone: string; email: string; party_person: { first_name: string; last_name: string; title: string; dob: string; personal_code: string; avatar_url: string; gender: string | null }[] | { first_name: string; last_name: string; title: string; dob: string; personal_code: string; avatar_url: string; gender: string | null } | null } | null;
+        const personRaw = party?.party_person;
+        const person = Array.isArray(personRaw) ? personRaw[0] : personRaw;
+
+        const computedTitle = computeTravellerTitle(person?.gender, person?.dob);
+
         return {
           id: t.party_id,
           firstName: person?.first_name || party?.display_name?.split(" ")[0] || "",
           lastName: person?.last_name || party?.display_name?.split(" ").slice(1).join(" ") || "",
-          title: person?.title || "Mr",
+          title: computedTitle,
           dob: person?.dob || null,
           personalCode: person?.personal_code || null,
           contactNumber: party?.phone || null,

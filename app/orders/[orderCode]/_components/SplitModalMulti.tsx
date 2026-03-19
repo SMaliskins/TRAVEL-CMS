@@ -652,7 +652,7 @@ function PayerSelect({
   const [liveResults, setLiveResults] = useState<Party[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const selectedParty = parties.find((p) => p.id === value);
   const resolvedName = selectedParty?.display_name || displayName || "";

@@ -57,6 +57,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.passportFullName = row.passport_full_name || undefined;
     record.nationality = row.nationality || undefined;
     record.avatarUrl = row.avatar_url || undefined;
+    record.gender = row.gender || undefined;
   }
 
   // Bank accounts (party level)
@@ -367,7 +368,7 @@ export async function GET(request: NextRequest) {
     const [personData, companyData, clientData, supplierData, subagentData] = await Promise.all([
       supabaseAdmin
         .from("party_person")
-        .select("party_id,title,first_name,last_name,dob,personal_code,citizenship,passport_number,passport_issue_date,passport_expiry_date,passport_issuing_country,passport_full_name,nationality,avatar_url")
+        .select("party_id,title,first_name,last_name,dob,personal_code,citizenship,passport_number,passport_issue_date,passport_expiry_date,passport_issuing_country,passport_full_name,nationality,avatar_url,gender")
         .in("party_id", partyIds),
       supabaseAdmin
         .from("party_company")

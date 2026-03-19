@@ -84,6 +84,7 @@ export default function DashboardPage() {
   const [agentTargets, setAgentTargets] = useState<AgentTarget[]>([]);
 
   const tokenRef = useRef<string | null>(null);
+  const [tokenReady, setTokenReady] = useState(false);
 
   // Per-card period overrides
   type CardKey = "orders" | "bookings" | "revenue" | "overdue";
@@ -161,7 +162,7 @@ export default function DashboardPage() {
 
   // Fetch statistics
   useEffect(() => {
-    if (!periodStart || !periodEnd) return;
+    if (!periodStart || !periodEnd || !tokenReady) return;
 
     const fetchStatistics = async () => {
       try {
@@ -187,7 +188,7 @@ export default function DashboardPage() {
     };
 
     fetchStatistics();
-  }, [periodStart, periodEnd]);
+  }, [periodStart, periodEnd, tokenReady]);
 
   // Fetch previous year comparison
   useEffect(() => {
@@ -213,7 +214,7 @@ export default function DashboardPage() {
     };
 
     fetchPreviousYear();
-  }, [periodStart, periodEnd]);
+  }, [periodStart, periodEnd, tokenReady]);
 
   // Fetch chart data (skip for finance role)
   useEffect(() => {
@@ -239,11 +240,11 @@ export default function DashboardPage() {
     };
 
     fetchChart();
-  }, [periodStart, periodEnd, isFinance]);
+  }, [periodStart, periodEnd, isFinance, tokenReady]);
 
   // Fetch real tourist locations (skip for finance role)
   useEffect(() => {
-    if (isFinance) return;
+    if (isFinance || !tokenReady) return;
 
     const fetchLocations = async () => {
       try {
@@ -268,11 +269,11 @@ export default function DashboardPage() {
     };
 
     fetchLocations();
-  }, [isFinance]);
+  }, [isFinance, tokenReady]);
 
   // Fetch calendar events (skip for finance role)
   useEffect(() => {
-    if (isFinance) return;
+    if (isFinance || !tokenReady) return;
 
     const fetchCalendar = async () => {
       try {
@@ -293,7 +294,7 @@ export default function DashboardPage() {
     };
 
     fetchCalendar();
-  }, [isFinance]);
+  }, [isFinance, tokenReady]);
 
   // Fetch agent targets for supervisor/admin (skip for finance)
   useEffect(() => {
@@ -315,7 +316,7 @@ export default function DashboardPage() {
       }
     };
     fetchAgentTargets();
-  }, [showAgentBreakdown, periodStart, periodEnd]);
+  }, [showAgentBreakdown, periodStart, periodEnd, tokenReady]);
 
   // Helper to calculate dates for a card period
   const calcCardDates = (cp: CardPeriodType): { start: string; end: string } => {
@@ -354,6 +355,7 @@ export default function DashboardPage() {
   // Fetch per-card override data when card periods change
   const cardPeriodsKey = JSON.stringify(cardPeriods);
   useEffect(() => {
+    if (!tokenReady) return;
     const fetchOverrides = async () => {
       const token = tokenRef.current;
       if (!token) return;
@@ -387,7 +389,7 @@ export default function DashboardPage() {
     };
     fetchOverrides();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardPeriodsKey]);
+  }, [cardPeriodsKey, tokenReady]);
 
   const getStats = (card: CardKey): DashboardStatistics | null => {
     if (cardPeriods[card] !== "inherit" && cardOverrideData[card]?.stats) return cardOverrideData[card]!.stats;
@@ -417,6 +419,7 @@ export default function DashboardPage() {
       setEmail(data.user.email || null);
       const token = session?.access_token || null;
       tokenRef.current = token;
+      setTokenReady(!!token);
 
       if (token) {
         try {

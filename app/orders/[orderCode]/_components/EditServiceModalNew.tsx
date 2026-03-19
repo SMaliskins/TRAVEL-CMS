@@ -4249,6 +4249,24 @@ export default function EditServiceModalNew({
                         </div>
                       )}
                     </div>
+                    {/* Service Price Net: always shown for tour, highlighted when commission is active */}
+                    {(() => {
+                      const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
+                      const hasComm = comm && comm.rate != null && comm.rate > 0;
+                      const commAmount = hasComm ? getCommissionAmount(commissionableCost) : 0;
+                      const netPrice = Math.round((effectiveServicePrice - commAmount) * 100) / 100;
+                      return (
+                        <div className={`mt-1 rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
+                            <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                          </div>
+                          <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
+                            {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Agent discount</label>

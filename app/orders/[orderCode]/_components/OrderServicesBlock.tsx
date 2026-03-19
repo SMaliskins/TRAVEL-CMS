@@ -58,7 +58,7 @@ interface Traveller {
   id: string;
   firstName: string;
   lastName: string;
-  title: "Mr" | "Mrs" | "Chd";
+  title: string;
   dob?: string;
   personalCode?: string;
   contactNumber?: string;
@@ -2288,8 +2288,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     {isExpanded &&
                       groupServices.map((service) => {
                         const assignedIds = service.assignedTravellerIds;
-                        const visibleIds = assignedIds.slice(0, 3);
-                        const remainingCount = assignedIds.length - 3;
+                        const visibleIds = assignedIds.slice(0, 5);
+                        const remainingCount = assignedIds.length - 5;
 
                         // Calculate split group info
                         let splitInfo = null;
@@ -2423,8 +2423,12 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium text-gray-900">
                               {formatCurrency(service.clientPrice)}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700">
-                              {formatCurrency(service.servicePrice)}
+                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700" title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
+                              {formatCurrency(
+                                service.categoryType === "tour" && service.commissionAmount
+                                  ? Math.round((service.servicePrice - service.commissionAmount) * 100) / 100
+                                  : service.servicePrice
+                              )}
                             </td>
                             <td 
                               className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}

@@ -219,9 +219,21 @@ export async function POST(
     }
 
     // Assign travellers to each new service: use part.travellerIds when provided, else copy all original
-    const originalTravellerIds = (originalTravellers || [])
+    let originalTravellerIds = (originalTravellers || [])
       .map((t) => t.traveller_id)
       .filter(Boolean) as string[];
+
+    // Fallback: if original service had no travellers, use ALL order travellers
+    if (originalTravellerIds.length === 0 && !parts.some((p) => p.travellerIds?.length)) {
+      const { data: orderTravellers } = await supabaseAdmin
+        .from("order_travellers")
+        .select("party_id")
+        .eq("order_id", originalService.order_id);
+      if (orderTravellers && orderTravellers.length > 0) {
+        originalTravellerIds = orderTravellers.map(t => t.party_id).filter(Boolean) as string[];
+      }
+    }
+
     if (createdServices && (originalTravellerIds.length > 0 || parts.some((p) => p.travellerIds?.length))) {
       const travellerInserts: Array<{ company_id: string; service_id: string; traveller_id: string }> = [];
       createdServices.forEach((svc, index) => {
