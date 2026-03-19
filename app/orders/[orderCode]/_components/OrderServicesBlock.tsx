@@ -31,7 +31,7 @@ import { FlightSegment } from "@/components/FlightItineraryInput";
 import { Map as MapIcon, ClipboardList } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
-import { getCityByName, getCityByIATA, searchCities } from "@/lib/data/cities";
+import { getCityByName, getCityByIATA, searchCities, resolveCity } from "@/lib/data/cities";
 import { getCategoryTypeFromName } from "@/lib/invoices/generateInvoiceHTML";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import ItineraryTabs from "./ItineraryTabs";
@@ -1665,12 +1665,37 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     // Sort: first by nights (most time), then by service count (most services)
     const sorted = Array.from(byKey.values()).sort((a, b) => b.nights - a.nights || b.serviceCount - a.serviceCount);
     const withNights = sorted.filter((e) => e.nights > 0);
-    // Prefer cities where they stay; if none (e.g. flight-only), use flight arrivals (where they fly TO)
     const list = withNights.length > 0 ? withNights : sorted;
     const destinations = list.map((e) => e.city);
-    if (destinations.length > 0) {
+    if (destinations.length === 0) return;
+
+    // Find cities missing country — resolve them via Nominatim
+    const unresolved = destinations.filter((d) => !d.country && d.city);
+    if (unresolved.length === 0) {
       onDestinationsFromServices(destinations);
+      return;
     }
+
+    // First emit what we have, then resolve in background
+    onDestinationsFromServices(destinations);
+
+    (async () => {
+      let updated = false;
+      const resolvePromises = unresolved.map(async (dest) => {
+        const resolved = await resolveCity(dest.city);
+        if (resolved) {
+          dest.country = resolved.country;
+          dest.countryCode = resolved.countryCode;
+          dest.lat = dest.lat || resolved.lat;
+          dest.lng = dest.lng || resolved.lng;
+          updated = true;
+        }
+      });
+      await Promise.all(resolvePromises);
+      if (updated) {
+        onDestinationsFromServices([...destinations]);
+      }
+    })();
   }, [services, onDestinationsFromServices]);
 
   // Load categories for "What service?" chooser

@@ -16,7 +16,7 @@ import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
-import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUNTRY_TO_ISO, searchCities } from "@/lib/data/cities";
+import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUNTRY_TO_ISO, searchCities, resolveCity } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";

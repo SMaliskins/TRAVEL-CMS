@@ -2,6 +2,7 @@
 // Flag emojis are generated from ISO 3166-1 alpha-2 country codes
 
 import { getAirportByIata } from "@/lib/airports";
+import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 
 export interface City {
   name: string;
@@ -73,7 +74,7 @@ export async function loadWorldCities(): Promise<void> {
 
   if (customCitiesCache.length === 0) {
     promises.push(
-      fetch("/api/geo/cities-cache")
+      fetchWithAuth("/api/geo/cities-cache")
         .then((res) => (res.ok ? res.json() : { cities: [] }))
         .then((data: { cities: City[] }) => { customCitiesCache = data.cities || []; })
         .catch(() => {})
@@ -529,6 +530,43 @@ export function getCityByName(name: string): City | undefined {
   return getAllCities().find(
     (city) => city.name.toLowerCase() === name.toLowerCase()
   );
+}
+
+/**
+ * Resolve an unknown city via Nominatim API.
+ * Validates it's a real place, caches in custom_cities, and adds to local cache.
+ * Returns null if the name is not a valid city.
+ */
+export async function resolveCity(name: string, countryHint?: string): Promise<City | null> {
+  if (!name || name.length < 2) return null;
+  try {
+    const res = await fetchWithAuth("/api/geo/resolve-city", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, countryHint }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.city) return null;
+    const city: City = {
+      name: data.city.name,
+      country: data.city.country,
+      countryCode: data.city.countryCode,
+      lat: data.city.lat,
+      lng: data.city.lng,
+    };
+    // Add to local cache so subsequent getCityByName calls find it
+    const key = `${normalizeCityNameForKey(city.name)}|${city.countryCode.toUpperCase()}`;
+    const existing = customCitiesCache.find(
+      (c) => `${normalizeCityNameForKey(c.name)}|${c.countryCode.toUpperCase()}` === key
+    );
+    if (!existing) {
+      customCitiesCache.push(city);
+    }
+    return city;
+  } catch {
+    return null;
+  }
 }
 
 // Get all unique countries with flags (uses extended list when loaded)
