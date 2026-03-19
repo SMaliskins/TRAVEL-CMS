@@ -668,9 +668,16 @@ function PayerSelect({
   }, [parties, liveResults]);
 
   const filteredParties = useMemo(() => {
-    if (!search) return allKnown;
-    const q = search.toLowerCase();
-    return allKnown.filter(p => p.display_name.toLowerCase().includes(q));
+    const list = !search
+      ? allKnown
+      : allKnown.filter(p => p.display_name.toLowerCase().includes(search.toLowerCase()));
+    const seen = new Set<string>();
+    return list.filter(p => {
+      const key = p.display_name.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [allKnown, search]);
 
   // Live search directory API
