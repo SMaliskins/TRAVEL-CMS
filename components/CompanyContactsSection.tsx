@@ -91,7 +91,7 @@ export default function CompanyContactsSection({
             };
           })
           .filter((r: PersonSearchResult) => r.id && r.displayName)
-          .sort((a, b) => {
+          .sort((a: PersonSearchResult, b: PersonSearchResult) => {
             const aNorm = normalizeForSearch(a.displayName).replace(/[^a-z0-9]/g, "");
             const bNorm = normalizeForSearch(b.displayName).replace(/[^a-z0-9]/g, "");
             const aStarts = aNorm.startsWith(queryNorm) ? 0 : 1;

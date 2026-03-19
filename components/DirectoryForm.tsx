@@ -1155,10 +1155,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       if (parsed.email) { setEmail(parsed.email); markFieldDirty("email"); }
                       if (parsed.bankName || parsed.iban || parsed.swift) {
                         setBankAccounts((prev) => {
-                          const existing = prev.length > 0 ? [...prev] : [{ bank_name: "", iban: "", swift: "", currency: "EUR" }];
+                          const existing: BankAccount[] = prev.length > 0 ? [...prev] : [{ bankName: "", iban: "", swift: "" }];
                           existing[0] = {
                             ...existing[0],
-                            bank_name: parsed.bankName || existing[0].bank_name || "",
+                            bankName: parsed.bankName || existing[0].bankName || "",
                             iban: parsed.iban || existing[0].iban || "",
                             swift: parsed.swift || existing[0].swift || "",
                           };
