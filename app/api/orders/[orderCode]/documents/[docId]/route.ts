@@ -11,10 +11,9 @@ export async function DELETE(
 ) {
   try {
     const { orderCode, docId } = await params;
-    const user = await getUser(request);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) return NextResponse.json({ error: "Company not found" }, { status: 400 });
+    const apiUser = await getApiUser(request);
+    if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { companyId } = apiUser;
 
     const { data: doc, error: fetchErr } = await supabaseAdmin
       .from("order_documents")

@@ -24,12 +24,11 @@ export async function POST(request: NextRequest) {
     const nights = Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / msPerDay));
 
     const result = await goGlobalClient.searchHotels({
-      cityCode: String(cityCode),
-      arrivalDate: checkIn,
-      nights,
-      rooms: [{ adults: adults || 2, children: [] }],
-      nationality: nationality || "GB",
-      currency: body.currency || "EUR",
+      CityCode: String(cityCode),
+      ArrivalDate: checkIn,
+      Nights: nights,
+      Rooms: [{ Adults: adults || 2, ChildCount: 0 }],
+      Nationality: nationality || "GB",
     });
 
     return NextResponse.json({

@@ -101,7 +101,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: fontSettingsScript }} />
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css" media="print" onLoad="this.media='all'" />
+        <link rel="preload" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css" as="style" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css" media="print" data-async-css />
+        <script dangerouslySetInnerHTML={{ __html: `addEventListener('load',function(){document.querySelectorAll('link[data-async-css]').forEach(function(l){l.media='all'})})` }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${roboto.variable} ${openSans.variable} ${lato.variable} ${nunito.variable} ${poppins.variable} ${sourceSans.variable} antialiased`}

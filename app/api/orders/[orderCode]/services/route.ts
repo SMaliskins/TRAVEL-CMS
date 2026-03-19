@@ -59,15 +59,11 @@ export async function GET(
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    const user = await getCurrentUser(request);
-    if (!user) {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const companyId = await getCompanyId(user.id);
-    if (!companyId) {
-      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
-    }
+    const { companyId } = apiUser;
 
     const orderId = await getOrderId(orderCode, companyId);
     if (!orderId) {
