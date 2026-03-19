@@ -48,6 +48,7 @@ export function countryCodeToFlag(countryCode: string): string {
 
 // Extended cities loaded from /data/world-cities.json (all countries' cities)
 let worldCitiesCache: City[] | null = null;
+let customCitiesCache: City[] = [];
 
 function normalizeCityNameForKey(name: string): string {
   return (name || "")
@@ -57,32 +58,56 @@ function normalizeCityNameForKey(name: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-/** Load extended world cities from public data (call on app mount for full coverage) */
+/** Load extended world cities from public data + custom cities from DB */
 export async function loadWorldCities(): Promise<void> {
-  if (worldCitiesCache) return;
-  try {
-    const res = await fetch("/data/world-cities.json");
-    if (res.ok) {
-      const data = (await res.json()) as City[];
-      worldCitiesCache = data;
-    }
-  } catch {
-    // ignore
+  const promises: Promise<void>[] = [];
+
+  if (!worldCitiesCache) {
+    promises.push(
+      fetch("/data/world-cities.json")
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data: City[]) => { worldCitiesCache = data; })
+        .catch(() => {})
+    );
   }
+
+  if (customCitiesCache.length === 0) {
+    promises.push(
+      fetch("/api/geo/cities-cache")
+        .then((res) => (res.ok ? res.json() : { cities: [] }))
+        .then((data: { cities: City[] }) => { customCitiesCache = data.cities || []; })
+        .catch(() => {})
+    );
+  }
+
+  await Promise.all(promises);
 }
 
 function getAllCities(): City[] {
-  if (!worldCitiesCache) return CITIES;
   const existingKeys = new Set(
     CITIES.map((c) => `${normalizeCityNameForKey(c.name)}|${(c.countryCode || "").toUpperCase()}`)
   );
-  const extended = worldCitiesCache.filter(
-    (w) =>
-      !existingKeys.has(
-        `${normalizeCityNameForKey(w.name)}|${(w.countryCode || "").toUpperCase()}`
-      )
-  );
-  return [...CITIES, ...extended];
+  const result = [...CITIES];
+
+  for (const c of customCitiesCache) {
+    const key = `${normalizeCityNameForKey(c.name)}|${(c.countryCode || "").toUpperCase()}`;
+    if (!existingKeys.has(key)) {
+      existingKeys.add(key);
+      result.push(c);
+    }
+  }
+
+  if (worldCitiesCache) {
+    for (const w of worldCitiesCache) {
+      const key = `${normalizeCityNameForKey(w.name)}|${(w.countryCode || "").toUpperCase()}`;
+      if (!existingKeys.has(key)) {
+        existingKeys.add(key);
+        result.push(w);
+      }
+    }
+  }
+
+  return result;
 }
 
 // Popular travel destinations with coordinates (always available)
