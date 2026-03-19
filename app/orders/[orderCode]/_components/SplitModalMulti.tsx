@@ -310,18 +310,17 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     }));
   };
 
-  const updatePart = (serviceId: string, partIndex: number, field: keyof SplitPart, value: unknown, service: Service) => {
+  const updatePart = (serviceId: string, partIndex: number, field: keyof SplitPart, value: unknown, service: Service, extra?: string) => {
     const config = splitConfigs[serviceId];
     if (!config) return;
 
     const newParts = [...config.parts];
     
     if (field === "payerPartyId") {
-      const party = parties.find(p => p.id === value);
       newParts[partIndex] = {
         ...newParts[partIndex],
         payerPartyId: value as string,
-        payerName: party?.display_name || "",
+        payerName: extra || parties.find(p => p.id === value)?.display_name || "",
       };
     } else if (field === "clientAmount") {
       const newAmount = parseFloat(value as string) || 0;
@@ -510,7 +509,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
                               parties={parties}
                               value={part.payerPartyId || ""}
                               displayName={part.payerName}
-                              onChange={(partyId) => updatePart(service.id, partIdx, "payerPartyId", partyId, service)}
+                              onChange={(partyId, partyName) => updatePart(service.id, partIdx, "payerPartyId", partyId, service, partyName)}
                               placeholder="Select payer..."
                             />
                           </div>
@@ -645,7 +644,7 @@ function PayerSelect({
   parties: Party[];
   value: string;
   displayName?: string;
-  onChange: (partyId: string) => void;
+  onChange: (partyId: string, displayName: string) => void;
   placeholder?: string;
 }) {
   const [search, setSearch] = useState("");
@@ -761,7 +760,7 @@ function PayerSelect({
                 key={party.id}
                 type="button"
                 onClick={() => {
-                  onChange(party.id);
+                  onChange(party.id, party.display_name);
                   setIsOpen(false);
                   setSearch("");
                 }}
