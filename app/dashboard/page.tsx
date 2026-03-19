@@ -12,6 +12,7 @@ import TouristsMap from "@/components/dashboard/TouristsMap";
 import RecentlyCompletedList from "@/components/dashboard/RecentlyCompletedList";
 import CalendarWithDots from "@/components/dashboard/CalendarWithDots";
 import AIWindowPlaceholder from "@/components/dashboard/AIWindowPlaceholder";
+import DashboardNotifications from "@/components/dashboard/DashboardNotifications";
 import FinanceDashboard from "@/components/dashboard/FinanceDashboard";
 import "../hotels-booking/modern-booking.css";
 
@@ -624,6 +625,9 @@ export default function DashboardPage() {
                 <CalendarWithDots events={calendarEvents} />
               </div>
             </div>
+
+            {/* Notifications */}
+            <DashboardNotifications />
 
             {/* Row 3: Chart */}
             <div className="grid gap-4">
