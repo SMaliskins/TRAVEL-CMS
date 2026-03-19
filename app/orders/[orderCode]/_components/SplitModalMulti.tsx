@@ -509,6 +509,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
                             <PayerSelect
                               parties={parties}
                               value={part.payerPartyId || ""}
+                              displayName={part.payerName}
                               onChange={(partyId) => updatePart(service.id, partIdx, "payerPartyId", partyId, service)}
                               placeholder="Select payer..."
                             />
@@ -637,11 +638,13 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
 function PayerSelect({
   parties,
   value,
+  displayName,
   onChange,
   placeholder,
 }: {
   parties: Party[];
   value: string;
+  displayName?: string;
   onChange: (partyId: string) => void;
   placeholder?: string;
 }) {
@@ -650,6 +653,8 @@ function PayerSelect({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const selectedParty = parties.find((p) => p.id === value);
+  const resolvedName = selectedParty?.display_name || displayName || "";
+  const hasValue = !!(value && resolvedName);
 
   const filteredParties = parties.filter((p) =>
     p.display_name.toLowerCase().includes(search.toLowerCase())
@@ -669,7 +674,7 @@ function PayerSelect({
     <div ref={wrapperRef} className="relative">
       <input
         type="text"
-        value={isOpen ? search : selectedParty?.display_name || ""}
+        value={isOpen ? search : resolvedName}
         onChange={(e) => {
           setSearch(e.target.value);
           setIsOpen(true);
@@ -680,7 +685,7 @@ function PayerSelect({
         }}
         placeholder={placeholder}
         className={`w-full px-2 py-1 text-sm border rounded pr-6 ${
-          selectedParty ? 'border-green-300 bg-green-50' : 'border-gray-300'
+          hasValue ? 'border-green-300 bg-green-50' : 'border-gray-300'
         }`}
       />
       <div className="absolute inset-y-0 right-0 flex items-center pr-1 pointer-events-none">
