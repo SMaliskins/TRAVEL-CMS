@@ -16,7 +16,7 @@ import OrderPaymentsList from "./_components/OrderPaymentsList";
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
-import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUNTRY_TO_ISO } from "@/lib/data/cities";
+import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUNTRY_TO_ISO, searchCities } from "@/lib/data/cities";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
@@ -249,11 +249,17 @@ export default function OrderPage({
           if (cityData) {
             parsedCities.push(cityData);
           } else {
-            parsedCities.push({ name: cityPart, country: countryPart });
+            const countryCode = COUNTRY_TO_ISO[countryPart] || undefined;
+            parsedCities.push({ name: cityPart, country: countryPart, countryCode });
           }
         } else {
           const cityData = getCityByName(entry);
-          parsedCities.push(cityData || { name: entry });
+          if (cityData) {
+            parsedCities.push(cityData);
+          } else {
+            const fuzzy = searchCities(entry);
+            parsedCities.push(fuzzy.length > 0 && fuzzy[0].name.toLowerCase() === entry.toLowerCase() ? fuzzy[0] : { name: entry });
+          }
         }
       }
       destinations = parsedCities;
@@ -934,13 +940,22 @@ export default function OrderPage({
                               const cityName = (city as { name?: string }).name || (city as { city?: string }).city || "";
                               if (!cityName) continue;
                               const cityData = getCityByName(cityName);
-                              const countryName = cityData?.country || (city as Record<string, unknown>).country as string || "Unknown";
+                              let countryName = cityData?.country || (city as Record<string, unknown>).country as string || "";
                               let countryCode = (city as { countryCode?: string }).countryCode || cityData?.countryCode;
-                              if (!countryCode && countryName !== "Unknown") {
+                              if (!countryName && !countryCode) {
+                                const fuzzy = searchCities(cityName);
+                                if (fuzzy.length > 0) {
+                                  countryName = fuzzy[0].country;
+                                  countryCode = fuzzy[0].countryCode;
+                                }
+                              }
+                              if (!countryCode && countryName) {
                                 countryCode = COUNTRY_TO_ISO[countryName] || undefined;
                               }
-                              if (!countryCities[countryName]) countryCities[countryName] = { countryCode, cities: [] };
-                              if (!countryCities[countryName].cities.includes(cityName)) countryCities[countryName].cities.push(cityName);
+                              if (!countryName) countryName = countryCode ? (ISO_TO_COUNTRY[countryCode] || countryCode) : "";
+                              const groupKey = countryName || cityName;
+                              if (!countryCities[groupKey]) countryCities[groupKey] = { countryCode, cities: [] };
+                              if (!countryCities[groupKey].cities.includes(cityName)) countryCities[groupKey].cities.push(cityName);
                             }
                             return Object.entries(countryCities).map(([country, data], idx) => (
                               <span key={country} className="flex items-center text-sm font-semibold text-gray-900">

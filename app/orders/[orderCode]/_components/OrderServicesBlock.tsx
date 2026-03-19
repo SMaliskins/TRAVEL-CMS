@@ -31,7 +31,7 @@ import { FlightSegment } from "@/components/FlightItineraryInput";
 import { Map as MapIcon, ClipboardList } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
-import { getCityByName, getCityByIATA } from "@/lib/data/cities";
+import { getCityByName, getCityByIATA, searchCities } from "@/lib/data/cities";
 import { getCategoryTypeFromName } from "@/lib/invoices/generateInvoiceHTML";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import ItineraryTabs from "./ItineraryTabs";
@@ -1546,18 +1546,29 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       return Math.max(0, days);
     };
 
-    const addCity = (candidate: string, nights: number, serviceDelta: number = 1) => {
+    const addCity = (candidate: string, nights: number, serviceDelta: number = 1, fallbackCountry?: string, fallbackCountryCode?: string) => {
       if (!candidate?.trim()) return;
-      const cityData = getCityByName(candidate.trim()) || getCityByIATA(candidate.trim());
-      if (!cityData) return;
-      const key = cityData.name.toLowerCase();
+      const name = candidate.trim();
+      let cityData = getCityByName(name) || getCityByIATA(name);
+      if (!cityData) {
+        const fuzzy = searchCities(name);
+        if (fuzzy.length > 0 && fuzzy[0].name.toLowerCase() === name.toLowerCase()) {
+          cityData = fuzzy[0];
+        }
+      }
+      const cityName = cityData?.name || name;
+      const country = cityData?.country || fallbackCountry || "";
+      const countryCode = cityData?.countryCode || fallbackCountryCode || "";
+      const key = cityName.toLowerCase();
       const existing = byKey.get(key);
       if (existing) {
         existing.nights += nights;
         existing.serviceCount += serviceDelta;
+        if (!existing.city.country && country) existing.city.country = country;
+        if (!existing.city.countryCode && countryCode) existing.city.countryCode = countryCode;
       } else {
         byKey.set(key, {
-          city: { city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng },
+          city: { city: cityName, country, countryCode, lat: cityData?.lat, lng: cityData?.lng },
           nights,
           serviceCount: serviceDelta,
         });
@@ -1573,31 +1584,48 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
       // Hotel/tour: unique cities per service get (nights, +1 service)
       if (categoryType === "hotel" || categoryType === "tour") {
-        const cityDataByKey = new Map<string, { city: CityWithCountry }>();
+        const svcCountry = (service as any).country || (service as any).dest_country || "";
+        const svcCountryCode = (service as any).countryCode || (service as any).dest_country_code || "";
+        const svcCity = (service as any).hotelCity || (service as any).dest_city || "";
         const candidates: string[] = [];
+        if (svcCity) candidates.push(svcCity);
         const hotelAddress = (service as any).hotelAddress as string | undefined;
         const hotelName = (service as any).hotelName as string | undefined;
         if (hotelAddress) candidates.push(...hotelAddress.split(",").map((p: string) => p.trim()));
         if (hotelName) candidates.push(...hotelName.split(",").map((p: string) => p.trim()));
         candidates.push(service.name?.split(",")[0]?.trim() || "");
+        let found = false;
         for (const c of candidates) {
           if (!c) continue;
-          const cityData = getCityByName(c) || getCityByIATA(c);
+          let cityData = getCityByName(c) || getCityByIATA(c);
+          if (!cityData) {
+            const fuzzy = searchCities(c);
+            if (fuzzy.length > 0 && fuzzy[0].name.toLowerCase() === c.toLowerCase()) cityData = fuzzy[0];
+          }
           if (cityData) {
             const key = cityData.name.toLowerCase();
-            if (!cityDataByKey.has(key)) {
-              cityDataByKey.set(key, { city: { city: cityData.name, country: cityData.country || "", countryCode: cityData.countryCode, lat: cityData.lat, lng: cityData.lng } });
+            const existing = byKey.get(key);
+            if (existing) {
+              existing.nights += nights;
+              existing.serviceCount += 1;
+            } else {
+              byKey.set(key, {
+                city: { city: cityData.name, country: cityData.country || svcCountry, countryCode: cityData.countryCode || svcCountryCode, lat: cityData.lat, lng: cityData.lng },
+                nights, serviceCount: 1,
+              });
             }
+            found = true;
+            break;
           }
         }
-        for (const [, { city }] of cityDataByKey) {
-          const key = city.city.toLowerCase();
-          const existing = byKey.get(key);
-          if (existing) {
-            existing.nights += nights;
-            existing.serviceCount += 1;
-          } else {
-            byKey.set(key, { city, nights, serviceCount: 1 });
+        if (!found && candidates.length > 0) {
+          const cityName = candidates[0];
+          const key = cityName.toLowerCase();
+          if (!byKey.has(key)) {
+            byKey.set(key, {
+              city: { city: cityName, country: svcCountry, countryCode: svcCountryCode },
+              nights, serviceCount: 1,
+            });
           }
         }
       }

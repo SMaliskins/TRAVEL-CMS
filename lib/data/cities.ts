@@ -96,14 +96,39 @@ export const CITIES: City[] = [
   { name: "Turin", country: "Italy", countryCode: "IT", lat: 45.0703, lng: 7.6869, iataCode: "TRN" },
   { name: "Bologna", country: "Italy", countryCode: "IT", lat: 44.4949, lng: 11.3426, iataCode: "BLQ" },
   { name: "Palermo", country: "Italy", countryCode: "IT", lat: 38.1157, lng: 13.3615, iataCode: "PMO" },
+  { name: "Amalfi", country: "Italy", countryCode: "IT", lat: 40.6340, lng: 14.6027 },
+  { name: "Positano", country: "Italy", countryCode: "IT", lat: 40.6281, lng: 14.4850 },
+  { name: "Sorrento", country: "Italy", countryCode: "IT", lat: 40.6263, lng: 14.3758 },
+  { name: "Capri", country: "Italy", countryCode: "IT", lat: 40.5507, lng: 14.2222 },
+  { name: "Sardinia", country: "Italy", countryCode: "IT", lat: 39.2238, lng: 9.1217, iataCode: "CAG" },
+  { name: "Catania", country: "Italy", countryCode: "IT", lat: 37.5079, lng: 15.0830, iataCode: "CTA" },
+  { name: "Verona", country: "Italy", countryCode: "IT", lat: 45.4384, lng: 10.9916, iataCode: "VRN" },
+  { name: "Pisa", country: "Italy", countryCode: "IT", lat: 43.7228, lng: 10.4017, iataCode: "PSA" },
+  { name: "Genoa", country: "Italy", countryCode: "IT", lat: 44.4056, lng: 8.9463, iataCode: "GOA" },
+  { name: "Rimini", country: "Italy", countryCode: "IT", lat: 44.0593, lng: 12.5653, iataCode: "RMI" },
+  { name: "Como", country: "Italy", countryCode: "IT", lat: 45.8081, lng: 9.0852 },
+  { name: "Taormina", country: "Italy", countryCode: "IT", lat: 37.8526, lng: 15.2866 },
+  { name: "Siena", country: "Italy", countryCode: "IT", lat: 43.3188, lng: 11.3308 },
+  { name: "Bari", country: "Italy", countryCode: "IT", lat: 41.1171, lng: 16.8719, iataCode: "BRI" },
   
   // France
   { name: "Paris", country: "France", countryCode: "FR", lat: 48.8566, lng: 2.3522, iataCode: "CDG" },
   { name: "Lyon", country: "France", countryCode: "FR", lat: 45.7640, lng: 4.8357, iataCode: "LYS" },
   { name: "Marseille", country: "France", countryCode: "FR", lat: 43.2965, lng: 5.3698, iataCode: "MRS" },
   { name: "Nice", country: "France", countryCode: "FR", lat: 43.7102, lng: 7.2620, iataCode: "NCE" },
+  { name: "Cannes", country: "France", countryCode: "FR", lat: 43.5528, lng: 7.0174 },
+  { name: "Antibes", country: "France", countryCode: "FR", lat: 43.5808, lng: 7.1239 },
+  { name: "Saint-Tropez", country: "France", countryCode: "FR", lat: 43.2727, lng: 6.6406 },
+  { name: "Monaco", country: "Monaco", countryCode: "MC", lat: 43.7384, lng: 7.4246 },
   { name: "Bordeaux", country: "France", countryCode: "FR", lat: 44.8378, lng: -0.5792, iataCode: "BOD" },
   { name: "Toulouse", country: "France", countryCode: "FR", lat: 43.6047, lng: 1.4442, iataCode: "TLS" },
+  { name: "Strasbourg", country: "France", countryCode: "FR", lat: 48.5734, lng: 7.7521, iataCode: "SXB" },
+  { name: "Montpellier", country: "France", countryCode: "FR", lat: 43.6108, lng: 3.8767, iataCode: "MPL" },
+  { name: "Biarritz", country: "France", countryCode: "FR", lat: 43.4832, lng: -1.5586, iataCode: "BIQ" },
+  { name: "Ajaccio", country: "France", countryCode: "FR", lat: 41.9192, lng: 8.7386, iataCode: "AJA" },
+  { name: "Avignon", country: "France", countryCode: "FR", lat: 43.9493, lng: 4.8055 },
+  { name: "Chamonix", country: "France", countryCode: "FR", lat: 45.9237, lng: 6.8694 },
+  { name: "Courchevel", country: "France", countryCode: "FR", lat: 45.4154, lng: 6.6347 },
   
   // Spain
   { name: "Barcelona", country: "Spain", countryCode: "ES", lat: 41.3851, lng: 2.1734, iataCode: "BCN" },
@@ -113,6 +138,15 @@ export const CITIES: City[] = [
   { name: "Malaga", country: "Spain", countryCode: "ES", lat: 36.7213, lng: -4.4214, iataCode: "AGP" },
   { name: "Palma de Mallorca", country: "Spain", countryCode: "ES", lat: 39.5696, lng: 2.6502, iataCode: "PMI" },
   { name: "Ibiza", country: "Spain", countryCode: "ES", lat: 38.9067, lng: 1.4206, iataCode: "IBZ" },
+  { name: "Tenerife", country: "Spain", countryCode: "ES", lat: 28.2916, lng: -16.6291, iataCode: "TFS" },
+  { name: "Gran Canaria", country: "Spain", countryCode: "ES", lat: 27.9202, lng: -15.3876, iataCode: "LPA" },
+  { name: "Lanzarote", country: "Spain", countryCode: "ES", lat: 28.9638, lng: -13.5464, iataCode: "ACE" },
+  { name: "Fuerteventura", country: "Spain", countryCode: "ES", lat: 28.3587, lng: -14.0537, iataCode: "FUE" },
+  { name: "Marbella", country: "Spain", countryCode: "ES", lat: 36.5109, lng: -4.8826 },
+  { name: "San Sebastian", country: "Spain", countryCode: "ES", lat: 43.3183, lng: -1.9812, iataCode: "EAS" },
+  { name: "Alicante", country: "Spain", countryCode: "ES", lat: 38.3452, lng: -0.4810, iataCode: "ALC" },
+  { name: "Bilbao", country: "Spain", countryCode: "ES", lat: 43.2630, lng: -2.9350, iataCode: "BIO" },
+  { name: "Menorca", country: "Spain", countryCode: "ES", lat: 39.9496, lng: 4.1105, iataCode: "MAH" },
   
   // United Kingdom
   { name: "London", country: "United Kingdom", countryCode: "GB", lat: 51.5074, lng: -0.1278, iataCode: "LHR" },
@@ -182,6 +216,17 @@ export const CITIES: City[] = [
   { name: "Kadriye", country: "Turkey", countryCode: "TR", lat: 36.7689, lng: 31.3917 },
   { name: "Bodrum", country: "Turkey", countryCode: "TR", lat: 37.0343, lng: 27.4305, iataCode: "BJV" },
   { name: "Cappadocia", country: "Turkey", countryCode: "TR", lat: 38.6431, lng: 34.8289, iataCode: "NAV" },
+  { name: "Fethiye", country: "Turkey", countryCode: "TR", lat: 36.6515, lng: 29.1225 },
+  { name: "Marmaris", country: "Turkey", countryCode: "TR", lat: 36.8550, lng: 28.2740 },
+  { name: "Kemer", country: "Turkey", countryCode: "TR", lat: 36.5983, lng: 30.5608 },
+  { name: "Alanya", country: "Turkey", countryCode: "TR", lat: 36.5437, lng: 31.9994, iataCode: "GZP" },
+  { name: "Side", country: "Turkey", countryCode: "TR", lat: 36.7666, lng: 31.3891 },
+  { name: "Belek", country: "Turkey", countryCode: "TR", lat: 36.8597, lng: 31.0558 },
+  { name: "Kusadasi", country: "Turkey", countryCode: "TR", lat: 37.8579, lng: 27.2610 },
+  { name: "Dalaman", country: "Turkey", countryCode: "TR", lat: 36.7668, lng: 28.7959, iataCode: "DLM" },
+  { name: "Cesme", country: "Turkey", countryCode: "TR", lat: 38.3236, lng: 26.3030 },
+  { name: "Ankara", country: "Turkey", countryCode: "TR", lat: 39.9334, lng: 32.8597, iataCode: "ESB" },
+  { name: "Izmir", country: "Turkey", countryCode: "TR", lat: 38.4192, lng: 27.1287, iataCode: "ADB" },
   
   // Portugal
   { name: "Lisbon", country: "Portugal", countryCode: "PT", lat: 38.7223, lng: -9.1393, iataCode: "LIS" },
@@ -396,9 +441,6 @@ export const CITIES: City[] = [
   
   // Luxembourg
   { name: "Luxembourg", country: "Luxembourg", countryCode: "LU", lat: 49.6116, lng: 6.1319, iataCode: "LUX" },
-  
-  // Monaco
-  { name: "Monaco", country: "Monaco", countryCode: "MC", lat: 43.7384, lng: 7.4246 },
   
   // Philippines
   { name: "Manila", country: "Philippines", countryCode: "PH", lat: 14.5995, lng: 120.9842, iataCode: "MNL" },
