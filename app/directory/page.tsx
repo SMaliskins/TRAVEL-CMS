@@ -477,8 +477,8 @@ export default function DirectoryPage() {
           </div>
         )}
 
-        {/* Statistics Dashboard (hidden in archive view and for subagent) */}
-        {!showArchiveView && !isSubagent && (
+        {/* Statistics Dashboard — temporarily hidden until data is populated */}
+        {false && !showArchiveView && !isSubagent && (
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
