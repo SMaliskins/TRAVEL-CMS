@@ -66,59 +66,72 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     const fetchParties = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        
-        // Fetch all parties
-        const allPartiesRes = await fetch("/api/party", {
-          headers: {
-            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-          },
+        const authHeaders: Record<string, string> = {
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        };
+
+        // Fetch all parties from directory API (more reliable, supports search)
+        let allParties: Party[] = [];
+        const dirRes = await fetch("/api/directory?limit=500", {
+          headers: authHeaders,
           credentials: "include",
         });
-        
-        let allParties: Party[] = [];
-        if (allPartiesRes.ok) {
-          const data = await allPartiesRes.json();
-          allParties = (data.parties || []).map((p: Party) => ({ ...p, isFromOrder: false }));
+
+        if (dirRes.ok) {
+          const dirData = await dirRes.json();
+          const records = dirData.data || [];
+          allParties = records.map((r: { id: string; displayName?: string; companyName?: string; firstName?: string; lastName?: string; partyType?: string }) => ({
+            id: r.id,
+            display_name: r.displayName || r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown",
+            party_type: r.partyType || "person",
+            isFromOrder: false,
+          }));
+        } else {
+          console.error("[SplitMulti] Directory API failed:", dirRes.status, await dirRes.text().catch(() => ""));
+          // Fallback: try /api/party
+          const partyRes = await fetch("/api/party", { headers: authHeaders, credentials: "include" });
+          if (partyRes.ok) {
+            const data = await partyRes.json();
+            allParties = (data.parties || []).map((p: Party) => ({ ...p, isFromOrder: false }));
+          } else {
+            console.error("[SplitMulti] Party API also failed:", partyRes.status);
+          }
         }
 
-        // Fetch parties from current order
-        const orderRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
-          headers: {
-            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-          },
-          credentials: "include",
-        });
-        
-        let orderPartyIds: string[] = [];
-        if (orderRes.ok) {
-          const orderData = await orderRes.json();
-          const servicesRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, {
-            headers: {
-              ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-            },
+        // Build a minimum set from the services' own payers (always available)
+        const servicePayerMap = new Map<string, string>();
+        for (const svc of services) {
+          if (svc.payerPartyId && svc.payer) {
+            servicePayerMap.set(svc.payerPartyId, svc.payer);
+          }
+        }
+
+        // Ensure service payers are always in the list
+        for (const [id, name] of servicePayerMap) {
+          if (!allParties.some(p => p.id === id)) {
+            allParties.unshift({ id, display_name: name, party_type: "company", isFromOrder: true });
+          }
+        }
+
+        // Mark order parties
+        const orderPartyIds = new Set(servicePayerMap.keys());
+        try {
+          const orderRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+            headers: authHeaders,
             credentials: "include",
           });
-          if (servicesRes.ok) {
-            const servicesData = await servicesRes.json();
-            orderPartyIds = [
-              ...new Set([
-                orderData.order?.client_party_id,
-                ...servicesData.services
-                  .map((s: { payer_party_id?: string }) => s.payer_party_id)
-                  .filter(Boolean),
-              ]),
-            ].filter(Boolean) as string[];
+          if (orderRes.ok) {
+            const orderData = await orderRes.json();
+            if (orderData.order?.client_party_id) {
+              orderPartyIds.add(orderData.order.client_party_id);
+            }
           }
-        }
+        } catch { /* non-critical */ }
 
-        // Mark parties from order
         allParties.forEach((p) => {
-          if (orderPartyIds.includes(p.id)) {
-            p.isFromOrder = true;
-          }
+          if (orderPartyIds.has(p.id)) p.isFromOrder = true;
         });
 
-        // Sort: order parties first
         allParties.sort((a, b) => {
           if (a.isFromOrder && !b.isFromOrder) return -1;
           if (!a.isFromOrder && b.isFromOrder) return 1;
@@ -127,14 +140,22 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
 
         setParties(allParties);
       } catch (err) {
-        console.error("Failed to fetch parties:", err);
+        console.error("[SplitMulti] Failed to fetch parties:", err);
+        // Last resort: build from service data
+        const fallback: Party[] = [];
+        for (const svc of services) {
+          if (svc.payerPartyId && svc.payer && !fallback.some(p => p.id === svc.payerPartyId)) {
+            fallback.push({ id: svc.payerPartyId, display_name: svc.payer, party_type: "company", isFromOrder: true });
+          }
+        }
+        setParties(fallback);
       } finally {
         setIsLoadingParties(false);
       }
     };
 
     fetchParties();
-  }, [orderCode]);
+  }, [orderCode, services]);
 
   // Initialize configs for services — wait for parties to load first
   const configsInitialized = useRef(false);
