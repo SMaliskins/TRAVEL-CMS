@@ -5,6 +5,7 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
+import DirectoryContactPickerRow from "@/components/DirectoryContactPickerRow";
 
 interface DirectoryMergeModalProps {
   isOpen: boolean;
@@ -175,15 +176,13 @@ export default function DirectoryMergeModal({
                 {sourceResults.map((r) => {
                   const isSelected = selectedSource?.id === r.id;
                   return (
-                    <button
+                    <DirectoryContactPickerRow
                       key={r.id}
-                      type="button"
+                      record={r}
+                      isSelected={isSelected}
                       onClick={() => setSelectedSource(isSelected ? null : r)}
-                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 ${isSelected ? "bg-blue-50 text-blue-700" : ""}`}
-                    >
-                      {recordName(r)}
-                      {r.email && <span className="ml-2 text-gray-500">{r.email}</span>}
-                    </button>
+                      className="border-b border-gray-100 last:border-b-0"
+                    />
                   );
                 })}
               </div>
@@ -207,15 +206,13 @@ export default function DirectoryMergeModal({
                 {targetResults.map((r) => {
                   const isSelected = selectedTarget?.id === r.id;
                   return (
-                    <button
+                    <DirectoryContactPickerRow
                       key={r.id}
-                      type="button"
+                      record={r}
+                      isSelected={isSelected}
                       onClick={() => setSelectedTarget(isSelected ? null : r)}
-                      className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 ${isSelected ? "bg-blue-50 text-blue-700" : ""}`}
-                    >
-                      {recordName(r)}
-                      {r.email && <span className="ml-2 text-gray-500">{r.email}</span>}
-                    </button>
+                      className="border-b border-gray-100 last:border-b-0"
+                    />
                   );
                 })}
               </div>

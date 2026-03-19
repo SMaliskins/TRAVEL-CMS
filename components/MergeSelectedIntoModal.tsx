@@ -5,6 +5,7 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
+import DirectoryContactPickerRow from "@/components/DirectoryContactPickerRow";
 
 interface MergeSelectedIntoModalProps {
   isOpen: boolean;
@@ -138,22 +139,15 @@ export default function MergeSelectedIntoModal({
           {searchResults.length > 0 && (
             <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200">
               {searchResults.map((r) => {
-                const name = r.type === "person"
-                  ? `${r.firstName || ""} ${r.lastName || ""}`.trim() || "—"
-                  : r.companyName || "—";
                 const isSelected = selectedTarget?.id === r.id;
                 return (
-                  <button
+                  <DirectoryContactPickerRow
                     key={r.id}
-                    type="button"
+                    record={r}
+                    isSelected={isSelected}
                     onClick={() => setSelectedTarget(isSelected ? null : r)}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 ${
-                      isSelected ? "bg-blue-50 text-blue-700" : ""
-                    }`}
-                  >
-                    {name}
-                    {r.email && <span className="ml-2 text-gray-500">{r.email}</span>}
-                  </button>
+                    className="border-b border-gray-100 last:border-b-0"
+                  />
                 );
               })}
             </div>

@@ -28,6 +28,7 @@ interface Party {
   display_name: string;
   party_type: string;
   isFromOrder?: boolean;
+  avatarUrl?: string | null;
 }
 
 interface SplitPart {
@@ -80,11 +81,12 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
         if (dirRes.ok) {
           const dirData = await dirRes.json();
           const records = dirData.data || [];
-          allParties = records.map((r: { id: string; displayName?: string; companyName?: string; firstName?: string; lastName?: string; partyType?: string }) => ({
+          allParties = records.map((r: { id: string; displayName?: string; companyName?: string; firstName?: string; lastName?: string; partyType?: string; type?: string; avatarUrl?: string; companyAvatarUrl?: string }) => ({
             id: r.id,
             display_name: r.displayName || r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown",
-            party_type: r.partyType || "person",
+            party_type: r.partyType || r.type || "person",
             isFromOrder: false,
+            avatarUrl: r.avatarUrl || r.companyAvatarUrl || null,
           }));
         } else {
           console.error("[SplitMulti] Directory API failed:", dirRes.status, await dirRes.text().catch(() => ""));
@@ -670,11 +672,10 @@ function PayerSelect({
     const list = !search
       ? allKnown
       : allKnown.filter(p => p.display_name.toLowerCase().includes(search.toLowerCase()));
-    const seen = new Set<string>();
-    return list.filter(p => {
-      const key = p.display_name.toLowerCase().trim();
-      if (seen.has(key)) return false;
-      seen.add(key);
+    const seenIds = new Set<string>();
+    return list.filter((p) => {
+      if (seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
       return true;
     });
   }, [allKnown, search]);
@@ -696,11 +697,12 @@ function PayerSelect({
         });
         if (res.ok) {
           const json = await res.json();
-          const items: Party[] = (json.data || []).map((r: { id: string; companyName?: string; firstName?: string; lastName?: string; type?: string }) => ({
+          const items: Party[] = (json.data || []).map((r: { id: string; companyName?: string; firstName?: string; lastName?: string; type?: string; avatarUrl?: string; companyAvatarUrl?: string }) => ({
             id: r.id,
             display_name: r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown",
             party_type: r.type || "person",
             isFromOrder: false,
+            avatarUrl: r.avatarUrl || r.companyAvatarUrl || null,
           }));
           setLiveResults(items);
         }
@@ -755,7 +757,14 @@ function PayerSelect({
               {isSearching ? "Searching..." : search.length < 2 ? "Type to search..." : "No results"}
             </div>
           ) : (
-            filteredParties.map((party) => (
+            filteredParties.map((party) => {
+              const initials = party.display_name
+                .trim()
+                .split(/\s+/)
+                .map((w) => w.charAt(0).toUpperCase())
+                .slice(0, 2)
+                .join("") || "?";
+              return (
               <button
                 key={party.id}
                 type="button"
@@ -764,16 +773,24 @@ function PayerSelect({
                   setIsOpen(false);
                   setSearch("");
                 }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-amber-50 ${
+                className={`flex w-full items-center gap-2 text-left px-3 py-2 text-sm hover:bg-amber-50 ${
                   party.id === value ? "bg-amber-100" : ""
                 } ${party.isFromOrder ? "font-medium" : ""}`}
               >
-                <div className="flex items-center justify-between">
+                {party.avatarUrl ? (
+                  <img src={party.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full border border-gray-200 object-cover" />
+                ) : (
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-medium text-amber-800">
+                    {initials}
+                  </span>
+                )}
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-1">
                   <span className="truncate">{party.display_name}</span>
-                  {party.isFromOrder && <span className="text-xs text-amber-500">★</span>}
+                  {party.isFromOrder && <span className="shrink-0 text-xs text-amber-500">★</span>}
                 </div>
               </button>
-            ))
+            );
+            })
           )}
         </div>
       )}

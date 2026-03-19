@@ -12,6 +12,7 @@ interface OrderTraveller {
   lastName: string;
   title?: string;
   isMainClient?: boolean;
+  avatarUrl?: string | null;
 }
 
 interface AddAccompanyingModalProps {
@@ -32,7 +33,7 @@ export default function AddAccompanyingModal({
   const [loadingOrder, setLoadingOrder] = useState(true);
   const [showAddSearch, setShowAddSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; phone?: string; email?: string }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; phone?: string; email?: string; avatarUrl?: string | null }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,10 +82,11 @@ export default function AddAccompanyingModal({
       });
       const data = await res.json();
       const results = (data.data || data.records || [])
-        .map((item: { id: string; firstName?: string; lastName?: string; first_name?: string; last_name?: string; companyName?: string; company_name?: string; phone?: string; email?: string }) => {
+        .map((item: { id: string; firstName?: string; lastName?: string; first_name?: string; last_name?: string; companyName?: string; company_name?: string; phone?: string; email?: string; avatarUrl?: string; avatar_url?: string; companyAvatarUrl?: string }) => {
           const name = [item.firstName ?? item.first_name, item.lastName ?? item.last_name].filter(Boolean).join(" ") ||
             (item.companyName ?? item.company_name) || "Unknown";
-          return { id: item.id, name, phone: item.phone, email: item.email };
+          const avatarUrl = item.avatarUrl || item.avatar_url || item.companyAvatarUrl || null;
+          return { id: item.id, name, phone: item.phone, email: item.email, avatarUrl };
         });
       setSearchResults(results);
     } catch {
@@ -118,7 +120,7 @@ export default function AddAccompanyingModal({
     onAddClients([{ id: t.id, name: displayName(t) }]);
   };
 
-  const handleAddFromSearch = (item: { id: string; name: string }) => {
+  const handleAddFromSearch = (item: { id: string; name: string; avatarUrl?: string | null }) => {
     if (existingSet.has(item.id)) return;
     onAddClients([{ id: item.id, name: item.name }]);
     setShowAddSearch(false);
@@ -164,9 +166,23 @@ export default function AddAccompanyingModal({
                 {travellersNotYetAdded.map((t) => (
                   <li
                     key={t.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3"
                   >
-                    <span className="text-sm font-medium text-gray-900">{displayName(t)}</span>
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                      {t.avatarUrl ? (
+                        <img src={t.avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover" />
+                      ) : (
+                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700">
+                          {displayName(t)
+                            .trim()
+                            .split(/\s+/)
+                            .map((w) => w.charAt(0).toUpperCase())
+                            .slice(0, 2)
+                            .join("") || "?"}
+                        </span>
+                      )}
+                      <span className="truncate text-sm font-medium text-gray-900">{displayName(t)}</span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleAddFromOrder(t)}
@@ -222,21 +238,36 @@ export default function AddAccompanyingModal({
                   <ul className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-blue-200 bg-white">
                     {searchResults.map((item) => {
                       const alreadyAdded = existingSet.has(item.id);
+                      const initials = item.name
+                        .trim()
+                        .split(/\s+/)
+                        .map((w) => w.charAt(0).toUpperCase())
+                        .slice(0, 2)
+                        .join("") || "?";
                       return (
                         <li key={item.id}>
                           <button
                             type="button"
                             onClick={() => !alreadyAdded && handleAddFromSearch(item)}
                             disabled={alreadyAdded}
-                            className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 disabled:opacity-50 disabled:cursor-default"
+                            className="flex w-full items-center gap-2.5 px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 disabled:opacity-50 disabled:cursor-default"
                           >
-                            <div className="font-medium text-gray-900 text-sm">{item.name}</div>
-                            {(item.phone || item.email) && (
-                              <div className="text-gray-500 text-xs mt-0.5">
-                                {item.phone} {item.email && `• ${item.email}`}
-                              </div>
+                            {item.avatarUrl ? (
+                              <img src={item.avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover" />
+                            ) : (
+                              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700">
+                                {initials}
+                              </span>
                             )}
-                            {alreadyAdded && <span className="text-xs text-gray-400">already added</span>}
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-gray-900 text-sm truncate">{item.name}</div>
+                              {(item.phone || item.email) && (
+                                <div className="text-gray-500 text-xs mt-0.5 truncate">
+                                  {item.phone} {item.email && `• ${item.email}`}
+                                </div>
+                              )}
+                              {alreadyAdded && <span className="text-xs text-gray-400">already added</span>}
+                            </div>
                           </button>
                         </li>
                       );

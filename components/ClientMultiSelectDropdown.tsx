@@ -11,6 +11,7 @@ interface Party {
   name?: string;
   first_name?: string;
   last_name?: string;
+  avatarUrl?: string | null;
 }
 
 interface ClientEntry {
@@ -24,7 +25,7 @@ interface ClientMultiSelectDropdownProps {
   placeholder?: string;
   className?: string;
   /** Order travellers to suggest first */
-  orderTravellers?: { id: string; firstName?: string; lastName?: string }[];
+  orderTravellers?: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }[];
 }
 
 export default function ClientMultiSelectDropdown({
@@ -56,6 +57,7 @@ export default function ClientMultiSelectDropdown({
       display_name: dn,
       first_name: t.firstName,
       last_name: t.lastName,
+      avatarUrl: t.avatarUrl ?? null,
     };
   });
 
@@ -92,6 +94,7 @@ export default function ClientMultiSelectDropdown({
             (r.companyName as string) || (r.company_name as string) || "",
           first_name: (r.firstName as string) || (r.first_name as string),
           last_name: (r.lastName as string) || (r.last_name as string),
+          avatarUrl: (r.avatarUrl as string) || (r.avatar_url as string) || (r.companyAvatarUrl as string) || (r.company_avatar_url as string) || null,
         }));
         const apiIds = new Set(apiParties.map((p) => p.id));
         const deduped = matchingTravellers.filter((p) => !apiIds.has(p.id));
@@ -243,6 +246,12 @@ export default function ClientMultiSelectDropdown({
                   [party.first_name, party.last_name].filter(Boolean).join(" ");
                 const isChecked = checkedIds.has(party.id);
                 const alreadyAdded = existingClientIds.includes(party.id);
+                const initials = (displayName || party.id)
+                  .trim()
+                  .split(/\s+/)
+                  .map((w: string) => w.charAt(0).toUpperCase())
+                  .slice(0, 2)
+                  .join("") || "?";
                 return (
                   <label
                     key={party.id}
@@ -255,9 +264,16 @@ export default function ClientMultiSelectDropdown({
                       checked={isChecked}
                       onChange={() => !alreadyAdded && toggleCheck(party)}
                       disabled={alreadyAdded}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
                     />
-                    <span className="flex-1 truncate">{displayName || party.id}</span>
+                    {party.avatarUrl ? (
+                      <img src={party.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full border border-gray-200 object-cover" />
+                    ) : (
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-medium text-blue-700">
+                        {initials}
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{displayName || party.id}</span>
                     {alreadyAdded && (
                       <span className="text-xs text-gray-400">added</span>
                     )}
