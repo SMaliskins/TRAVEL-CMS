@@ -21,6 +21,7 @@ interface Party {
   first_name?: string;
   last_name?: string;
   party_type?: string;
+  avatarUrl?: string | null;
 }
 
 interface PartySelectProps {
@@ -141,6 +142,7 @@ export default function PartySelect({
           first_name: (r.firstName as string) || (r.first_name as string),
           last_name: (r.lastName as string) || (r.last_name as string),
           party_type: (r.type as string) || (r.party_type as string),
+          avatarUrl: (r.avatarUrl as string) || (r.avatar_url as string) || null,
         }));
         const apiIds = new Set(apiParties.map((p) => p.id));
         const dedupedPrioritized = matchingPrioritized.filter((p) => !apiIds.has(p.id));
@@ -565,19 +567,30 @@ export default function PartySelect({
             <div className="px-3 py-2 text-sm text-gray-500">No results found</div>
           )}
 
-          {parties.map((party) => (
-            <button
-              key={party.id}
-              type="button"
-              onClick={() => handleSelect(party)}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center justify-between"
-            >
-              <span>{party.display_name || party.name || [party.first_name, party.last_name].filter(Boolean).join(" ")}</span>
-              {party.party_type && (
-                <span className="text-xs text-gray-400">{party.party_type}</span>
-              )}
-            </button>
-          ))}
+          {parties.map((party) => {
+            const displayName = party.display_name || party.name || [party.first_name, party.last_name].filter(Boolean).join(" ");
+            const initials = displayName.trim().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase()).slice(0, 2).join("");
+            return (
+              <button
+                key={party.id}
+                type="button"
+                onClick={() => handleSelect(party)}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2.5"
+              >
+                {party.avatarUrl ? (
+                  <img src={party.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 border border-gray-200" />
+                ) : (
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700 shrink-0">
+                    {initials || "?"}
+                  </span>
+                )}
+                <span className="flex-1 min-w-0 truncate">{displayName}</span>
+                {party.party_type && (
+                  <span className="text-xs text-gray-400 shrink-0">{party.party_type}</span>
+                )}
+              </button>
+            );
+          })}
 
           {showCreateOption && !isLoading && (
             <button
