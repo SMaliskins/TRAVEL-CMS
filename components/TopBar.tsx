@@ -385,7 +385,7 @@ export default function TopBar() {
                           {!n.read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />}
                         </button>
                       );
-                    }))
+                    })
                   )}
                 </div>
               </div>
