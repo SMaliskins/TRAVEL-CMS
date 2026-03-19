@@ -62,6 +62,7 @@ interface Traveller {
   dob?: string;
   personalCode?: string;
   contactNumber?: string;
+  avatarUrl?: string | null;
 }
 
 // Functional types that determine which features are available
@@ -2445,23 +2446,27 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               <div className="flex items-center gap-1">
                                 <div className="flex items-center gap-0.5">
-                                  {visibleIds.map((travellerId) => (
-                                    <div
-                                      key={travellerId}
-                                      className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-800"
-                                      title={
-                                        orderTravellers.find(
-                                          (t) => t.id === travellerId
-                                        )?.firstName +
-                                        " " +
-                                        orderTravellers.find(
-                                          (t) => t.id === travellerId
-                                        )?.lastName
-                                      }
-                                    >
-                                      {getTravellerInitials(travellerId)}
-                                    </div>
-                                  ))}
+                                  {visibleIds.map((travellerId) => {
+                                    const trav = orderTravellers.find((t) => t.id === travellerId);
+                                    const fullName = trav ? `${trav.firstName} ${trav.lastName}` : "";
+                                    return trav?.avatarUrl ? (
+                                      <img
+                                        key={travellerId}
+                                        src={trav.avatarUrl}
+                                        alt={fullName}
+                                        title={fullName}
+                                        className="h-5 w-5 rounded-full object-cover border border-blue-200"
+                                      />
+                                    ) : (
+                                      <div
+                                        key={travellerId}
+                                        className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-800"
+                                        title={fullName}
+                                      >
+                                        {getTravellerInitials(travellerId)}
+                                      </div>
+                                    );
+                                  })}
                                   {remainingCount > 0 && (
                                     <span className="text-sm text-gray-500">
                                       +{remainingCount}

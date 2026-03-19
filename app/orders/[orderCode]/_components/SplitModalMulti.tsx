@@ -136,40 +136,43 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     fetchParties();
   }, [orderCode]);
 
-  // Initialize configs for services
+  // Initialize configs for services — wait for parties to load first
+  const configsInitialized = useRef(false);
   useEffect(() => {
+    if (isLoadingParties) return;
+    if (configsInitialized.current) return;
+
     const initialConfigs: Record<string, ServiceSplitConfig> = {};
     services.forEach(service => {
-      if (!splitConfigs[service.id]) {
-        const originalPayer = parties.find(p => p.id === service.payerPartyId);
-        const travellerIds = service.assignedTravellerIds || [];
-        const t0 = travellerIds.slice(0, Math.ceil(travellerIds.length / 2));
-        const t1 = travellerIds.slice(Math.ceil(travellerIds.length / 2));
-        initialConfigs[service.id] = {
-          numParts: 2,
-          parts: [
-            {
-              clientAmount: service.clientPrice / 2,
-              serviceAmount: service.servicePrice / 2,
-              payerName: originalPayer?.display_name || service.payer || "",
-              payerPartyId: service.payerPartyId,
-              travellerIds: t0,
-            },
-            {
-              clientAmount: service.clientPrice / 2,
-              serviceAmount: service.servicePrice / 2,
-              payerName: "",
-              payerPartyId: undefined,
-              travellerIds: t1,
-            },
-          ],
-        };
-      }
+      const originalPayer = parties.find(p => p.id === service.payerPartyId);
+      const travellerIds = service.assignedTravellerIds || [];
+      const t0 = travellerIds.slice(0, Math.ceil(travellerIds.length / 2));
+      const t1 = travellerIds.slice(Math.ceil(travellerIds.length / 2));
+      initialConfigs[service.id] = {
+        numParts: 2,
+        parts: [
+          {
+            clientAmount: service.clientPrice / 2,
+            serviceAmount: service.servicePrice / 2,
+            payerName: originalPayer?.display_name || service.payer || "",
+            payerPartyId: service.payerPartyId,
+            travellerIds: t0,
+          },
+          {
+            clientAmount: service.clientPrice / 2,
+            serviceAmount: service.servicePrice / 2,
+            payerName: "",
+            payerPartyId: undefined,
+            travellerIds: t1,
+          },
+        ],
+      };
     });
     if (Object.keys(initialConfigs).length > 0) {
-      setSplitConfigs(prev => ({ ...prev, ...initialConfigs }));
+      setSplitConfigs(initialConfigs);
+      configsInitialized.current = true;
     }
-  }, [services, parties, splitConfigs]);
+  }, [services, parties, isLoadingParties]);
 
   const getCategoryIcon = (category: string) => {
     const icons: Record<string, string> = {
