@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { Bell, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { Bell, ExternalLink } from "lucide-react";
 
 interface Notification {
   id: string;
@@ -57,7 +57,6 @@ export default function DashboardNotifications() {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -65,7 +64,7 @@ export default function DashboardNotifications() {
       const headers: Record<string, string> = {};
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
 
-      const res = await fetch("/api/notifications/staff?limit=20", { headers, credentials: "include" });
+      const res = await fetch("/api/notifications/staff?limit=5", { headers, credentials: "include" });
       if (!res.ok) return;
       const data = await res.json();
       setNotifications(data.notifications || []);
@@ -80,77 +79,52 @@ export default function DashboardNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  const scroll = (dir: "left" | "right") => {
-    if (!scrollRef.current) return;
-    const amount = 320;
-    scrollRef.current.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
-  };
-
   if (isLoading || notifications.length === 0) return null;
 
   const headerLabel = { en: "Notifications", ru: "Уведомления", lv: "Paziņojumi" };
   const viewAllLabel = { en: "View all", ru: "Все", lv: "Visi" };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Bell size={16} className="text-gray-500" />
-          <h3 className="text-sm font-semibold text-gray-700">{headerLabel[lang as keyof typeof headerLabel] || headerLabel.en}</h3>
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Bell size={14} className="text-gray-400" />
+          <h3 className="text-xs font-semibold text-gray-600">{headerLabel[lang as keyof typeof headerLabel] || headerLabel.en}</h3>
           {notifications.some((n) => !n.read) && (
-            <span className="h-2 w-2 rounded-full bg-blue-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => scroll("left")}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <button
-            onClick={() => scroll("right")}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            onClick={() => router.push("/notifications")}
-            className="ml-1 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-          >
-            {viewAllLabel[lang as keyof typeof viewAllLabel] || viewAllLabel.en}
-            <ExternalLink size={12} />
-          </button>
-        </div>
+        <button
+          onClick={() => router.push("/notifications")}
+          className="flex items-center gap-0.5 text-[10px] font-medium text-blue-600 hover:text-blue-800 transition-colors"
+        >
+          {viewAllLabel[lang as keyof typeof viewAllLabel] || viewAllLabel.en}
+          <ExternalLink size={10} />
+        </button>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="flex gap-3 overflow-x-auto scrollbar-hide pb-1"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {notifications.map((n) => (
+      <div className="space-y-1">
+        {notifications.slice(0, 5).map((n) => (
           <button
             key={n.id}
-            onClick={() => router.push("/notifications")}
-            className={`shrink-0 w-[280px] rounded-lg border p-3 text-left transition-all hover:shadow-md ${
+            onClick={() => router.push(n.link || "/notifications")}
+            className={`w-full rounded-lg px-2 py-1.5 text-left transition-colors ${
               n.read
-                ? "border-gray-200 bg-gray-50 hover:border-gray-300"
-                : "border-blue-200 bg-blue-50/50 hover:border-blue-300"
+                ? "hover:bg-gray-50"
+                : "bg-blue-50/50 hover:bg-blue-50"
             }`}
           >
-            <div className="flex items-start gap-2">
-              <span className="text-base shrink-0">{notifIcon(n.type)}</span>
+            <div className="flex items-start gap-1.5">
+              <span className="text-xs shrink-0 leading-none mt-0.5">{notifIcon(n.type)}</span>
               <div className="min-w-0 flex-1">
-                <p className={`text-sm leading-tight truncate ${n.read ? "text-gray-700" : "font-semibold text-gray-900"}`}>
+                <p className={`text-[11px] leading-tight truncate ${n.read ? "text-gray-600" : "font-semibold text-gray-900"}`}>
                   {localizedText(n.title, lang)}
                 </p>
-                <p className="mt-1 text-xs text-gray-500 line-clamp-2">
+                <p className="text-[10px] text-gray-400 truncate">
                   {localizedText(n.message, lang)}
                 </p>
-                <p className="mt-1.5 text-[10px] text-gray-400">{timeAgo(n.created_at, lang)}</p>
               </div>
-              {!n.read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+              {!n.read && <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />}
             </div>
           </button>
         ))}

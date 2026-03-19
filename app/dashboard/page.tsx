@@ -616,18 +616,16 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            {/* Row 2: Map and Calendar */}
+            {/* Row 2: Map and Calendar + Notifications */}
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <TouristsMap locations={touristLocations} />
               </div>
-              <div>
+              <div className="flex flex-col gap-4">
                 <CalendarWithDots events={calendarEvents} />
+                <DashboardNotifications />
               </div>
             </div>
-
-            {/* Notifications */}
-            <DashboardNotifications />
 
             {/* Row 3: Chart */}
             <div className="grid gap-4">
