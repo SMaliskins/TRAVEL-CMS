@@ -1,0 +1,68 @@
+{
+  "version": "2026-03-19",
+  "items": [
+    {
+      "type": "feature",
+      "text": {
+        "en": "Traveller avatars now display correctly",
+        "ru": "Аватары клиентов теперь отображаются корректно",
+        "lv": "Ceļotāju avatāri tagad tiek attēloti pareizi"
+      },
+      "image": "/release-notes/2026-03-19/travellers-avatars-titles.png"
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Titles auto-calculated by gender and age (Mr/Mrs/Ms/Chd/Inf)",
+        "ru": "Обращения (Title) определяются автоматически по полу и возрасту (Mr/Mrs/Ms/Chd/Inf)",
+        "lv": "Uzruna tiek noteikta automātiski pēc dzimuma un vecuma (Mr/Mrs/Ms/Chd/Inf)"
+      },
+      "image": "/release-notes/2026-03-19/travellers-avatars-titles.png"
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Service Price Net for Package Tours — operator cost always visible",
+        "ru": "Себестоимость услуги (Service Price Net) для пакетных туров — сумма к оплате оператору всегда видна",
+        "lv": "Pakalpojuma neto cena tūrēm — operatora izmaksas vienmēr redzamas"
+      },
+      "image": null
+    },
+    {
+      "type": "fix",
+      "text": {
+        "en": "Dashboard loading fixed",
+        "ru": "Исправлена загрузка Dashboard",
+        "lv": "Dashboard ielāde izlabota"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Travellers modal redesigned — horizontal layout",
+        "ru": "Модальное окно Travellers переработано — горизонтальная раскладка",
+        "lv": "Ceļotāju logs pārveidots — horizontāls izkārtojums"
+      },
+      "image": "/release-notes/2026-03-19/travellers-avatars-titles.png"
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Up to 5 traveller avatars shown in services list",
+        "ru": "До 5 аватаров клиентов в списке услуг",
+        "lv": "Līdz 5 ceļotāju avatāriem pakalpojumu sarakstā"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "System notifications with release notes",
+        "ru": "Системные уведомления с описанием изменений",
+        "lv": "Sistēmas paziņojumi ar izmaiņu aprakstu"
+      },
+      "image": "/release-notes/2026-03-19/notification-detail.png"
+    }
+  ]
+}

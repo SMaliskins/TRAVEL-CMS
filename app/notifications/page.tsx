@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { Bell, Rocket, Plane, AlertTriangle, CreditCard, CheckCircle2, Filter } from "lucide-react";
+import { Bell, Rocket, Plane, AlertTriangle, CreditCard, CheckCircle2, Filter, ChevronDown, ChevronUp, Sparkles, Wrench, X, ArrowLeft, ArrowRight, Image as ImageIcon } from "lucide-react";
 
 interface Notification {
   id: string;
@@ -11,6 +11,7 @@ interface Notification {
   title: string;
   message: string;
   link: string | null;
+  ref_id: string;
   read: boolean;
   created_at: string;
 }
@@ -59,6 +60,22 @@ function formatDate(dateStr: string, lang: string): string {
   });
 }
 
+interface ReleaseItem {
+  type: "feature" | "fix";
+  text: Record<string, string>;
+  image: string | null;
+}
+
+interface ReleaseData {
+  version: string;
+  items: ReleaseItem[];
+}
+
+function extractReleaseDate(refId: string): string | null {
+  const match = refId?.match(/system_update:(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
 export default function NotificationsPage() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language || "en";
@@ -67,6 +84,9 @@ export default function NotificationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [releaseCache, setReleaseCache] = useState<Record<string, ReleaseData>>({});
+  const [expandedItemIdx, setExpandedItemIdx] = useState<number | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -88,6 +108,18 @@ export default function NotificationsPage() {
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
+
+  const fetchReleaseData = useCallback(async (date: string) => {
+    if (releaseCache[date]) return;
+    try {
+      const res = await fetch(`/data/releases/${date}.json`);
+      if (!res.ok) return;
+      const data: ReleaseData = await res.json();
+      setReleaseCache((prev) => ({ ...prev, [date]: data }));
+    } catch {
+      // no release data available
+    }
+  }, [releaseCache]);
 
   const markAsRead = async (ids: string[]) => {
     try {
@@ -210,37 +242,145 @@ export default function NotificationsPage() {
             <div className="divide-y divide-gray-100">
               {filtered.map((n) => {
                 const isExpanded = expandedId === n.id;
+                const releaseDate = n.type === "system_update" ? extractReleaseDate(n.ref_id || "") : null;
+                const release = releaseDate ? releaseCache[releaseDate] : null;
+
                 return (
-                  <button
-                    key={n.id}
-                    onClick={() => {
-                      if (!n.read) markAsRead([n.id]);
-                      setExpandedId(isExpanded ? null : n.id);
-                    }}
-                    className={`flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50 ${
-                      !n.read ? "bg-blue-50/40" : ""
-                    }`}
-                  >
-                    <span className="mt-0.5 text-xl shrink-0">{notifIcon(n.type)}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={`text-sm leading-tight ${n.read ? "text-gray-700" : "font-semibold text-gray-900"}`}>
-                          {localizedText(n.title, lang)}
-                        </p>
-                        {!n.read && <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />}
+                  <div key={n.id} className={!n.read ? "bg-blue-50/40" : ""}>
+                    <button
+                      onClick={() => {
+                        if (!n.read) markAsRead([n.id]);
+                        const newExpanded = isExpanded ? null : n.id;
+                        setExpandedId(newExpanded);
+                        setExpandedItemIdx(null);
+                        if (newExpanded && n.type === "system_update" && releaseDate) {
+                          fetchReleaseData(releaseDate);
+                        }
+                      }}
+                      className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+                    >
+                      <span className="mt-0.5 text-xl shrink-0">{notifIcon(n.type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`text-sm leading-tight ${n.read ? "text-gray-700" : "font-semibold text-gray-900"}`}>
+                            {localizedText(n.title, lang)}
+                          </p>
+                          {!n.read && <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />}
+                        </div>
+                        {!isExpanded && (
+                          <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                            {localizedText(n.message, lang)}
+                          </p>
+                        )}
+                        <p className="mt-2 text-xs text-gray-400">{formatDate(n.created_at, lang)}</p>
                       </div>
-                      <p className={`mt-1 text-sm text-gray-600 ${isExpanded ? "whitespace-pre-wrap" : "line-clamp-2"}`}>
-                        {localizedText(n.message, lang)}
-                      </p>
-                      <p className="mt-2 text-xs text-gray-400">{formatDate(n.created_at, lang)}</p>
-                    </div>
-                  </button>
+                      <span className="mt-1 shrink-0 text-gray-400">
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-5 pb-5">
+                        {release ? (
+                          <div className="ml-9 space-y-1">
+                            {release.items.map((item, idx) => {
+                              const isItemExpanded = expandedItemIdx === idx;
+                              const hasImage = !!item.image;
+                              return (
+                                <div key={idx}>
+                                  <button
+                                    onClick={() => {
+                                      if (hasImage) setExpandedItemIdx(isItemExpanded ? null : idx);
+                                    }}
+                                    className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                                      hasImage ? "hover:bg-gray-100 cursor-pointer" : "cursor-default"
+                                    } ${isItemExpanded ? "bg-gray-100" : ""}`}
+                                  >
+                                    <span className="mt-0.5 shrink-0">
+                                      {item.type === "feature" ? (
+                                        <Sparkles size={14} className="text-amber-500" />
+                                      ) : (
+                                        <Wrench size={14} className="text-gray-400" />
+                                      )}
+                                    </span>
+                                    <span className="flex-1 text-sm text-gray-700">
+                                      {item.text[lang] || item.text.en}
+                                    </span>
+                                    {hasImage && (
+                                      <span className="shrink-0 flex items-center gap-1 text-xs text-blue-500">
+                                        <ImageIcon size={12} />
+                                        {isItemExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                      </span>
+                                    )}
+                                    {item.type === "feature" && !hasImage && (
+                                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 uppercase">
+                                        {lang === "ru" ? "Новое" : "New"}
+                                      </span>
+                                    )}
+                                    {item.type === "fix" && (
+                                      <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 uppercase">
+                                        Fix
+                                      </span>
+                                    )}
+                                  </button>
+                                  {isItemExpanded && item.image && (
+                                    <div className="ml-8 mt-1 mb-2">
+                                      <button
+                                        onClick={() => setLightboxSrc(item.image)}
+                                        className="block rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:shadow-md transition-shadow max-w-lg"
+                                      >
+                                        <img
+                                          src={item.image}
+                                          alt={item.text[lang] || item.text.en}
+                                          className="w-full h-auto"
+                                        />
+                                      </button>
+                                      <p className="mt-1 text-[10px] text-gray-400">
+                                        {lang === "ru" ? "Нажмите для увеличения" : lang === "lv" ? "Noklikšķiniet, lai palielinātu" : "Click to enlarge"}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="ml-9">
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                              {localizedText(n.message, lang)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
           )}
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 p-8"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt=""
+            className="max-h-[85vh] max-w-[90vw] rounded-xl shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
