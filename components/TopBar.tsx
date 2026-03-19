@@ -20,6 +20,18 @@ interface StaffNotification {
   created_at: string;
 }
 
+function localizedText(text: string, lang: string): string {
+  if (text.startsWith("{")) {
+    try {
+      const obj = JSON.parse(text);
+      return obj[lang] || obj["en"] || text;
+    } catch {
+      return text;
+    }
+  }
+  return text;
+}
+
 function notifIcon(type: string): string {
   switch (type) {
     case "checkin_open": return "✈️";
@@ -53,6 +65,7 @@ export default function TopBar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<StaffNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifBtnRef = useRef<HTMLButtonElement>(null);
   
@@ -170,6 +183,8 @@ export default function TopBar() {
     if (n.link) {
       setNotifOpen(false);
       router.push(n.link);
+    } else {
+      setExpandedNotifId((prev) => (prev === n.id ? null : n.id));
     }
   };
 
@@ -349,25 +364,28 @@ export default function TopBar() {
                   {notifications.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-gray-400">No notifications</div>
                   ) : (
-                    notifications.map((n) => (
-                      <button
-                        key={n.id}
-                        onClick={() => handleNotifClick(n)}
-                        className={`flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
-                          n.read ? "" : "bg-blue-50/40"
-                        }`}
-                      >
-                        <span className="mt-0.5 flex-shrink-0 text-base">{notifIcon(n.type)}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm leading-tight ${n.read ? "text-gray-600" : "font-medium text-gray-900"}`}>
-                            {n.title}
-                          </p>
-                          <p className="mt-0.5 text-xs text-gray-500 truncate">{n.message}</p>
-                          <p className="mt-1 text-[10px] text-gray-400">{timeAgo(n.created_at)}</p>
-                        </div>
-                        {!n.read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />}
-                      </button>
-                    ))
+                    notifications.map((n) => {
+                      const isExpanded = expandedNotifId === n.id;
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => handleNotifClick(n)}
+                          className={`flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                            n.read ? "" : "bg-blue-50/40"
+                          }`}
+                        >
+                          <span className="mt-0.5 flex-shrink-0 text-base">{notifIcon(n.type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm leading-tight ${n.read ? "text-gray-600" : "font-medium text-gray-900"}`}>
+                              {localizedText(n.title, prefs.language)}
+                            </p>
+                            <p className={`mt-0.5 text-xs text-gray-500 ${isExpanded ? "whitespace-pre-wrap" : "truncate"}`}>{localizedText(n.message, prefs.language)}</p>
+                            <p className="mt-1 text-[10px] text-gray-400">{timeAgo(n.created_at)}</p>
+                          </div>
+                          {!n.read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />}
+                        </button>
+                      );
+                    }))
                   )}
                 </div>
               </div>
