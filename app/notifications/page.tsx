@@ -76,6 +76,21 @@ function extractReleaseDate(refId: string): string | null {
   return match ? match[1] : null;
 }
 
+interface ReleaseStats {
+  seenCount: number;
+  readCount: number;
+  reactions: Record<string, number>;
+  reactionDetails: { emoji: string; userId: string; displayName: string }[];
+}
+
+const RELEASE_EMOJIS = [
+  { key: "like", label: "Like", icon: "👍" },
+  { key: "love", label: "Love", icon: "❤️" },
+  { key: "wow", label: "Wow", icon: "😮" },
+  { key: "celebrate", label: "Celebrate", icon: "🎉" },
+  { key: "thumbsup", label: "Thumbs up", icon: "👍" },
+] as const;
+
 export default function NotificationsPage() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language || "en";
@@ -85,8 +100,10 @@ export default function NotificationsPage() {
   const [activeSection, setActiveSection] = useState<Section>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [releaseCache, setReleaseCache] = useState<Record<string, ReleaseData>>({});
+  const [releaseStatsCache, setReleaseStatsCache] = useState<Record<string, ReleaseStats>>({});
   const [expandedItemIdx, setExpandedItemIdx] = useState<number | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [reactionLoading, setReactionLoading] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -109,6 +126,13 @@ export default function NotificationsPage() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+    return headers;
+  }, []);
+
   const fetchReleaseData = useCallback(async (date: string) => {
     if (releaseCache[date]) return;
     try {
@@ -120,6 +144,53 @@ export default function NotificationsPage() {
       // no release data available
     }
   }, [releaseCache]);
+
+  const recordReleaseView = useCallback(async (releaseVersion: string) => {
+    try {
+      const headers = await getAuthHeaders();
+      await fetch("/api/notifications/release-view", {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ releaseVersion }),
+      });
+    } catch {
+      // silent
+    }
+  }, [getAuthHeaders]);
+
+  const fetchReleaseStats = useCallback(async (releaseVersion: string) => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(
+        `/api/notifications/release-stats?releaseVersion=${encodeURIComponent(releaseVersion)}`,
+        { headers, credentials: "include" }
+      );
+      if (!res.ok) return;
+      const data: ReleaseStats = await res.json();
+      setReleaseStatsCache((prev) => ({ ...prev, [releaseVersion]: data }));
+    } catch {
+      // silent
+    }
+  }, [getAuthHeaders]);
+
+  const setReaction = useCallback(async (releaseVersion: string, emoji: string) => {
+    setReactionLoading(emoji);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/notifications/release-reaction", {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ releaseVersion, emoji }),
+      });
+      if (res.ok) await fetchReleaseStats(releaseVersion);
+    } catch {
+      // silent
+    } finally {
+      setReactionLoading(null);
+    }
+  }, [getAuthHeaders, fetchReleaseStats]);
 
   const markAsRead = async (ids: string[]) => {
     try {
@@ -248,13 +319,18 @@ export default function NotificationsPage() {
                 return (
                   <div key={n.id} className={!n.read ? "bg-blue-50/40" : ""}>
                     <button
-                      onClick={() => {
-                        if (!n.read) markAsRead([n.id]);
+                      onClick={async () => {
+                        if (!n.read) {
+                          markAsRead([n.id]);
+                          if (n.type === "system_update" && releaseDate) setTimeout(() => fetchReleaseStats(releaseDate), 300);
+                        }
                         const newExpanded = isExpanded ? null : n.id;
                         setExpandedId(newExpanded);
                         setExpandedItemIdx(null);
                         if (newExpanded && n.type === "system_update" && releaseDate) {
                           fetchReleaseData(releaseDate);
+                          recordReleaseView(releaseDate);
+                          fetchReleaseStats(releaseDate);
                         }
                       }}
                       className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
@@ -282,6 +358,7 @@ export default function NotificationsPage() {
                     {isExpanded && (
                       <div className="px-5 pb-5">
                         {release ? (
+                          <>
                           <div className="ml-9 space-y-1">
                             {release.items.map((item, idx) => {
                               const isItemExpanded = expandedItemIdx === idx;
@@ -344,6 +421,49 @@ export default function NotificationsPage() {
                               );
                             })}
                           </div>
+                          {releaseDate && (
+                            <div className="ml-9 mt-4 pt-4 border-t border-gray-100 space-y-3">
+                              {releaseStatsCache[releaseDate] && (
+                                <p className="text-xs text-gray-500">
+                                  {releaseStatsCache[releaseDate].seenCount} {lang === "ru" ? "увидели" : lang === "lv" ? "redzēja" : "saw"} · {releaseStatsCache[releaseDate].readCount} {lang === "ru" ? "прочитали" : lang === "lv" ? "izlasa" : "read"}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                {RELEASE_EMOJIS.map(({ key, icon, label }) => {
+                                  const count = releaseStatsCache[releaseDate]?.reactions?.[key] ?? 0;
+                                  return (
+                                    <button
+                                      key={key}
+                                      type="button"
+                                      onClick={() => setReaction(releaseDate, key)}
+                                      disabled={!!reactionLoading}
+                                      className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                                      title={label}
+                                    >
+                                      <span>{icon}</span>
+                                      {count > 0 && <span className="text-gray-600">{count}</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {releaseStatsCache[releaseDate]?.reactionDetails?.length > 0 && (
+                                <div className="text-xs text-gray-600">
+                                  <span className="font-medium text-gray-500">
+                                    {lang === "ru" ? "Кто поставил реакцию:" : lang === "lv" ? "Reakcijas:" : "Who reacted:"}
+                                  </span>
+                                  <ul className="mt-1 space-y-0.5">
+                                    {releaseStatsCache[releaseDate].reactionDetails.map((d, i) => (
+                                      <li key={i} className="flex items-center gap-1.5">
+                                        <span>{RELEASE_EMOJIS.find((e) => e.key === d.emoji)?.icon ?? d.emoji}</span>
+                                        <span>{d.displayName}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          </>
                         ) : (
                           <div className="ml-9">
                             <p className="text-sm text-gray-600 whitespace-pre-wrap">

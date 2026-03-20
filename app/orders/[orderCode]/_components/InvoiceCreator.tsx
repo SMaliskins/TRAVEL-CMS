@@ -9,7 +9,7 @@ import SingleDatePicker from "@/components/SingleDatePicker";
 import { useToast } from "@/contexts/ToastContext";
 import { Check, X } from "lucide-react";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
-import { getInvoiceLabels, numberToWords, getCategoryLabel, getCategoryTypeFromName } from "@/lib/invoices/generateInvoiceHTML";
+import { getInvoiceLabels, numberToWords, getCategoryLabel, getCategoryTypeFromName, translateServiceDescriptionForInvoice } from "@/lib/invoices/generateInvoiceHTML";
 import { getServiceDisplayName, type ServiceForDisplayName } from "@/lib/services/serviceDisplayName";
 
 interface Service {
@@ -18,6 +18,8 @@ interface Service {
   clientPrice: number;
   category: string;
   categoryType?: string | null;
+  serviceType?: string | null;
+  service_type?: string | null;
   dateFrom?: string;
   dateTo?: string;
   client?: string;
@@ -454,8 +456,9 @@ export default function InvoiceCreator({
   useEffect(() => {
     const nextFromServices = currentServices.map(s => {
       const catType = s.categoryType || getCategoryTypeFromName(s.category);
-      const catLabel = catType === "other" ? (s.category || "") : getCategoryLabel(catType, effectiveInvoiceLanguage);
+      const catLabel = getCategoryLabel(catType, effectiveInvoiceLanguage);
       const displayName = getServiceDisplayNameForInvoice(s);
+      const translatedName = translateServiceDescriptionForInvoice(displayName, effectiveInvoiceLanguage);
       const dateFrom = s.dateFrom;
       const dateTo = s.dateTo;
       const editableDateText = dateFrom
@@ -463,7 +466,7 @@ export default function InvoiceCreator({
         : "";
       return {
         ...s,
-        editableName: catLabel ? `${catLabel}: ${displayName}` : displayName,
+        editableName: catLabel ? `${catLabel}: ${translatedName}` : translatedName,
         editablePrice: Number(s.clientPrice) || 0,
         editableClient: s.client || "",
         editableDateText,
@@ -600,33 +603,7 @@ export default function InvoiceCreator({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showTypePopover]);
 
-  // Load invoice number on mount — single: reserve one; bulk: reserve N for this order (same numbers on revisit)
-  const singleNumberFetchedRef = useRef(false);
-  useEffect(() => {
-    if (hasMultiplePayers && servicesByPayer && servicesByPayer.size > 1) return;
-    if (singleNumberFetchedRef.current) return;
-    singleNumberFetchedRef.current = true;
-    generateInvoiceNumber().then(setInvoiceNumber);
-  }, [orderCode, hasMultiplePayers, servicesByPayer]);
-
-  // Bulk: reserve N numbers when we have payer groups and no numbers yet
-  const bulkNumbersFetchedRef = useRef(false);
-  useEffect(() => {
-    if (!(hasMultiplePayers && payerGroups.length > 1)) return;
-    if (bulkNumbersFetchedRef.current) return;
-    const need = payerGroups.length;
-    const have = invoiceNumberByPayerIndex.filter((n) => n?.trim()).length;
-    if (have >= need) return;
-    bulkNumbersFetchedRef.current = true;
-    generateInvoiceNumbers(need).then((nums) => setInvoiceNumberByPayerIndex(nums.slice(0, need)));
-  }, [orderCode, hasMultiplePayers, payerGroups.length]);
-
-  // Release reserved number(s) when closing without saving (return to company pool)
-  useEffect(() => {
-    return () => {
-      fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices/release-reservation`, { method: "POST" }).catch(() => {});
-    };
-  }, [orderCode]);
+  // Invoice number: NOT reserved on open — only when Save. Avoids wasting numbers when user closes without creating.
 
   // Default deposit date to today on mount (once)
   useEffect(() => {
@@ -711,7 +688,8 @@ export default function InvoiceCreator({
     [subtotal, taxAmount]
   );
 
-  const isCredit = total < 0;
+  const hasOnlyCancellations = editableServices.length > 0 && editableServices.every((s) => (s.serviceType || s.service_type) === "cancellation");
+  const isCredit = total < 0 || hasOnlyCancellations;
   const invoiceType = isCredit ? "Credit Note" : "Invoice";
   
   // Calculate deposit and final payment (AFTER total is calculated)
@@ -761,17 +739,18 @@ export default function InvoiceCreator({
   })();
 
   const formatCurrency = (amount: number) => {
+    const displayAmount = isCredit ? -Math.abs(amount) : amount;
     try {
       return new Intl.NumberFormat(undefined, {
         style: "currency",
         currency: currencyCode,
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      }).format(amount);
+      }).format(displayAmount);
     } catch {
-      const absAmount = Math.abs(amount);
+      const absAmount = Math.abs(displayAmount);
       const formatted = `${currencySymbol}${absAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      return amount < 0 ? `-${formatted}` : formatted;
+      return displayAmount < 0 ? `-${formatted}` : formatted;
     }
   };
 
@@ -1045,7 +1024,7 @@ export default function InvoiceCreator({
         final_payment_amount,
         final_payment_date,
         status: 'draft',
-        is_credit: servicesTotal < 0,
+        is_credit: servicesTotal < 0 || (services.length > 0 && services.every((s) => (s.serviceType || (s as any).service_type) === "cancellation")),
         language: languageOverride ?? invoiceLanguage ?? "en",
         linked_service_ids: services.map((s) => s.id).filter((id) => !String(id).startsWith("manual-")),
         items: services.map((s) => {
@@ -1220,12 +1199,14 @@ export default function InvoiceCreator({
           showToast("error", `Failed to create invoices. ${errorCount} error(s). ${errorDetails}`);
         }
       } else {
-        // Single payer - existing flow
+        // Single payer — reserve number only at save (not on open)
+        const invNum = invoiceNumber.trim() || (await generateInvoiceNumber());
+        if (!invNum) throw new Error('Failed to get invoice number');
         const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            invoice_number: invoiceNumber,
+            invoice_number: invNum,
             payer_name: payerName,
             payer_party_id: payerPartyId,
             payer_type: payerType,
@@ -1373,7 +1354,7 @@ export default function InvoiceCreator({
               type="text"
               value={effectiveInvoiceNumber}
               onChange={(e) => setEffectiveInvoiceNumber(e.target.value)}
-              placeholder="e.g. 01426-SM-0001"
+              placeholder="Auto (assigned on save)"
               className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             {effectiveInvoiceNumber.trim() && (
@@ -1889,7 +1870,7 @@ export default function InvoiceCreator({
                 </div>
                 <div className="text-right">
                   <h1 className={`text-3xl font-bold mb-1 ${isCredit ? 'text-green-700' : 'text-gray-900'}`}>
-                    {isCredit ? previewLabels.creditNote : previewLabels.invoice}
+                    {isCredit ? "CREDIT-INVOICE" : previewLabels.invoice}
                   </h1>
                   <div className="text-xs text-gray-500 mb-1">
                     {previewLabels.referenceNr}{effectiveInvoiceNumber.trim() ? ` ${effectiveInvoiceNumber}` : ''}
