@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
@@ -23,6 +23,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
@@ -34,6 +35,14 @@ type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 interface PaymentDateItem {
   type: string;
   date: string;
+}
+
+/** Same shape as GET /api/orders/.../travellers — used to mirror Travellers avatars in header PartySelect */
+interface OrderTravellerPickerRow {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
 }
 
 interface OrderData {
@@ -62,13 +71,15 @@ interface OrderData {
 }
 
 export default function OrderPage({
-  params,
+  params: paramsPromise,
 }: {
   params: Promise<{ orderCode: string }>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const urlParams = useParams();
+  const orderCodeFromUrl = typeof urlParams?.orderCode === "string" ? slugToOrderCode(urlParams.orderCode) : "";
   const { showToast } = useToast();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -146,6 +157,46 @@ export default function OrderPage({
   const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
   const autoDestSavedRef = useRef(false);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
+  const [orderTravellersForPicker, setOrderTravellersForPicker] = useState<OrderTravellerPickerRow[]>([]);
+
+  const clientPickerPrioritizedParties = useMemo(
+    () =>
+      orderTravellersForPicker.map((t) => ({
+        id: t.id,
+        display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id,
+        firstName: t.firstName,
+        lastName: t.lastName,
+        avatarUrl: t.avatarUrl,
+      })),
+    [orderTravellersForPicker]
+  );
+
+  // Avatar: image from /api/orders/.../travellers (party_person.avatar_url), or initials.
+  // On server deploy, ensure NEXT_PUBLIC_SUPABASE_URL is set at build time so resolvePublicMediaUrl produces valid image URLs.
+  const leadPassengerHeaderAvatar = useMemo(() => {
+    const name = (order?.client_display_name || "").trim();
+    const parts = name.split(/\s+/).filter(Boolean);
+    const initials =
+      parts.length >= 2
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+        : parts[0]
+          ? parts[0].slice(0, 2).toUpperCase()
+          : "?";
+    const safeInitials = (initials && initials.slice(0, 2)) || "?";
+    if (!order?.client_party_id) {
+      return { imageUrl: null as string | null, initials: safeInitials };
+    }
+    const list = Array.isArray(orderTravellersForPicker) ? orderTravellersForPicker : [];
+    const row = list.find((x) => x.id === order.client_party_id);
+    const raw = row?.avatarUrl?.trim() || null;
+    const imageUrl = raw ? resolvePublicMediaUrl(raw, "avatars") || raw : null;
+    return { imageUrl, initials: safeInitials };
+  }, [order?.client_party_id, order?.client_display_name, orderTravellersForPicker]);
+
+  const [leadPassengerAvatarFailed, setLeadPassengerAvatarFailed] = useState(false);
+  useEffect(() => {
+    setLeadPassengerAvatarFailed(false);
+  }, [leadPassengerHeaderAvatar.imageUrl]);
 
   useEffect(() => {
     const headerEl = stickyHeaderRef.current;
@@ -307,12 +358,18 @@ export default function OrderPage({
     if (!order || autoDestSavedRef.current || autoDestinations.length === 0) return;
     const hasSaved = order.countries_cities && order.countries_cities.trim();
     if (hasSaved) return; // никогда не перезаписывать сохранённые направления
-    autoDestSavedRef.current = true;
 
     const unique = autoDestinations.filter((c, i, arr) =>
       arr.findIndex((x) => x.city.toLowerCase() === c.city.toLowerCase()) === i
     );
     if (unique.length === 0) return;
+
+    // Wait for geocoding: don't save if any destination is still missing country info
+    // (Nominatim will resolve and trigger this effect again with full data)
+    const allResolved = unique.every((c) => c.country || c.countryCode);
+    if (!allResolved) return;
+
+    autoDestSavedRef.current = true;
     const destsStr = unique.map((c) => `${c.city}, ${c.country}`).join("; ");
     const formatted = `|${destsStr}|return:`;
 
@@ -440,6 +497,26 @@ export default function OrderPage({
       if (response.ok) {
         setOrder({ ...order, client_party_id: partyId || null, client_display_name: displayName || null });
         setEditingHeaderField(null);
+        try {
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          const tr = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/travellers`, {
+            headers: s2?.access_token ? { Authorization: `Bearer ${s2.access_token}` } : {},
+            credentials: "include",
+          });
+          if (tr.ok) {
+            const td = await tr.json();
+            setOrderTravellersForPicker(
+              (td.travellers || []).map((t: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }) => ({
+                id: t.id,
+                firstName: t.firstName || "",
+                lastName: t.lastName || "",
+                avatarUrl: t.avatarUrl ?? null,
+              }))
+            );
+          }
+        } catch {
+          /* ignore picker refresh errors */
+        }
       }
     } catch (err) {
       console.error("Error saving client:", err);
@@ -575,56 +652,88 @@ export default function OrderPage({
     fetchCompanySettings();
   }, []);
 
-  // Resolve orderCode from params, then fetch order (services load in parallel in OrderServicesBlock)
+  // Set orderCode from URL immediately (useParams is synchronous) so fetch starts without waiting for params Promise
   useEffect(() => {
+    if (orderCodeFromUrl) setOrderCode(orderCodeFromUrl);
+  }, [orderCodeFromUrl]);
+
+  // Fetch order as soon as we have orderCode (from useParams — fast path)
+  useEffect(() => {
+    if (!orderCodeFromUrl) return;
     let cancelled = false;
-    params.then((resolvedParams) => {
-      if (cancelled) return;
-      const code = slugToOrderCode(resolvedParams.orderCode);
-      setOrderCode(code);
-      setError(null);
-      setOrderLoading(true);
+    setError(null);
+    setOrderLoading(true);
 
-      (async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const response = await fetch(`/api/orders/${encodeURIComponent(code)}`, {
-            headers: {
-              ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-            },
-            credentials: "include",
-          });
-          if (cancelled) return;
-          if (response.ok) {
-            const data = await response.json();
-            setOrder(data.order || data);
-          } else if (response.status === 404) {
-            setError(t(lang, "order.notFound"));
-          } else {
-            const errData = await response.json().catch(() => ({}));
-            setError(errData.error || t(lang, "order.loadError"));
-          }
-        } catch (err) {
-          if (!cancelled) {
-            console.error("Fetch order error:", err);
-            setError(t(lang, "order.networkError"));
-          }
-        } finally {
-          if (!cancelled) setOrderLoading(false);
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}`, {
+          headers: {
+            ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include",
+        });
+        if (cancelled) return;
+        if (response.ok) {
+          const data = await response.json();
+          setOrder(data.order || data);
+        } else if (response.status === 404) {
+          setError(t(lang, "order.notFound"));
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          setError(errData.error || t(lang, "order.loadError"));
         }
-      })();
-    });
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Fetch order error:", err);
+          setError(t(lang, "order.networkError"));
+        }
+      } finally {
+        if (!cancelled) setOrderLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
-  }, [params, lang]);
+  }, [orderCodeFromUrl, lang]);
 
-  // Payment summary (linkedToInvoices) for overpayment in header — refetch when invoices may change
+  // Travellers on this order — same API as Travellers UI; feed header PartySelect for matching avatars (runs as soon as we have orderCodeFromUrl)
   useEffect(() => {
-    if (!orderCode) return;
+    if (!orderCodeFromUrl) return;
     let cancelled = false;
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
+        const res = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}/travellers`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          credentials: "include",
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const list: OrderTravellerPickerRow[] = (data.travellers || []).map(
+          (t: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }) => ({
+            id: t.id,
+            firstName: t.firstName || "",
+            lastName: t.lastName || "",
+            avatarUrl: t.avatarUrl ?? null,
+          })
+        );
+        if (!cancelled) setOrderTravellersForPicker(list);
+      } catch {
+        if (!cancelled) setOrderTravellersForPicker([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orderCodeFromUrl, order?.client_party_id]);
+
+  // Payment summary (linkedToInvoices) for overpayment in header — refetch when invoices may change (runs as soon as we have orderCodeFromUrl)
+  useEffect(() => {
+    if (!orderCodeFromUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}/invoices`, {
           headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         });
         if (!res.ok || cancelled) return;
@@ -635,7 +744,7 @@ export default function OrderPage({
       }
     })();
     return () => { cancelled = true; };
-  }, [orderCode, invoiceRefetchTrigger]);
+  }, [orderCodeFromUrl, invoiceRefetchTrigger]);
 
   // Update order status
   const handleStatusChange = async (newStatus: OrderStatus) => {
@@ -671,8 +780,9 @@ export default function OrderPage({
   // Calculate effective status (auto-finish if past date_to)
   const effectiveStatus = order ? getEffectiveStatus(order.status, order.date_to) : "Active";
 
-  // Full-page loading only until we have orderCode (params resolved)
-  if (!orderCode) {
+  const effectiveOrderCode = orderCodeFromUrl || orderCode;
+  // Full-page loading only until we have orderCode from URL (useParams is immediate)
+  if (!effectiveOrderCode) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg text-gray-500">{t(lang, "order.loading")}</div>
@@ -698,7 +808,7 @@ export default function OrderPage({
             <div className="shrink-0 pr-2 flex flex-col justify-center">
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
-                  {orderCode}
+                  {effectiveOrderCode}
                 </h1>
                 {order && (
                   <OrderStatusBadge 
@@ -865,6 +975,8 @@ export default function OrderPage({
                           // User must select a new client or Cancel to restore old one
                         }}
                         roleFilter="client"
+                        directoryMatchTravellersApi
+                        prioritizedParties={clientPickerPrioritizedParties}
                         initialDisplayName={order.client_display_name || ""}
                       />
                     </div>
@@ -883,37 +995,58 @@ export default function OrderPage({
                   </div>
                 ) : (
                   <div className="flex flex-nowrap items-center gap-4 sm:gap-5 min-w-0">
-                    {/* Lead Passenger — слева */}
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">{t(lang, "order.leadPassenger")}</div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span 
-                          className={`text-base font-semibold cursor-pointer rounded px-1 -mx-1 transition-colors ${
-                            isCtrlPressed && order.client_party_id 
-                              ? "text-blue-600 underline" 
-                              : "text-gray-900 hover:bg-gray-100"
-                          }`}
-                          onClick={() => {
-                            if (isCtrlPressed && order.client_party_id) {
-                              router.push(`/directory/${order.client_party_id}`);
-                            } else {
-                              startEditingClient();
-                            }
-                          }}
-                          title={isCtrlPressed ? t(lang, "order.ctrlClickToOpenClient") : t(lang, "order.clickToChangeClient")}
-                        >
-                          {order.client_display_name || t(lang, "order.selectClient")}
+                    {/* Lead Passenger — слева; аватар ~высота двух строк (label + name) */}
+                    <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                      <div className="relative h-12 w-12 shrink-0 flex items-center justify-center rounded-full border border-gray-200 bg-blue-100 text-sm font-semibold text-blue-800 overflow-hidden">
+                        {leadPassengerHeaderAvatar.imageUrl && !leadPassengerAvatarFailed ? (
+                          <img
+                            src={leadPassengerHeaderAvatar.imageUrl}
+                            alt=""
+                            className="absolute inset-0 h-full w-full rounded-full object-cover border-0"
+                            onError={() => setLeadPassengerAvatarFailed(true)}
+                          />
+                        ) : null}
+                        <span className={leadPassengerHeaderAvatar.imageUrl && !leadPassengerAvatarFailed ? "sr-only" : "relative z-10"} aria-hidden>
+                          {leadPassengerHeaderAvatar.initials}
                         </span>
-                        {order.client_phone && (
-                          <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
-                            {order.client_phone}
-                          </a>
-                        )}
-                        {order.client_email && (
-                          <a href={`mailto:${order.client_email}`} className="text-sm text-blue-600 hover:text-blue-800">
-                            {order.client_email}
-                          </a>
-                        )}
+                      </div>
+                      <div className="min-w-0 flex flex-col justify-center gap-0.5">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">
+                          {t(lang, "order.leadPassenger")}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`text-base font-semibold cursor-pointer rounded px-1 -mx-1 transition-colors ${
+                              isCtrlPressed && order.client_party_id
+                                ? "text-blue-600 underline"
+                                : "text-gray-900 hover:bg-gray-100"
+                            }`}
+                            onClick={() => {
+                              if (isCtrlPressed && order.client_party_id) {
+                                router.push(`/directory/${order.client_party_id}`);
+                              } else {
+                                startEditingClient();
+                              }
+                            }}
+                            title={
+                              isCtrlPressed
+                                ? t(lang, "order.ctrlClickToOpenClient")
+                                : t(lang, "order.clickToChangeClient")
+                            }
+                          >
+                            {order.client_display_name || t(lang, "order.selectClient")}
+                          </span>
+                          {order.client_phone && (
+                            <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
+                              {order.client_phone}
+                            </a>
+                          )}
+                          {order.client_email && (
+                            <a href={`mailto:${order.client_email}`} className="text-sm text-blue-600 hover:text-blue-800">
+                              {order.client_email}
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {/* Destination — справа, рядом с Lead Passenger */}
@@ -966,7 +1099,12 @@ export default function OrderPage({
                                     aria-hidden
                                   />
                                 )}
-                                {country} ({data.cities.join(", ")})
+                                {(() => {
+                                  const citiesStr = data.cities.join(", ");
+                                  return data.cities.length === 1 && data.cities[0] === country
+                                    ? country
+                                    : `${country} (${citiesStr})`;
+                                })()}
                                 {idx < Object.keys(countryCities).length - 1 && <span className="text-gray-400 mx-1">/</span>}
                               </span>
                             ));
@@ -1280,29 +1418,43 @@ export default function OrderPage({
                   {(() => {
                     const paid = order.amount_paid ?? 0;
                     const total = order.amount_total ?? 0;
+                    // Refund due = client paid more than total (e.g. after cancellation)
+                    const refundDue = Math.max(0, Math.round((paid - total) * 100) / 100);
+                    const isRefundDue = total > 0 && refundDue > 0.01;
                     // Overpayment = paid not linked to any active (non-cancelled) invoice
                     const overpayment = Math.max(0, Math.round((paid - linkedToInvoices) * 100) / 100);
                     const isOverpaid = paid > linkedToInvoices + 0.01;
-                    const isPaid = total > 0 && paid >= total && !isOverpaid;
+                    const isPaid = total > 0 && paid >= total && !isOverpaid && !isRefundDue;
                     const isPartial = paid > 0 && total > 0 && paid < total;
                     const isUnpaid = total > 0 && paid === 0;
 
                     return (
                       <>
                         <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          isOverpaid ? "bg-purple-100 text-purple-800"
+                          isRefundDue ? "bg-purple-100 text-purple-800"
+                          : isOverpaid ? "bg-purple-100 text-purple-800"
                           : isPaid ? "bg-green-100 text-green-800"
                           : isPartial ? "bg-yellow-100 text-yellow-800"
                           : "bg-red-100 text-red-800"
                         }`}>
-                          {isOverpaid ? t(lang, "order.overpaid") : isPaid ? t(lang, "order.paid") : isPartial ? t(lang, "order.partiallyPaid") : t(lang, "order.unpaid")}
+                          {isRefundDue ? t(lang, "order.refundDue") : isOverpaid ? t(lang, "order.overpaid") : isPaid ? t(lang, "order.paid") : isPartial ? t(lang, "order.partiallyPaid") : t(lang, "order.unpaid")}
                         </div>
-                        {isOverpaid && (
+                        {isRefundDue && (
+                          <>
+                            <span className="text-xs text-purple-700">
+                              €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.paidAmount")}
+                            </span>
+                            <span className="text-[10px] text-purple-600 font-medium">
+                              €{refundDue.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.refundDue")}
+                            </span>
+                          </>
+                        )}
+                        {isOverpaid && !isRefundDue && (
                           <span className="text-xs text-purple-700">
                             €{paid.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.paidAmount")}
                           </span>
                         )}
-                        {isOverpaid && (
+                        {isOverpaid && !isRefundDue && (
                           <span className="text-[10px] text-purple-600 font-medium">
                             +€{overpayment.toLocaleString("en-US", { minimumFractionDigits: 2 })} {t(lang, "order.overpayment")}
                           </span>
@@ -1381,7 +1533,7 @@ export default function OrderPage({
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}
               <OrderServicesBlock
                 ref={servicesBlockRef}
-                orderCode={orderCode}
+                orderCode={effectiveOrderCode}
                 defaultClientId={order?.client_party_id}
                 defaultClientName={order?.client_display_name || undefined}
                 orderDateFrom={order?.date_from}
@@ -1455,7 +1607,7 @@ export default function OrderPage({
               <div className="rounded-lg bg-white p-6 shadow-sm">
                 {showInvoiceCreator ? (
                   <InvoiceCreator
-                    orderCode={orderCode}
+                    orderCode={effectiveOrderCode}
                     clientName={order?.client_display_name || null}
                     selectedServices={invoiceServices}
                     servicesByPayer={invoiceServicesByPayer.size > 0 ? invoiceServicesByPayer : undefined}
@@ -1473,7 +1625,7 @@ export default function OrderPage({
                   />
                 ) : (
                   <InvoiceList
-                    orderCode={orderCode}
+                    orderCode={effectiveOrderCode}
                     key={invoiceRefetchTrigger}
                     orderAmountTotal={order?.amount_total ?? 0}
                     onCreateNew={() => {
@@ -1488,7 +1640,7 @@ export default function OrderPage({
                 <div className="rounded-lg bg-white p-6 shadow-sm">
                   <OrderPaymentsList
                     key={`payments-${invoiceRefetchTrigger}`}
-                    orderCode={orderCode}
+                    orderCode={effectiveOrderCode}
                     orderId={order.id}
                     orderAmountTotal={order.amount_total}
                     onChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
@@ -1498,15 +1650,15 @@ export default function OrderPage({
             </div>
           )}
 
-          {activeTab === "documents" && orderCode && (
+          {activeTab === "documents" && effectiveOrderCode && (
             <div className="rounded-lg bg-white p-6 shadow-sm">
-              <OrderDocumentsTab orderCode={orderCode} />
+              <OrderDocumentsTab orderCode={effectiveOrderCode} />
             </div>
           )}
 
-          {activeTab === "communication" && orderCode && (
+          {activeTab === "communication" && effectiveOrderCode && (
             <div className="rounded-lg bg-white p-6 shadow-sm">
-              <OrderCommunicationsTab orderCode={orderCode} />
+              <OrderCommunicationsTab orderCode={effectiveOrderCode} />
             </div>
           )}
 
@@ -1524,7 +1676,7 @@ export default function OrderPage({
       {showDeleteModal && (
         <DeleteOrderModal
           isOpen={showDeleteModal}
-          orderCode={orderCode}
+          orderCode={effectiveOrderCode}
           password={deletePassword}
           error={deleteError}
           isDeleting={isDeleting}

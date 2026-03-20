@@ -22,6 +22,7 @@ interface Invoice {
   due_date: string | null;
   status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'issued' | 'issued_sent' | 'processed' | 'replaced' | 'amended';
   total: number;
+  is_credit?: boolean;
   subtotal: number;
   tax_amount: number;
   client_name: string;
@@ -232,15 +233,24 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   }, [editingLinesInvoice, openActionsInvoiceId]);
 
   const formatCurrency = (amount: number) => {
-    return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const n = Number(amount);
+    const sign = n < 0 ? "-" : "";
+    return `${sign}€${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+
+  const isCreditInvoice = (inv: Invoice) =>
+    !!inv.is_credit || String(inv.invoice_number || "").endsWith("-C");
 
   const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
 
-  // Extract short number from invoice number (e.g., "00965" from "0633/25-SM-00965")
+  // Extract short number from invoice number (e.g. "00965" from "0633/25-SM-00965", "0242-C" from "10926-VLA-0242-C")
   const getShortNumber = (invoiceNumber: string): string => {
     const parts = invoiceNumber.split('-');
-    return parts[parts.length - 1] || invoiceNumber;
+    const last = parts[parts.length - 1] || "";
+    if (last === "C" && parts.length >= 2) {
+      return `${parts[parts.length - 2]}-C`;
+    }
+    return last || invoiceNumber;
   };
 
   // Group invoices by payer
@@ -262,7 +272,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
   const calculateGroupTotals = (groupInvoices: Invoice[]) => {
     return groupInvoices.reduce((acc, inv) => {
-      acc.total += inv.total;
+      const invTotal = inv.total || 0;
+      acc.total += isCreditInvoice(inv) ? -Math.abs(invTotal) : invTotal;
       acc.paid += inv.paid_amount ?? 0;
       return acc;
     }, { total: 0, paid: 0 });
@@ -1387,7 +1398,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 <React.Fragment key={payerName}>
                   {payerInvoices.map((invoice) => {
                     const paid = invoice.paid_amount ?? 0;
-                    const invoiceDebt = Math.max(0, invoice.total - paid);
+                    // Credit invoice: total is stored positive; debt = remaining refund = -|total| - paid (e.g. -110 - (-110) = 0)
+                    const signedTotal = isCreditInvoice(invoice) ? -Math.abs(invoice.total) : invoice.total;
+                    const invoiceDebt = Math.max(0, signedTotal - paid);
                     
                     return (
                       <tr
@@ -1402,7 +1415,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                           </span>
                         </td>
                         <td className="py-2 px-3 text-gray-700 truncate" title={payerName}>{payerName}</td>
-                        <td className="py-2 px-3 text-right text-gray-900">{formatCurrency(invoice.total)}</td>
+                        <td className={`py-2 px-3 text-right ${isCreditInvoice(invoice) ? "text-red-600 font-medium" : "text-gray-900"}`}>
+                          {(isCreditInvoice(invoice) ? "-" : "") + formatCurrency(Math.abs(invoice.total))}
+                        </td>
                         <td className="py-2 px-3 text-right text-gray-600">{formatCurrency(paid)}</td>
                         <td className={`py-2 px-3 text-right font-medium ${invoiceDebt > 0 ? 'text-red-600' : 'text-gray-900'}`}>{formatCurrency(invoiceDebt)}</td>
                         <td className="py-2 px-3 text-center">

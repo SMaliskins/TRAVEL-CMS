@@ -102,7 +102,7 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
   }, [loadPayments, loadPaymentSummary]);
 
   const formatCurrency = (amount: number, currency = "EUR") =>
-    `€${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `€${Math.abs(Number(amount)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const handleEdit = (p: Payment) => {
     setEditPayment({
@@ -270,7 +270,9 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
                     {t(lang, `payments.${p.method}` as any)}
                   </span>
                 </td>
-                <td className={`py-1.5 px-2 text-right font-medium ${isCancelled ? "text-gray-400 line-through" : "text-gray-900"}`}>{formatCurrency(p.amount, p.currency)}</td>
+                <td className={`py-1.5 px-2 text-right font-medium ${isCancelled ? "text-gray-400 line-through" : (p.amount < 0 ? "text-red-600" : "text-gray-900")}`}>
+                  {p.amount < 0 ? "-" : ""}{formatCurrency(Math.abs(p.amount), p.currency)}
+                </td>
                 <td className="py-1.5 px-2 text-gray-500 text-xs max-w-[150px] truncate">
                   {isCancelled ? <span className="text-red-500 text-xs">{t(lang, "payments.cancelled")}</span> : (p.note || "—")}
                 </td>
@@ -325,7 +327,9 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
         <tfoot>
           <tr className="border-t border-gray-300">
             <td colSpan={3} className="py-1.5 px-2 text-xs font-medium text-gray-600 text-right">{t(lang, "payments.total")}:</td>
-            <td className="py-1.5 px-2 text-right font-semibold text-gray-900 text-sm">{formatCurrency(total)}</td>
+            <td className={`py-1.5 px-2 text-right font-semibold text-sm ${total < 0 ? "text-red-600" : "text-gray-900"}`}>
+              {(total < 0 ? "-" : "") + formatCurrency(total)}
+            </td>
             <td colSpan={3} />
           </tr>
           {total > linkedToInvoices + 0.01 && (

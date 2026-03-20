@@ -1,0 +1,140 @@
+{
+  "version": "2026-03-20",
+  "items": [
+    {
+      "type": "feature",
+      "text": {
+        "en": "Cancel Service — modal with refund from supplier, our retention, % of margin, credit to client; confirm cancellation in one step",
+        "ru": "Отмена услуги — модалка: возврат от поставщика, наша доля, % маржи, кредит клиенту; подтверждение отмены в один шаг",
+        "lv": "Pakalpojuma anulēšana — modālis: atgriezums no piegādātāja, mūsu daļa, % no maržas, kredīts klientam; anulēšanas apstiprinājums vienā solī"
+      },
+      "image": "/release-notes/2026-03-20/cancel-service-modal.png"
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Restore to Original — for cancelled services you can only restore the original, not cancel again",
+        "ru": "Восстановить исходный — для отменённых услуг доступно только восстановление, повторная отмена невозможна",
+        "lv": "Atjaunot sākotnējo — anulētajiem pakalpojumiem iespējams tikai atjaunot, otrreiz anulēt nevar"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Company expenses — Finance tab for utilities, insurance and other company costs (Supervisor/Finance only)",
+        "ru": "Компанейские расходы — вкладка Finance для коммунальных, страховых и прочих расходов компании (только Supervisor/Finance)",
+        "lv": "Uzņēmuma izdevumi — Finance cilne komunālajiem, apdrošināšanai un citiem izdevumiem (tikai Supervisor/Finance)"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Directory merge with preview — see both cards before merging, confirm checkbox, irreversible notice",
+        "ru": "Слияние в Directory с превью — просмотр обеих карточек перед слиянием, чекбокс подтверждения",
+        "lv": "Directory saplūšana ar priekšskatījumu — skatiet abas kartes pirms saplūšanas, apstiprinājuma izvēles rūtiņa"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Directory bulk merge — select multiple contacts with checkboxes, merge into target in one action",
+        "ru": "Массовое слияние в Directory — выбор нескольких контактов и слияние в целевой одним действием",
+        "lv": "Directory masveida saplūšana — izvēlieties vairākus kontaktus un saplūdiniet ar mērķi vienā darbībā"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Credit invoice number format — original number + «-C» (e.g. INV-001 → INV-001-C)",
+        "ru": "Номер кредит-счёта — исходный номер + «-C» (напр. INV-001 → INV-001-C)",
+        "lv": "Kredītrēķina numurs — oriģināls + «-C» (piem. INV-001 → INV-001-C)"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Invoice number reserved only on save — no reservation when Create dialog is opened but not saved",
+        "ru": "Номер счёта резервируется только при сохранении — при открытии диалога без сохранения не занимается",
+        "lv": "Rēķina numurs rezervēts tikai saglabājot — dialoga atvēršana bez saglabāšanas nerezervē"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Service descriptions on invoices translated to invoice language",
+        "ru": "Описания услуг на счёте переводятся на язык счёта",
+        "lv": "Pakalpojumu apraksti rēķinos tiek tulkoti rēķina valodā"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Supplier visible in cancelled services (taken from parent service if missing)",
+        "ru": "Поставщик отображается в отменённых услугах (берётся из родительской при отсутствии)",
+        "lv": "Piegādātājs redzams anulētajos pakalpojumos (no vecāka, ja nav)"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Lead Passenger avatar in order header",
+        "ru": "Аватар Lead Passenger в заголовке заказа",
+        "lv": "Lead Passenger avatārs pasūtījuma galvenē"
+      },
+      "image": null
+    },
+    {
+      "type": "fix",
+      "text": {
+        "en": "Passport DOB saves correctly; directory merge syncs order client name",
+        "ru": "Дата рождения в паспорте сохраняется; слияние синхронизирует имя клиента в заказе",
+        "lv": "Dzimšanas datums pasē saglabājas; saplūšana sinhronizē klienta vārdu pasūtījumā"
+      },
+      "image": null
+    },
+    {
+      "type": "fix",
+      "text": {
+        "en": "AI passport parsing — UK/PDF support, MRZ fallback, improved robustness",
+        "ru": "AI парсинг паспорта — поддержка UK/PDF, MRZ fallback, повышенная надёжность",
+        "lv": "AI pases parsēšana — UK/PDF atbalsts, MRZ rezerves ceļš, uzlabota robustums"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Credit invoice amounts as negative; refund payments stored and displayed in red",
+        "ru": "Суммы кредит-счётов отрицательные; платёжки возврата с минусом и красным",
+        "lv": "Kredītrēķinu summas negatīvas; atgriezuma maksājumi mīnusā un sarkani"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Refund due — order header shows when client overpaid (e.g. after cancellation)",
+        "ru": "К возврату — заголовок заказа показывает при переплате клиента",
+        "lv": "Jāatdod — pasūtījuma galvene rāda, kad klients pārmaksājis"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Bulk ops (Supplier, Payer, Client) on invoiced services",
+        "ru": "Массовые операции (Supplier, Payer, Client) для услуг в счёте",
+        "lv": "Masveida darbības (Supplier, Payer, Client) rēķinā esošiem pakalpojumiem"
+      },
+      "image": null
+    }
+  ]
+}

@@ -100,6 +100,12 @@ export default function AddPaymentModal({
   const [invoiceOptions, setInvoiceOptions] = useState<InvoiceOption[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
 
+  const selectedInvoice = invoiceId ? invoiceOptions.find((inv) => inv.id === invoiceId) : null;
+  const isCreditInvoice =
+    !!selectedInvoice &&
+    (String(selectedInvoice.invoice_number || "").endsWith("-C") || (selectedInvoice.total ?? 0) < 0);
+  const isEditingRefund = !!editPayment && editPayment.amount < 0;
+
   const dateInputRef = useRef<HTMLInputElement>(null);
   const orderSearchRef = useRef<HTMLInputElement>(null);
   const orderDropdownRef = useRef<HTMLDivElement>(null);
@@ -341,7 +347,8 @@ export default function AddPaymentModal({
       setError("Select an order");
       return;
     }
-    if (!amount || parseFloat(amount) <= 0) {
+    const amountNum = parseFloat(amount);
+    if (!amount || isNaN(amountNum) || amountNum === 0) {
       setError("Enter a valid amount");
       return;
     }
@@ -367,7 +374,7 @@ export default function AddPaymentModal({
           order_id: effectiveOrderId,
           invoice_id: invoiceId || null,
           method,
-          amount: parseFloat(amount),
+          amount: (isCreditInvoice || isEditingRefund) ? -Math.abs(amountNum) : amountNum,
           currency,
           paid_at: paidAt,
           account_id: method === "cash" ? null : (accountId || null),
@@ -508,9 +515,10 @@ export default function AddPaymentModal({
                   if (e.target.value) {
                     const inv = invoiceOptions.find((i) => i.id === e.target.value);
                     if (inv) {
+                      const isCred = String(inv.invoice_number || "").endsWith("-C") || (inv.total ?? 0) < 0;
                       const amountToSuggest = typeof inv.remaining === "number" && inv.remaining >= 0
                         ? inv.remaining
-                        : inv.total;
+                        : (isCred ? Math.abs(inv.total ?? 0) : inv.total);
                       if (amountToSuggest != null) setAmount(String(amountToSuggest));
                     }
                     if (inv?.payer_name) {
@@ -519,17 +527,21 @@ export default function AddPaymentModal({
                     }
                   }
                 }}
-                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${isCreditInvoice ? "text-red-600 font-medium" : ""}`}
               >
                 <option value="">-- No invoice --</option>
-                {invoiceOptions.map((inv) => (
-                  <option key={inv.id} value={inv.id}>
-                    {inv.invoice_number} -- {inv.total?.toFixed(2)} ({inv.status})
-                    {typeof inv.remaining === "number" && inv.remaining < (inv.total ?? 0) && inv.remaining >= 0
-                      ? `; remaining ${inv.remaining.toFixed(2)}`
-                      : ""}
-                  </option>
-                ))}
+                {invoiceOptions.map((inv) => {
+                  const isCred = String(inv.invoice_number || "").endsWith("-C") || (inv.total ?? 0) < 0;
+                  const amountDisplay = isCred ? -Math.abs(inv.total ?? 0) : (inv.total ?? 0);
+                  return (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoice_number} -- {amountDisplay.toFixed(2)} ({inv.status})
+                      {typeof inv.remaining === "number" && inv.remaining < (inv.total ?? 0) && inv.remaining >= 0
+                        ? `; remaining ${inv.remaining.toFixed(2)}`
+                        : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -620,11 +632,11 @@ export default function AddPaymentModal({
               <input
                 type="number"
                 step="0.01"
-                min="0"
+                min={(isCreditInvoice || isEditingRefund) ? undefined : "0"}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                placeholder={(isCreditInvoice || isEditingRefund) ? "Refund amount" : "0.00"}
+                className={`w-full border rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${(isCreditInvoice || isEditingRefund) ? "border-red-200 bg-red-50/30" : "border-gray-300"}`}
               />
             </div>
             <div>
@@ -643,11 +655,11 @@ export default function AddPaymentModal({
             </div>
           </div>
 
-          {/* Credit to Account — only for Bank/Card */}
+          {/* Credit to Account / Refunded from account — only for Bank/Card */}
           {method !== "cash" && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-0.5">
-                Credit to Account
+                {isCreditInvoice && method === "bank" ? "Refunded from account" : "Credit to Account"}
               </label>
               {bankAccounts.length === 0 ? (
                 <p className="text-xs text-gray-500 italic">
@@ -678,10 +690,10 @@ export default function AddPaymentModal({
             </div>
           )}
 
-          {/* Payer - from Directory with create option */}
+          {/* Payer / Beneficiar - from Directory with create option */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-0.5">
-              Payer
+              {isCreditInvoice ? "Beneficiar" : "Payer"}
             </label>
             <PartySelect
               key={`payer-${payerPartyId || "empty"}-${payerName}`}

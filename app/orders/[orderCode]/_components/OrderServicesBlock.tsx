@@ -28,7 +28,7 @@ import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
-import { Map as MapIcon, ClipboardList } from "lucide-react";
+import { Map as MapIcon, ClipboardList, Mail, Send, XCircle, Loader2 } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, getCityByIATA, searchCities, resolveCity } from "@/lib/data/cities";
@@ -472,14 +472,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [editServiceId, setEditServiceId] = useState<string | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   
-  // Cancelled filter with localStorage persistence
+  // Hide Cancelled: hides "garbage" (wrong entry, simple cancel). Formal annulments (serviceType=cancellation or has cancellation child) always visible.
   const [hideCancelled, setHideCancelled] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('travel-cms:hide-cancelled-services') === 'true';
     }
     return false;
   });
-  
+
   // Traveller filter for itinerary tabs
   const [selectedTravellerId, setSelectedTravellerId] = useState<string | null>(null);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -489,6 +489,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [filterPayer, setFilterPayer] = useState("");
   const filterMenuRef = React.useRef<HTMLDivElement>(null);
   const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
+  const [bpEmailModal, setBpEmailModal] = useState<{ to: string; subject: string; message: string } | null>(null);
+  const [bpEmailSending, setBpEmailSending] = useState(false);
+  const bpEmailTrapRef = useFocusTrap<HTMLDivElement>(!!bpEmailModal);
+  useModalOverlay(!!bpEmailModal);
 
   useImperativeHandle(ref, () => ({
     triggerAddService: () => {
@@ -506,10 +510,22 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       : s.client,
   [orderTravellers]);
 
-  // Filter services based on cancelled, traveller, and column filters
+  // Parent IDs that have a formal cancellation child (always show those originals)
+  const parentIdsWithCancellation = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of services) {
+      if (s.serviceType === 'cancellation' && s.parentServiceId) set.add(s.parentServiceId);
+    }
+    return set;
+  }, [services]);
+
+  // Filter: formal annulments always visible; "garbage" (simple cancel, no formal record) hideable
   const visibleServices = useMemo(() => {
     return services.filter(s => {
-      if (hideCancelled && s.resStatus === 'cancelled') return false;
+      if (s.resStatus === 'cancelled') {
+        const isFormalAnnulment = s.serviceType === 'cancellation' || parentIdsWithCancellation.has(s.id);
+        if (!isFormalAnnulment && hideCancelled) return false;
+      }
       if (selectedTravellerId && !s.assignedTravellerIds.includes(selectedTravellerId)) return false;
       if (filterCategory && s.category !== filterCategory) return false;
       if (filterSupplier && s.supplier !== filterSupplier) return false;
@@ -517,7 +533,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       if (filterPayer && s.payer !== filterPayer) return false;
       return true;
     });
-  }, [services, hideCancelled, selectedTravellerId, filterCategory, filterSupplier, filterClient, filterPayer, getDisplayClient]);
+  }, [services, hideCancelled, parentIdsWithCancellation, selectedTravellerId, filterCategory, filterSupplier, filterClient, filterPayer, getDisplayClient]);
 
   const filterOptions = useMemo(() => {
     const categories = [...new Set(services.map(s => s.category).filter(Boolean))].sort();
@@ -538,34 +554,37 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     return () => document.removeEventListener("click", onDocClick);
   }, [filterMenuOpen]);
 
-  // Get visible services without invoice for "select all" functionality (excluding cancelled)
+  // Visible non-cancelled services (for bulk ops: Supplier, Payer, Client, etc. — includes invoiced)
+  const visibleServicesForBulk = useMemo(() => {
+    return visibleServices.filter(s => s.resStatus !== 'cancelled').map(s => s.id);
+  }, [visibleServices]);
+
+  // Without invoice (for Create Invoice only)
   const visibleServicesWithoutInvoice = useMemo(() => {
     return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
   }, [visibleServices]);
   
-  // Filter out cancelled and invoiced services from selectedServiceIds (can't invoice again while invoice is active)
+  // Filter out only cancelled services from selectedServiceIds; keep invoiced (allowed for bulk Supplier/Payer/Client ops)
   useEffect(() => {
     setSelectedServiceIds(prev => prev.filter(id => {
       const service = services.find(s => s.id === id);
-      return service && service.resStatus !== 'cancelled' && !service.invoice_id;
+      return service && service.resStatus !== 'cancelled';
     }));
   }, [services]);
   
-  // Check if all visible services without invoice are selected
-  const allNonInvoicedSelected = useMemo(() => {
-    if (visibleServicesWithoutInvoice.length === 0) return false;
-    return visibleServicesWithoutInvoice.every(id => selectedServiceIds.includes(id));
-  }, [visibleServicesWithoutInvoice, selectedServiceIds]);
-  
-  // Handle "select all" checkbox - only for visible services
-  const handleSelectAllNonInvoiced = (checked: boolean) => {
+  // Check if all visible services (for bulk) are selected
+  const allVisibleForBulkSelected = useMemo(() => {
+    if (visibleServicesForBulk.length === 0) return false;
+    return visibleServicesForBulk.every(id => selectedServiceIds.includes(id));
+  }, [visibleServicesForBulk, selectedServiceIds]);
+
+  // Handle "select all" checkbox — all visible non-cancelled (incl. invoiced, for bulk ops)
+  const handleSelectAllVisible = (checked: boolean) => {
     if (checked) {
-      // Select all visible services without invoice
       setSelectedServiceIds(prev => {
         const newIds = [...prev];
-        visibleServicesWithoutInvoice.forEach(id => {
+        visibleServicesForBulk.forEach(id => {
           const service = services.find(s => s.id === id);
-          // Double check: don't add cancelled services
           if (service && service.resStatus !== 'cancelled' && !newIds.includes(id)) {
             newIds.push(id);
           }
@@ -573,8 +592,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         return newIds;
       });
     } else {
-      // Deselect all visible services without invoice
-      setSelectedServiceIds(prev => prev.filter(id => !visibleServicesWithoutInvoice.includes(id)));
+      setSelectedServiceIds(prev => prev.filter(id => !visibleServicesForBulk.includes(id)));
     }
   };
   
@@ -582,8 +600,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [duplicateConfirmService, setDuplicateConfirmService] = useState<Service | null>(null);
-  const [cancelConfirmService, setCancelConfirmService] = useState<Service | null>(null);
-  // New modals for change/cancellation with fees
   const [changeModalService, setChangeModalService] = useState<Service | null>(null);
   const [cancelModalService, setCancelModalService] = useState<Service | null>(null);
   
@@ -706,7 +722,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       localStorage.setItem('travel-cms:hide-cancelled-services', String(newValue));
     }
   };
-  
+
   // Multi-select boarding passes across services
   const [selectedBoardingPasses, setSelectedBoardingPasses] = useState<SelectedBoardingPass[]>([]);
   
@@ -723,11 +739,60 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
   const handleClearBoardingPassSelection = useCallback(() => {
     setSelectedBoardingPasses([]);
+    setBpEmailModal(null);
   }, []);
+
+  const handleOpenBoardingPassEmailModal = useCallback(() => {
+    if (selectedBoardingPasses.length === 0) return;
+    const flights = [...new Set(selectedBoardingPasses.map((p) => p.flightNumber))].join(", ");
+    setBpEmailModal({
+      to: "",
+      subject: `Boarding passes — ${flights}`,
+      message: "Please find your boarding pass(es) attached.",
+    });
+  }, [selectedBoardingPasses]);
+
+  const handleSendBoardingPassEmail = useCallback(async () => {
+    if (!bpEmailModal || selectedBoardingPasses.length === 0) return;
+    if (!bpEmailModal.to.trim()) {
+      alert("Please enter recipient email.");
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    setBpEmailSending(true);
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/boarding-passes/send-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          to: bpEmailModal.to.trim(),
+          subject: bpEmailModal.subject,
+          message: bpEmailModal.message,
+          attachments: selectedBoardingPasses.map((p) => ({ fileName: p.fileName, url: p.fileUrl })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setBpEmailModal(null);
+        setSelectedBoardingPasses([]);
+      } else {
+        alert(data.error || "Failed to send email.");
+      }
+    } finally {
+      setBpEmailSending(false);
+    }
+  }, [bpEmailModal, selectedBoardingPasses, orderCode]);
 
   const handleSendSelectedBoardingPasses = useCallback(async (method: "whatsapp" | "email") => {
     if (selectedBoardingPasses.length === 0) return;
-    
+    if (method === "email") {
+      handleOpenBoardingPassEmailModal();
+      return;
+    }
     try {
       const files: File[] = [];
       for (const pass of selectedBoardingPasses) {
@@ -773,33 +838,28 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       }
 
       const fileNames = selectedBoardingPasses.map(p => p.fileName).join(", ");
-      
-      if (method === "whatsapp") {
-        alert(`Files downloaded: ${fileNames}\n\nOpen WhatsApp and attach the downloaded files.`);
-        setContentModal({ url: "https://web.whatsapp.com/", title: "WhatsApp" });
-      } else {
-        const flights = selectedBoardingPasses.map(p => p.flightNumber).filter((v, i, a) => a.indexOf(v) === i).join(", ");
-        window.location.href = `mailto:?subject=${encodeURIComponent(`Boarding Passes - ${flights}`)}`;
-        alert(`Files downloaded: ${fileNames}\n\nAttach them to your email.`);
-      }
-      
+      alert(`Files downloaded: ${fileNames}\n\nOpen WhatsApp and attach the downloaded files.`);
+      setContentModal({ url: "https://web.whatsapp.com/", title: "WhatsApp" });
       handleClearBoardingPassSelection();
     } catch (err) {
       console.error("Share failed:", err);
     }
-  }, [selectedBoardingPasses, handleClearBoardingPassSelection]);
+  }, [selectedBoardingPasses, handleClearBoardingPassSelection, handleOpenBoardingPassEmailModal]);
   
-  // Calculate service count by traveller
+  // Calculate service count by traveller (respects hideCancelled for "garbage" only)
   const serviceCountByTraveller = React.useMemo(() => {
     const counts: Record<string, number> = {};
     for (const service of services) {
-      if (hideCancelled && service.resStatus === 'cancelled') continue;
+      if (service.resStatus === 'cancelled') {
+        const isFormalAnnulment = service.serviceType === 'cancellation' || parentIdsWithCancellation.has(service.id);
+        if (!isFormalAnnulment && hideCancelled) continue;
+      }
       for (const tid of service.assignedTravellerIds) {
         counts[tid] = (counts[tid] || 0) + 1;
       }
     }
     return counts;
-  }, [services, hideCancelled]);
+  }, [services, hideCancelled, parentIdsWithCancellation]);
   
   // Map route points — FIXED. See .ai/specs/itinerary-map-spec.md
   // Origin = where they fly FROM. Destinations = where they go. Full path = origin + each arrival.
@@ -1493,20 +1553,32 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   }, [fetchServices, fetchTravellers]);
 
   // Recalculate totals whenever services change
-  // Include ALL services (cancelled + cancellation credit lines) so totals are financially correct
+  // Include: active services + cancelled with penalty/credit (formal annulment: original + cancellation child)
+  // Cancellation services = negative; cancelled originals with cancellation child = positive (they cancel out)
   const prevTotalsRef = React.useRef<{ amount_total: number; profit_estimated: number } | null>(null);
   useEffect(() => {
     if (!onTotalsChanged) return;
-    const amount_total = services.reduce((sum, s) => sum + (Number(s.clientPrice) || 0), 0);
+    const amount_total = services.reduce((sum, s) => {
+      // Exclude cancelled unless it has a cancellation child (formal annulment)
+      if (s.resStatus === "cancelled" && !parentIdsWithCancellation.has(s.id)) return sum;
+      const price = Number(s.clientPrice) || 0;
+      const isCancellation = s.serviceType === "cancellation";
+      return sum + (isCancellation ? -Math.abs(price) : price);
+    }, 0);
     const profit_estimated = services.reduce((sum, s) => {
+      if (s.resStatus === "cancelled" && !parentIdsWithCancellation.has(s.id)) return sum;
       const sale = Number(s.clientPrice) || 0;
       const cost = Number(s.servicePrice) || 0;
+      const isCancellation = s.serviceType === "cancellation";
+      const saleSigned = isCancellation ? -Math.abs(sale) : sale;
+      const costSigned = isCancellation ? -Math.abs(cost) : cost;
       const isTour = s.categoryType === "tour";
       if (isTour && s.commissionAmount != null) {
         const commission = Number(s.commissionAmount) || 0;
-        return sum + (sale - (cost - commission));
+        const commissionSigned = isCancellation ? -Math.abs(commission) : commission;
+        return sum + (saleSigned - (costSigned - commissionSigned));
       }
-      return sum + (sale - cost);
+      return sum + (saleSigned - costSigned);
     }, 0);
     const prev = prevTotalsRef.current;
     if (prev && prev.amount_total === amount_total && prev.profit_estimated === profit_estimated) return;
@@ -1618,14 +1690,27 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             break;
           }
         }
-        if (!found && candidates.length > 0) {
-          const cityName = candidates[0];
-          const key = cityName.toLowerCase();
-          if (!byKey.has(key)) {
-            byKey.set(key, {
-              city: { city: cityName, country: svcCountry, countryCode: svcCountryCode },
-              nights, serviceCount: 1,
-            });
+        // Fallback when no candidate matched the city DB:
+        // Use: 1) explicit hotelCity/dest_city, 2) last part of hotelAddress (most likely city in "Street, City" format),
+        // 3) first part (for "City, Region" formats like "Sunny Beach, Sunny Beach").
+        // Never fall back to hotel name fragments.
+        if (!found) {
+          let fallbackCity = svcCity;
+          if (!fallbackCity && hotelAddress) {
+            const addressParts = hotelAddress.split(",").map((p: string) => p.trim()).filter(Boolean);
+            if (addressParts.length >= 2) {
+              // Try last part first (typical "Street, City" format), then first part ("City, Region")
+              fallbackCity = addressParts[addressParts.length - 1];
+            }
+          }
+          if (fallbackCity) {
+            const key = fallbackCity.toLowerCase();
+            if (!byKey.has(key)) {
+              byKey.set(key, {
+                city: { city: fallbackCity, country: svcCountry, countryCode: svcCountryCode },
+                nights, serviceCount: 1,
+              });
+            }
           }
         }
       }
@@ -1803,7 +1888,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     ).toUpperCase();
   };
 
-  const getResStatusColor = (status: Service["resStatus"]) => {
+  const getResStatusColor = (status: Service["resStatus"], invoiceId?: string | null) => {
     switch (status) {
       case "draft":
         return "bg-slate-100 text-slate-600 border border-dashed border-slate-300";
@@ -1816,7 +1901,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       case "rejected":
         return "bg-red-100 text-red-800";
       case "cancelled":
-        return "bg-gray-100 text-gray-800";
+        return invoiceId ? "bg-[linear-gradient(to_right,#bbf7d0_50%,#e5e7eb_50%)] text-gray-800" : "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -2019,33 +2104,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     }
   };
 
-  // Handle cancel service confirmation
-  const handleCancelConfirm = async () => {
-    if (!cancelConfirmService) return;
-    
-    const service = cancelConfirmService;
-    setCancelConfirmService(null);
-    
-    try {
-      const response = await fetch(
-        `/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...service,
-            res_status: "cancelled"
-          })
-        }
-      );
-      if (!response.ok) throw new Error("Failed to cancel service");
-      fetchServices();
-    } catch (error) {
-      console.error("Error cancelling service:", error);
-      alert("Failed to cancel service");
-    }
-  };
-
   // Initialize expandedGroups - all groups expanded by default
   useEffect(() => {
     const initialExpanded: Record<string, boolean> = {};
@@ -2147,7 +2205,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           <div className="flex items-center gap-2">
             <ClipboardList size={18} strokeWidth={1.6} className="text-gray-500" />
             <h2 className="text-base font-semibold text-gray-900">{t(lang, "order.services")}</h2>
-            <span className="text-xs text-gray-500">({visibleServices.length}{hideCancelled && services.length > visibleServices.length ? ` of ${services.length}` : ""})</span>
+            <span className="text-xs text-gray-500">({visibleServices.length}{hideCancelled || hasActiveFilters || selectedTravellerId ? ` of ${services.length}` : ""})</span>
           </div>
           <div className="flex items-center gap-2">
             {/* Filter menu */}
@@ -2205,13 +2263,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 </div>
               )}
             </div>
-            {/* Hide Cancelled toggle */}
+            {/* Hide Cancelled — hides "garbage" (wrong entry, simple cancel). Formal annulments always visible. */}
             <button
               onClick={toggleHideCancelled}
               className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                hideCancelled 
-                  ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                hideCancelled ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
               title={hideCancelled ? t(lang, "order.showCancelled") : t(lang, "order.hideCancelled")}
             >
@@ -2243,14 +2299,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="w-20 px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   <div className="flex items-center justify-center gap-2">
-                    {visibleServicesWithoutInvoice.length > 0 && (
+                    {visibleServicesForBulk.length > 0 && (
                       <input
                         type="checkbox"
-                        checked={allNonInvoicedSelected}
-                        onChange={(e) => handleSelectAllNonInvoiced(e.target.checked)}
+                        checked={allVisibleForBulkSelected}
+                        onChange={(e) => handleSelectAllVisible(e.target.checked)}
                         className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        title="Select all visible services without invoice"
-                        aria-label="Select all visible services without invoice"
+                        title="Select all visible services (for bulk ops)"
+                        aria-label="Select all visible services"
                         onClick={(e) => e.stopPropagation()}
                       />
                     )}
@@ -2385,41 +2441,42 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 </div>
                               )}
                               <div className="flex items-center justify-center gap-1">
-                                {service.invoice_id ? (
-                                  <div className="flex items-center justify-center">
-                                    {/* Invoiced: show icon, link to invoice; cannot select for new invoice while active */}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
-                                      }}
-                                      className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
-                                      title="Invoiced — view invoice (cannot issue another invoice for this service)"
-                                    >
-                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                ) : service.resStatus === 'cancelled' ? (
+                                {service.resStatus === 'cancelled' ? (
                                   <span className="text-gray-400 text-xs" title="Cancelled service cannot be invoiced">-</span>
                                 ) : (
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedServiceIds.includes(service.id)}
-                                    onChange={(e) => {
-                                      e.stopPropagation();
-                                      if (e.target.checked) {
-                                        setSelectedServiceIds(prev => [...prev, service.id]);
-                                      } else {
-                                        setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
-                                      }
-                                    }}
-                                    disabled={(service as Service).resStatus === 'cancelled'}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                    aria-label={`Select ${service.name} for invoice`}
-                                    title="Select for invoice"
-                                  />
+                                  <div className="flex items-center justify-center gap-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedServiceIds.includes(service.id)}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        if (e.target.checked) {
+                                          setSelectedServiceIds(prev => [...prev, service.id]);
+                                        } else {
+                                          setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
+                                        }
+                                      }}
+                                      disabled={(service as Service).resStatus === 'cancelled'}
+                                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                      aria-label={`Select ${service.name}`}
+                                      title={service.invoice_id ? "Select for bulk ops (invoiced)" : "Select for invoice or bulk ops"}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    {service.invoice_id && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
+                                        }}
+                                        className="p-0.5 text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
+                                        title="View invoice"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -2473,10 +2530,12 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium text-gray-900">
-                              {formatCurrency(service.clientPrice)}
+                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}>
+                              {service.serviceType === "cancellation"
+                                ? formatCurrency(-Math.abs(service.clientPrice))
+                                : formatCurrency(service.clientPrice)}
                             </td>
-                            <td className="w-20 whitespace-nowrap px-1 py-1 text-left text-sm text-gray-700" title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
+                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
                               {formatCurrency(
                                 service.categoryType === "tour" && service.commissionAmount
                                   ? Math.round((service.servicePrice - service.commissionAmount) * 100) / 100
@@ -2539,7 +2598,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             <td className="px-2 py-1 text-sm">
                               <span
                                 className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getResStatusColor(
-                                  service.resStatus
+                                  service.resStatus,
+                                  service.invoice_id
                                 )}`}
                               >
                                 {service.resStatus}
@@ -2873,6 +2933,30 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 alert("Failed to delete service");
               }
             } : undefined}
+            onRestoreToOriginal={async (cancellationServiceId: string, originalServiceId: string) => {
+              const { data: { session } } = await supabase.auth.getSession();
+              const headers: Record<string, string> = { "Content-Type": "application/json" };
+              if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+              const patchRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${originalServiceId}`, {
+                method: "PATCH",
+                headers,
+                body: JSON.stringify({ res_status: "confirmed" }),
+              });
+              if (!patchRes.ok) {
+                const err = await patchRes.json().catch(() => ({}));
+                throw new Error(err.error || "Failed to restore original service");
+              }
+              const delRes = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${cancellationServiceId}`, {
+                method: "DELETE",
+                headers: { ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+              });
+              if (!delRes.ok) {
+                throw new Error("Failed to remove cancellation record");
+              }
+              fetchServices();
+              fetchTravellers();
+              setEditServiceId(null);
+            }}
           />
         </>
       )}
@@ -2976,9 +3060,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             <button
               onClick={() => {
                 if (onIssueInvoice) {
-                  // Filter out cancelled services before passing to onIssueInvoice
+                  // Filter out cancelled and already-invoiced services before passing to onIssueInvoice
                   const selectedServicesData = services
-                    .filter(s => selectedServiceIds.includes(s.id) && s.resStatus !== 'cancelled')
+                    .filter(s => selectedServiceIds.includes(s.id) && s.resStatus !== 'cancelled' && !s.invoice_id)
                     .map(s => {
                       const clientNames = (s.assignedTravellerIds?.length && orderTravellers.length)
                         ? orderTravellers
@@ -3128,7 +3212,15 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     Duplicate
                   </button>
                   <button
-                    onClick={() => { setBulkAction("cancel"); setShowBulkActions(false); }}
+                    onClick={() => {
+                      setShowBulkActions(false);
+                      if (selectedServiceIds.length === 1) {
+                        const svc = services.find(s => s.id === selectedServiceIds[0]);
+                        if (svc && svc.resStatus !== "cancelled") setCancelModalService(svc);
+                      } else {
+                        setBulkAction("cancel");
+                      }
+                    }}
                     className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3180,17 +3272,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         cancelText="Cancel"
       />
       
-      {/* Cancel Service Confirmation Modal */}
-      <ConfirmModal
-        isOpen={cancelConfirmService !== null}
-        onCancel={() => setCancelConfirmService(null)}
-        onConfirm={handleCancelConfirm}
-        title="Cancel Service"
-        message={`Cancel service "${cancelConfirmService?.name}"?`}
-        confirmText="Cancel Service"
-        cancelText="Keep"
-      />
-      
       {/* Change Service Modal (for Flights) */}
       {changeModalService && (
         <ChangeServiceModal
@@ -3217,7 +3298,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         />
       )}
 
-      {contentModal && (
+{contentModal && (
         <ContentModal
           isOpen={true}
           onClose={() => setContentModal(null)}
@@ -3225,7 +3306,91 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           url={contentModal.url}
         />
       )}
-      
+
+      {bpEmailModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40">
+          <div
+            ref={bpEmailTrapRef}
+            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">Send boarding passes by email</h3>
+              </div>
+              <button
+                onClick={() => setBpEmailModal(null)}
+                disabled={bpEmailSending}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <input
+                  type="email"
+                  value={bpEmailModal.to}
+                  onChange={(e) => setBpEmailModal({ ...bpEmailModal, to: e.target.value })}
+                  placeholder="recipient@example.com"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={bpEmailModal.subject}
+                  onChange={(e) => setBpEmailModal({ ...bpEmailModal, subject: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={bpEmailModal.message}
+                  onChange={(e) => setBpEmailModal({ ...bpEmailModal, message: e.target.value })}
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <ClipboardList className="h-4 w-4 text-gray-400 shrink-0" />
+                <span>{selectedBoardingPasses.length} boarding pass{selectedBoardingPasses.length !== 1 ? "es" : ""} will be attached</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setBpEmailModal(null)}
+                disabled={bpEmailSending}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendBoardingPassEmail}
+                disabled={bpEmailSending || !bpEmailModal.to.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bpEmailSending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Send email
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bulk Actions Popovers - appear near the floating bar */}
       {bulkAction === "status" && (
         <>

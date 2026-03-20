@@ -20,6 +20,7 @@ interface Invoice {
   due_date: string | null;
   status: 'draft' | 'sent' | 'issued' | 'paid' | 'cancelled' | 'overdue' | 'processed' | 'amended';
   total: number;
+  is_credit?: boolean;
   subtotal: number;
   tax_amount: number;
   client_name: string;
@@ -299,8 +300,13 @@ export default function FinancesInvoicesPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return `€${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const n = Number(amount);
+    const sign = n < 0 ? "-" : "";
+    return `${sign}€${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+
+  const isCreditInvoice = (inv: Invoice) =>
+    !!inv.is_credit || String(inv.invoice_number || "").endsWith("-C");
 
   const formatDate = (dateString: string | null) => formatDateDDMMYYYY(dateString);
   const formatDateTime = (dateString: string | null) => {
@@ -343,9 +349,10 @@ export default function FinancesInvoicesPage() {
   const totals = useMemo(() => {
     let amount = 0, paid = 0, balance = 0;
     for (const inv of displayInvoices) {
-      amount += inv.total || 0;
+      const invTotal = inv.total || 0;
+      amount += isCreditInvoice(inv) ? -Math.abs(invTotal) : invTotal;
       paid += inv.paid_amount || 0;
-      balance += inv.remaining || 0;
+      balance += inv.remaining ?? invTotal;
     }
     return { amount, paid, balance, count: displayInvoices.length };
   }, [displayInvoices]);
@@ -366,7 +373,11 @@ export default function FinancesInvoicesPage() {
 
   const getShortNumber = (invoiceNumber: string): string => {
     const parts = invoiceNumber.split('-');
-    return parts[parts.length - 1] || invoiceNumber;
+    const last = parts[parts.length - 1] || "";
+    if (last === "C" && parts.length >= 2) {
+      return `${parts[parts.length - 2]}-C`;
+    }
+    return last || invoiceNumber;
   };
 
   const getStatusBadge = (status: Invoice['status'], invoice?: Invoice) => {
@@ -502,6 +513,7 @@ export default function FinancesInvoicesPage() {
                 const prevTotal = inv.processed_total != null ? Number(inv.processed_total) : null;
                 const effectiveTotal = inv.status === "cancelled" ? 0 : inv.total;
                 const diff = prevTotal != null ? effectiveTotal - prevTotal : null;
+                const displayTotal = inv.status === "cancelled" ? 0 : (isCreditInvoice(inv) ? -Math.abs(inv.total) : inv.total);
                 return (
                   <tr key={inv.id} className="hover:bg-amber-100/50">
                     <td className="px-3 py-1.5 text-gray-500 text-xs">{getShortNumber(inv.invoice_number)}</td>
@@ -524,10 +536,10 @@ export default function FinancesInvoicesPage() {
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-right text-xs text-gray-400 line-through">
-                      {prevTotal != null ? formatCurrency(prevTotal) : "—"}
+                      {prevTotal != null ? formatCurrency(isCreditInvoice(inv) ? -Math.abs(prevTotal) : prevTotal) : "—"}
                     </td>
-                    <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-900">
-                      {formatCurrency(effectiveTotal)}
+                    <td className={`px-3 py-1.5 text-right text-xs font-semibold ${isCreditInvoice(inv) ? "text-red-600" : "text-gray-900"}`}>
+                      {formatCurrency(displayTotal)}
                     </td>
                     <td className="px-3 py-1.5 text-center text-xs">
                       {diff != null ? (
@@ -627,8 +639,8 @@ export default function FinancesInvoicesPage() {
                     </td>
                     <td className="px-3 py-1.5 text-gray-600">{formatDate(invoice.invoice_date)}</td>
                     <td className="px-3 py-1.5 text-gray-600">{invoice.payer_name || "-"}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold text-gray-900">
-                      {formatCurrency(invoice.total)}
+                    <td className={`px-3 py-1.5 text-right font-semibold ${isCreditInvoice(invoice) ? "text-red-600" : "text-gray-900"}`}>
+                      {(isCreditInvoice(invoice) ? "-" : "") + formatCurrency(Math.abs(invoice.total))}
                     </td>
                     <td className="px-3 py-1.5 text-right text-gray-600">
                       {(invoice.paid_amount || 0) > 0 ? formatCurrency(invoice.paid_amount!) : "—"}

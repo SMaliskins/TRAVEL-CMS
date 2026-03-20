@@ -192,7 +192,9 @@ export default function PaymentsPage() {
 
   const formatCurrency = (amount: number, cur: string) => {
     const symbols: Record<string, string> = { EUR: "\u20ac", USD: "$", GBP: "\u00a3" };
-    return `${symbols[cur] || cur}${Number(amount).toLocaleString("en-US", {
+    const n = Number(amount);
+    const sign = n < 0 ? "-" : "";
+    return `${sign}${symbols[cur] || cur}${Math.abs(n).toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -298,7 +300,7 @@ export default function PaymentsPage() {
           {t(lang, "payments.total")}: <strong className="text-gray-900">{payments.length}</strong> {t(lang, "payments.paymentsCount")}
         </span>
         <span className="text-sm text-gray-600">
-          {t(lang, "payments.amount")}: <strong className="text-gray-900">{formatCurrency(totalAmount, "EUR")}</strong>
+          {t(lang, "payments.amount")}: <strong className={totalAmount < 0 ? "text-red-600" : "text-gray-900"}>{formatCurrency(totalAmount, "EUR")}</strong>
         </span>
       </div>
 
@@ -352,7 +354,7 @@ export default function PaymentsPage() {
                       {t(lang, `payments.${p.method}`) || p.method}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                  <td className={`px-4 py-3 text-right font-semibold ${p.amount < 0 ? "text-red-600" : "text-gray-900"}`}>
                     {formatCurrency(p.amount, p.currency)}
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">
