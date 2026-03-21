@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useUser } from "@/contexts/UserContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { Bell, Rocket, Plane, AlertTriangle, CreditCard, CheckCircle2, Filter, ChevronDown, ChevronUp, Sparkles, Wrench, X, ArrowLeft, ArrowRight, Image as ImageIcon } from "lucide-react";
 
@@ -88,10 +89,10 @@ const RELEASE_EMOJIS = [
   { key: "love", label: "Love", icon: "❤️" },
   { key: "wow", label: "Wow", icon: "😮" },
   { key: "celebrate", label: "Celebrate", icon: "🎉" },
-  { key: "thumbsup", label: "Thumbs up", icon: "👍" },
 ] as const;
 
 export default function NotificationsPage() {
+  const { profile } = useUser();
   const { prefs } = useUserPreferences();
   const lang = prefs.language || "en";
 
@@ -174,23 +175,66 @@ export default function NotificationsPage() {
     }
   }, [getAuthHeaders]);
 
-  const setReaction = useCallback(async (releaseVersion: string, emoji: string) => {
-    setReactionLoading(emoji);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/notifications/release-reaction", {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ releaseVersion, emoji }),
+  const setReaction = useCallback(
+    async (releaseVersion: string, emojiKey: string) => {
+      const stats = releaseStatsCache[releaseVersion];
+      const myReaction = stats?.reactionDetails?.find((d) => d.userId === profile?.id)?.emoji;
+      const isRemoving = myReaction === emojiKey;
+      const displayName = profile ? [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "—" : "—";
+
+      setReactionLoading(emojiKey);
+      setReleaseStatsCache((prev) => {
+        const current = prev[releaseVersion];
+        if (!current) return prev;
+        const nextReactions = { ...current.reactions };
+        let nextDetails = [...(current.reactionDetails || [])];
+        if (isRemoving) {
+          nextReactions[myReaction] = Math.max(0, (nextReactions[myReaction] || 1) - 1);
+          nextDetails = nextDetails.filter((d) => !(d.userId === profile?.id && d.emoji === myReaction));
+        } else {
+          if (myReaction) {
+            nextReactions[myReaction] = Math.max(0, (nextReactions[myReaction] || 1) - 1);
+            nextDetails = nextDetails.filter((d) => d.userId !== profile?.id);
+          }
+          nextReactions[emojiKey] = (nextReactions[emojiKey] || 0) + 1;
+          nextDetails.push({ emoji: emojiKey, userId: profile?.id ?? "", displayName });
+        }
+        return {
+          ...prev,
+          [releaseVersion]: {
+            ...current,
+            reactions: nextReactions,
+            reactionDetails: nextDetails,
+          },
+        };
       });
-      if (res.ok) await fetchReleaseStats(releaseVersion);
-    } catch {
-      // silent
-    } finally {
-      setReactionLoading(null);
-    }
-  }, [getAuthHeaders, fetchReleaseStats]);
+
+      try {
+        const headers = await getAuthHeaders();
+        if (isRemoving) {
+          const res = await fetch(`/api/notifications/release-reaction?releaseVersion=${encodeURIComponent(releaseVersion)}`, {
+            method: "DELETE",
+            headers,
+            credentials: "include",
+          });
+          if (!res.ok) await fetchReleaseStats(releaseVersion);
+        } else {
+          const res = await fetch("/api/notifications/release-reaction", {
+            method: "POST",
+            headers,
+            credentials: "include",
+            body: JSON.stringify({ releaseVersion, emoji: emojiKey }),
+          });
+          if (!res.ok) await fetchReleaseStats(releaseVersion);
+        }
+      } catch {
+        await fetchReleaseStats(releaseVersion);
+      } finally {
+        setReactionLoading(null);
+      }
+    },
+    [getAuthHeaders, fetchReleaseStats, releaseStatsCache, profile]
+  );
 
   const markAsRead = async (ids: string[]) => {
     try {
@@ -431,17 +475,23 @@ export default function NotificationsPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 {RELEASE_EMOJIS.map(({ key, icon, label }) => {
                                   const count = releaseStatsCache[releaseDate]?.reactions?.[key] ?? 0;
+                                  const myReaction = releaseStatsCache[releaseDate]?.reactionDetails?.find((d) => d.userId === profile?.id)?.emoji;
+                                  const isSelected = myReaction === key;
                                   return (
                                     <button
                                       key={key}
                                       type="button"
                                       onClick={() => setReaction(releaseDate, key)}
                                       disabled={!!reactionLoading}
-                                      className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                                      className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm disabled:opacity-50 transition-colors ${
+                                        isSelected
+                                          ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-200"
+                                          : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                                      }`}
                                       title={label}
                                     >
                                       <span>{icon}</span>
-                                      {count > 0 && <span className="text-gray-600">{count}</span>}
+                                      {count > 0 && <span className={isSelected ? "text-blue-600" : "text-gray-600"}>{count}</span>}
                                     </button>
                                   );
                                 })}
