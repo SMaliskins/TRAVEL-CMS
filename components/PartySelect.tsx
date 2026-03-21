@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 
 function toTitleCase(str: string): string {
   if (!str) return str;
@@ -22,6 +23,7 @@ interface Party {
   last_name?: string;
   party_type?: string;
   avatarUrl?: string | null;
+  companyAvatarUrl?: string | null;
 }
 
 interface PartySelectProps {
@@ -33,7 +35,24 @@ interface PartySelectProps {
   /** Initial display name to show without API fetch */
   initialDisplayName?: string;
   /** Order travellers to suggest first (Client/Payer in service forms) */
-  prioritizedParties?: { id: string; display_name?: string; firstName?: string; lastName?: string; avatarUrl?: string | null }[];
+  prioritizedParties?: {
+    id: string;
+    display_name?: string;
+    firstName?: string;
+    lastName?: string;
+    avatarUrl?: string | null;
+    companyAvatarUrl?: string | null;
+  }[];
+  /**
+   * Match AssignedTravellersModal: GET /api/directory without ?role=, then filter rows like
+   * roles.includes("client") || !roles.includes("supplier"). Ensures avatars match Travellers search.
+   */
+  directoryMatchTravellersApi?: boolean;
+}
+
+function directoryRowMatchesTravellersSearch(r: Record<string, unknown>): boolean {
+  const roles = r.roles as string[] | undefined;
+  return Boolean(roles?.includes("client") || !roles?.includes("supplier"));
 }
 
 export default function PartySelect({ 
@@ -44,6 +63,7 @@ export default function PartySelect({
   roleFilter = "client",
   initialDisplayName = "",
   prioritizedParties = [],
+  directoryMatchTravellersApi = false,
 }: PartySelectProps) {
   const currentRole = useCurrentUserRole();
   const isSubagentUser = currentRole === "subagent";
@@ -81,6 +101,8 @@ export default function PartySelect({
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [wasCleared, setWasCleared] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number; openUpward?: boolean } | null>(null);
+  /** Avatar URLs that failed to load — show initials fallback */
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState<Record<string, boolean>>({});
 
   // Update inputValue when initialDisplayName changes (e.g., after async load)
   // But don't restore if user manually cleared the field
@@ -90,17 +112,22 @@ export default function PartySelect({
     }
   }, [initialDisplayName, inputValue, wasCleared]);
 
-  // Map prioritized parties to Party format (including avatarUrl)
-  const prioritizedAsParties: Party[] = prioritizedParties.map((p) => {
-    const dn = p.display_name || [p.firstName, p.lastName].filter(Boolean).join(" ") || p.id;
-    return {
-      id: p.id,
-      display_name: dn,
-      first_name: p.firstName,
-      last_name: p.lastName,
-      avatarUrl: p.avatarUrl || null,
-    };
-  });
+  // Map prioritized parties to Party format (including avatars)
+  const prioritizedAsParties: Party[] = useMemo(
+    () =>
+      prioritizedParties.map((p) => {
+        const dn = p.display_name || [p.firstName, p.lastName].filter(Boolean).join(" ") || p.id;
+        return {
+          id: p.id,
+          display_name: dn,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          avatarUrl: p.avatarUrl || null,
+          companyAvatarUrl: p.companyAvatarUrl || null,
+        };
+      }),
+    [prioritizedParties]
+  );
 
   // Search parties
   const searchParties = useCallback(async (query: string) => {
@@ -125,30 +152,53 @@ export default function PartySelect({
       const { data: { session } } = await supabase.auth.getSession();
       
       const params = new URLSearchParams({ search: query, limit: String(maxResults) });
-      if (roleFilter) params.set("role", roleFilter);
+      const skipRoleParam = directoryMatchTravellersApi && roleFilter === "client";
+      if (roleFilter && !skipRoleParam) params.set("role", roleFilter);
       
       const response = await fetch(`/api/directory?${params.toString()}`, {
+        cache: "no-store",
         headers: { ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}) },
         credentials: "include",
       });
 
       if (response.ok) {
         const data = await response.json();
-        const results = data.data || data.records || data.parties || [];
-        const apiParties: Party[] = results.map((r: Record<string, unknown>) => ({
-          id: r.id as string,
-          display_name: (r.displayName as string) || (r.display_name as string) || 
-                       [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
-                       (r.companyName as string) || (r.company_name as string) || (r.name as string) || "",
-          first_name: (r.firstName as string) || (r.first_name as string),
-          last_name: (r.lastName as string) || (r.last_name as string),
-          party_type: (r.type as string) || (r.party_type as string),
-          avatarUrl: (r.avatarUrl as string) || (r.avatar_url as string) || null,
-        }));
+        let results: Record<string, unknown>[] = (data.data || data.records || data.parties || []) as Record<
+          string,
+          unknown
+        >[];
+        if (directoryMatchTravellersApi && roleFilter === "client") {
+          results = results.filter(directoryRowMatchesTravellersSearch);
+        }
+        const prioById = new Map(prioritizedAsParties.map((p) => [p.id, p]));
+        const apiParties: Party[] = results.map((r: Record<string, unknown>) => {
+          const id = r.id as string;
+          const prio = prioById.get(id);
+          const apiAvatar = (r.avatarUrl as string) || (r.avatar_url as string) || null;
+          const apiCompany =
+            (r.companyAvatarUrl as string) || (r.company_avatar_url as string) || (r.logo_url as string) || null;
+          return {
+            id,
+            display_name:
+              (r.displayName as string) ||
+              (r.display_name as string) ||
+              [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
+              (r.companyName as string) ||
+              (r.company_name as string) ||
+              (r.name as string) ||
+              "",
+            first_name: (r.firstName as string) || (r.first_name as string),
+            last_name: (r.lastName as string) || (r.last_name as string),
+            party_type: (r.type as string) || (r.party_type as string),
+            avatarUrl: apiAvatar || prio?.avatarUrl || null,
+            companyAvatarUrl: apiCompany || prio?.companyAvatarUrl || null,
+          };
+        });
         const apiIds = new Set(apiParties.map((p) => p.id));
         const dedupedPrioritized = matchingPrioritized.filter((p) => !apiIds.has(p.id));
         const transformedResults = [...dedupedPrioritized, ...apiParties];
         
+        setAvatarLoadFailed({});
         setParties(transformedResults);
         
         const exactMatch = transformedResults.some((p: Party) => 
@@ -166,7 +216,7 @@ export default function PartySelect({
     } finally {
       setIsLoading(false);
     }
-  }, [roleFilter, prioritizedParties]);
+  }, [roleFilter, prioritizedAsParties, minSearchChars, maxResults, directoryMatchTravellersApi]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -571,6 +621,9 @@ export default function PartySelect({
           {parties.map((party) => {
             const displayName = party.display_name || party.name || [party.first_name, party.last_name].filter(Boolean).join(" ");
             const initials = displayName.trim().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase()).slice(0, 2).join("");
+            const rawAvatar = (party.avatarUrl || party.companyAvatarUrl || "").trim() || null;
+            const avatarSrc = rawAvatar ? resolvePublicMediaUrl(rawAvatar, "avatars") || rawAvatar : null;
+            const showAvatar = Boolean(avatarSrc) && !avatarLoadFailed[party.id];
             return (
               <button
                 key={party.id}
@@ -578,8 +631,18 @@ export default function PartySelect({
                 onClick={() => handleSelect(party)}
                 className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2.5"
               >
-                {party.avatarUrl ? (
-                  <img src={party.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 border border-gray-200" />
+                {showAvatar ? (
+                  <img
+                    src={avatarSrc!}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="h-7 w-7 rounded-full object-cover shrink-0 border border-gray-200"
+                    onError={() =>
+                      setAvatarLoadFailed((prev: Record<string, boolean>) =>
+                        prev[party.id] ? prev : { ...prev, [party.id]: true }
+                      )
+                    }
+                  />
                 ) : (
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700 shrink-0">
                     {initials || "?"}
