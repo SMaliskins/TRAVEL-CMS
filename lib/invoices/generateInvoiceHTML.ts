@@ -438,12 +438,12 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
 
 /** Service category type labels for "Pakalpojums" column: Aviobiļete, Viesnīca, Transfers, etc. */
 const CATEGORY_TYPE_LABELS: Record<string, Record<string, string>> = {
-  en: { flight: "Flight", hotel: "Hotel", transfer: "Transfers", tour: "Tour", insurance: "Insurance", visa: "Visa", rent_a_car: "Rent a car", cruise: "Cruise", other: "Other" },
-  lv: { flight: "Aviobiļete", hotel: "Viesnīca", transfer: "Transfers", tour: "Tūre", insurance: "Apdrošināšana", visa: "Vīza", rent_a_car: "Auto noma", cruise: "Kruīzs", other: "Cits" },
-  ru: { flight: "Авиабилет", hotel: "Отель", transfer: "Трансферы", tour: "Тур", insurance: "Страховка", visa: "Виза", rent_a_car: "Аренда авто", cruise: "Круиз", other: "Другое" },
-  de: { flight: "Flug", hotel: "Hotel", transfer: "Transfers", tour: "Reise", insurance: "Versicherung", visa: "Visum", rent_a_car: "Mietwagen", cruise: "Kreuzfahrt", other: "Sonstiges" },
-  fr: { flight: "Vol", hotel: "Hôtel", transfer: "Transferts", tour: "Tour", insurance: "Assurance", visa: "Visa", rent_a_car: "Location voiture", cruise: "Croisière", other: "Autre" },
-  es: { flight: "Vuelo", hotel: "Hotel", transfer: "Traslados", tour: "Tour", insurance: "Seguro", visa: "Visado", rent_a_car: "Alquiler coche", cruise: "Crucero", other: "Otro" },
+  en: { flight: "Flight", hotel: "Hotel", transfer: "Transfers", tour: "Tour", insurance: "Insurance", visa: "Visa", rent_a_car: "Rent a car", cruise: "Cruise", ancillary: "Ancillary", other: "Other" },
+  lv: { flight: "Aviobiļete", hotel: "Viesnīca", transfer: "Transfers", tour: "Tūre", insurance: "Apdrošināšana", visa: "Vīza", rent_a_car: "Auto noma", cruise: "Kruīzs", ancillary: "Papildu pakalpojums", other: "Cits" },
+  ru: { flight: "Авиабилет", hotel: "Отель", transfer: "Трансферы", tour: "Тур", insurance: "Страховка", visa: "Виза", rent_a_car: "Аренда авто", cruise: "Круиз", ancillary: "Доп. услуга", other: "Другое" },
+  de: { flight: "Flug", hotel: "Hotel", transfer: "Transfers", tour: "Reise", insurance: "Versicherung", visa: "Visum", rent_a_car: "Mietwagen", cruise: "Kreuzfahrt", ancillary: "Zusatzleistung", other: "Sonstiges" },
+  fr: { flight: "Vol", hotel: "Hôtel", transfer: "Transferts", tour: "Tour", insurance: "Assurance", visa: "Visa", rent_a_car: "Location voiture", cruise: "Croisière", ancillary: "Service annexe", other: "Autre" },
+  es: { flight: "Vuelo", hotel: "Hotel", transfer: "Traslados", tour: "Tour", insurance: "Seguro", visa: "Visado", rent_a_car: "Alquiler coche", cruise: "Crucero", ancillary: "Servicio adicional", other: "Otro" },
 };
 
 /** Derive category type from service_category name (e.g. "Flight" -> "flight"). Exported for invoice preview. */
@@ -459,7 +459,33 @@ export function getCategoryTypeFromName(categoryStr: string | null | undefined):
   if (c.includes("visa") || c.includes("vīza")) return "visa";
   if (c.includes("rent") || c.includes("car") || c.includes("noma")) return "rent_a_car";
   if (c.includes("cruise") || c.includes("kruīz")) return "cruise";
+  if (c.includes("ancillary") || c.includes("papildu") || c.includes("add-on") || c.includes("addon")) return "ancillary";
   return "other";
+}
+
+/** "Cancellation: " prefix for cancellation services — translate to invoice language */
+const CANCELLATION_PREFIX: Record<string, string> = {
+  en: "Cancellation: ",
+  lv: "Anulēšana: ",
+  ru: "Аннуляция: ",
+  de: "Storno: ",
+  fr: "Annulation: ",
+  es: "Cancelación: ",
+  hu: "Lemondás: ",
+};
+
+/**
+ * Translate service description for invoice (e.g. "Cancellation: ..." -> "Anulēšana: ..." for lv).
+ * Used so service names match the invoice language.
+ */
+export function translateServiceDescriptionForInvoice(name: string | null | undefined, lang: string): string {
+  if (!name || typeof name !== "string") return "";
+  const code = (lang && String(lang).trim().toLowerCase()) || "en";
+  const prefix = CANCELLATION_PREFIX[code] ?? CANCELLATION_PREFIX.en;
+  if (name.startsWith("Cancellation: ")) {
+    return prefix + name.slice("Cancellation: ".length);
+  }
+  return name;
 }
 
 /** Get service category label by type and language (e.g. flight + lv -> "Aviobiļete"). Exported for invoice preview. */
@@ -570,13 +596,18 @@ export function generateInvoiceHTML(
   const isLatviaCompany = /latvia|latvija|lettland/i.test(companyCountry);
 
   const currencySymbol = "€";
+  const isCredit = !!invoice?.is_credit;
   const formatCurrency = (amount: number) => {
-    return `${currencySymbol}${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const abs = Math.abs(amount);
+    const str = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return isCredit ? `−${currencySymbol}${str}` : `${currencySymbol}${str}`;
   };
 
   const formatCurrencyWithCode = (amount: number, code = "EUR") => {
     const sym = code === "EUR" ? "€" : code;
-    return `${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
+    const abs = Math.abs(amount);
+    const str = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return isCredit ? `−${str} ${sym}` : `${str} ${sym}`;
   };
 
   const formatDate = (dateString: string | null) => {
@@ -668,7 +699,7 @@ export function generateInvoiceHTML(
       `}
     </div>
     <div style="text-align: right; flex: 1;">
-      <div class="invoice-title" style="font-size: 32px; font-weight: bold; margin-bottom: 4px; letter-spacing: 0.02em;">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+      <div class="invoice-title" style="font-size: 32px; font-weight: bold; margin-bottom: 4px; letter-spacing: 0.02em;">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
       ${invoice.is_credit ? `<div style="color: green; font-size: 12px;">${t.refundCredit}</div>` : ""}
       <div style="margin-top: 8px; font-size: 12px; font-weight: bold;">${invoice.invoice_number}</div>
       <div style="margin-top: 4px; font-size: 12px;"><strong>${t.date}:</strong> ${formatDate(invoice.invoice_date)}</div>
@@ -708,7 +739,7 @@ export function generateInvoiceHTML(
     </thead>
     <tbody>
       ${invoice.invoice_items?.map((item: any) => {
-        const serviceText = item.service_name?.trim() || "-";
+        const serviceText = translateServiceDescriptionForInvoice(item.service_name?.trim() || "", lang) || "-";
         return `
         <tr>
           <td>${(item.service_dates_text && String(item.service_dates_text).trim()) ? String(item.service_dates_text).trim() : formatDatesCell(item.service_date_from, item.service_date_to)}</td>
