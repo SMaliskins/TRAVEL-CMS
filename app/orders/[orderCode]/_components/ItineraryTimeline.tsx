@@ -1004,6 +1004,7 @@ export default function ItineraryTimeline({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null);
   const [bpMenuServiceId, setBpMenuServiceId] = useState<string | null>(null);
+  const [dragOverBpEventId, setDragOverBpEventId] = useState<string | null>(null);
   const bpFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const bpMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1495,17 +1496,49 @@ export default function ItineraryTimeline({
                                 />
                                 {(() => {
                                   const hasBPs = event.boardingPasses && event.boardingPasses.filter(bp => bp.flightNumber === event.flightNumber).length > 0;
+                                  const tickets = event.ticketNumbers || [];
+                                  const clientIds = tickets.length > 0
+                                    ? tickets.map(t => t.clientId)
+                                    : (event.assignedTravellerIds || []);
+                                  const isDragOver = dragOverBpEventId === event.id;
                                   return (
                                     <div
                                       onClick={() => bpFileInputRefs.current[event.id]?.click()}
+                                      onDragOver={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (e.dataTransfer.types.includes("Files")) setDragOverBpEventId(event.id);
+                                      }}
+                                      onDragLeave={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverBpEventId(null);
+                                      }}
+                                      onDrop={async (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setDragOverBpEventId(null);
+                                        const files = Array.from(e.dataTransfer.files || []);
+                                        if (!onUploadBoardingPass || !event.serviceId || files.length === 0 || clientIds.length === 0) return;
+                                        setUploadingServiceId(event.serviceId);
+                                        try {
+                                          for (let i = 0; i < files.length; i++) {
+                                            await onUploadBoardingPass(event.serviceId, files[i], clientIds[i % clientIds.length], event.flightNumber || "");
+                                          }
+                                        } finally {
+                                          setUploadingServiceId(null);
+                                        }
+                                      }}
                                       className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-all border-2 ${
-                                        uploadingServiceId === event.serviceId
-                                          ? "bg-gray-200 text-gray-400 border-gray-300"
-                                          : hasBPs
-                                            ? "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
-                                            : "bg-orange-50 text-orange-600 border-orange-200 border-dashed hover:bg-orange-100 hover:border-orange-300"
+                                        isDragOver
+                                          ? "bg-blue-100 text-blue-700 border-blue-400 ring-2 ring-blue-300"
+                                          : uploadingServiceId === event.serviceId
+                                            ? "bg-gray-200 text-gray-400 border-gray-300"
+                                            : hasBPs
+                                              ? "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
+                                              : "bg-orange-50 text-orange-600 border-orange-200 border-dashed hover:bg-orange-100 hover:border-orange-300"
                                       }`}
-                                      title={hasBPs ? "Boarding passes uploaded — click to add more" : "Add boarding pass(es) — select one or several files (PDF, image, .pkpass)"}
+                                      title={hasBPs ? "Boarding passes uploaded — click or drag file to add more" : "Add boarding pass(es) — click or drag file here (PDF, image, .pkpass)"}
                                     >
                                       {uploadingServiceId === event.serviceId ? "⏳ Uploading..." : hasBPs ? "📋 BP ✓" : "📋 +BP"}
                                     </div>
@@ -1528,7 +1561,7 @@ export default function ItineraryTimeline({
                                           .filter(bp => bp.flightNumber === event.flightNumber)
                                           .map(pass => (
                                             <div key={pass.id} className="flex items-center justify-between gap-2 px-2 py-1.5 hover:bg-gray-50">
-                                              <span className="text-xs truncate flex-1" title={pass.fileName}>{pass.clientName} — {pass.fileName}</span>
+                                              <span className="text-xs truncate flex-1" title={pass.clientName ? `${pass.clientName}: ${pass.fileName}` : pass.fileName}>{pass.fileName}</span>
                                               <div className="flex gap-0.5 shrink-0">
                                                 <button type="button" onClick={() => { onViewBoardingPass?.(pass); setBpMenuServiceId(null); }} className="text-xs text-blue-600 hover:underline">View</button>
                                                 {onDeleteBoardingPass && (

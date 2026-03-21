@@ -204,7 +204,7 @@ export default function PaymentsPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="mx-auto max-w-[1800px] space-y-4">
           <div className="flex items-center justify-between">
             <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
@@ -285,7 +285,7 @@ export default function PaymentsPage() {
           endDate={filterDateTo}
           dropdownAlign="left"
         />
-        <div className="ml-auto">
+        <div className="w-full sm:w-auto sm:ml-auto">
           <button
             onClick={() => setShowAddModal(true)}
             className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
@@ -305,8 +305,8 @@ export default function PaymentsPage() {
       </div>
 
       {/* Payments Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+        <table className="w-full text-sm min-w-[700px]">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.date")}</th>

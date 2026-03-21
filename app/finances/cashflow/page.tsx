@@ -238,8 +238,8 @@ export default function CashFlowPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="p-3 sm:p-6">
+      <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-2">
         <button
           onClick={() => { setTab("cash"); setFilterAccount("all"); }}
           className={`px-4 py-1.5 text-sm font-medium rounded-md ${
@@ -365,10 +365,10 @@ export default function CashFlowPage() {
                   <div
                     id={`day-${day.date}`}
                     key={day.date}
-                    className="bg-white rounded-lg border border-gray-200 overflow-hidden scroll-mt-4"
+                    className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto scroll-mt-4"
                   >
               {/* Day header */}
-              <div className="flex items-center justify-between bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 bg-gray-50 px-3 sm:px-4 py-3 border-b border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {formatDateDDMMYYYY(day.date)}
                 </h3>
@@ -377,7 +377,7 @@ export default function CashFlowPage() {
                 </span>
               </div>
 
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[400px]">
                 <thead className="bg-gray-50/50">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
@@ -451,9 +451,9 @@ export default function CashFlowPage() {
           {filteredDailyReport.map((day) => (
             <div
               key={day.date}
-              className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+              className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto"
             >
-              <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 bg-gray-50 px-3 py-2 border-b border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {formatDateDDMMYYYY(day.date)}
                 </h3>
@@ -461,7 +461,7 @@ export default function CashFlowPage() {
                   {t(lang, "payments.total")}: {formatCurrency(day.total)}
                 </span>
               </div>
-              <table className="w-full text-sm table-fixed">
+              <table className="w-full text-sm table-fixed min-w-[500px]">
                 <thead className="bg-gray-50/50">
                   <tr>
                     <th className="w-[12%] px-3 py-1.5 text-left text-xs font-medium text-gray-500">{t(lang, "payments.order")}</th>

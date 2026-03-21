@@ -462,8 +462,8 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="booking-modern-container">
-        <div className="mx-auto max-w-[1800px] space-y-6">
+      <div className="booking-modern-container !p-4 sm:!p-6">
+        <div className="mx-auto max-w-[1800px] space-y-4 sm:space-y-6">
           <div className="booking-modern-header relative !mb-0">
             <div className="flex items-center justify-between w-full">
               <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
@@ -485,13 +485,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="booking-modern-container">
-      <div className="mx-auto max-w-[1800px] space-y-6">
+    <div className="booking-modern-container !p-4 sm:!p-6">
+      <div className="mx-auto max-w-[1800px] space-y-4 sm:space-y-6">
         {/* Header with Period Selector */}
         <div className="booking-modern-header relative !mb-0 !overflow-visible">
-          <div className="flex items-center justify-between w-full">
-            <h1 className="booking-header-title">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
-            <div className="relative z-40">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
+            <h1 className="booking-header-title text-xl sm:text-2xl">Hello, {username || email?.split('@')[0] || 'User'}!</h1>
+            <div className="relative z-40 w-full sm:w-auto">
               <PeriodSelector
                 value={period}
                 onChange={handlePeriodChange}

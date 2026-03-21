@@ -8,7 +8,7 @@ export default function ReconciliationPage() {
   const lang = prefs.language;
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <div className="bg-white rounded-lg border border-gray-200 p-12 text-center mt-4">
         <div className="text-4xl mb-4">🔄</div>
         <h2 className="text-lg font-semibold text-gray-700 mb-2">{t(lang, "reconciliation.comingSoon")}</h2>

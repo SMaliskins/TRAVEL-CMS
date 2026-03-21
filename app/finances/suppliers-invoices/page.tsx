@@ -74,8 +74,8 @@ export default function SuppliersInvoicesPage() {
   }, [loadDocs]);
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="p-3 sm:p-6">
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div />
         <PeriodSelector
           value={period}
@@ -93,8 +93,8 @@ export default function SuppliersInvoicesPage() {
           No supplier invoices found
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">{t(lang, "invoices.file")}</th>

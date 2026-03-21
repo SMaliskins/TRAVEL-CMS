@@ -221,6 +221,8 @@ interface EditServiceModalProps {
   orderTravellers?: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }[];
   /** Supervisor-only: permanently delete this service */
   onDeleteService?: (serviceId: string) => void;
+  /** Restore original service from cancellation (undo cancellation) */
+  onRestoreToOriginal?: (cancellationServiceId: string, originalServiceId: string) => Promise<void>;
 }
 
 // Fallback categories used when API is not available
@@ -268,6 +270,7 @@ export default function EditServiceModalNew({
   hotelServices = [],
   orderTravellers = [],
   onDeleteService,
+  onRestoreToOriginal,
 }: EditServiceModalProps) {
   useModalOverlay();
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
@@ -298,6 +301,7 @@ export default function EditServiceModalNew({
   // Change/Cancel modals
   const [showChangeModal, setShowChangeModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Form state - initialized from service
   const [category, setCategory] = useState(service.category); // Display name
@@ -2233,6 +2237,22 @@ export default function EditServiceModalNew({
     setParseError("Could not parse this booking. Try copying the full confirmation text.");
   };
 
+  const handleRestoreToOriginal = async () => {
+    const originalId = service.parentServiceId;
+    if (!originalId || !onRestoreToOriginal) return;
+    if (!confirm("Restore original service? The cancellation record will be removed.")) return;
+    setIsRestoring(true);
+    try {
+      await onRestoreToOriginal(service.id, originalId);
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to restore";
+      setError(msg);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!serviceName.trim()) {
       setError("Service name is required");
@@ -2731,8 +2751,8 @@ export default function EditServiceModalNew({
   ) : null;
 
   return (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 modal-future-overlay">
-      <div ref={trapRef} className="w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-future-container" style={modalStyle}>
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-2 sm:p-4 modal-future-overlay">
+      <div ref={trapRef} className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto modal-future-container rounded-xl" style={modalStyle}>
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded bg-[#E6FAE6]">
@@ -2757,6 +2777,11 @@ export default function EditServiceModalNew({
           {error && (
             <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
               {error}
+            </div>
+          )}
+          {isCancellationService && (
+            <div className="mb-3 px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm font-medium">
+              Cancellation
             </div>
           )}
           {showAIParsedBanner && (
@@ -4053,6 +4078,18 @@ export default function EditServiceModalNew({
               {isCancellationService && (
                 <div className="p-3 modal-section space-y-2 border-l-4 border-red-300 bg-red-50/30">
                   <h4 className="modal-section-title text-red-700">CANCELLATION DETAILS</h4>
+                  {categoryType === "ancillary" && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
+                      <PartySelect
+                        value={supplierPartyId}
+                        onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                        roleFilter="supplier"
+                        initialDisplayName={supplierName}
+                        prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
+                      />
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-slate-600">Refund from Supplier</span>
                     <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-red-500 bg-white">
@@ -4061,14 +4098,14 @@ export default function EditServiceModalNew({
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-slate-600">Cancellation Fee</span>
+                    <span className="text-sm text-slate-600">Our retention / Cancellation fee</span>
                     <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-red-500 bg-white">
                       <span className="pl-2 text-slate-600 shrink-0">€</span>
                       <input type="number" step="0.01" min="0" value={amendCancellationFee} onChange={(e) => setAmendCancellationFee(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2 pt-1 border-t border-red-200">
-                    <span className="text-sm font-medium text-slate-700">Client Credit</span>
+                    <span className="text-sm font-medium text-slate-700">Client Credit (refund)</span>
                     <span className="text-sm font-semibold text-red-700">
                       {(() => {
                         const refund = parseFloat(amendRefundAmount) || 0;
@@ -4077,9 +4114,13 @@ export default function EditServiceModalNew({
                       })()}
                     </span>
                   </div>
+                  <p className="text-xs text-slate-600 pt-1 border-t border-red-100">
+                    If there is a refund to the client, a credit note will be issued and closed with a refund payment; balance will be settled.
+                  </p>
                 </div>
               )}
-              {/* PRICING */}
+              {/* PRICING — hidden for cancellation services (CANCELLATION DETAILS is enough) */}
+              {!isCancellationService && (
               <div className="p-3 modal-section space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="modal-section-title">PRICING</h4>
@@ -4845,6 +4886,7 @@ export default function EditServiceModalNew({
                 </div>
                 )}
               </div>
+              )}
 
               {/* PARTIES moved to left column as tab (tour/other/transfer) */}
 
@@ -4852,6 +4894,7 @@ export default function EditServiceModalNew({
               {categoryType === "flight" && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
+                    {!isCancellationService && (
                     <button
                       type="button"
                       onClick={() => setShowChangeModal(true)}
@@ -4863,6 +4906,25 @@ export default function EditServiceModalNew({
                       </svg>
                       Change
                     </button>
+                    )}
+                    {isCancellationService && onRestoreToOriginal && service.parentServiceId ? (
+                    <button
+                      type="button"
+                      onClick={handleRestoreToOriginal}
+                      disabled={isRestoring}
+                      className="flex-1 px-3 py-2 text-sm font-medium bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      title="Restore to original"
+                    >
+                      {isRestoring ? (
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      )}
+                      Restore to Original
+                    </button>
+                    ) : !isCancellationService && (
                     <button
                       type="button"
                       onClick={() => setShowCancelModal(true)}
@@ -4874,6 +4936,7 @@ export default function EditServiceModalNew({
                       </svg>
                       Cancel
                     </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {onDeleteService && (
@@ -5354,6 +5417,36 @@ export default function EditServiceModalNew({
           {/* Actions - Sticky Footer (hidden for Hotel and Flight — buttons are in right column) */}
           {categoryType !== "hotel" && categoryType !== "flight" && (
             <div className="mt-4 pt-3 border-t flex items-center gap-2">
+              {isCancellationService && onRestoreToOriginal && service.parentServiceId ? (
+                <button
+                  type="button"
+                  onClick={handleRestoreToOriginal}
+                  disabled={isRestoring}
+                  className="px-3 py-2 text-sm font-medium bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  title="Restore to original"
+                >
+                  {isRestoring ? (
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
+                  Restore to Original
+                </button>
+              ) : resStatus !== "cancelled" && (
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(true)}
+                  className="px-3 py-2 text-sm font-medium bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-1.5"
+                  title="Cancel service"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                  Cancel service
+                </button>
+              )}
               {onDeleteService && (
                 <button
                   type="button"

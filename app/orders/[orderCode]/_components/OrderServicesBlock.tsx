@@ -2197,11 +2197,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         }
       `}</style>
       {/* Vertical layout: Services on top, Itinerary + Map below */}
-      <div className="space-y-4">
+      <div className="space-y-4 overflow-hidden">
         {/* Services table — skeleton when loading; Itinerary block always rendered below */}
         {isLoading ? servicesTableContent : (
-        <div className="rounded-lg bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+        <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-gray-200 px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0 sm:justify-between">
           <div className="flex items-center gap-2">
             <ClipboardList size={18} strokeWidth={1.6} className="text-gray-500" />
             <h2 className="text-base font-semibold text-gray-900">{t(lang, "order.services")}</h2>
@@ -2294,7 +2294,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="w-full border-collapse min-w-[680px]">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="w-20 px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wider text-gray-700">
@@ -3311,7 +3311,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40">
           <div
             ref={bpEmailTrapRef}
-            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-2 sm:mx-4 overflow-hidden max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">

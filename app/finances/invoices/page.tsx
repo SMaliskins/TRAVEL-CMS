@@ -409,7 +409,7 @@ export default function FinancesInvoicesPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="mx-auto max-w-[1800px] space-y-4">
           <div className="flex items-center justify-between">
             <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
@@ -435,8 +435,8 @@ export default function FinancesInvoicesPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="p-3 sm:p-6">
+      <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-2">
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
             type="checkbox"
@@ -470,7 +470,7 @@ export default function FinancesInvoicesPage() {
             value={searchNumber}
             onChange={(e) => setSearchNumber(e.target.value)}
             placeholder="Invoice #"
-            className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md w-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md w-full sm:w-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
         </div>
         {(filterStatus !== "all" || !activeOnly || searchNumber || period !== "currentMonth") && (
@@ -484,7 +484,7 @@ export default function FinancesInvoicesPage() {
       </div>
 
       {isFinance && attentionInvoices.length > 0 && (
-        <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 overflow-hidden">
+        <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 overflow-hidden overflow-x-auto">
           <div className="px-4 py-2.5 bg-amber-100 border-b border-amber-300 flex items-center gap-2">
             <span className="text-amber-700 text-lg">&#9888;</span>
             <h3 className="text-sm font-bold text-amber-800">
@@ -494,7 +494,7 @@ export default function FinancesInvoicesPage() {
               ({attentionInvoices.length})
             </span>
           </div>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[700px]">
             <thead className="bg-amber-50/80">
               <tr>
                 <th className="px-3 py-1.5 text-left font-semibold text-amber-800 text-xs">#</th>
@@ -568,8 +568,8 @@ export default function FinancesInvoicesPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+        <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-gray-50">
             <tr>
               <th

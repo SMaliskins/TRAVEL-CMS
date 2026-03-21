@@ -816,7 +816,7 @@ export default function OrdersPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="bg-gray-50 p-6">
+      <div className="bg-gray-50 p-3 sm:p-6">
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -843,7 +843,7 @@ export default function OrdersPage() {
   // Error state
   if (loadError) {
     return (
-      <div className="bg-gray-50 p-6">
+      <div className="bg-gray-50 p-3 sm:p-6">
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -892,13 +892,13 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="bg-gray-50 p-4">
+    <div className="bg-gray-50 p-3 sm:p-4">
       <div className="mx-auto max-w-[1800px] space-y-2">
         {/* Compact header with view tabs — sticky below TopBar + TabBar */}
-        <div className="sticky top-0 z-20 bg-gray-50 pb-2 -mb-2 -mt-4 pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
+        <div className="sticky top-14 sm:top-0 z-20 bg-gray-50 pb-2 -mb-2 -mt-3 sm:-mt-4 pt-3 sm:pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
             <button
               onClick={() => router.push("/orders/new")}
               className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
@@ -913,37 +913,39 @@ export default function OrdersPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5 shrink-0">
             <button
               onClick={() => setViewMode("list")}
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs sm:text-sm font-medium transition-colors ${
                 viewMode === "list"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
+              title="List view"
             >
               <List size={15} />
-              List
+              <span className="hidden sm:inline">List</span>
             </button>
             <button
               onClick={() => setViewMode("calendar")}
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs sm:text-sm font-medium transition-colors ${
                 viewMode === "calendar"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
               }`}
+              title="Calendar view"
             >
               <CalendarDays size={15} />
-              Calendar
+              <span className="hidden sm:inline">Calendar</span>
             </button>
           </div>
         </div>
 
         {/* Inline filter bar */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2.5">
-          <div className="flex items-center gap-3 flex-wrap">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-3 sm:px-4 py-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
             {/* Surname search */}
-            <div className="relative">
+            <div className="relative w-full sm:w-36 min-w-0">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
@@ -953,14 +955,14 @@ export default function OrdersPage() {
                   setSurnameInput(e.target.value);
                   ordersSearchStore.setField("clientLastName", e.target.value);
                 }}
-                className="w-36 rounded border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                className="w-full rounded border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               />
             </div>
 
-            <span className="text-gray-300">|</span>
+            <span className="hidden sm:inline text-gray-300">|</span>
 
             {/* Date group mode */}
-            <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5 w-fit">
               {([
                 { value: "created", label: "Created" },
                 { value: "checkIn", label: "Start date" },
@@ -980,7 +982,7 @@ export default function OrdersPage() {
               ))}
             </div>
 
-            <span className="text-gray-300">|</span>
+            <span className="hidden sm:inline text-gray-300">|</span>
 
             {/* Agent */}
             <div className="flex items-center gap-1.5">
@@ -997,7 +999,7 @@ export default function OrdersPage() {
               </select>
             </div>
 
-            <span className="text-gray-300">|</span>
+            <span className="hidden sm:inline text-gray-300">|</span>
 
             {/* Status */}
             <div className="flex items-center gap-1.5">
@@ -1051,7 +1053,7 @@ export default function OrdersPage() {
         {/* Calendar View */}
         {orders.length > 0 && viewMode === "calendar" && (
           <div className="rounded-lg bg-white shadow-sm border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-gray-200 bg-gray-50">
               <button onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; })} className="p-1 rounded hover:bg-gray-200 transition-colors">
                 <ChevronLeft size={16} />
               </button>
@@ -1062,7 +1064,7 @@ export default function OrdersPage() {
             </div>
             <div className="grid grid-cols-7">
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
-                <div key={d} className="px-1 py-1 text-center text-[10px] font-medium text-gray-500 uppercase border-b border-gray-200 bg-gray-50">{d}</div>
+                <div key={d} className="px-0.5 sm:px-1 py-1 text-center text-[9px] sm:text-[10px] font-medium text-gray-500 uppercase border-b border-gray-200 bg-gray-50 truncate">{d}</div>
               ))}
               {calendarOrders.map((cell, i) => {
                 const todayISO = new Date().toISOString().slice(0, 10);
@@ -1071,7 +1073,7 @@ export default function OrdersPage() {
                 return (
                   <div
                     key={i}
-                    className={`min-h-[80px] border-b border-r border-gray-100 p-1 ${
+                    className={`min-h-[60px] sm:min-h-[80px] border-b border-r border-gray-100 p-0.5 sm:p-1 ${
                       !cell.isCurrentMonth ? "bg-gray-50/50" : ""
                     } ${isToday ? "bg-blue-50/60" : ""}`}
                   >
@@ -1111,9 +1113,10 @@ export default function OrdersPage() {
 
         {/* Table (List view) */}
         {orders.length > 0 && viewMode === "list" && (
-        <div className="rounded-lg bg-white shadow-sm">
-          <table className="w-full border-collapse">
-            <thead className="sticky top-[76px] z-10 shadow-[0_1px_0_0_#e5e7eb]">
+        <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+          <div className="overflow-x-auto -mx-3 sm:mx-0">
+          <table className="w-full border-collapse min-w-[900px]">
+            <thead className="sticky top-14 sm:top-[76px] z-10 shadow-[0_1px_0_0_#e5e7eb] bg-gray-50">
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.orderId")}
@@ -1475,6 +1478,7 @@ export default function OrdersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
         )}
 

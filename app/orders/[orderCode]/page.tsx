@@ -800,10 +800,10 @@ export default function OrderPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-7xl p-4">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
-        <div ref={stickyHeaderRef} className={`mb-0 ${showInvoiceCreator ? "" : "sticky top-[92px] z-20"} bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)]`}>
-          <div className="flex items-stretch flex-wrap lg:flex-nowrap">
+        <div ref={stickyHeaderRef} className={`mb-0 ${showInvoiceCreator ? "" : "sticky top-14 sm:top-[92px] z-20"} bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)] -mx-3 px-3 sm:mx-0 sm:px-0`}>
+          <div className="flex flex-col sm:flex-row sm:items-stretch sm:flex-wrap lg:flex-nowrap gap-3 sm:gap-0">
             {/* Block 1: Order Code + Status + Type/Source */}
             <div className="shrink-0 pr-2 flex flex-col justify-center">
               <div className="flex items-center gap-2">
@@ -962,8 +962,8 @@ export default function OrderPage({
               <div className="flex-1 min-w-0">
                 {/* Row 1: Client Name */}
                 {editingHeaderField === "client" ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="w-64">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+                    <div className="w-full min-w-0 sm:w-64">
                       <PartySelect
                         value={editClientId}
                         onChange={(partyId, displayName) => {
@@ -994,7 +994,7 @@ export default function OrderPage({
                     </span>
                   </div>
                 ) : (
-                  <div className="flex flex-nowrap items-center gap-4 sm:gap-5 min-w-0">
+                  <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-3 sm:gap-5 min-w-0">
                     {/* Lead Passenger — слева; аватар ~высота двух строк (label + name) */}
                     <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                       <div className="relative h-12 w-12 shrink-0 flex items-center justify-center rounded-full border border-gray-200 bg-blue-100 text-sm font-semibold text-blue-800 overflow-hidden">
@@ -1120,7 +1120,7 @@ export default function OrderPage({
                 {/* Itinerary edit form (view is above: Destination справа от Lead Passenger) */}
                 {editingHeaderField === "itinerary" ? (
                   <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
                         <CityMultiSelect
@@ -1227,8 +1227,8 @@ export default function OrderPage({
                 
                 {/* Row: Dates (под Lead Passenger и Destination) */}
                 {editingHeaderField === "dates" ? (
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <div className="w-80">
+                  <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+                    <div className="w-full min-w-0 sm:w-80">
                       <DateRangePicker
                         label=""
                         from={editDateFrom || undefined}
@@ -1385,10 +1385,10 @@ export default function OrderPage({
             {/* Block 3: Total + Payment Status */}
             {order && (<>
               {/* Groove divider */}
-<div className="hidden lg:flex self-stretch items-center mx-1.5 my-1">
-              <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
-            </div>
-              <div className="flex items-center gap-2 shrink-0 justify-end">
+              <div className="hidden lg:flex self-stretch items-center mx-1.5 my-1">
+                <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-2 shrink-0 sm:justify-end w-full sm:w-auto">
                 {/* Total amount with hover tooltip for payment plan */}
                 <div className="text-right relative group/total">
                   <div className="text-xl font-bold text-gray-900 cursor-default">
@@ -1488,15 +1488,15 @@ export default function OrderPage({
           </div>
 
           {/* B) Tabs + Action Buttons */}
-          <nav className="-mb-px flex items-center justify-between border-t border-gray-200/60 mt-1">
-            <div className="flex flex-1 gap-1 pt-2">
+          <nav className="-mb-px flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-200/60 mt-1 pt-2">
+            <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 min-w-0">
               {(["client", "finance", "documents", "communication", "log"] as const).map((tab) => {
                 const isActive = activeTab === tab;
                 return (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    className={`shrink-0 whitespace-nowrap rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-gray-900 text-white shadow-sm"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800"
@@ -1507,7 +1507,7 @@ export default function OrderPage({
                 );
               })}
             </div>
-            <div className="ml-auto flex items-center gap-2 py-1">
+            <div className="shrink-0 flex items-center gap-2 py-1">
               <button
                 onClick={() => {
                   if (activeTab === "client" && servicesBlockRef.current) {
@@ -1527,7 +1527,7 @@ export default function OrderPage({
         </div>
 
         {/* Tab Content */}
-        <div className="mb-6">
+        <div className="mb-6 -mx-3 px-3 sm:mx-0 sm:px-0">
           {activeTab === "client" && (
             <div className="space-y-6">
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}
@@ -1604,7 +1604,7 @@ export default function OrderPage({
 
           {activeTab === "finance" && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-white p-6 shadow-sm">
+              <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
                 {showInvoiceCreator ? (
                   <InvoiceCreator
                     orderCode={effectiveOrderCode}
@@ -1637,7 +1637,7 @@ export default function OrderPage({
                 )}
               </div>
               {order && !showInvoiceCreator && (
-                <div className="rounded-lg bg-white p-6 shadow-sm">
+                <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
                   <OrderPaymentsList
                     key={`payments-${invoiceRefetchTrigger}`}
                     orderCode={effectiveOrderCode}
@@ -1651,19 +1651,19 @@ export default function OrderPage({
           )}
 
           {activeTab === "documents" && effectiveOrderCode && (
-            <div className="rounded-lg bg-white p-6 shadow-sm">
+            <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
               <OrderDocumentsTab orderCode={effectiveOrderCode} />
             </div>
           )}
 
           {activeTab === "communication" && effectiveOrderCode && (
-            <div className="rounded-lg bg-white p-6 shadow-sm">
+            <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
               <OrderCommunicationsTab orderCode={effectiveOrderCode} />
             </div>
           )}
 
           {activeTab === "log" && (
-            <div className="rounded-lg bg-white p-6 shadow-sm">
+            <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
               <h2 className="mb-2 text-lg font-semibold text-gray-900">Log</h2>
               <p className="text-gray-600">Coming next</p>
             </div>
@@ -1707,8 +1707,8 @@ function DeleteOrderModal({
   const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
 
   return (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50">
-      <div ref={trapRef} role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4">
+      <div ref={trapRef} role="dialog" aria-modal="true" className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <h3 className="mb-1 text-lg font-semibold text-gray-900">Delete Order</h3>
         <p className="mb-4 text-sm text-gray-600">
           Order <strong>{orderCode}</strong> will be permanently deleted along with all services, invoices, payments and documents. Invoice numbers will be released.

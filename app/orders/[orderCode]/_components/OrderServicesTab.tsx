@@ -24,6 +24,7 @@ interface Service {
   refNr?: string;
   ticketNr?: string;
   assignedTravellerIds: string[];
+  invoice_id?: string | null;
 }
 
 export default function OrderServicesTab() {
@@ -149,7 +150,7 @@ export default function OrderServicesTab() {
       : "Unknown";
   };
 
-  const getResStatusColor = (status: Service["resStatus"]) => {
+  const getResStatusColor = (status: Service["resStatus"], invoiceId?: string | null) => {
     switch (status) {
       case "confirmed":
         return "bg-green-100 text-green-800";
@@ -160,7 +161,7 @@ export default function OrderServicesTab() {
       case "rejected":
         return "bg-red-100 text-red-800";
       case "cancelled":
-        return "bg-gray-100 text-gray-800";
+        return invoiceId ? "bg-[linear-gradient(to_right,#bbf7d0_50%,#e5e7eb_50%)] text-gray-800" : "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -257,7 +258,8 @@ export default function OrderServicesTab() {
                     <td className="px-4 py-3 text-sm">
                       <span
                         className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getResStatusColor(
-                          service.resStatus
+                          service.resStatus,
+                          service.invoice_id
                         )}`}
                       >
                         {service.resStatus}
