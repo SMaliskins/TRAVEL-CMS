@@ -102,6 +102,13 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json();
 
   if (body.markAllRead) {
+    const { data: toRead } = await supabaseAdmin
+      .from("staff_notifications")
+      .select("ref_id")
+      .eq("company_id", auth.companyId)
+      .eq("read", false);
+    const versions = (toRead || []).map((n) => n.ref_id?.match(/^system_update:(.+)$/)?.[1]).filter(Boolean) as string[];
+
     const { error } = await supabaseAdmin
       .from("staff_notifications")
       .update({ read: true })
@@ -109,10 +116,24 @@ export async function PATCH(request: NextRequest) {
       .eq("read", false);
 
     if (error) return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+    const now = new Date().toISOString();
+    for (const v of versions) {
+      await supabaseAdmin.from("release_views").upsert(
+        { company_id: auth.companyId, release_version: v, user_id: auth.userId, seen_at: now, read_at: now },
+        { onConflict: "company_id,release_version,user_id" }
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 
   if (Array.isArray(body.ids) && body.ids.length > 0) {
+    const { data: toRead } = await supabaseAdmin
+      .from("staff_notifications")
+      .select("ref_id")
+      .eq("company_id", auth.companyId)
+      .in("id", body.ids);
+    const versions = (toRead || []).map((n) => n.ref_id?.match(/^system_update:(.+)$/)?.[1]).filter(Boolean) as string[];
+
     const { error } = await supabaseAdmin
       .from("staff_notifications")
       .update({ read: true })
@@ -120,6 +141,13 @@ export async function PATCH(request: NextRequest) {
       .in("id", body.ids);
 
     if (error) return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+    const now = new Date().toISOString();
+    for (const v of versions) {
+      await supabaseAdmin.from("release_views").upsert(
+        { company_id: auth.companyId, release_version: v, user_id: auth.userId, seen_at: now, read_at: now },
+        { onConflict: "company_id,release_version,user_id" }
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 

@@ -140,8 +140,24 @@ export async function GET(
     }
 
     // Map to API format (flight for Itinerary; Tour/hotel/terms for Edit)
+    // For cancellation services: ensure supplier is inherited from parent when missing
     type Row = typeof services extends (infer R)[] ? R : never;
-    const mappedServices = (services || []).map(s => {
+    const servicesList = services || [];
+    const byId = servicesList.reduce((acc, svc) => {
+      acc[svc.id] = svc as { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null };
+      return acc;
+    }, {} as Record<string, { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null }>);
+    const resolveSupplier = (s: typeof servicesList[0] & { parent_service_id?: string | null; service_type?: string | null }) => {
+      const sTyped = s as { supplier_name?: string | null; supplier_party_id?: string | null };
+      if ((sTyped.supplier_name && sTyped.supplier_name.trim()) || (s as { service_type?: string | null }).service_type !== "cancellation") {
+        return sTyped.supplier_name || "";
+      }
+      const parentId = (s as { parent_service_id?: string | null }).parent_service_id;
+      if (!parentId) return sTyped.supplier_name || "";
+      const parent = byId[parentId];
+      return (parent?.supplier_name && parent.supplier_name.trim()) ? parent.supplier_name : (sTyped.supplier_name || "");
+    };
+    const mappedServices = servicesList.map(s => {
       const row = s as Row & {
         flight_segments?: unknown;
         ticket_numbers?: unknown;
@@ -205,8 +221,13 @@ export async function GET(
         serviceName: s.service_name,
         dateFrom: s.service_date_from,
         dateTo: s.service_date_to,
-        supplierPartyId: s.supplier_party_id,
-        supplierName: s.supplier_name || "",
+        supplierPartyId: (() => {
+          const svc = s as { supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null };
+          if (svc.supplier_party_id || svc.service_type !== "cancellation") return s.supplier_party_id;
+          const parent = svc.parent_service_id ? byId[svc.parent_service_id] : null;
+          return (parent?.supplier_party_id ?? s.supplier_party_id) ?? null;
+        })(),
+        supplierName: resolveSupplier(s),
         airlineChannel: s.airline_channel || false,
         airlineChannelSupplierId: s.airline_channel_supplier_id || null,
         airlineChannelSupplierName: s.airline_channel_supplier_name || "",
@@ -299,6 +320,7 @@ export async function GET(
         cancellationFee: (row as { cancellation_fee?: number | null }).cancellation_fee != null ? parseFloat(String((row as { cancellation_fee?: number }).cancellation_fee)) : null,
         refundAmount: (row as { refund_amount?: number | null }).refund_amount != null ? parseFloat(String((row as { refund_amount?: number }).refund_amount)) : null,
         changeFee: (row as { change_fee?: number | null }).change_fee != null ? parseFloat(String((row as { change_fee?: number }).change_fee)) : null,
+        cancellationRefundType: (row as { cancellation_refund_type?: string | null }).cancellation_refund_type ?? null,
       };
     });
 
@@ -332,6 +354,87 @@ export async function POST(
     const orderId = await getOrderId(orderCode, companyId);
     if (!orderId) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Clone service for cancellation (create cancellation record then caller will set original to cancelled)
+    if (body.cloneFromServiceId && body.cancellationRefundType) {
+      const refundAmount = typeof body.refundAmount === "number" ? body.refundAmount : parseFloat(String(body.refundAmount || "0")) || 0;
+      const cancellationFee = typeof body.cancellationFee === "number" ? body.cancellationFee : parseFloat(String(body.cancellationFee || "0")) || 0;
+      const clientPrice = refundAmount - cancellationFee; // credit to client when positive
+      const { data: orig, error: fetchErr } = await supabaseAdmin
+        .from("order_services")
+        .select("*")
+        .eq("id", body.cloneFromServiceId)
+        .eq("order_id", orderId)
+        .eq("company_id", companyId)
+        .single();
+      if (fetchErr || !orig) {
+        return NextResponse.json({ error: "Original service not found" }, { status: 404 });
+      }
+      const origRow = orig as Record<string, unknown>;
+      const clone: Record<string, unknown> = {};
+      for (const key of Object.keys(origRow)) {
+        if (key === "id") continue;
+        if (key === "invoice_id" || key === "split_group_id" || key === "split_index" || key === "split_total") {
+          clone[key] = null;
+          continue;
+        }
+        clone[key] = origRow[key];
+      }
+      clone.service_name = "Cancellation: " + (origRow.service_name || "");
+      clone.service_type = "cancellation";
+      clone.parent_service_id = orig.id;
+      clone.res_status = "confirmed";
+      clone.service_price = -refundAmount;
+      clone.client_price = clientPrice;
+      clone.refund_amount = refundAmount;
+      clone.cancellation_fee = cancellationFee;
+      clone.cancellation_refund_type = body.cancellationRefundType;
+
+      const { data: newService, error: insertErr } = await supabaseAdmin
+        .from("order_services")
+        .insert(clone)
+        .select()
+        .single();
+      if (insertErr) {
+        if (insertErr.code === "42703") {
+          delete clone.cancellation_refund_type;
+          const { data: retry, error: retryErr } = await supabaseAdmin.from("order_services").insert(clone).select().single();
+          if (retryErr) {
+            console.error("Clone service insert error:", retryErr);
+            return NextResponse.json({ error: "Failed to create cancellation service" }, { status: 500 });
+          }
+          const inserted = retry as Record<string, unknown>;
+          const { data: travellers } = await supabaseAdmin.from("order_service_travellers").select("traveller_id").eq("service_id", orig.id);
+          if (travellers && travellers.length > 0) {
+            await supabaseAdmin.from("order_service_travellers").insert(
+              (travellers as { traveller_id: string }[]).map((t) => ({
+                company_id: companyId,
+                service_id: inserted.id,
+                traveller_id: t.traveller_id,
+              }))
+            );
+          }
+          syncOrderDatesFromServices(orderId).catch(() => {});
+          return NextResponse.json({ service: { id: inserted.id, serviceType: "cancellation", parentServiceId: orig.id } });
+        }
+        console.error("Clone service insert error:", insertErr);
+        return NextResponse.json({ error: "Failed to create cancellation service" }, { status: 500 });
+      }
+      const inserted = newService as Record<string, unknown>;
+      const { data: travellers } = await supabaseAdmin.from("order_service_travellers").select("traveller_id").eq("service_id", orig.id);
+      if (travellers && travellers.length > 0) {
+        await supabaseAdmin.from("order_service_travellers").insert(
+          (travellers as { traveller_id: string }[]).map((t) => ({
+            company_id: companyId,
+            service_id: inserted.id,
+            traveller_id: t.traveller_id,
+          }))
+        );
+      }
+      syncOrderDatesFromServices(orderId).catch(() => {});
+      upsertOrderServiceEmbedding(inserted.id as string).catch((e) => console.warn("[POST clone] upsertOrderServiceEmbedding:", e));
+      return NextResponse.json({ service: { id: inserted.id, serviceType: "cancellation", parentServiceId: orig.id } });
     }
 
     // Validate required fields

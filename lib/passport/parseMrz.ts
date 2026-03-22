@@ -58,7 +58,8 @@ function mrzDateToIso(mrzDate: string | null | undefined): string | undefined {
  * PDF text may have extra content, different line breaks, or spaces.
  * TD3 passport: 2 lines of 44 chars each, line 1 starts with P<
  */
-function extractMrzLinesFromText(text: string): string[] | null {
+/** Exported for AI parse fallback: find TD3 MRZ (P< or I<) inside arbitrary text (e.g. model reply). */
+export function extractTd3MrzLinesFromText(text: string): string[] | null {
   // Remove all whitespace to get continuous MRZ-like string
   const noSpaces = text.replace(/\s/g, "");
   // MRZ uses only A-Z, 0-9, <
@@ -113,7 +114,7 @@ export function parseMrzToPassportData(text: string): PassportDataFromMrz | null
   }
 
   // Try 2: Extract MRZ from full PDF text (P<... continuous or embedded)
-  const extracted = extractMrzLinesFromText(trimmed);
+  const extracted = extractTd3MrzLinesFromText(trimmed);
   if (extracted) {
     const result = tryParseMrz(extracted);
     if (result) return result;

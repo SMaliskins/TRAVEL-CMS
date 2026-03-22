@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
@@ -10,6 +10,7 @@ const ClientsByCitizenshipPie = dynamic(
   { ssr: false, loading: () => <div className="h-48 bg-gray-100 rounded animate-pulse" /> }
 );
 import DirectoryMergeModal from "@/components/DirectoryMergeModal";
+import MergeSelectedIntoModal from "@/components/MergeSelectedIntoModal";
 import { formatPhoneForDisplay } from "@/utils/phone";
 import "../hotels-booking/modern-booking.css";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -36,17 +37,27 @@ interface DirectoryStats {
 
 export default function DirectoryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const currentRole = useCurrentUserRole();
   const isSubagent = currentRole === "subagent";
   const [records, setRecords] = useState<DirectoryRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("directory.search") ?? "";
+  });
   const [stats, setStats] = useState<DirectoryStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const r = sessionStorage.getItem("directory.role");
+    return r || null;
+  });
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showMergeSelectedModal, setShowMergeSelectedModal] = useState(false);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
   const [showImportModal, setShowImportModal] = useState(false);
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -66,6 +77,36 @@ export default function DirectoryPage() {
   const totalPages = Math.ceil(total / limit) || 1;
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
+
+  const DIR_SEARCH_KEY = "directory.search";
+  const DIR_ROLE_KEY = "directory.role";
+
+  // When landing with URL params (e.g. shared link), apply them over sessionStorage
+  useEffect(() => {
+    const fromUrl = searchParams.get("search") ?? "";
+    const roleFromUrl = searchParams.get("role");
+    if (fromUrl || roleFromUrl) {
+      setSearchQuery(fromUrl);
+      setSelectedRole(roleFromUrl);
+    }
+  }, [searchParams]);
+
+  // Persist search/role to sessionStorage and URL when they change (so Back restores from sessionStorage)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (searchQuery.trim()) sessionStorage.setItem(DIR_SEARCH_KEY, searchQuery.trim());
+    else sessionStorage.removeItem(DIR_SEARCH_KEY);
+    if (selectedRole) sessionStorage.setItem(DIR_ROLE_KEY, selectedRole);
+    else sessionStorage.removeItem(DIR_ROLE_KEY);
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (selectedRole) params.set("role", selectedRole);
+    const qs = params.toString();
+    const desired = qs ? `?${qs}` : "";
+    if (window.location.pathname === "/directory" && window.location.search !== desired) {
+      router.replace(qs ? `/directory?${qs}` : "/directory", { scroll: false });
+    }
+  }, [searchQuery, selectedRole, router]);
 
   // Load statistics and first page of contacts in parallel on mount; then keep records in sync with search/role
   // status: "active" = main list, "archived" = archived contacts (restore from here)
@@ -92,25 +133,27 @@ export default function DirectoryPage() {
     }
   }, []);
 
-  // Load statistics on mount (in parallel with list below)
+  // Load statistics after a short delay so the list and search paint first (reduces perceived lag and auth race)
   useEffect(() => {
     let cancelled = false;
     setStatsLoading(true);
-    fetchWithAuth("/api/directory/statistics")
-      .then((response) => {
-        if (cancelled) return null;
-        return response.ok ? response.json() : null;
-      })
-      .then((data) => {
-        if (!cancelled && data) setStats(data);
-      })
-      .catch((error) => {
-        if (!cancelled) console.error("Error loading directory stats:", error);
-      })
-      .finally(() => {
-        if (!cancelled) setStatsLoading(false);
-      });
-    return () => { cancelled = true; };
+    const t = setTimeout(() => {
+      fetchWithAuth("/api/directory/statistics")
+        .then((response) => {
+          if (cancelled) return null;
+          return response.ok ? response.json() : null;
+        })
+        .then((data) => {
+          if (!cancelled && data) setStats(data);
+        })
+        .catch((error) => {
+          if (!cancelled) console.error("Error loading directory stats:", error);
+        })
+        .finally(() => {
+          if (!cancelled) setStatsLoading(false);
+        });
+    }, 150);
+    return () => { cancelled = true; clearTimeout(t); };
   }, []);
 
   const prevSearchRef = useRef(searchQuery);
@@ -137,6 +180,52 @@ export default function DirectoryPage() {
       setPage(1);
     }
   }, [searchQuery, selectedRole]);
+
+  // Keep URL in sync with search and role so that back button restores them
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (selectedRole) params.set("role", selectedRole);
+    const qs = params.toString();
+    const desired = qs ? `?${qs}` : "";
+    if (typeof window !== "undefined" && window.location.pathname === "/directory" && window.location.search !== desired) {
+      router.replace(desired ? `/directory?${qs}` : "/directory", { scroll: false });
+    }
+  }, [searchQuery, selectedRole, router]);
+
+  // Clear row selection when page, role filter, or archive mode change
+  useEffect(() => {
+    setSelectedRowIds(new Set());
+  }, [page, selectedRole, showArchiveView]);
+
+  const selectedCount = selectedRowIds.size;
+  const allOnPageSelected =
+    !isSubagent && !showArchiveView && records.length > 0 && records.every((r) => selectedRowIds.has(r.id));
+  const someOnPageSelected =
+    !isSubagent && !showArchiveView && records.some((r) => selectedRowIds.has(r.id));
+
+  const toggleRowSelected = (id: string) => {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        records.forEach((r) => next.delete(r.id));
+      } else {
+        records.forEach((r) => next.add(r.id));
+      }
+      return next;
+    });
+  };
+
+  const clearRowSelection = () => setSelectedRowIds(new Set());
 
   // Restore scroll position when returning from contact detail (after content has loaded)
   const scrollRestoreRef = useRef<number | null>(null);
@@ -647,11 +736,35 @@ export default function DirectoryPage() {
               )}
             </div>
           </div>
+          {!isSubagent && !showArchiveView && selectedCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 bg-indigo-50/90 px-4 py-2">
+              <span className="text-sm font-medium text-indigo-900">
+                {selectedCount} contact{selectedCount === 1 ? "" : "s"} selected
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMergeSelectedModal(true)}
+                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  ⇄ Merge selected into…
+                </button>
+                <button
+                  type="button"
+                  onClick={clearRowSelection}
+                  className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-50"
+                >
+                  Clear selection
+                </button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="overflow-hidden">
               <div className="h-12 border-b bg-gray-50" />
               {[...Array(8)].map((_, i) => (
                 <div key={i} className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 last:border-0">
+                  {!isSubagent && !showArchiveView && <div className="h-4 w-4 bg-gray-100 rounded animate-pulse" />}
                   <div className="h-4 w-12 bg-gray-100 rounded animate-pulse" />
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse" />
@@ -676,6 +789,20 @@ export default function DirectoryPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
+                  {!isSubagent && !showArchiveView && (
+                    <th className="w-10 px-2 py-2 text-left" scope="col">
+                      <input
+                        type="checkbox"
+                        checked={allOnPageSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected;
+                        }}
+                        onChange={toggleSelectAllOnPage}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        aria-label="Select all contacts on this page"
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
@@ -703,6 +830,21 @@ export default function DirectoryPage() {
                         router.push(`/directory/${record.id}`);
                       }}
                     >
+                      {!isSubagent && !showArchiveView && (
+                        <td
+                          className="w-10 px-2 py-2 whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedRowIds.has(record.id)}
+                            onChange={() => toggleRowSelected(record.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            aria-label={`Select ${displayName}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-2 whitespace-nowrap">
                         <span className="text-xs font-mono text-gray-400">
                           {recordWithExtras.displayId ? String(recordWithExtras.displayId).padStart(5, '0') : String(index + 1).padStart(5, '0')}
@@ -789,7 +931,17 @@ export default function DirectoryPage() {
         <DirectoryMergeModal
           isOpen={showMergeModal}
           onClose={() => setShowMergeModal(false)}
-          onSuccess={() => loadRecords(searchQuery, selectedRole, page)}
+          onSuccess={() => loadRecords(searchQuery, selectedRole, page, showArchiveView ? "archived" : "active")}
+        />
+
+        <MergeSelectedIntoModal
+          isOpen={showMergeSelectedModal}
+          onClose={() => setShowMergeSelectedModal(false)}
+          sourceIds={Array.from(selectedRowIds)}
+          onComplete={() => {
+            loadRecords(searchQuery, selectedRole, page, showArchiveView ? "archived" : "active");
+            setSelectedRowIds(new Set());
+          }}
         />
 
         {/* Import CSV Modal */}

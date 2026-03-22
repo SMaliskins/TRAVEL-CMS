@@ -5,6 +5,215 @@
 
 ---
 
+## [2026-03-20] CW — Finance: Company expenses (Supervisor/Finance only)
+
+**Task:** Add Finance section for company expense invoices (utilities, insurance, etc.) — not linked to orders. Parse documents; add rows; filter/search by period, supplier, amount. Supervisor and Finance only.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Migration `add_company_expense_invoices.sql`: table `company_expense_invoices` (company_id, supplier, invoice_date, amount, currency, description, created_at, created_by); RLS policies for supervisor/finance only.
+- API: GET/POST `/api/finances/company-expenses` (filters: dateFrom, dateTo, supplier, amountMin, amountMax, search); POST body for add; PATCH/DELETE `/api/finances/company-expenses/[id]`. Role check: supervisor or finance.
+- API: POST `/api/finances/company-expenses/parse` — multipart file (PDF/image), regex + optional AI extraction (supplier, invoice_date, amount, currency, description), return JSON for form prefill.
+- Finance layout: new tab "Company expenses" visible only when role is supervisor or finance (or admin).
+- Page `/finances/company-expenses`: filters (period, quick search, supplier, amount min/max), table sorted by invoice_date; Add row form; Upload & parse → prefills form; Edit/Delete per row. Forbidden message for other roles.
+- i18n: companyExpenses.* keys (en, ru, lv).
+
+**Next Step:** Run migration in Supabase; QA — add row, upload PDF, filter, edit, delete. Optional: RELEASE_LOG entry when verified.
+
+---
+
+## [2026-03-17] CW — AI passport PDF: Responses API + Files API
+
+**Task:** UK / PDF passport parsing broken (wrong Chat Completions payload) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `parse-passport/route.ts`: PDF path — `POST /v1/files` (`purpose=user_data`) → `POST /v1/responses` with `input_file` + `instructions` (SYSTEM_PROMPT), `store: false`, `max_output_tokens` 1500; `DELETE /v1/files/:id` in `finally`; `extractOpenAiResponsesOutputText` walks `output` message `output_text` parts
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — upload UK PDF; confirm JSON + MRZ path
+
+---
+
+## [2026-03-18] CW — AI passport parse: UK/MRZ robustness
+
+**Task:** UK passport parsing seemed broken / wrong person | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `parse-passport/route.ts`: strip ```json fences before JSON parse; recover TD3 MRZ lines from full model text via `extractTd3MrzLinesFromText`; apply MRZ to name/number/nationality/gender (not only dob/expiry); MRZ-only fallback when AI JSON empty; SYSTEM_PROMPT UK GBR hint; OpenAI `max_tokens` 1500
+- `lib/passport/parseMrz.ts`: export `extractTd3MrzLinesFromText` (was internal)
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — UK biodata image/PDF; verify Bondarenko MRZ overrides wrong visual guess
+
+---
+
+## [2026-03-18] CW — Merge modals: preview + confirm checkbox
+
+**Task:** Preview + confirm before directory merge | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `components/MergeContactPreview.tsx`: preview cards (ID, type/roles, email, phone, passport name/No., DOB), mismatch warning passport vs card name, irreversible notice, confirm checkbox
+- `DirectoryMergeModal`, `MergeContactModal`, `MergeSelectedIntoModal`: step pick → `GET /api/directory/:id` full records → review → checkbox → Confirm merge; Back/Cancel; wider modal + scroll
+- `MergeContactModal`: `useModalOverlay(isOpen)`, `useFocusTrap(isOpen)`
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — all three merge entry points; avatar URLs if relative
+
+---
+
+## [2026-03-18] CW — Merge: sync orders.client_display_name after client_party_id retarget
+
+**Task:** Lead Passenger showed wrong name vs avatar after directory merge | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/api/directory/merge/route.ts`: before retargeting orders, collect affected order ids; after `client_party_id` → target, set `client_display_name` from target `party.display_name` for those orders (matches order PATCH behaviour)
+
+**Результат:** New merges keep header name aligned with merged-into card; existing bad rows need one-time fix in DB or re-save client on order.
+
+**Next Step:** QA — merge two clients with orders; check order header name + avatar
+
+---
+
+## [2026-03-17 23:00] CW — Directory: multi-select + MergeSelectedIntoModal
+
+**Task:** Wire bulk merge modal to Directory with row checkboxes | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/directory/page.tsx`: checkbox column + select-all on page, indeterminate header, toolbar when selection &gt; 0, `MergeSelectedIntoModal`; hidden for subagent and archive view; selection clears on page/role/archive change
+- `MergeSelectedIntoModal.tsx`: reset state on open, `useModalOverlay(isOpen)` / `useFocusTrap(isOpen)`, clearer copy
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — select 2+ rows, merge into target; verify list refresh and navigation still works on row click
+
+---
+
+## [2026-03-17 22:15] CW — Directory API: map party_person (dob) when party_type missing
+
+**Task:** DOB still not showing / seems not saved | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `buildDirectoryRecord` in `app/api/directory/[id]/route.ts` and `app/api/directory/route.ts`: `includePersonProfile` when `party_type === "person"` OR (not company AND party_person row has data: names, dob, passport fields, personal_code). Case-normalized `company` check.
+
+**Результат:** Saved `dob` in `party_person` is returned even if `party.party_type` is null/legacy; UI sync no longer clears passport DOB after save.
+
+**Next Step:** QA — contact with odd `party_type`; set DOB, save, reload
+
+---
+
+## [2026-03-17 21:30] CW — Passport DOB: normalize + dirty sync + API persist
+
+**Task:** Date of birth not saving / shows "-" in passport block | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `DirectoryForm.tsx`: single `setPassportData` functional update; `markFieldDirty("dob")` when normalized DOB changes; sync `setDob` with normalized ISO
+- `PassportDetailsInput.tsx`: `updateField` accepts `undefined`; DOB picker passes through `date` (clear → undefined) instead of `""`
+- `app/api/directory/[id]/route.ts`: `normalizePersonDobToIso` on `updates.dob`; empty → null; invalid string → omit field (no wipe)
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — edit person passport DOB, Save/Done, reload record; expect `dob` in DB as YYYY-MM-DD and UI not "-"
+
+---
+
+## [2026-03-17 20:45] CW — Directory list: merge duplicate party_person rows (keep avatar_url)
+
+**Task:** Some contacts show initials in search though they have photo | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/api/directory/route.ts`: `buildPersonMapByPartyId` merges multiple `party_person` rows per `party_id`, preserves non-empty `avatar_url`
+- `PartySelect`: `referrerPolicy="no-referrer"` on result avatars (fewer blocked image loads)
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — if still initials, check Network JSON `avatarUrl` and image request status for that party id
+
+---
+
+## [2026-03-17 20:15] CW — Order header: avatar left of Lead Passenger
+
+**Task:** Show client photo beside Lead Passenger label + name | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/orders/[orderCode]/page.tsx`: `leadPassengerHeaderAvatar` from `orderTravellersForPicker` + `resolvePublicMediaUrl`; 48×48 circle left of text; fallback initials; `onError` → initials
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — header with client that has `avatar_url` in travellers API
+
+---
+
+## [2026-03-17 19:45] CW — Order header PartySelect: same directory search as Travellers + traveller avatars
+
+**Task:** Client search in order header shows avatars like Travellers | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `PartySelect`: optional `directoryMatchTravellersApi` — no `?role=client` on list fetch, filter rows like `AssignedTravellersModal`; merge `avatarUrl` from `prioritizedParties` by id; clear `avatarLoadFailed` on each successful search
+- `app/orders/[orderCode]/page.tsx`: load `/api/orders/.../travellers` for picker; `prioritizedParties` + `directoryMatchTravellersApi` on header `PartySelect`; refetch travellers after `saveClient`
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — header client search vs Travellers add search (same Bondarenko row should show photo if DB has avatar_url)
+
+---
+
+## [2026-03-17 19:00] CW — Resolve relative Supabase avatar URLs in PartySelect + directory list
+
+**Task:** Avatars show initials when DB stores storage path without domain | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Added `lib/resolvePublicMediaUrl.ts` (absolute `https` unchanged; relative → `NEXT_PUBLIC_SUPABASE_URL` + `/storage/v1/object/public/avatars/...`)
+- Wired in `app/api/directory/route.ts` for `avatarUrl` / `companyAvatarUrl` and in `PartySelect` before `<img src>`
+
+**Результат:** `npx tsc --noEmit` OK.
+
+**Next Step:** QA — order header client search: photo should load if `party_person.avatar_url` is path-only or full URL
+
+---
+
+## [2026-03-17 18:30] CW — PartySelect / directory list avatars
+
+**Task:** Client search dropdown shows real avatars | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `app/api/directory/route.ts`: log `party_person` / `party_company` fetch errors; after `buildDirectoryRecord` force-set `avatarUrl` / `companyAvatarUrl` from maps (trim); `Cache-Control: private, no-store` on list JSON
+- `components/PartySelect.tsx`: map `companyAvatarUrl` / `logo_url`; `cache: "no-store"` on fetch; `avatarUrl || companyAvatarUrl` for image; `onError` → initials; `useMemo` for prioritized parties + stable `useCallback` deps
+
+**Результат:** `npx tsc --noEmit` OK. QA: confirm Network response includes `avatarUrl` for a contact with photo; if missing, data is DB-side.
+
+**Next Step:** QA — visual check in order Client picker
+
+---
+
 ## [2026-03-17 15:00] CW — DEDUP: Cleanup existing duplicates + fix find-or-create
 
 **Task:** Remove existing duplicate records & fix hidden duplicate source | **Status:** SUCCESS

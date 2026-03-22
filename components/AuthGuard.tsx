@@ -30,7 +30,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const publicPath = isPublicPath(pathname);
 
-    const checkAuth = async () => {
+    const checkAuth = async (isRetry = false) => {
       try {
         const [sessionRes, userRes] = await Promise.all([
           supabase.auth.getSession(),
@@ -43,7 +43,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
         if (!session) {
           setIsAuthenticated(false);
-          if (!publicPath) { router.push("/login"); return; }
+          if (!publicPath) {
+            if (!isRetry) {
+              await new Promise((r) => setTimeout(r, 400));
+              return checkAuth(true);
+            }
+            router.push("/login");
+          }
           setIsLoading(false);
           return;
         }
@@ -57,13 +63,21 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             await supabase.auth.signOut({ scope: "local" }).catch(() => {});
           }
           setIsAuthenticated(false);
-          if (!publicPath) { router.push("/login"); return; }
+          if (!publicPath) {
+            if (!isRetry && !isRefreshTokenError) {
+              await new Promise((r) => setTimeout(r, 400));
+              return checkAuth(true);
+            }
+            router.push("/login");
+          }
           setIsLoading(false);
           return;
         }
 
         setIsAuthenticated(true);
-        if (publicPath) { router.push("/dashboard"); return; }
+        if (publicPath) { router.push("/dashboard"); }
+        setIsLoading(false);
+        return;
       } catch (error) {
         const msg = error && typeof error === "object" && "message" in error ? String((error as { message?: string }).message || "") : "";
         const isRefreshTokenError = msg.includes("Refresh Token") || msg.includes("refresh_token_not_found");
@@ -71,7 +85,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut({ scope: "local" }).catch(() => {});
         }
         setIsAuthenticated(false);
-        if (!publicPath) { router.push("/login"); return; }
+        if (!publicPath) {
+          if (!isRetry) {
+            await new Promise((r) => setTimeout(r, 400));
+            return checkAuth(true);
+          }
+          router.push("/login");
+        }
       }
       setIsLoading(false);
     };

@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
   const [demoEmail, setDemoEmail] = useState("");
+
+  // Local dev: redirect to main app (orders)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+      router.replace("/orders");
+    }
+  }, [router]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState("");
   const [demoCredentials, setDemoCredentials] = useState<{ email: string; password: string } | null>(null);

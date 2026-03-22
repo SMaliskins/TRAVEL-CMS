@@ -358,7 +358,8 @@ export async function POST(
       total,
       notes,
     } = body;
-    const { language } = body;
+    const { language, original_invoice_id } = body;
+    const isCredit = body.is_credit === true;
 
     // Validation
     if (!invoice_number || !items || items.length === 0) {
@@ -420,12 +421,55 @@ export async function POST(
       }
     }
 
+    // For credit invoices: use original invoice number + "-C" when we can resolve the original
+    let effectiveInvoiceNumber = String(invoice_number).trim();
+    if (isCredit) {
+      let sourceInvoiceId: string | null = null;
+      if (original_invoice_id && typeof original_invoice_id === "string" && original_invoice_id.trim()) {
+        sourceInvoiceId = original_invoice_id.trim();
+      } else if (serviceIds.length > 0) {
+        const { data: svcRows } = await supabaseAdmin
+          .from("order_services")
+          .select("id, invoice_id, parent_service_id")
+          .in("id", serviceIds);
+        const invIds = new Set<string>();
+        const parentIds = (svcRows || [])
+          .filter((s: any) => !s.invoice_id && s.parent_service_id)
+          .map((s: any) => s.parent_service_id);
+        for (const s of svcRows || []) {
+          if (s.invoice_id) invIds.add(s.invoice_id);
+        }
+        if (parentIds.length > 0) {
+          const { data: parents } = await supabaseAdmin
+            .from("order_services")
+            .select("id, invoice_id")
+            .in("id", parentIds);
+          for (const p of parents || []) {
+            if (p.invoice_id) invIds.add(p.invoice_id);
+          }
+        }
+        if (invIds.size === 1) sourceInvoiceId = [...invIds][0];
+      }
+      if (sourceInvoiceId) {
+        const { data: srcInv } = await supabaseAdmin
+          .from("invoices")
+          .select("invoice_number")
+          .eq("id", sourceInvoiceId)
+          .eq("company_id", order.company_id)
+          .maybeSingle();
+        if (srcInv?.invoice_number) {
+          const origNum = String(srcInv.invoice_number).trim();
+          effectiveInvoiceNumber = origNum.endsWith("-C") ? origNum : `${origNum}-C`;
+        }
+      }
+    }
+
     // Check if invoice number is already in use
     const { data: existingWithNumber } = await supabaseAdmin
       .from("invoices")
       .select("id, status")
       .eq("company_id", order.company_id)
-      .eq("invoice_number", String(invoice_number).trim())
+      .eq("invoice_number", effectiveInvoiceNumber)
       .maybeSingle();
 
     if (existingWithNumber) {
@@ -455,7 +499,7 @@ export async function POST(
     };
 
     const invoiceData: any = {
-      invoice_number,
+      invoice_number: effectiveInvoiceNumber,
       order_id: order.id,
       company_id: order.company_id,
       invoice_date: invoice_date || new Date().toISOString().split("T")[0],

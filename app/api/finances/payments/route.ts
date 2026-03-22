@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const method = searchParams.get("method");
     const accountId = searchParams.get("accountId");
     const orderId = searchParams.get("orderId");
+    const includeCancelled = searchParams.get("includeCancelled") === "true";
 
     let query = supabaseAdmin
       .from("payments")
@@ -27,6 +28,8 @@ export async function GET(request: NextRequest) {
       .eq("company_id", companyId)
       .order("paid_at", { ascending: false });
 
+    // Exclude cancelled in global list; when filtering by orderId, include all (OrderPaymentsList shows them with toggle)
+    if (!includeCancelled && !orderId) query = query.neq("status", "cancelled");
     if (orderId) query = query.eq("order_id", orderId);
     if (dateFrom) query = query.gte("paid_at", dateFrom);
     if (dateTo) query = query.lte("paid_at", dateTo + "T23:59:59Z");
@@ -129,6 +132,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Order not found", debug: { order_id, companyId } }, { status: 404 });
     }
 
+    const amountNum = parseFloat(amount);
+    const paidAt = paid_at || new Date().toISOString();
+    const paidAtDate = paidAt.slice(0, 16);
+
+    const { data: existingPayments } = await supabaseAdmin
+      .from("payments")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("order_id", order_id)
+      .eq("amount", Math.round(amountNum * 100) / 100)
+      .neq("status", "cancelled");
+
+    if (existingPayments && existingPayments.length > 0) {
+      const matches = existingPayments.filter((p: { id: string }) => true);
+      const { data: fullRows } = await supabaseAdmin
+        .from("payments")
+        .select("invoice_id, paid_at")
+        .in("id", matches.map((p: { id: string }) => p.id));
+
+      const invoiceIdToMatch = invoice_id || null;
+      const isDuplicate = (fullRows ?? []).some(
+        (r: { invoice_id: string | null; paid_at: string }) =>
+          (r.invoice_id || null) === invoiceIdToMatch &&
+          (r.paid_at || "").slice(0, 16) === paidAtDate
+      );
+
+      if (isDuplicate) {
+        return NextResponse.json(
+          {
+            error: "Duplicate payment",
+            message: "A payment with the same order, amount, invoice, and date already exists.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const { data: payment, error } = await supabaseAdmin
       .from("payments")
       .insert({
@@ -136,9 +176,9 @@ export async function POST(request: NextRequest) {
         order_id,
         invoice_id: invoice_id || null,
         method,
-        amount: parseFloat(amount),
+        amount: amountNum,
         currency: currency || "EUR",
-        paid_at: paid_at || new Date().toISOString(),
+        paid_at: paidAt,
         account_id: account_id || null,
         payer_name: payer_name || null,
         payer_party_id: payer_party_id || null,

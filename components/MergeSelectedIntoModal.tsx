@@ -6,6 +6,11 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import DirectoryContactPickerRow from "@/components/DirectoryContactPickerRow";
+import {
+  MergeContactPreviewCard,
+  MergeConfirmCheckbox,
+  MergeIrreversibleNotice,
+} from "@/components/MergeContactPreview";
 
 interface MergeSelectedIntoModalProps {
   isOpen: boolean;
@@ -27,6 +32,10 @@ export default function MergeSelectedIntoModal({
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [step, setStep] = useState<"pick" | "confirm">("pick");
+  const [confirmChecked, setConfirmChecked] = useState(false);
+  const [previewRecords, setPreviewRecords] = useState<DirectoryRecord[]>([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const validSourceIds = sourceIds.filter((id) => selectedTarget && id !== selectedTarget.id);
 
@@ -64,8 +73,52 @@ export default function MergeSelectedIntoModal({
     return () => clearTimeout(timer);
   }, [isOpen, searchQuery, searchContacts]);
 
-  const trapRef = useFocusTrap<HTMLDivElement>(true);
-  useModalOverlay();
+  const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
+  useModalOverlay(isOpen);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedTarget(null);
+    setError(null);
+    setProgress({ done: 0, total: 0 });
+    setStep("pick");
+    setConfirmChecked(false);
+    setPreviewRecords([]);
+  }, [isOpen]);
+
+  const loadBulkPreview = async () => {
+    if (!selectedTarget) return;
+    const toFetch = [...new Set([...sourceIds, selectedTarget.id])];
+    setLoadingPreview(true);
+    setError(null);
+    try {
+      const results = await Promise.all(
+        toFetch.map(async (id) => {
+          const res = await fetchWithAuth(`/api/directory/${id}`);
+          const json = res.ok ? await res.json() : null;
+          return json?.record as DirectoryRecord | undefined;
+        })
+      );
+      const map = new Map<string, DirectoryRecord>();
+      toFetch.forEach((id, i) => {
+        const r = results[i];
+        if (r) map.set(id, r);
+      });
+      if (map.size !== toFetch.length) {
+        throw new Error("Failed to load some contacts for preview");
+      }
+      const ordered = toFetch.map((id) => map.get(id)!).filter(Boolean);
+      setPreviewRecords(ordered);
+      setStep("confirm");
+      setConfirmChecked(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load preview");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
 
   const handleMergeAll = async () => {
     if (!selectedTarget) return;
@@ -113,20 +166,56 @@ export default function MergeSelectedIntoModal({
       : selectedTarget.companyName || "Contact"
     : "";
 
+  const previewMap =
+    step === "confirm" && previewRecords.length > 0
+      ? new Map(previewRecords.map((r) => [r.id, r]))
+      : null;
+  const targetPreview = selectedTarget && previewMap ? previewMap.get(selectedTarget.id) : null;
+  const sourcePreviewIds = selectedTarget
+    ? sourceIds.filter((id) => id !== selectedTarget.id)
+    : [];
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4">
-      <div ref={trapRef} className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div ref={trapRef} className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="border-b border-gray-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Merge selected into</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Merge <strong>{sourceIds.length}</strong> contact(s) into one (e.g. Trash). All orders and data will be transferred; sources will be archived.
+            {step === "pick"
+              ? `Merge ${sourceIds.length} selected contact(s) into one target. You will review every card (passport vs name) before confirming.`
+              : "Review all contacts below, then confirm."}
           </p>
         </div>
         <div className="space-y-4 px-6 py-4">
+          {step === "confirm" && targetPreview && previewMap ? (
+            <>
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Target (kept)
+                </h3>
+                <MergeContactPreviewCard record={targetPreview} variant="target" />
+              </div>
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Sources (archived after merge) — {sourcePreviewIds.length}
+                </h3>
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {sourcePreviewIds.map((id) => {
+                    const r = previewMap.get(id);
+                    if (!r) return null;
+                    return <MergeContactPreviewCard key={id} record={r} variant="source" />;
+                  })}
+                </div>
+              </div>
+              <MergeIrreversibleNotice />
+              <MergeConfirmCheckbox checked={confirmChecked} onChange={setConfirmChecked} disabled={merging} />
+            </>
+          ) : (
+            <>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Target contact (e.g. Trash)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target contact (card to keep)</label>
             <input
               type="text"
               value={searchQuery}
@@ -165,24 +254,51 @@ export default function MergeSelectedIntoModal({
           {error && (
             <p className="text-sm text-red-600">{error}</p>
           )}
+            </>
+          )}
         </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
-            disabled={merging}
+            disabled={merging || loadingPreview}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleMergeAll}
-            disabled={!selectedTarget || merging || validSourceIds.length === 0}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {merging ? `Merging ${progress.done}/${progress.total}...` : "⇄ Merge all into target"}
-          </button>
+          {step === "confirm" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("pick");
+                  setConfirmChecked(false);
+                  setPreviewRecords([]);
+                }}
+                disabled={merging}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleMergeAll}
+                disabled={!confirmChecked || merging || validSourceIds.length === 0}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {merging ? `Merging ${progress.done}/${progress.total}...` : "Confirm merge all"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={loadBulkPreview}
+              disabled={!selectedTarget || loadingPreview || validSourceIds.length === 0}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loadingPreview ? "Loading…" : "Continue to review"}
+            </button>
+          )}
         </div>
       </div>
     </div>

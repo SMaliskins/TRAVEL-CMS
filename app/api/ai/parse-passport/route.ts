@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { parseMrzToPassportData } from "@/lib/passport/parseMrz";
+import { extractTd3MrzLinesFromText, parseMrzToPassportData } from "@/lib/passport/parseMrz";
+import type { PassportDataFromMrz } from "@/lib/passport/parseMrz";
 import { MODELS } from "@/lib/ai/config";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
@@ -10,7 +11,7 @@ import { consumeRateLimit } from "@/lib/security/rateLimit";
  * 
  * Supports:
  * - Image upload (base64 or FormData)
- * - PDF upload (FormData) - sent directly to GPT-4o (works for scanned/image-based PDFs, Ukrainian passports, etc.)
+ * - PDF upload (FormData) — OpenAI Files API + Responses API (`input_file`, gpt-4o); not Chat Completions
  * - Text parsing (JSON body)
  * 
  * Expected FormData:
@@ -74,6 +75,7 @@ CRITICAL — Date of birth (dob):
 
 MRZ (Machine Readable Zone):
 - If the passport has MRZ at the bottom (2 lines of ~44 chars, A-Z 0-9 <), copy them EXACTLY as printed into mrzLine1 and mrzLine2. Used for reliable DOB and expiry extraction. Omit if not visible.
+- United Kingdom (GBR) and all ICAO passports: each MRZ line must be exactly 44 characters (pad with <). UK line 1 starts with P<GBR.
 
 Date of issue (passportIssueDate) and Date of expiry (passportExpiryDate):
 - Look for "Izdošanas datums/Date of issue", "Derīga līdz/Date of expiry", "Date de validité". European DD.MM.YYYY — convert to YYYY-MM-DD. NEVER swap day and month.
@@ -164,6 +166,29 @@ function normalizePassport(passport: Record<string, unknown> & Partial<PassportD
   };
 }
 
+function stripMarkdownCodeFences(s: string): string {
+  let t = s.trim();
+  if (t.startsWith("```")) {
+    t = t.replace(/^```(?:json)?\s*/i, "");
+    t = t.replace(/\s*```\s*$/i, "");
+  }
+  return t.trim();
+}
+
+function mrzBlocksToPassportData(m: PassportDataFromMrz): PassportData {
+  return {
+    passportNumber: m.passportNumber,
+    passportExpiryDate: m.passportExpiryDate,
+    passportIssuingCountry: m.passportIssuingCountry,
+    passportFullName: m.passportFullName,
+    firstName: m.firstName,
+    lastName: m.lastName,
+    dob: m.dob,
+    nationality: m.nationality,
+    gender: m.gender,
+  };
+}
+
 function mergePassports(primary: PassportData, secondary: PassportData): PassportData {
   const merged = { ...primary };
   for (const k of Object.keys(secondary) as (keyof PassportData)[]) {
@@ -177,7 +202,7 @@ function mergePassports(primary: PassportData, secondary: PassportData): Passpor
   return merged;
 }
 
-/** Apply MRZ as primary source for DOB and expiry (most reliable) */
+/** When MRZ parses (ICAO TD3), prefer it for identity + dates — fixes wrong visual OCR (e.g. UK biodata). */
 function applyMrzOverrides(
   passport: PassportData,
   mrzLine1?: string,
@@ -189,9 +214,80 @@ function applyMrzOverrides(
   if (!mrz) return passport;
   return {
     ...passport,
-    dob: mrz.dob ?? passport.dob,
+    passportNumber: mrz.passportNumber ?? passport.passportNumber,
     passportExpiryDate: mrz.passportExpiryDate ?? passport.passportExpiryDate,
+    passportIssuingCountry: mrz.passportIssuingCountry ?? passport.passportIssuingCountry,
+    passportFullName: mrz.passportFullName ?? passport.passportFullName,
+    firstName: mrz.firstName ?? passport.firstName,
+    lastName: mrz.lastName ?? passport.lastName,
+    dob: mrz.dob ?? passport.dob,
+    nationality: mrz.nationality ?? passport.nationality,
+    gender: mrz.gender ?? passport.gender,
   };
+}
+
+function recoverMrzLinesFromModelText(content: string, existing1?: string, existing2?: string): { mrzLine1?: string; mrzLine2?: string } {
+  if (existing1 && existing2) return { mrzLine1: existing1, mrzLine2: existing2 };
+  const extracted = extractTd3MrzLinesFromText(content);
+  if (!extracted || extracted.length < 2) return { mrzLine1: existing1, mrzLine2: existing2 };
+  return { mrzLine1: extracted[0], mrzLine2: extracted[1] };
+}
+
+/** OpenAI Responses API: aggregate text from `output` message parts (raw fetch has no `output_text`). */
+function extractOpenAiResponsesOutputText(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const d = data as Record<string, unknown>;
+  if (typeof d.output_text === "string" && d.output_text.trim()) return d.output_text;
+  const output = d.output;
+  if (!Array.isArray(output)) return "";
+  const chunks: string[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    if (o.type !== "message") continue;
+    const contentParts = o.content;
+    if (!Array.isArray(contentParts)) continue;
+    for (const part of contentParts) {
+      if (!part || typeof part !== "object") continue;
+      const p = part as Record<string, unknown>;
+      if (p.type === "output_text" && typeof p.text === "string") chunks.push(p.text);
+    }
+  }
+  return chunks.join("");
+}
+
+async function openaiUploadUserDataPdf(
+  apiKey: string,
+  pdfBase64: string,
+  filename: string
+): Promise<{ fileId: string } | { error: unknown }> {
+  const bytes = Buffer.from(pdfBase64, "base64");
+  const form = new FormData();
+  form.append("purpose", "user_data");
+  form.append("file", new Blob([bytes], { type: "application/pdf" }), filename);
+  const res = await fetch("https://api.openai.com/v1/files", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) return { error: json };
+  const id = json && typeof json === "object" && typeof (json as { id?: unknown }).id === "string"
+    ? (json as { id: string }).id
+    : null;
+  if (!id) return { error: json };
+  return { fileId: id };
+}
+
+async function openaiDeleteFileSafe(apiKey: string, fileId: string): Promise<void> {
+  try {
+    await fetch(`https://api.openai.com/v1/files/${encodeURIComponent(fileId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -277,51 +373,105 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      let messages;
-      
+      let content = "";
+
       if (textContent) {
-        // Text-based parsing
-        messages = [
-          {
-            role: "system",
-            content: SYSTEM_PROMPT,
-          },
+        const messages = [
+          { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
             content: `Parse this passport text and extract all passport information:\n\n${textContent}`,
           },
         ];
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: MODELS.OPENAI_VISION,
+            messages,
+            max_tokens: 1500,
+            temperature: 0.1,
+          }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error("OpenAI API error:", errorData);
+          return NextResponse.json(
+            { error: "AI parsing failed", details: errorData, passport: null },
+            { status: 500 }
+          );
+        }
+        const data = await response.json();
+        content = data.choices?.[0]?.message?.content || "";
       } else if (isPDF && pdfBase64) {
-        // PDF parsing - GPT-4o native PDF support (works for scanned/image-based PDFs, Ukrainian passports, etc.)
-        messages = [
-          {
-            role: "system",
-            content: SYSTEM_PROMPT,
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "file",
-                file: {
-                  filename: "passport.pdf",
-                  file_data: `data:application/pdf;base64,${pdfBase64}`,
+        /**
+         * PDFs must use Responses API + Files API (`input_file`).
+         * Chat Completions does not accept `type: file` / data-URL PDFs reliably.
+         */
+        const upload = await openaiUploadUserDataPdf(openaiKey, pdfBase64, "passport.pdf");
+        if ("error" in upload) {
+          console.error("OpenAI PDF upload error:", upload.error);
+          return NextResponse.json(
+            { error: "AI parsing failed (PDF upload)", details: upload.error, passport: null },
+            { status: 500 }
+          );
+        }
+        try {
+          const response = await fetch("https://api.openai.com/v1/responses", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${openaiKey}`,
+            },
+            body: JSON.stringify({
+              model: MODELS.OPENAI_VISION,
+              instructions: SYSTEM_PROMPT,
+              max_output_tokens: 1500,
+              temperature: 0.1,
+              store: false,
+              input: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "input_file", file_id: upload.fileId },
+                    {
+                      type: "input_text",
+                      text: "Extract all passport information from this PDF document. Include isAlienPassport: true if the document type is Alien's passport (Estonia: Välismaalase pass; Latvia: Ārzemnieka pase). Return JSON only.",
+                    },
+                  ],
                 },
-              },
-              {
-                type: "text",
-                text: "Extract all passport information from this PDF document. Include isAlienPassport: true if the document type is Alien's passport (Estonia: Välismaalase pass; Latvia: Ārzemnieka pase). Return JSON only.",
-              },
-            ],
-          },
-        ];
+              ],
+            }),
+          });
+          const respData = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            console.error("OpenAI Responses API error:", respData);
+            return NextResponse.json(
+              { error: "AI parsing failed", details: respData, passport: null },
+              { status: 500 }
+            );
+          }
+          const status =
+            respData && typeof respData === "object"
+              ? (respData as { status?: string }).status
+              : undefined;
+          if (status === "failed" || status === "cancelled" || status === "incomplete") {
+            console.error("OpenAI Responses status:", respData);
+            return NextResponse.json(
+              { error: "AI parsing failed", details: respData, passport: null },
+              { status: 500 }
+            );
+          }
+          content = extractOpenAiResponsesOutputText(respData);
+        } finally {
+          await openaiDeleteFileSafe(openaiKey, upload.fileId);
+        }
       } else {
-        // Image parsing
-        messages = [
-          {
-            role: "system",
-            content: SYSTEM_PROMPT,
-          },
+        const messages = [
+          { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
             content: [
@@ -338,39 +488,37 @@ export async function POST(request: NextRequest) {
             ],
           },
         ];
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: MODELS.OPENAI_VISION,
+            messages,
+            max_tokens: 1500,
+            temperature: 0.1,
+          }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error("OpenAI API error:", errorData);
+          return NextResponse.json(
+            { error: "AI parsing failed", details: errorData, passport: null },
+            { status: 500 }
+          );
+        }
+        const data = await response.json();
+        content = data.choices?.[0]?.message?.content || "";
       }
-
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: MODELS.OPENAI_VISION,
-          messages,
-          max_tokens: 1000,
-          temperature: 0.1,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("OpenAI API error:", errorData);
-        return NextResponse.json(
-          { error: "AI parsing failed", details: errorData, passport: null },
-          { status: 500 }
-        );
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || "";
+      const contentStripped = stripMarkdownCodeFences(content);
 
       let openaiPassport: PassportData | null = null;
       let mrzLine1: string | undefined;
       let mrzLine2: string | undefined;
       try {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const jsonMatch = contentStripped.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
@@ -386,6 +534,7 @@ export async function POST(request: NextRequest) {
       // Second pass: Anthropic (if configured and we have image/text)
       const anthropicKey = process.env.ANTHROPIC_API_KEY;
       let anthropicPassport: PassportData | null = null;
+      let anthropicRawText = "";
       if (anthropicKey && (imageBase64 || textContent) && !isPDF) {
         try {
           const anthropic = new Anthropic({ apiKey: anthropicKey });
@@ -402,8 +551,9 @@ export async function POST(request: NextRequest) {
             messages: [{ role: "user", content: userContent }],
           });
           const text = msg.content.find((c) => c.type === "text");
-          const textContent2 = text && "text" in text ? text.text : "";
-          const jsonMatch2 = textContent2.match(/\{[\s\S]*\}/);
+          anthropicRawText = text && "text" in text ? text.text : "";
+          const text2Stripped = stripMarkdownCodeFences(anthropicRawText);
+          const jsonMatch2 = text2Stripped.match(/\{[\s\S]*\}/);
           if (jsonMatch2?.[0]) {
             const parsed = JSON.parse(jsonMatch2[0]);
             const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
@@ -417,6 +567,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Recover MRZ from raw model text if JSON omitted lines (common on UK biodata pages)
+      const textBlob = `${content}\n${anthropicRawText}`;
+      ({ mrzLine1, mrzLine2 } = recoverMrzLinesFromModelText(textBlob, mrzLine1, mrzLine2));
+
       // Merge: prefer OpenAI as primary, fill gaps from Anthropic
       let finalPassport = openaiPassport
         ? anthropicPassport
@@ -424,10 +578,16 @@ export async function POST(request: NextRequest) {
           : openaiPassport
         : anthropicPassport;
 
-      // MRZ as primary source for DOB and expiry
       if (finalPassport) {
         finalPassport = applyMrzOverrides(finalPassport, mrzLine1, mrzLine2);
         return NextResponse.json({ passport: finalPassport });
+      }
+
+      if (mrzLine1 && mrzLine2) {
+        const mrzOnly = parseMrzToPassportData(`${mrzLine1}\n${mrzLine2}`);
+        if (mrzOnly && (mrzOnly.passportNumber || mrzOnly.lastName || mrzOnly.firstName)) {
+          return NextResponse.json({ passport: mrzBlocksToPassportData(mrzOnly) });
+        }
       }
 
       return NextResponse.json({ 

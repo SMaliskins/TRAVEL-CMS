@@ -101,7 +101,17 @@ export default function CityMultiSelect({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    if (filteredCities.length >= 3 || searchQuery.length < 3) {
+    if (searchQuery.length < 3) {
+      setApiResults([]);
+      return;
+    }
+
+    // Always search API unless there's already a local result whose name starts with the query.
+    // The old threshold (>= 3 local results) suppressed API even when no exact/prefix match existed.
+    const hasGoodLocalMatch = filteredCities.some(
+      (c) => c.name.toLowerCase().startsWith(searchQuery.toLowerCase())
+    );
+    if (hasGoodLocalMatch) {
       setApiResults([]);
       return;
     }

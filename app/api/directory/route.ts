@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { getSearchPatterns, getSemanticQueryVariants, matchesSearch } from "@/lib/directory/searchNormalize";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -23,6 +24,32 @@ async function getCurrentUser(request: NextRequest) {
 }
 
 /**
+ * If duplicate party_person rows exist for one party_id, a naive Map would keep the last row only
+ * and could drop avatar_url. Merge rows and preserve any non-empty avatar_url.
+ */
+function buildPersonMapByPartyId(rows: any[] | null | undefined): Map<string, any> {
+  const map = new Map<string, any>();
+  for (const p of rows || []) {
+    const pid = p?.party_id as string | undefined;
+    if (!pid) continue;
+    const prev = map.get(pid);
+    if (!prev) {
+      map.set(pid, { ...p });
+      continue;
+    }
+    const trimStr = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const nextAvatar = trimStr(p.avatar_url);
+    const prevAvatar = trimStr(prev.avatar_url);
+    map.set(pid, {
+      ...prev,
+      ...p,
+      avatar_url: nextAvatar || prevAvatar || p.avatar_url || prev.avatar_url,
+    });
+  }
+  return map;
+}
+
+/**
  * Build DirectoryRecord from database rows
  */
 function buildDirectoryRecord(row: any): DirectoryRecord {
@@ -31,10 +58,24 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   if (row.is_supplier) roles.push("supplier");
   if (row.is_subagent) roles.push("subagent");
 
+  const pt = String(row.party_type ?? "").toLowerCase();
+  const isCompanyParty = pt === "company";
+  const isPersonParty = pt === "person";
+  const hasNonEmptyStr = (v: unknown) => v != null && String(v).trim() !== "";
+  const hasPersonRowData =
+    hasNonEmptyStr(row.first_name) ||
+    hasNonEmptyStr(row.last_name) ||
+    row.dob != null ||
+    hasNonEmptyStr(row.passport_number) ||
+    row.passport_issue_date != null ||
+    row.passport_expiry_date != null ||
+    hasNonEmptyStr(row.personal_code);
+  const includePersonProfile = isPersonParty || (!isCompanyParty && hasPersonRowData);
+
   const record: DirectoryRecord = {
     id: row.id,
     displayId: row.display_id || undefined,
-    type: row.party_type === "company" ? "company" : "person",
+    type: isCompanyParty ? "company" : "person",
     roles,
     isActive: row.status === "active",
     createdAt: row.created_at,
@@ -42,7 +83,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   };
 
   // Person fields
-  if (row.party_type === "person") {
+  if (includePersonProfile) {
     record.title = row.title || undefined;
     record.firstName = row.first_name || undefined;
     record.lastName = row.last_name || undefined;
@@ -75,7 +116,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   }
 
   // Company fields
-  if (row.party_type === "company") {
+  if (isCompanyParty) {
     record.companyName = row.company_name || row.display_name || undefined;
     record.companyAvatarUrl = row.logo_url || undefined;
     record.regNumber = row.reg_number || undefined;
@@ -354,12 +395,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (!parties || parties.length === 0) {
-      return NextResponse.json({
-        data: [],
-        total: count || 0,
-        page,
-        limit,
-      });
+      return NextResponse.json(
+        {
+          data: [],
+          total: count || 0,
+          page,
+          limit,
+        },
+        { headers: { "Cache-Control": "private, no-store, max-age=0" } }
+      );
     }
 
     const partyIds = parties.map((p: any) => p.id);
@@ -388,8 +432,15 @@ export async function GET(request: NextRequest) {
         .in("party_id", partyIds),
     ]);
 
+    if (personData.error) {
+      console.error("[directory] party_person fetch failed:", personData.error);
+    }
+    if (companyData.error) {
+      console.error("[directory] party_company fetch failed:", companyData.error);
+    }
+
     // Build maps for quick lookup
-    const personMap = new Map((personData.data || []).map((p: any) => [p.party_id, p]));
+    const personMap = buildPersonMapByPartyId(personData.data);
     const companyMap = new Map((companyData.data || []).map((c: any) => [c.party_id, c]));
     const clientSet = new Set((clientData.data || []).map((c: any) => c.party_id));
     const supplierMap = new Map((supplierData.data || []).map((s: any) => [s.party_id, s]));
@@ -471,6 +522,17 @@ export async function GET(request: NextRequest) {
         created_at: party.created_at,
         updated_at: party.updated_at,
       });
+      // Ensure media URLs are never lost to accidental key overlap in spreads
+      const personAvatar =
+        typeof person?.avatar_url === "string" ? person.avatar_url.trim() : person?.avatar_url || null;
+      if (record.type === "person" && personAvatar) {
+        record.avatarUrl = resolvePublicMediaUrl(personAvatar, "avatars") || personAvatar;
+      }
+      const companyLogo =
+        typeof company?.logo_url === "string" ? company.logo_url.trim() : company?.logo_url || null;
+      if (record.type === "company" && companyLogo) {
+        record.companyAvatarUrl = resolvePublicMediaUrl(companyLogo, "avatars") || companyLogo;
+      }
       return record;
     });
 
@@ -496,12 +558,15 @@ export async function GET(request: NextRequest) {
         }))
       : records;
 
-    return NextResponse.json({
-      data: safeRecords,
-      total: count || 0,
-      page,
-      limit,
-    });
+    return NextResponse.json(
+      {
+        data: safeRecords,
+        total: count || 0,
+        page,
+        limit,
+      },
+      { headers: { "Cache-Control": "private, no-store, max-age=0" } }
+    );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Directory list error:", errorMsg);

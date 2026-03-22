@@ -387,7 +387,7 @@ export default function AddPaymentModal({
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
         console.error("[AddPayment] Save failed", JSON.stringify({ orderId, status: res.status, json }));
-        setError(json.error || "Failed to save payment");
+        setError(json.message || json.error || "Failed to save payment");
         return;
       }
 

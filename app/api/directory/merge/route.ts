@@ -87,7 +87,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Update orders: client_party_id
+    // 1. Update orders: client_party_id (+ sync header fields so UI matches target party)
+    const { data: ordersToRetarget } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("client_party_id", sourcePartyId)
+      .eq("company_id", companyId);
+
+    const retargetedOrderIds = (ordersToRetarget || []).map((o) => o.id);
+
     const { error: ordersErr } = await supabase
       .from("orders")
       .update({ client_party_id: targetPartyId })
@@ -100,6 +108,25 @@ export async function POST(request: NextRequest) {
         { error: "Failed to merge orders", details: ordersErr.message },
         { status: 500 }
       );
+    }
+
+    if (retargetedOrderIds.length > 0) {
+      const { data: targetPartyRow } = await supabase
+        .from("party")
+        .select("display_name")
+        .eq("id", targetPartyId)
+        .maybeSingle();
+      const dn = targetPartyRow?.display_name?.trim();
+      if (dn) {
+        const { error: syncNameErr } = await supabase
+          .from("orders")
+          .update({ client_display_name: dn })
+          .in("id", retargetedOrderIds)
+          .eq("company_id", companyId);
+        if (syncNameErr) {
+          console.error("Merge: sync client_display_name error:", syncNameErr);
+        }
+      }
     }
 
     // 2. Update order_services: client_party_id, payer_party_id, supplier_party_id

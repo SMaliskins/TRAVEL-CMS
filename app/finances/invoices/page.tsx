@@ -352,7 +352,9 @@ export default function FinancesInvoicesPage() {
       const invTotal = inv.total || 0;
       amount += isCreditInvoice(inv) ? -Math.abs(invTotal) : invTotal;
       paid += inv.paid_amount || 0;
-      balance += inv.remaining ?? invTotal;
+      const signedTotal = isCreditInvoice(inv) ? -Math.abs(invTotal) : invTotal;
+      const debt = inv.remaining ?? Math.max(0, signedTotal - (inv.paid_amount || 0));
+      balance += debt;
     }
     return { amount, paid, balance, count: displayInvoices.length };
   }, [displayInvoices]);
@@ -622,6 +624,8 @@ export default function FinancesInvoicesPage() {
                 const isAmended = invoice.status === 'amended';
                 const prevTotal = invoice.processed_total != null ? Number(invoice.processed_total) : null;
                 const diff = isAmended && prevTotal != null ? invoice.total - prevTotal : null;
+                const signedTotal = isCreditInvoice(invoice) ? -Math.abs(invoice.total || 0) : (invoice.total || 0);
+                const invoiceDebt = invoice.remaining ?? Math.max(0, signedTotal - (invoice.paid_amount || 0));
                 return (
                   <tr key={invoice.id} className={`hover:bg-gray-50 ${isAmended ? 'bg-amber-50/50' : ''}`}>
                     <td className="px-3 py-1.5 text-gray-500">{getShortNumber(invoice.invoice_number)}</td>
@@ -645,8 +649,8 @@ export default function FinancesInvoicesPage() {
                     <td className="px-3 py-1.5 text-right text-gray-600">
                       {(invoice.paid_amount || 0) > 0 ? formatCurrency(invoice.paid_amount!) : "—"}
                     </td>
-                    <td className={`px-3 py-1.5 text-right font-medium ${(invoice.remaining ?? invoice.total) > 0 ? "text-red-600" : "text-green-600"}`}>
-                      {formatCurrency(invoice.remaining ?? invoice.total)}
+                    <td className={`px-3 py-1.5 text-right font-medium ${invoiceDebt > 0 ? "text-red-600" : "text-green-600"}`}>
+                      {formatCurrency(invoiceDebt)}
                     </td>
                     <td className="px-3 py-1.5 text-center text-xs">
                       {(() => {

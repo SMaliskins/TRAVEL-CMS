@@ -6,6 +6,11 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { DirectoryRecord } from "@/lib/types/directory";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import DirectoryContactPickerRow from "@/components/DirectoryContactPickerRow";
+import {
+  MergeContactPreviewCard,
+  MergeConfirmCheckbox,
+  MergeIrreversibleNotice,
+} from "@/components/MergeContactPreview";
 
 interface DirectoryMergeModalProps {
   isOpen: boolean;
@@ -34,6 +39,11 @@ export default function DirectoryMergeModal({
   const [selectedTarget, setSelectedTarget] = useState<DirectoryRecord | null>(null);
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"pick" | "confirm">("pick");
+  const [confirmChecked, setConfirmChecked] = useState(false);
+  const [previewSource, setPreviewSource] = useState<DirectoryRecord | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<DirectoryRecord | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const searchSource = useCallback(async () => {
     if (!sourceQuery.trim()) {
@@ -117,11 +127,39 @@ export default function DirectoryMergeModal({
       setSelectedSource(null);
       setSelectedTarget(null);
       setError(null);
+      setStep("pick");
+      setConfirmChecked(false);
+      setPreviewSource(null);
+      setPreviewTarget(null);
     }
   }, [isOpen]);
 
-  const trapRef = useFocusTrap<HTMLDivElement>(true);
+  const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
   useModalOverlay(isOpen);
+
+  const loadPreviewRecords = async (src: DirectoryRecord, tgt: DirectoryRecord) => {
+    setLoadingPreview(true);
+    setError(null);
+    try {
+      const [resS, resT] = await Promise.all([
+        fetchWithAuth(`/api/directory/${src.id}`),
+        fetchWithAuth(`/api/directory/${tgt.id}`),
+      ]);
+      const jsS = resS.ok ? await resS.json() : null;
+      const jsT = resT.ok ? await resT.json() : null;
+      if (!jsS?.record || !jsT?.record) {
+        throw new Error("Failed to load contact details for preview");
+      }
+      setPreviewSource(jsS.record as DirectoryRecord);
+      setPreviewTarget(jsT.record as DirectoryRecord);
+      setStep("confirm");
+      setConfirmChecked(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load preview");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
 
   const handleMerge = async () => {
     if (!selectedSource || !selectedTarget) return;
@@ -153,14 +191,27 @@ export default function DirectoryMergeModal({
 
   return (
     <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4">
-      <div ref={trapRef} className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div ref={trapRef} className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="border-b border-gray-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Merge contact</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Choose the contact to merge away (source) and the contact to merge into (target, e.g. Trash). Source will be archived.
+            {step === "pick"
+              ? "Choose source (removed) and target (kept). You will review full details before confirming."
+              : "Review both contacts — passport name vs card name — then confirm."}
           </p>
         </div>
         <div className="space-y-4 px-6 py-4">
+          {step === "confirm" && previewSource && previewTarget ? (
+            <>
+              <div className="space-y-3">
+                <MergeContactPreviewCard record={previewSource} variant="source" />
+                <MergeContactPreviewCard record={previewTarget} variant="target" />
+              </div>
+              <MergeIrreversibleNotice />
+              <MergeConfirmCheckbox checked={confirmChecked} onChange={setConfirmChecked} disabled={merging} />
+            </>
+          ) : (
+            <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Merge this contact (source)</label>
             <input
@@ -221,25 +272,55 @@ export default function DirectoryMergeModal({
               <p className="text-sm text-gray-600 mt-1">Target: <strong>{recordName(selectedTarget)}</strong></p>
             )}
           </div>
+            </>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
-            disabled={merging}
+            disabled={merging || loadingPreview}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleMerge}
-            disabled={!selectedSource || !selectedTarget || merging}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {merging ? "Merging..." : "⇄ Merge"}
-          </button>
+          {step === "confirm" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("pick");
+                  setConfirmChecked(false);
+                  setPreviewSource(null);
+                  setPreviewTarget(null);
+                }}
+                disabled={merging}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleMerge}
+                disabled={!confirmChecked || merging}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {merging ? "Merging..." : "Confirm merge"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedSource && selectedTarget) loadPreviewRecords(selectedSource, selectedTarget);
+              }}
+              disabled={!selectedSource || !selectedTarget || loadingPreview}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loadingPreview ? "Loading…" : "Continue to review"}
+            </button>
+          )}
         </div>
       </div>
     </div>

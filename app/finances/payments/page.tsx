@@ -27,6 +27,7 @@ interface Payment {
   payer_name: string | null;
   note: string | null;
   created_at: string;
+  status?: string;
 }
 
 
@@ -200,7 +201,8 @@ export default function PaymentsPage() {
     })}`;
   };
 
-  const totalAmount = payments.reduce((s, p) => s + Number(p.amount), 0);
+  const visiblePayments = payments.filter((p) => p.status !== "cancelled");
+  const totalAmount = visiblePayments.reduce((s, p) => s + Number(p.amount), 0);
 
   if (loading) {
     return (
@@ -297,7 +299,7 @@ export default function PaymentsPage() {
 
       <div className="mb-3 flex items-center gap-4">
         <span className="text-sm text-gray-600">
-          {t(lang, "payments.total")}: <strong className="text-gray-900">{payments.length}</strong> {t(lang, "payments.paymentsCount")}
+          {t(lang, "payments.total")}: <strong className="text-gray-900">{visiblePayments.length}</strong> {t(lang, "payments.paymentsCount")}
         </span>
         <span className="text-sm text-gray-600">
           {t(lang, "payments.amount")}: <strong className={totalAmount < 0 ? "text-red-600" : "text-gray-900"}>{formatCurrency(totalAmount, "EUR")}</strong>
@@ -320,14 +322,14 @@ export default function PaymentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {payments.length === 0 ? (
+            {visiblePayments.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   {t(lang, "payments.noPayments")}
                 </td>
               </tr>
             ) : (
-              payments.map((p) => (
+              visiblePayments.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-600">
                     {formatDateDDMMYYYY(p.paid_at)}

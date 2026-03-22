@@ -36,6 +36,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | S8 | Orders | Fix duplicate closing div tags in OrderClientSection | CODE WRITER | DONE | feature/x | ✅ Fixed missing closing bracket for condition (line 505) |
 | S9 | Orders | Add accessible name to Order Type select | CODE WRITER | DONE | feature/x | ✅ Added aria-label="Order Type" for WCAG compliance |
 | S10 | Orders | Fix null/undefined handling in route display | CODE WRITER | DONE | feature/x | ✅ Added null checks for dateFrom/dateTo and parsedRoute.origin |
+| S11 | Orders | Hotel Special Request — Tour Package + expand options | DB → CW → QA | TODO | - | Spec: `.ai/tasks/hotel-special-request-preferences-improvement.md` |
 
 ## PHASE 2.5: Order Detail Redesign (ACTIVE)
 

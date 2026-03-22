@@ -693,7 +693,7 @@ export default function OrderPage({
       }
     })();
     return () => { cancelled = true; };
-  }, [orderCodeFromUrl, lang]);
+  }, [orderCodeFromUrl, lang, invoiceRefetchTrigger]);
 
   // Travellers on this order — same API as Travellers UI; feed header PartySelect for matching avatars (runs as soon as we have orderCodeFromUrl)
   useEffect(() => {

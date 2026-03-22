@@ -82,16 +82,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const isCreditInv = (inv: { is_credit?: boolean; invoice_number?: string }) =>
+      !!inv.is_credit || String(inv.invoice_number || "").endsWith("-C");
+
     const mappedInvoices = (invoices || []).map((inv: any) => {
       const comm = commsMap.get(inv.id);
       const paid = paidMap.get(inv.id) || 0;
+      const total = Number(inv.total || 0);
+      const signedTotal = isCreditInv(inv) ? -Math.abs(total) : total;
+      const remaining = Math.round(Math.max(0, signedTotal - paid) * 100) / 100;
       return {
         ...inv,
         order_code: (inv.orders && Array.isArray(inv.orders) && inv.orders[0]?.order_code) || 
                     (inv.orders?.order_code) || null,
         orders: undefined,
         paid_amount: Math.round(paid * 100) / 100,
-        remaining: Math.round((Number(inv.total || 0) - paid) * 100) / 100,
+        remaining,
         email_status: comm ? {
           delivery_status: comm.delivery_status,
           delivered_at: comm.delivered_at,

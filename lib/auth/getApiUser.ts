@@ -43,7 +43,22 @@ export async function getApiUser(request: NextRequest): Promise<ApiUser | null> 
     .eq("id", authUser.id)
     .single();
 
-  if (!profile?.company_id) return null;
+  // Fallback: profiles table (demo user, legacy setups)
+  if (!profile?.company_id) {
+    const { data: legacyProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("company_id, role")
+      .eq("user_id", authUser.id)
+      .single();
+
+    if (legacyProfile?.company_id) {
+      const roleName = (legacyProfile.role as string) || "agent";
+      const ownRoles = ["subagent", "agent", "manager"];
+      const scope = ownRoles.includes(roleName) ? ("own" as const) : ("all" as const);
+      return { userId: authUser.id, companyId: legacyProfile.company_id, role: roleName, scope };
+    }
+    return null;
+  }
 
   const roleRaw = profile.role as unknown;
   const roleObj = Array.isArray(roleRaw) ? roleRaw[0] : roleRaw as { name: string } | null;

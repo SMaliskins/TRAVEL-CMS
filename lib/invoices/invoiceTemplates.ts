@@ -1,5 +1,5 @@
 import type { InvoiceCompanyInfo } from "./generateInvoiceHTML";
-import { numberToWords, getInvoiceLabels } from "./generateInvoiceHTML";
+import { numberToWords, getInvoiceLabels, translateServiceDescriptionForInvoice } from "./generateInvoiceHTML";
 
 export type InvoiceTemplateId =
   | "classic"
@@ -35,13 +35,17 @@ export const INVOICE_TEMPLATES: InvoiceTemplateConfig[] = [
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  return `€${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatCurrency(amount: number, isCredit = false): string {
+  const abs = Math.abs(amount);
+  const str = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return isCredit ? `−€${str}` : `€${str}`;
 }
 
-function formatCurrencyWithCode(amount: number, code = "EUR"): string {
+function formatCurrencyWithCode(amount: number, code = "EUR", isCredit = false): string {
   const sym = code === "EUR" ? "€" : code;
-  return `${Math.abs(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sym}`;
+  const abs = Math.abs(amount);
+  const str = abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return isCredit ? `−${str} ${sym}` : `${str} ${sym}`;
 }
 
 function formatDate(dateString: string | null): string {
@@ -119,14 +123,16 @@ interface ItemRow {
   amount: string;
 }
 
-function buildItemsRows(invoice: any): ItemRow[] {
+function buildItemsRows(invoice: any, lang: string): ItemRow[] {
   if (!invoice.invoice_items?.length) return [];
+  const invoiceLang = (lang && String(lang).trim().toLowerCase()) || "en";
+  const isCredit = !!invoice?.is_credit;
   return invoice.invoice_items.map((item: any) => {
-    const serviceText = item.service_name?.trim() || "-";
+    const serviceText = translateServiceDescriptionForInvoice(item.service_name?.trim() || "", invoiceLang) || "-";
     const dates = (item.service_dates_text && String(item.service_dates_text).trim())
       ? String(item.service_dates_text).trim()
       : formatDatesCell(item.service_date_from, item.service_date_to);
-    return { dates, serviceText, client: (item.service_client || "-").replace(/\s*,\s*/g, "<br>"), amount: formatCurrency(item.line_total) };
+    return { dates, serviceText, client: (item.service_client || "-").replace(/\s*,\s*/g, "<br>"), amount: formatCurrency(item.line_total, isCredit) };
   });
 }
 
@@ -140,13 +146,14 @@ function buildLatviaBlock(invoice: any, lang: string, t: Record<string, string>)
   const taxable21 = taxRate === 21 ? subtotal : 0;
   const vat21Amount = taxRate === 21 ? taxAmount : 0;
   const curr = "EUR";
+  const isCredit = !!invoice?.is_credit;
   return `
-    <tr><td>${t.summa}</td><td class="num">${formatCurrencyWithCode(subtotal, curr)}</td></tr>
-    <tr><td>${t.nonTaxableAmount}</td><td class="num">${formatCurrencyWithCode(nonTaxable, curr)}</td></tr>
-    <tr><td>${t.taxable0}</td><td class="num">${formatCurrencyWithCode(taxable0, curr)}</td></tr>
-    <tr><td>${t.taxable21}</td><td class="num">${formatCurrencyWithCode(taxable21, curr)}</td></tr>
-    <tr><td>${t.vat21}</td><td class="num">${formatCurrencyWithCode(vat21Amount, curr)}</td></tr>
-    <tr class="total-row"><td>${t.summaApmaksai}</td><td class="num">${formatCurrencyWithCode(total, curr)}</td></tr>
+    <tr><td>${t.summa}</td><td class="num">${formatCurrencyWithCode(subtotal, curr, isCredit)}</td></tr>
+    <tr><td>${t.nonTaxableAmount}</td><td class="num">${formatCurrencyWithCode(nonTaxable, curr, isCredit)}</td></tr>
+    <tr><td>${t.taxable0}</td><td class="num">${formatCurrencyWithCode(taxable0, curr, isCredit)}</td></tr>
+    <tr><td>${t.taxable21}</td><td class="num">${formatCurrencyWithCode(taxable21, curr, isCredit)}</td></tr>
+    <tr><td>${t.vat21}</td><td class="num">${formatCurrencyWithCode(vat21Amount, curr, isCredit)}</td></tr>
+    <tr class="total-row"><td>${t.summaApmaksai}</td><td class="num">${formatCurrencyWithCode(total, curr, isCredit)}</td></tr>
     <tr><td colspan="2" style="font-style:italic;border:none;padding-top:4px">${t.summaVardiem}: ${numberToWords(total, lang)}</td></tr>
     <tr><td colspan="2" style="font-size:10px;color:#666;border:none;padding-top:6px">${t.legalNote0}</td></tr>
     <tr><td colspan="2" style="font-size:10px;color:#666;border:none">${t.legalNote21}</td></tr>
@@ -154,20 +161,22 @@ function buildLatviaBlock(invoice: any, lang: string, t: Record<string, string>)
 }
 
 function buildNonLatviaTotals(invoice: any, t: Record<string, string>): string {
+  const isCredit = !!invoice?.is_credit;
   return `
-    <tr><td>${t.subtotal}:</td><td class="num">${formatCurrency(invoice.subtotal || 0)}</td></tr>
-    <tr><td>${t.vat} (${invoice.tax_rate || 0}%):</td><td class="num">${formatCurrency(invoice.tax_amount || 0)}</td></tr>
-    <tr class="total-row"><td>${t.total}:</td><td class="num">${formatCurrency(invoice.total || 0)}</td></tr>
+    <tr><td>${t.subtotal}:</td><td class="num">${formatCurrency(invoice.subtotal || 0, isCredit)}</td></tr>
+    <tr><td>${t.vat} (${invoice.tax_rate || 0}%):</td><td class="num">${formatCurrency(invoice.tax_amount || 0, isCredit)}</td></tr>
+    <tr class="total-row"><td>${t.total}:</td><td class="num">${formatCurrency(invoice.total || 0, isCredit)}</td></tr>
   `;
 }
 
 function buildPaymentTermsContent(invoice: any, bankAccounts: BankAccount[], beneficiaryName: string, t: Record<string, string>): string {
   const lines: string[] = [];
+  const isCredit = !!invoice?.is_credit;
   if (invoice.deposit_amount && invoice.deposit_date) {
-    lines.push(`${t.deposit}: ${formatCurrency(invoice.deposit_amount)} ${t.by || "by"} ${formatDate(invoice.deposit_date)}`);
+    lines.push(`${t.deposit}: ${formatCurrency(invoice.deposit_amount, isCredit)} ${t.by || "by"} ${formatDate(invoice.deposit_date)}`);
   }
   if (invoice.final_payment_amount && invoice.final_payment_date) {
-    lines.push(`${t.finalPayment}: ${formatCurrency(invoice.final_payment_amount)} ${t.by || "by"} ${formatDate(invoice.final_payment_date)}`);
+    lines.push(`${t.finalPayment}: ${formatCurrency(invoice.final_payment_amount, isCredit)} ${t.by || "by"} ${formatDate(invoice.final_payment_date)}`);
   }
   if (!lines.length && invoice.due_date) {
     lines.push(`${t.dueDate}: ${formatDate(invoice.due_date)}`);
@@ -202,7 +211,7 @@ function templateClassic(invoice: any, logoUrl: string | null, company: InvoiceC
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
 
@@ -250,7 +259,7 @@ function templateClassic(invoice: any, logoUrl: string | null, company: InvoiceC
     ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:80px;max-width:200px;object-fit:contain">` : `<div style="height:80px;width:80px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:11px;border:1px dashed #ddd;border-radius:4px">Logo</div>`}
   </div>
   <div style="text-align:right">
-    <div class="inv-title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+    <div class="inv-title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
     ${invoice.is_credit ? `<div style="color:green;font-size:11px">${t.refundCredit}</div>` : ""}
     <div style="margin-top:6px;font-size:13px;font-weight:bold">${invoice.invoice_number || ""}</div>
     <div style="margin-top:3px;font-size:11.5px"><strong>${t.date}:</strong> ${formatDate(invoice.invoice_date)}</div>
@@ -322,7 +331,7 @@ function templateModernClean(invoice: any, logoUrl: string | null, company: Invo
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -372,7 +381,7 @@ function templateModernClean(invoice: any, logoUrl: string | null, company: Invo
     ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:70px;max-width:180px;object-fit:contain">` : `<div style="height:70px;width:70px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:10px;border:1px dashed #ddd">Logo</div>`}
   </div>
   <div style="text-align:right">
-    <div class="inv-title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+    <div class="inv-title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
     ${invoice.is_credit ? `<div style="color:green;font-size:11px">${t.refundCredit}</div>` : ""}
     <div style="font-size:13px;font-weight:600;margin-top:4px">${invoice.invoice_number || ""}</div>
     <div style="font-size:11.5px;color:#666;margin-top:2px">${t.date}: ${formatDate(invoice.invoice_date)}</div>
@@ -444,7 +453,7 @@ function templateUltraModern(invoice: any, logoUrl: string | null, company: Invo
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
 
@@ -496,7 +505,7 @@ function templateUltraModern(invoice: any, logoUrl: string | null, company: Invo
 
 <div class="company-center">
   <div class="company-big">${beneficiaryName}</div>
-  <div class="inv-meta">${invoice.is_credit ? t.creditNote : t.invoice}${invoice.is_credit ? ` — ${t.refundCredit}` : ""}</div>
+  <div class="inv-meta">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}${invoice.is_credit ? ` — ${t.refundCredit}` : ""}</div>
 </div>
 
 <div class="sections">
@@ -563,7 +572,7 @@ function templateCorporate(invoice: any, logoUrl: string | null, company: Invoic
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -612,7 +621,7 @@ function templateCorporate(invoice: any, logoUrl: string | null, company: Invoic
   </div>
   <div class="corp-company">${beneficiaryName}</div>
   <div style="text-align:right;width:140px">
-    <div class="corp-inv-nr">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+    <div class="corp-inv-nr">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
     <div style="font-size:12px;font-weight:bold;margin-top:2px">${invoice.invoice_number || ""}</div>
   </div>
 </div>
@@ -685,7 +694,7 @@ function templateElegant(invoice: any, logoUrl: string | null, company: InvoiceC
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
 
@@ -733,7 +742,7 @@ function templateElegant(invoice: any, logoUrl: string | null, company: InvoiceC
   ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="elegant-logo">` : `<div style="height:60px;width:60px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:10px;border:1px dashed #ddd;margin:0 auto 8px auto">Logo</div>`}
   <div class="elegant-company">${beneficiaryName}</div>
   <div class="decorative-line"></div>
-  <div class="inv-title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+  <div class="inv-title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
   <div class="inv-meta">${invoice.invoice_number || ""} &nbsp;·&nbsp; ${t.date}: ${formatDate(invoice.invoice_date)}</div>
   ${invoice.is_credit ? `<div style="color:green;font-size:11px;margin-top:3px">${t.refundCredit}</div>` : ""}
 </div>
@@ -802,7 +811,7 @@ function templateCompactPro(invoice: any, logoUrl: string | null, company: Invoi
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -849,7 +858,7 @@ function templateCompactPro(invoice: any, logoUrl: string | null, company: Invoi
     <div style="font-size:11px;font-weight:bold">${beneficiaryName}</div>
   </div>
   <div class="inv-meta">
-    <div class="title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+    <div class="title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
     <div>${invoice.invoice_number || ""} · ${formatDate(invoice.invoice_date)}</div>
   </div>
 </div>
@@ -916,7 +925,7 @@ function templateBoldHeader(invoice: any, logoUrl: string | null, company: Invoi
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -964,7 +973,7 @@ function templateBoldHeader(invoice: any, logoUrl: string | null, company: Invoi
     ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:70px;max-width:180px;object-fit:contain">` : `<div style="height:70px;width:70px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:10px;border:1px dashed #ddd;border-radius:3px">Logo</div>`}
   </div>
   <div style="text-align:right">
-    <div class="bold-title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+    <div class="bold-title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
     <div class="bold-inv-nr">${invoice.invoice_number || ""}</div>
     <div class="bold-date">${formatDate(invoice.invoice_date)}</div>
     ${invoice.is_credit ? `<div style="color:green;font-size:11px">${t.refundCredit}</div>` : ""}
@@ -1036,7 +1045,7 @@ function templateTwoColumn(invoice: any, logoUrl: string | null, company: Invoic
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -1123,7 +1132,7 @@ ${curr ? `<tr><td></td><td>${curr}</td></tr>` : ""}`;
 
   <div class="main">
     <div class="main-title-row">
-      <div class="main-inv-title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+      <div class="main-inv-title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
       <div class="main-meta">
         <div style="font-size:13px;font-weight:bold">${invoice.invoice_number || ""}</div>
         <div>${t.date}: ${formatDate(invoice.invoice_date)}</div>
@@ -1168,7 +1177,7 @@ function templateSidebarAccent(invoice: any, logoUrl: string | null, company: In
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -1221,7 +1230,7 @@ function templateSidebarAccent(invoice: any, logoUrl: string | null, company: In
       <div style="font-size:18px;font-weight:bold;color:${accentColor};margin-top:6px">${beneficiaryName}</div>
     </div>
     <div class="inv-meta">
-      <div class="inv-title">${invoice.is_credit ? t.creditNote : t.invoice}</div>
+      <div class="inv-title">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice}</div>
       <div style="font-size:13px;font-weight:600;margin-top:4px">${invoice.invoice_number || ""}</div>
       <div style="color:#666;margin-top:2px">${t.date}: ${formatDate(invoice.invoice_date)}</div>
       ${invoice.is_credit ? `<div style="color:green;font-size:11px">${t.refundCredit}</div>` : ""}
@@ -1292,7 +1301,7 @@ function templateTableFocus(invoice: any, logoUrl: string | null, company: Invoi
   const bankAccounts = buildBankAccounts(invoice, company);
   const { name: beneficiaryName, regVatLine, address: beneficiaryAddress } = buildBeneficiaryInfo(invoice, company, t);
   const payerExtra = buildPayerInfo(invoice, t);
-  const items = buildItemsRows(invoice);
+  const items = buildItemsRows(invoice, lang);
   const paymentTermsText = buildPaymentTermsContent(invoice, bankAccounts, beneficiaryName, t);
   const hasPaymentTerms = !!(invoice.deposit_amount || invoice.final_payment_amount || invoice.due_date);
   const accentRgb = hexToRgb(accentColor);
@@ -1335,7 +1344,7 @@ function templateTableFocus(invoice: any, logoUrl: string | null, company: Invoi
 </head>
 <body>
 <div class="top-hdr">
-  <div class="inv-nr-big">${invoice.is_credit ? t.creditNote : t.invoice} ${invoice.invoice_number || ""}</div>
+  <div class="inv-nr-big">${invoice.is_credit ? "CREDIT-INVOICE" : t.invoice} ${invoice.invoice_number || ""}</div>
   <div class="inv-date">${t.date}: ${formatDate(invoice.invoice_date)}</div>
 </div>
 

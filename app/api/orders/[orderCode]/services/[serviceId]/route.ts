@@ -104,6 +104,7 @@ export async function GET(
       cancellationFee: row.cancellation_fee != null ? parseFloat(String(row.cancellation_fee)) : null,
       refundAmount: row.refund_amount != null ? parseFloat(String(row.refund_amount)) : null,
       changeFee: row.change_fee != null ? parseFloat(String(row.change_fee)) : null,
+      cancellationRefundType: (row as { cancellation_refund_type?: string | null }).cancellation_refund_type ?? null,
     };
 
     return NextResponse.json({ service });
@@ -272,6 +273,7 @@ export async function PATCH(
     if (body.ancillaryType !== undefined) updates.ancillary_type = body.ancillaryType || null;
     if (body.cancellationFee !== undefined) updates.cancellation_fee = body.cancellationFee != null ? parseFloat(String(body.cancellationFee)) : null;
     if (body.refundAmount !== undefined) updates.refund_amount = body.refundAmount != null ? parseFloat(String(body.refundAmount)) : null;
+    if (body.cancellationRefundType !== undefined) (updates as Record<string, unknown>).cancellation_refund_type = body.cancellationRefundType || null;
 
     // Fetch old service for notification diff
     const { data: oldSvc } = await supabaseAdmin

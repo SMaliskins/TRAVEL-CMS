@@ -10,7 +10,8 @@
     "migrate:parsed": "node --env-file=.env scripts/run-parsed-fields-migration.mjs",
     "test:passport": "node scripts/test-passport-parser.mjs",
     "test:airbaltic": "node scripts/test-airbaltic-invoice.mjs",
-    "generate:cities": "node scripts/generate-world-cities.mjs"
+    "generate:cities": "node scripts/generate-world-cities.mjs",
+    "seed:demo": "node --env-file=.env.local scripts/seed-demo-presentation.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
