@@ -1413,7 +1413,13 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           categoryType: ((s.categoryType ?? s.category_type) || undefined) as Service["categoryType"],
           vatRate: (s.vatRate ?? s.vat_rate) as number | null,
           name: String(s.serviceName ?? s.service_name ?? ""),
-          supplier: String(s.supplierName ?? s.supplier_name ?? "-"),
+          supplier: (() => {
+            const base = String(s.supplierName ?? s.supplier_name ?? "-");
+            const airlineChannel = !!(s.airlineChannel ?? s.airline_channel);
+            const airlineName = String(s.airlineChannelSupplierName ?? s.airline_channel_supplier_name ?? "").trim();
+            if (airlineChannel && airlineName) return `${base === "-" ? "BSP" : base}/${airlineName}`;
+            return base;
+          })(),
           client: String(s.clientName ?? s.client_name ?? "-"),
           payer: String(s.payerName ?? s.payer_name ?? "-"),
           supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
@@ -1841,7 +1847,13 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       categoryType: (service.categoryType ?? (raw.categoryType as string) ?? null) as Service["categoryType"],
       vatRate: ((raw.vatRate ?? raw.vat_rate) ?? null) as number | null,
       name: service.serviceName,
-      supplier: service.supplierName || "-",
+      supplier: (() => {
+        const base = service.supplierName || "-";
+        const airlineChannel = !!(service.airlineChannel ?? raw.airlineChannel);
+        const airlineName = String(service.airlineChannelSupplierName ?? raw.airlineChannelSupplierName ?? "").trim();
+        if (airlineChannel && airlineName) return `${base === "-" ? "BSP" : base}/${airlineName}`;
+        return base;
+      })(),
       client: service.clientName || "-",
       payer: service.payerName || "-",
       supplierPartyId: service.supplierPartyId || undefined,
