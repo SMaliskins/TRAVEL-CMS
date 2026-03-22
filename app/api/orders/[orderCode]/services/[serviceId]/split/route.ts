@@ -151,32 +151,32 @@ export async function POST(
       agent_discount_type: originalService.agent_discount_type,
     };
 
-    // Resolve client_party_id and client_name per part: payer takes precedence, else first traveller
+    // Resolve client (traveller) and payer separately — Client column must not contain payer
     const partyIdsToLookup = new Set<string>();
     parts.forEach((part) => {
+      if (part.travellerIds && part.travellerIds.length > 0) {
+        part.travellerIds.forEach((id) => partyIdsToLookup.add(id));
+      }
       if (part.payerPartyId) {
         partyIdsToLookup.add(part.payerPartyId);
-      } else if (part.travellerIds && part.travellerIds.length > 0) {
-        partyIdsToLookup.add(part.travellerIds[0]);
       }
     });
+    if (originalService.client_party_id) partyIdsToLookup.add(originalService.client_party_id);
+    if (originalService.payer_party_id) partyIdsToLookup.add(originalService.payer_party_id);
     let partyNames: Record<string, string> = {};
-    if (partyIdsToLookup.size > 0) {
+    const idsToLookup = Array.from(partyIdsToLookup).filter(Boolean);
+    if (idsToLookup.length > 0) {
       const { data: parties } = await supabaseAdmin
         .from("party")
         .select("id, display_name")
-        .in("id", Array.from(partyIdsToLookup));
+        .in("id", idsToLookup);
       (parties || []).forEach((p) => {
         partyNames[p.id] = (p as { display_name?: string }).display_name || "";
       });
     }
 
     const getClientForPart = (part: SplitPart) => {
-      const payerId = (part.payerPartyId && String(part.payerPartyId).trim()) || null;
-      if (payerId) {
-        const name = (part.payerName && part.payerName.trim()) || partyNames[payerId] || "";
-        return { client_party_id: payerId, client_name: name };
-      }
+      // Client = traveller (who receives), not payer
       if (part.travellerIds && part.travellerIds.length > 0) {
         const pid = part.travellerIds[0];
         return { client_party_id: pid, client_name: partyNames[pid] ?? "" };
