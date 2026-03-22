@@ -130,7 +130,7 @@ function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect
           <div className="space-y-3">
             {/* Client */}
             <div className="flex items-start gap-2">
-              <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
               <span className="text-sm text-gray-800 font-medium">{data.client}</span>
@@ -138,7 +138,7 @@ function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect
             
             {/* Dates */}
             <div className="flex items-start gap-2">
-              <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span className="text-sm text-gray-600">{data.dates}</span>
@@ -147,7 +147,7 @@ function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect
             {/* Destinations */}
             {data.destinations !== "—" && (
               <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -161,13 +161,13 @@ function OrderPreview({ orderSlug, anchorRect }: { orderSlug: string; anchorRect
                 {data.status}
               </span>
               <div className="flex items-center gap-3 text-sm">
-                <span className="text-gray-500">{data.services} services</span>
+                <span className="text-gray-600">{data.services} services</span>
                 <span className="font-semibold text-gray-900">{formatCurrency(data.amount)}</span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="text-center py-4 text-gray-500 text-sm">
+          <div className="text-center py-4 text-gray-600 text-sm">
             Unable to load preview
           </div>
         )}
@@ -246,7 +246,7 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
           cursor-pointer select-none transition-all duration-200 ease-out rounded-t-lg
           ${isActive
             ? "bg-gray-50 text-gray-900 shadow-sm relative pb-3 -mb-1"
-            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 mb-1"
+            : "text-gray-600 hover:text-gray-800 hover:bg-gray-200/50 mb-1"
           }
         `}
         onClick={onSelect}
@@ -264,17 +264,18 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
           className={`
             rounded p-0.5 transition-all duration-150 ml-1
             ${isActive
-              ? "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-              : "opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 hover:bg-gray-200"
+              ? "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+              : "opacity-0 group-hover:opacity-100 text-gray-600 hover:text-gray-800 hover:bg-gray-200"
             }
           `}
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
-          title="Close"
+          title="Close tab"
+          aria-label="Close tab"
         >
-          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-3.5 w-3.5" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -298,7 +299,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="sticky top-14 z-30 flex items-end gap-0 bg-gray-100 px-3 pt-2 pb-0 overflow-x-auto">
+    <div className="sticky top-16 z-30 flex items-end gap-0 bg-gray-100 px-3 pt-2 pb-0 overflow-x-auto">
       {tabs.map((tab, index) => (
         <div key={tab.id} className="flex items-end">
           <TabItem
@@ -318,10 +319,11 @@ export default function TabBar() {
       {tabs.length > 1 && (
         <button
           onClick={closeAllTabs}
-          className="ml-auto mb-1.5 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-600 hover:bg-gray-200/50 rounded transition-colors flex items-center justify-center gap-1"
+          className="ml-auto mb-1.5 px-2.5 py-1 text-[11px] text-gray-600 hover:text-gray-800 hover:bg-gray-200/50 rounded transition-colors flex items-center justify-center gap-1"
           title="Close all tabs"
+          aria-label="Close all tabs"
         >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3 h-3" aria-hidden fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
           <span>Close all tabs</span>

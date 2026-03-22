@@ -342,7 +342,7 @@ export default function PeriodSelector({
                 <button
                   key={period}
                   onClick={() => handlePeriodChange(period)}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${isSelected ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${isSelected ? "bg-blue-50 text-blue-800" : "text-gray-700"
                     }`}
                 >
                   <span>{getPeriodLabel(period)}</span>

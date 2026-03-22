@@ -470,7 +470,7 @@ export default function DashboardPage() {
               <div className="h-10 w-56 bg-gray-200 rounded animate-pulse" />
             </div>
           </div>
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5 min-h-[8.5rem]">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-28 bg-gray-100 rounded-xl animate-pulse" />
             ))}
@@ -515,7 +515,7 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* Row 1: Statistic Cards & Target */}
-            <div className={`grid gap-4 grid-cols-2 md:grid-cols-3 ${isSubagent ? "lg:grid-cols-6" : showTargets ? "lg:grid-cols-5" : "lg:grid-cols-4"} relative z-0`}>
+            <div className={`grid gap-4 grid-cols-2 md:grid-cols-3 ${isSubagent ? "lg:grid-cols-6" : showTargets ? "lg:grid-cols-5" : "lg:grid-cols-4"} relative z-0 min-h-[8.5rem]`}>
               <StatisticCard
                 title="Orders"
                 value={getStats("orders")?.ordersCount || 0}

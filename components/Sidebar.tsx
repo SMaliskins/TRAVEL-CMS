@@ -240,15 +240,16 @@ export default function Sidebar() {
               <Link
                 href={item.href}
                 onClick={onItemClick}
+                aria-label={getNavLabel(item, lang)}
                 className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-gray-900/10 text-gray-900"
-                    : "text-gray-700 hover:bg-gray-900/5"
+                    ? "bg-gray-200 text-gray-900"
+                    : "text-gray-700 hover:bg-gray-100"
                 }`}
                 onMouseEnter={() => setHoveredItem(item.href)}
                 onMouseLeave={() => setHoveredItem(null)}
               >
-                <span className="flex-shrink-0">{item.icon}</span>
+                <span className="flex-shrink-0" aria-hidden>{item.icon}</span>
               </Link>
               {/* Tooltip */}
               {hoveredItem === item.href && (
@@ -267,13 +268,14 @@ export default function Sidebar() {
                 <Link
                   href={item.href}
                   onClick={onItemClick}
+                  aria-label={getNavLabel(item, lang)}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
                     isActive
-                      ? "bg-gray-900/10 text-gray-900"
-                      : "text-gray-700 hover:bg-gray-900/5"
+                      ? "bg-gray-200 text-gray-900"
+                      : "text-gray-700 hover:bg-gray-100"
                   }`}
                 >
-                  <span className="flex-shrink-0">{item.icon}</span>
+                  <span className="flex-shrink-0" aria-hidden>{item.icon}</span>
                   <span>{getNavLabel(item, lang)}</span>
                 </Link>
               </li>
@@ -287,13 +289,14 @@ export default function Sidebar() {
                     <Link
                       href={child.href}
                       onClick={onItemClick}
+                      aria-label={getNavLabel(child, lang)}
                       className={`flex items-center gap-3 rounded-lg px-3 py-1.5 pl-8 text-sm font-medium transition-colors whitespace-nowrap ${
                         childActive
-                          ? "bg-gray-900/10 text-gray-900"
-                          : "text-gray-700 hover:bg-gray-900/5"
+                          ? "bg-gray-200 text-gray-900"
+                          : "text-gray-700 hover:bg-gray-100"
                       }`}
                     >
-                      <span className="flex-shrink-0">{child.icon}</span>
+                      <span className="flex-shrink-0" aria-hidden>{child.icon}</span>
                       <span>{getNavLabel(child, lang)}</span>
                     </Link>
                   </li>
@@ -309,19 +312,20 @@ export default function Sidebar() {
             <Link
               href={item.href}
               onClick={onItemClick}
+              aria-label={getNavLabel(item, lang)}
               className={`flex rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 showTooltip
                   ? "h-10 w-10 items-center justify-center"
                   : "items-center gap-3 px-3 py-2"
               } ${
                 isActive
-                  ? "bg-gray-900/10 text-gray-900"
-                  : "text-gray-700 hover:bg-gray-900/5"
+                  ? "bg-gray-200 text-gray-900"
+                  : "text-gray-700 hover:bg-gray-100"
               }`}
               onMouseEnter={() => showTooltip && setHoveredItem(item.href)}
               onMouseLeave={() => setHoveredItem(null)}
             >
-              <span className="flex-shrink-0">{item.icon}</span>
+              <span className="flex-shrink-0" aria-hidden>{item.icon}</span>
               {!showTooltip && <span>{getNavLabel(item, lang)}</span>}
             </Link>
             {/* Tooltip for collapsed/hover mode */}
@@ -388,7 +392,7 @@ export default function Sidebar() {
                 </nav>
                 {/* Version display */}
                 <div className="border-t border-gray-200 px-4 py-2">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-600">
                     v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
                   </span>
                 </div>
@@ -420,7 +424,7 @@ export default function Sidebar() {
 
           {/* Version display */}
           <div className={`px-3 py-1 ${isCollapsed ? "text-center" : ""}`}>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-600">
               {isExpanded ? `v${process.env.NEXT_PUBLIC_APP_VERSION || "dev"}` : `v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").split(".")[0]}`}
             </span>
           </div>
@@ -483,8 +487,8 @@ export default function Sidebar() {
                         }}
                         className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors text-left ${
                           mode === m
-                            ? "bg-gray-900/10 text-gray-900"
-                            : "text-gray-700 hover:bg-gray-900/5"
+                            ? "bg-gray-200 text-gray-900"
+                            : "text-gray-700 hover:bg-gray-100"
                         }`}
                       >
                         <div className="flex h-4 w-4 items-center justify-center">
@@ -523,9 +527,9 @@ export default function Sidebar() {
 
             {/* Version display */}
             <div className="px-3 py-1">
-              <span className="text-xs text-gray-400">
-                v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
-              </span>
+<span className="text-xs text-gray-600">
+              v{process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
+            </span>
             </div>
 
             {/* Sidebar Control - bottom (in overlay) */}
@@ -578,8 +582,8 @@ export default function Sidebar() {
                           }}
                           className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors text-left ${
                             mode === m
-                              ? "bg-gray-900/10 text-gray-900"
-                              : "text-gray-700 hover:bg-gray-900/5"
+                              ? "bg-gray-200 text-gray-900"
+                              : "text-gray-700 hover:bg-gray-100"
                           }`}
                         >
                           <div className="flex h-4 w-4 items-center justify-center">

@@ -907,7 +907,7 @@ export default function OrdersPage() {
               {t(lang, "orders.new")}
             </button>
             {filteredOrders.length !== orders.length && (
-              <span className="text-sm text-gray-500 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+              <span className="text-sm text-blue-800 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                 {filteredOrders.length} / {orders.length}
               </span>
             )}
@@ -919,9 +919,10 @@ export default function OrdersPage() {
               className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs sm:text-sm font-medium transition-colors ${
                 viewMode === "list"
                   ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
+                  : "text-gray-600 hover:text-gray-800"
               }`}
               title="List view"
+              aria-label="List view"
             >
               <List size={15} />
               <span className="hidden sm:inline">List</span>
@@ -931,9 +932,10 @@ export default function OrdersPage() {
               className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs sm:text-sm font-medium transition-colors ${
                 viewMode === "calendar"
                   ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
+                  : "text-gray-600 hover:text-gray-800"
               }`}
               title="Calendar view"
+              aria-label="Calendar view"
             >
               <CalendarDays size={15} />
               <span className="hidden sm:inline">Calendar</span>
@@ -974,7 +976,7 @@ export default function OrdersPage() {
                   className={`px-2 py-1 rounded text-sm font-medium transition-colors ${
                     dateGroupMode === opt.value
                       ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
+                      : "text-gray-600 hover:text-gray-800"
                   }`}
                 >
                   {opt.label}
@@ -986,8 +988,10 @@ export default function OrdersPage() {
 
             {/* Agent */}
             <div className="flex items-center gap-1.5">
-              <label className="text-xs text-gray-500 uppercase">Agent</label>
+              <label htmlFor="orders-agent-select" className="text-xs text-gray-600 uppercase">Agent</label>
               <select
+                id="orders-agent-select"
+                aria-label="Filter by agent"
                 value={searchState.agentId}
                 onChange={(e) => ordersSearchStore.setField("agentId", e.target.value)}
                 className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
@@ -1003,8 +1007,10 @@ export default function OrdersPage() {
 
             {/* Status */}
             <div className="flex items-center gap-1.5">
-              <label className="text-xs text-gray-500 uppercase">Status</label>
+              <label htmlFor="orders-status-select" className="text-xs text-gray-600 uppercase">Status</label>
               <select
+                id="orders-status-select"
+                aria-label="Filter by status"
                 value={searchState.status}
                 onChange={(e) => ordersSearchStore.setField("status", e.target.value)}
                 className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
@@ -1192,7 +1198,7 @@ export default function OrdersPage() {
                     <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.paid)}</td>
                     <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.debt)}</td>
                     <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.profit)}</td>
-                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-500">{formatCurrency(group.totals.vat)}</td>
+                    <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.vat)}</td>
                     <td className="px-1.5 py-1" colSpan={3}></td>
                   </tr>
                   {group.orders.map((order) => {
@@ -1230,7 +1236,7 @@ export default function OrdersPage() {
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">{formatDate(order.datesFrom)} — {formatDate(order.datesTo)}</td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-800">{formatCurrency(order.amount)}</td>
                         <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01 ? "text-purple-700" : "text-gray-800"}`}>{formatCurrency(order.paid)}</td>
-                        <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.debt > 0 ? "text-orange-600" : "text-gray-600"}`}>{formatCurrency(order.debt)}</td>
+                        <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.debt > 0 ? "text-orange-700" : "text-gray-600"}`}>{formatCurrency(order.debt)}</td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900">{formatCurrency(order.profit)}</td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-600">{formatCurrency(order.vat ?? 0)}</td>
                         <td className="w-7 px-0.5 py-0.5 text-center">
@@ -1437,7 +1443,7 @@ export default function OrdersPage() {
                                       <td
                                         className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${
                                           order.debt > 0
-                                            ? "text-orange-600"
+                                            ? "text-orange-700"
                                             : "text-gray-600"
                                         }`}
                                       >
@@ -1495,7 +1501,7 @@ export default function OrdersPage() {
         {/* Load more */}
         {pagination && pagination.page < pagination.totalPages && (
           <div className="flex items-center justify-center py-4 gap-3">
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-600">
               {t(lang, "orders.showing")} {orders.length} {t(lang, "orders.of")} {pagination.total}
             </span>
             <button

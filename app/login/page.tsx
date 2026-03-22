@@ -171,7 +171,7 @@ export default function LoginPage() {
       {/* Right panel — login form with staggered entrance */}
       <div className="flex-1 flex items-center justify-center relative overflow-hidden bg-gradient-to-b from-slate-50 to-gray-100 px-6 py-12 min-h-screen">
         {/* Ambient floating dots — constant subtle motion */}
-        <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0 pointer-events-none [contain:layout]">
           <div className="absolute top-[15%] right-[20%] w-2 h-2 rounded-full bg-blue-400/30 animate-ambient-float" style={{ animationDelay: "0s" }} />
           <div className="absolute top-[40%] left-[15%] w-3 h-3 rounded-full bg-blue-300/25 animate-ambient-float" style={{ animationDelay: "2s" }} />
           <div className="absolute bottom-[35%] right-[25%] w-2 h-2 rounded-full bg-indigo-400/20 animate-ambient-float" style={{ animationDelay: "4s" }} />

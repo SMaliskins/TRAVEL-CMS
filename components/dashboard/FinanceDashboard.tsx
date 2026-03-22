@@ -294,7 +294,7 @@ export default function FinanceDashboard({
   return (
     <div className="space-y-6">
       {/* Row 1: Stat Cards */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 relative z-0">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 relative z-0 min-h-[8.5rem]">
         <StatisticCard
           title="Revenue"
           value={`€${(getStats("revenue")?.revenue || 0).toLocaleString()}`}
@@ -340,7 +340,7 @@ export default function FinanceDashboard({
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">IATA BSP</h3>
               <p className="mt-3 text-sm text-gray-400 italic">Coming Soon</p>
-              <p className="mt-1 text-xs text-gray-400">Settlement reports & reconciliation</p>
+              <p className="mt-1 text-xs text-gray-600">Settlement reports & reconciliation</p>
             </div>
             <div className="ml-3 flex-shrink-0 h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100 shadow-inner text-indigo-500">
               <Plane className="h-5 w-5" />
