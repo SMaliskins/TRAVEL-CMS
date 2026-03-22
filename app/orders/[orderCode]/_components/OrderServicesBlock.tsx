@@ -554,45 +554,37 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     return () => document.removeEventListener("click", onDocClick);
   }, [filterMenuOpen]);
 
-  // Visible non-cancelled services (for bulk ops: Supplier, Payer, Client, etc. — includes invoiced)
-  const visibleServicesForBulk = useMemo(() => {
-    return visibleServices.filter(s => s.resStatus !== 'cancelled').map(s => s.id);
-  }, [visibleServices]);
-
-  // Without invoice (for Create Invoice only)
+  // Selectable services: non-invoiced only (checkboxes shown; Invoice/Split/Merge use these)
   const visibleServicesWithoutInvoice = useMemo(() => {
     return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
   }, [visibleServices]);
   
-  // Filter out only cancelled services from selectedServiceIds; keep invoiced (allowed for bulk Supplier/Payer/Client ops)
+  // Filter selectedServiceIds: keep only non-invoiced (invoiced have no checkbox; change supplier via Edit)
   useEffect(() => {
     setSelectedServiceIds(prev => prev.filter(id => {
       const service = services.find(s => s.id === id);
-      return service && service.resStatus !== 'cancelled';
+      return service && service.resStatus !== 'cancelled' && !service.invoice_id;
     }));
   }, [services]);
   
-  // Check if all visible services (for bulk) are selected
-  const allVisibleForBulkSelected = useMemo(() => {
-    if (visibleServicesForBulk.length === 0) return false;
-    return visibleServicesForBulk.every(id => selectedServiceIds.includes(id));
-  }, [visibleServicesForBulk, selectedServiceIds]);
+  // Check if all selectable (non-invoiced) services are selected
+  const allVisibleWithoutInvoiceSelected = useMemo(() => {
+    if (visibleServicesWithoutInvoice.length === 0) return false;
+    return visibleServicesWithoutInvoice.every(id => selectedServiceIds.includes(id));
+  }, [visibleServicesWithoutInvoice, selectedServiceIds]);
 
-  // Handle "select all" checkbox — all visible non-cancelled (incl. invoiced, for bulk ops)
+  // Handle "select all" — only non-invoiced services
   const handleSelectAllVisible = (checked: boolean) => {
     if (checked) {
       setSelectedServiceIds(prev => {
         const newIds = [...prev];
-        visibleServicesForBulk.forEach(id => {
-          const service = services.find(s => s.id === id);
-          if (service && service.resStatus !== 'cancelled' && !newIds.includes(id)) {
-            newIds.push(id);
-          }
+        visibleServicesWithoutInvoice.forEach(id => {
+          if (!newIds.includes(id)) newIds.push(id);
         });
         return newIds;
       });
     } else {
-      setSelectedServiceIds(prev => prev.filter(id => !visibleServicesForBulk.includes(id)));
+      setSelectedServiceIds(prev => prev.filter(id => !visibleServicesWithoutInvoice.includes(id)));
     }
   };
   
@@ -2311,14 +2303,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="w-20 px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wider text-gray-700">
                   <div className="flex items-center justify-center gap-2">
-                    {visibleServicesForBulk.length > 0 && (
+                    {visibleServicesWithoutInvoice.length > 0 && (
                       <input
                         type="checkbox"
-                        checked={allVisibleForBulkSelected}
+                        checked={allVisibleWithoutInvoiceSelected}
                         onChange={(e) => handleSelectAllVisible(e.target.checked)}
                         className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        title="Select all visible services (for bulk ops)"
-                        aria-label="Select all visible services"
+                        title="Select all non-invoiced services"
+                        aria-label="Select all non-invoiced services"
                         onClick={(e) => e.stopPropagation()}
                       />
                     )}
@@ -2438,10 +2430,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             style={{ animationDelay: `${rowDelay}ms` }}
                             onDoubleClick={(e) => {
                               e.stopPropagation();
-                              console.log('🔍 DoubleClick triggered on row! Service ID:', service.id);
                               setEditServiceId(service.id);
                             }}
-                            title="Double-click to edit"
+                            title={service.invoice_id ? "Double-click to edit (Supplier only)" : "Double-click to edit"}
                           >
                             <td className="w-20 px-2 py-1 text-center relative">
                               {/* Connector icon between split group rows */}
@@ -2455,45 +2446,44 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               <div className="flex items-center justify-center gap-1">
                                 {service.resStatus === 'cancelled' ? (
                                   <span className="text-gray-400 text-xs" title="Cancelled service cannot be invoiced">-</span>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-0.5">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedServiceIds.includes(service.id)}
-                                      onChange={(e) => {
+                                ) : service.invoice_id ? (
+                                  <div className="flex items-center justify-center">
+                                    <button
+                                      onClick={(e) => {
                                         e.stopPropagation();
-                                        if (e.target.checked) {
-                                          setSelectedServiceIds(prev => [...prev, service.id]);
-                                        } else {
-                                          setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
-                                        }
+                                        router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
                                       }}
-                                      disabled={(service as Service).resStatus === 'cancelled'}
-                                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                      aria-label={`Select ${service.name}`}
-                                      title={service.invoice_id ? "Select for bulk ops (invoiced)" : "Select for invoice or bulk ops"}
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    {service.invoice_id && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
-                                        }}
-                                        className="p-0.5 text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
-                                        title="View invoice"
-                                      >
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                      </button>
-                                    )}
+                                      className="p-0.5 text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
+                                      title="View invoice · Double-click row to edit (Supplier only)"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                    </button>
                                   </div>
+                                ) : (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedServiceIds.includes(service.id)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      if (e.target.checked) {
+                                        setSelectedServiceIds(prev => [...prev, service.id]);
+                                      } else {
+                                        setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    aria-label={`Select ${service.name}`}
+                                    title="Select for invoice or bulk ops"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
                                 )}
                               </div>
                             </td>
                             <td 
-                              className="px-2 py-1 text-sm text-gray-700"
+                              className="px-2 py-1 text-sm text-gray-700 max-w-[100px]"
+                              title={isAncillary ? (service.ancillaryType === "extra_baggage" ? "Baggage" : service.ancillaryType === "seat_selection" ? "Seat" : service.ancillaryType === "meal" ? "Meal" : "Add-on") : (service.category ?? "")}
                             >
                               {isAncillary ? (
                                 <span className="inline-flex items-center gap-1">
@@ -2504,19 +2494,23 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 </span>
                               ) : service.category}
                             </td>
-                            <td className="px-2 py-1 text-sm font-medium text-gray-900">
+                            <td 
+                              className="px-2 py-1 text-sm font-medium text-gray-900 max-w-[200px]"
+                              title={getServiceDisplayName(service, service.name)}
+                            >
                               <div className="flex items-center gap-2">
                                 {splitInfo && (
-                                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
+                                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium shrink-0 ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
                                   </span>
                                 )}
-                                <span>
+                                <span className="line-clamp-2 break-words">
                                   {getServiceDisplayName(service, service.name)}
                                 </span>
                               </div>
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm max-w-[120px] line-clamp-2 ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              title={displayClientName}
                               onClick={(e) => {
                                 const partyId = displayClientPartyId ?? service.clientPartyId;
                                 if ((e.ctrlKey || e.metaKey) && partyId) {
@@ -2530,7 +2524,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {displayClientName}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm max-w-[120px] line-clamp-2 ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              title={service.payer}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.payerPartyId) {
                                   e.preventDefault();
@@ -2542,12 +2537,18 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}>
+                            <td 
+                              className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}
+                              title={service.serviceType === "cancellation" ? formatCurrency(-Math.abs(service.clientPrice)) : formatCurrency(service.clientPrice)}
+                            >
                               {service.serviceType === "cancellation"
                                 ? formatCurrency(-Math.abs(service.clientPrice))
                                 : formatCurrency(service.clientPrice)}
                             </td>
-                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
+                            <td 
+                              className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} 
+                              title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : formatCurrency(service.categoryType === "tour" && service.commissionAmount ? Math.round(((service.servicePrice ?? 0) - service.commissionAmount) * 100) / 100 : (service.servicePrice ?? 0))}
+                            >
                               {formatCurrency(
                                 service.categoryType === "tour" && service.commissionAmount
                                   ? Math.round((service.servicePrice - service.commissionAmount) * 100) / 100
@@ -2555,7 +2556,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               )}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm max-w-[140px] line-clamp-2 ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              title={service.supplier}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
                                   e.preventDefault();
