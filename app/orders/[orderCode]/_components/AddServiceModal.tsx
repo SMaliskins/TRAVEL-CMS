@@ -1998,6 +1998,11 @@ export default function AddServiceModal({
         payload.quantity = 1;
       }
 
+      // BSP Airline Channel — for any service when Supplier is BSP
+      payload.airlineChannel = airlineChannel;
+      payload.airlineChannelSupplierId = airlineChannelSupplierId;
+      payload.airlineChannelSupplierName = airlineChannelSupplierName;
+
       // Add flight-specific fields (Flight category and Package Tour can have flight schedule)
       if (categoryType === "flight") {
         payload.cabinClass = cabinClass;
@@ -2005,9 +2010,6 @@ export default function AddServiceModal({
         if (flightSegments.length > 0) {
           payload.flightSegments = flightSegments;
         }
-        payload.airlineChannel = airlineChannel;
-        payload.airlineChannelSupplierId = airlineChannelSupplierId;
-        payload.airlineChannelSupplierName = airlineChannelSupplierName;
       }
       if (categoryType === "tour" && flightSegments.length > 0) {
         payload.flightSegments = flightSegments;
@@ -2684,13 +2686,53 @@ export default function AddServiceModal({
                       <div className="flex-1 min-w-0">
                         <PartySelect
                           value={supplierPartyId}
-                          onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                          onChange={(id, name) => {
+                            setSupplierPartyId(id);
+                            setSupplierName(name);
+                            if (!name.toUpperCase().includes("BSP")) {
+                              setAirlineChannel(false);
+                              setAirlineChannelSupplierId(null);
+                              setAirlineChannelSupplierName("");
+                            }
+                          }}
                           roleFilter="supplier"
                           initialDisplayName={supplierName || hotelName}
                           prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                         />
                       </div>
                     </div>
+                    {supplierName.toUpperCase().includes("BSP") && (
+                      <div className="mt-1.5 space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={airlineChannel}
+                            onChange={(e) => {
+                              setAirlineChannel(e.target.checked);
+                              if (!e.target.checked) {
+                                setAirlineChannelSupplierId(null);
+                                setAirlineChannelSupplierName("");
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                          <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                        </label>
+                        {airlineChannel && (
+                          <div className="pl-6">
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                            <PartySelect
+                              value={airlineChannelSupplierId}
+                              onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                              roleFilter="supplier"
+                              initialDisplayName={airlineChannelSupplierName}
+                              prioritizedParties={[]}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-sm font-normal text-[#343A40] mb-1">Booking ref</label>
@@ -3163,7 +3205,53 @@ export default function AddServiceModal({
               <div className="p-3 space-y-2">
                 <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                  <PartySelect
+                    value={supplierPartyId}
+                    onChange={(id, name) => {
+                      setSupplierPartyId(id);
+                      setSupplierName(name);
+                      if (!name.toUpperCase().includes("BSP")) {
+                        setAirlineChannel(false);
+                        setAirlineChannelSupplierId(null);
+                        setAirlineChannelSupplierName("");
+                      }
+                    }}
+                    roleFilter="supplier"
+                    initialDisplayName={supplierName}
+                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
+                  />
+                  {supplierName.toUpperCase().includes("BSP") && (
+                    <div className="mt-1.5 space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={airlineChannel}
+                          onChange={(e) => {
+                            setAirlineChannel(e.target.checked);
+                            if (!e.target.checked) {
+                              setAirlineChannelSupplierId(null);
+                              setAirlineChannelSupplierName("");
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                        <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                      </label>
+                      {airlineChannel && (
+                        <div className="pl-6">
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                          <PartySelect
+                            value={airlineChannelSupplierId}
+                            onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                            roleFilter="supplier"
+                            initialDisplayName={airlineChannelSupplierName}
+                            prioritizedParties={[]}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <div className="flex items-center justify-between mb-0.5">
@@ -3493,7 +3581,53 @@ export default function AddServiceModal({
               </div>
               <div className="p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">SUPPLIER</h4>
-                <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                <PartySelect
+                  value={supplierPartyId}
+                  onChange={(id, name) => {
+                    setSupplierPartyId(id);
+                    setSupplierName(name);
+                    if (!name.toUpperCase().includes("BSP")) {
+                      setAirlineChannel(false);
+                      setAirlineChannelSupplierId(null);
+                      setAirlineChannelSupplierName("");
+                    }
+                  }}
+                  roleFilter="supplier"
+                  initialDisplayName={supplierName}
+                  prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
+                />
+                {supplierName.toUpperCase().includes("BSP") && (
+                  <div className="mt-1.5 space-y-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={airlineChannel}
+                        onChange={(e) => {
+                          setAirlineChannel(e.target.checked);
+                          if (!e.target.checked) {
+                            setAirlineChannelSupplierId(null);
+                            setAirlineChannelSupplierName("");
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                      <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                    </label>
+                    {airlineChannel && (
+                      <div className="pl-6">
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                        <PartySelect
+                          value={airlineChannelSupplierId}
+                          onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                          roleFilter="supplier"
+                          initialDisplayName={airlineChannelSupplierName}
+                          prioritizedParties={[]}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref</label>

@@ -2412,6 +2412,11 @@ export default function EditServiceModalNew({
         payload.airport_service_flow = airportServiceFlow || null;
       }
 
+      // BSP Airline Channel — for any service when Supplier is BSP
+      payload.airline_channel = airlineChannel;
+      payload.airline_channel_supplier_id = airlineChannelSupplierId;
+      payload.airline_channel_supplier_name = airlineChannelSupplierName;
+
       // Add flight-specific fields
       if (categoryType === "flight") {
         payload.cabin_class = cabinClass;
@@ -2419,9 +2424,6 @@ export default function EditServiceModalNew({
         if (flightSegments.length > 0) {
           payload.flight_segments = flightSegments;
         }
-        payload.airline_channel = airlineChannel;
-        payload.airline_channel_supplier_id = airlineChannelSupplierId;
-        payload.airline_channel_supplier_name = airlineChannelSupplierName;
         if (pricingPerClient.length > 0) {
           const validClients = clients.filter(c => c.id || c.name);
           payload.pricingPerClient = validClients.map((c, i) => ({
@@ -3235,13 +3237,53 @@ export default function EditServiceModalNew({
                       <div className="flex-1 min-w-0">
                         <PartySelect
                           value={supplierPartyId}
-                          onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                          onChange={(id, name) => {
+                            setSupplierPartyId(id);
+                            setSupplierName(name);
+                            if (!name.toUpperCase().includes("BSP")) {
+                              setAirlineChannel(false);
+                              setAirlineChannelSupplierId(null);
+                              setAirlineChannelSupplierName("");
+                            }
+                          }}
                           roleFilter="supplier"
                           initialDisplayName={supplierName || hotelName}
                           prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                         />
                       </div>
                     </div>
+                    {supplierName.toUpperCase().includes("BSP") && (
+                      <div className="mt-1.5 space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={airlineChannel}
+                            onChange={(e) => {
+                              setAirlineChannel(e.target.checked);
+                              if (!e.target.checked) {
+                                setAirlineChannelSupplierId(null);
+                                setAirlineChannelSupplierName("");
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                          <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                        </label>
+                        {airlineChannel && (
+                          <div className="pl-6">
+                            <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                            <PartySelect
+                              value={airlineChannelSupplierId}
+                              onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                              roleFilter="supplier"
+                              initialDisplayName={airlineChannelSupplierName}
+                              prioritizedParties={[]}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-sm font-normal text-[#343A40] mb-1">Booking ref</label>
@@ -3357,11 +3399,14 @@ export default function EditServiceModalNew({
                     {onDeleteService && (
                       <button
                         type="button"
-                        onClick={() => { if (confirm(`Permanently delete "${serviceName}"? This cannot be undone.`)) { onDeleteService(service.id); onClose(); } }}
+                        onClick={() => {
+                          const ok = confirm(`Permanently delete "${serviceName}"? This cannot be undone.`);
+                          if (ok) setTimeout(() => { onDeleteService(service.id); onClose(); }, 0);
+                        }}
                         disabled={isSubmitting}
                         className="px-3 py-2 text-sm text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         Delete
                       </button>
                     )}
@@ -3755,7 +3800,53 @@ export default function EditServiceModalNew({
               <div className="p-3 space-y-2">
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
-                  <PartySelect value={supplierPartyId} onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }} roleFilter="supplier" initialDisplayName={supplierName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                  <PartySelect
+                    value={supplierPartyId}
+                    onChange={(id, name) => {
+                      setSupplierPartyId(id);
+                      setSupplierName(name);
+                      if (!name.toUpperCase().includes("BSP")) {
+                        setAirlineChannel(false);
+                        setAirlineChannelSupplierId(null);
+                        setAirlineChannelSupplierName("");
+                      }
+                    }}
+                    roleFilter="supplier"
+                    initialDisplayName={supplierName}
+                    prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
+                  />
+                  {supplierName.toUpperCase().includes("BSP") && (
+                    <div className="mt-1.5 space-y-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={airlineChannel}
+                          onChange={(e) => {
+                            setAirlineChannel(e.target.checked);
+                            if (!e.target.checked) {
+                              setAirlineChannelSupplierId(null);
+                              setAirlineChannelSupplierName("");
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                        <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                      </label>
+                      {airlineChannel && (
+                        <div className="pl-6">
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                          <PartySelect
+                            value={airlineChannelSupplierId}
+                            onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                            roleFilter="supplier"
+                            initialDisplayName={airlineChannelSupplierName}
+                            prioritizedParties={[]}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className={categoryType === "tour" && parseAttemptedButEmpty.has("clients") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : categoryType === "tour" && parsedFields.has("clients") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Client</label>
@@ -4028,11 +4119,51 @@ export default function EditServiceModalNew({
                 <h4 className="modal-section-title">SUPPLIER</h4>
                 <PartySelect
                   value={supplierPartyId}
-                  onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                  onChange={(id, name) => {
+                    setSupplierPartyId(id);
+                    setSupplierName(name);
+                    if (!name.toUpperCase().includes("BSP")) {
+                      setAirlineChannel(false);
+                      setAirlineChannelSupplierId(null);
+                      setAirlineChannelSupplierName("");
+                    }
+                  }}
                   roleFilter="supplier"
                   initialDisplayName={supplierName}
                   prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                 />
+                {supplierName.toUpperCase().includes("BSP") && (
+                  <div className="mt-1.5 space-y-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={airlineChannel}
+                        onChange={(e) => {
+                          setAirlineChannel(e.target.checked);
+                          if (!e.target.checked) {
+                            setAirlineChannelSupplierId(null);
+                            setAirlineChannelSupplierName("");
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                      <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                    </label>
+                    {airlineChannel && (
+                      <div className="pl-6">
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                        <PartySelect
+                          value={airlineChannelSupplierId}
+                          onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                          roleFilter="supplier"
+                          initialDisplayName={airlineChannelSupplierName}
+                          prioritizedParties={[]}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref</label>
@@ -4083,11 +4214,51 @@ export default function EditServiceModalNew({
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                       <PartySelect
                         value={supplierPartyId}
-                        onChange={(id, name) => { setSupplierPartyId(id); setSupplierName(name); }}
+                        onChange={(id, name) => {
+                          setSupplierPartyId(id);
+                          setSupplierName(name);
+                          if (!name.toUpperCase().includes("BSP")) {
+                            setAirlineChannel(false);
+                            setAirlineChannelSupplierId(null);
+                            setAirlineChannelSupplierName("");
+                          }
+                        }}
                         roleFilter="supplier"
                         initialDisplayName={supplierName}
                         prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))}
                       />
+                      {supplierName.toUpperCase().includes("BSP") && (
+                        <div className="mt-1.5 space-y-1.5">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={airlineChannel}
+                              onChange={(e) => {
+                                setAirlineChannel(e.target.checked);
+                                if (!e.target.checked) {
+                                  setAirlineChannelSupplierId(null);
+                                  setAirlineChannelSupplierName("");
+                                }
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-gray-700">Airline Channel</span>
+                            <span className="text-[10px] text-gray-400">ticket issued in airline system, billed via BSP</span>
+                          </label>
+                          {airlineChannel && (
+                            <div className="pl-6">
+                              <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
+                              <PartySelect
+                                value={airlineChannelSupplierId}
+                                onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
+                                roleFilter="supplier"
+                                initialDisplayName={airlineChannelSupplierName}
+                                prioritizedParties={[]}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="flex items-center justify-between gap-2">
@@ -4942,12 +5113,15 @@ export default function EditServiceModalNew({
                     {onDeleteService && (
                       <button
                         type="button"
-                        onClick={() => { if (confirm(`Permanently delete "${serviceName}"? This cannot be undone.`)) { onDeleteService(service.id); onClose(); } }}
+                        onClick={() => {
+                          const ok = confirm(`Permanently delete "${serviceName}"? This cannot be undone.`);
+                          if (ok) setTimeout(() => { onDeleteService(service.id); onClose(); }, 0);
+                        }}
                         disabled={isSubmitting}
                         className="px-3 py-2 text-sm text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
                         title="Delete permanently (Supervisor)"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         Delete
                       </button>
                     )}
@@ -5450,11 +5624,14 @@ export default function EditServiceModalNew({
               {onDeleteService && (
                 <button
                   type="button"
-                  onClick={() => { if (confirm(`Permanently delete "${serviceName}"? This cannot be undone.`)) { onDeleteService(service.id); onClose(); } }}
+                  onClick={() => {
+                  const ok = confirm(`Permanently delete "${serviceName}"? This cannot be undone.`);
+                  if (ok) setTimeout(() => { onDeleteService(service.id); onClose(); }, 0);
+                }}
                   disabled={isSubmitting}
                   className="px-3 py-2 text-sm text-red-600 hover:text-red-800 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                   Delete
                 </button>
               )}
