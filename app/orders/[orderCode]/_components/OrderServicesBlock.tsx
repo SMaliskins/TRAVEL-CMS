@@ -2481,10 +2481,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 )}
                               </div>
                             </td>
-                            <td 
-                              className="px-2 py-1 text-sm text-gray-700 max-w-[100px]"
-                              title={isAncillary ? (service.ancillaryType === "extra_baggage" ? "Baggage" : service.ancillaryType === "seat_selection" ? "Seat" : service.ancillaryType === "meal" ? "Meal" : "Add-on") : (service.category ?? "")}
-                            >
+                            <td className="px-2 py-1 text-sm text-gray-700">
                               {isAncillary ? (
                                 <span className="inline-flex items-center gap-1">
                                   <span className="text-gray-400">└</span>
@@ -2494,23 +2491,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 </span>
                               ) : service.category}
                             </td>
-                            <td 
-                              className="px-2 py-1 text-sm font-medium text-gray-900 max-w-[200px]"
-                              title={getServiceDisplayName(service, service.name)}
-                            >
+                            <td className="px-2 py-1 text-sm font-medium text-gray-900">
                               <div className="flex items-center gap-2">
                                 {splitInfo && (
                                   <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium shrink-0 ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
                                   </span>
                                 )}
-                                <span className="line-clamp-2 break-words">
-                                  {getServiceDisplayName(service, service.name)}
-                                </span>
+                                <span>{getServiceDisplayName(service, service.name)}</span>
                               </div>
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm max-w-[120px] line-clamp-2 ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
-                              title={displayClientName}
+                              className={`px-2 py-1 text-sm ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 const partyId = displayClientPartyId ?? service.clientPartyId;
                                 if ((e.ctrlKey || e.metaKey) && partyId) {
@@ -2524,8 +2515,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               {displayClientName}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm max-w-[120px] line-clamp-2 ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
-                              title={service.payer}
+                              className={`px-2 py-1 text-sm ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.payerPartyId) {
                                   e.preventDefault();
@@ -2537,18 +2527,12 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td 
-                              className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}
-                              title={service.serviceType === "cancellation" ? formatCurrency(-Math.abs(service.clientPrice)) : formatCurrency(service.clientPrice)}
-                            >
+                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}>
                               {service.serviceType === "cancellation"
                                 ? formatCurrency(-Math.abs(service.clientPrice))
                                 : formatCurrency(service.clientPrice)}
                             </td>
-                            <td 
-                              className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} 
-                              title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : formatCurrency(service.categoryType === "tour" && service.commissionAmount ? Math.round(((service.servicePrice ?? 0) - service.commissionAmount) * 100) / 100 : (service.servicePrice ?? 0))}
-                            >
+                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
                               {formatCurrency(
                                 service.categoryType === "tour" && service.commissionAmount
                                   ? Math.round((service.servicePrice - service.commissionAmount) * 100) / 100
@@ -2556,8 +2540,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               )}
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm max-w-[140px] line-clamp-2 ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
-                              title={service.supplier}
+                              className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
                                   e.preventDefault();
