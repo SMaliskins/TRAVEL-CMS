@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ordersSearchStore from "@/lib/stores/ordersSearchStore";
@@ -465,6 +465,9 @@ export default function OrdersPage() {
   const [dateSortAsc, setDateSortAsc] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [surnameInput, setSurnameInput] = useState(searchState.clientLastName || "");
+  const surnameDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const DEBOUNCE_MS = 180;
+  useEffect(() => () => { if (surnameDebounceRef.current) clearTimeout(surnameDebounceRef.current); }, []);
 
   const countriesFlagsMap = useMemo(() => {
     const map = new Map<string, React.ReactNode>();
@@ -882,6 +885,10 @@ export default function OrdersPage() {
   })();
 
   const clearAllFilters = () => {
+    if (surnameDebounceRef.current) {
+      clearTimeout(surnameDebounceRef.current);
+      surnameDebounceRef.current = null;
+    }
     ordersSearchStore.applyPatch({
       clientLastName: "",
       agentId: "all",
@@ -948,16 +955,21 @@ export default function OrdersPage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:flex-wrap">
             {/* Surname search */}
             <div className="relative w-full sm:w-36 min-w-0">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600" aria-hidden />
               <input
                 type="text"
                 placeholder="Client / Payer..."
                 value={surnameInput}
                 onChange={(e) => {
-                  setSurnameInput(e.target.value);
-                  ordersSearchStore.setField("clientLastName", e.target.value);
+                  const val = e.target.value;
+                  setSurnameInput(val);
+                  if (surnameDebounceRef.current) clearTimeout(surnameDebounceRef.current);
+                  surnameDebounceRef.current = setTimeout(() => {
+                    surnameDebounceRef.current = null;
+                    ordersSearchStore.setField("clientLastName", val);
+                  }, DEBOUNCE_MS);
                 }}
-                className="w-full rounded border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
               />
             </div>
 

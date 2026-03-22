@@ -38,6 +38,8 @@ class OrdersSearchStore {
   private state: OrdersSearchState;
   private listeners: Set<Listener> = new Set();
   private isMounted = false;
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly SAVE_DEBOUNCE_MS = 200;
 
   constructor() {
     this.state = DEFAULT_STATE;
@@ -65,11 +67,15 @@ class OrdersSearchStore {
 
   private saveToStorage() {
     if (typeof window === "undefined" || !this.isMounted) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
-    } catch (e) {
-      console.error("Failed to save orders search state to localStorage", e);
-    }
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(() => {
+      this.saveTimeout = null;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      } catch (e) {
+        console.error("Failed to save orders search state to localStorage", e);
+      }
+    }, this.SAVE_DEBOUNCE_MS);
   }
 
   private notifyListeners() {

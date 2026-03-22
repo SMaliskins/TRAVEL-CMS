@@ -11,11 +11,18 @@ interface OrdersSearchPopoverProps {
   inputRef: React.RefObject<HTMLInputElement | null>;
 }
 
+const getInitialState = () => ordersSearchStore.getState();
+
 export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverProps) {
+  const [initState] = useState(getInitialState);
   const [isOpen, setIsOpen] = useState(false);
-  const [filters, setFilters] = useState<OrdersSearchState>(() =>
-    ordersSearchStore.getState()
-  );
+  const [filters, setFilters] = useState<OrdersSearchState>(initState);
+  // Local state for text inputs — avoids full re-render on every keystroke (INP fix)
+  const [queryTextLocal, setQueryTextLocal] = useState(initState.queryText);
+  const [clientLastNameLocal, setClientLastNameLocal] = useState(initState.clientLastName);
+  const [hotelNameLocal, setHotelNameLocal] = useState(initState.hotelName);
+  const [countryLocal, setCountryLocal] = useState(initState.country);
+  const lastAppliedRef = useRef({ queryText: "", clientLastName: "", hotelName: "", country: "" });
   const [agents, setAgents] = useState<{ id: string; name: string; initials: string }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
@@ -36,11 +43,11 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
       .catch(() => {});
   }, [isOpen, agents.length]);
 
-  // Debounce text inputs
-  const debouncedQueryText = useDebounce(filters.queryText, 200);
-  const debouncedClientLastName = useDebounce(filters.clientLastName, 200);
-  const debouncedHotelName = useDebounce(filters.hotelName, 200);
-  const debouncedCountry = useDebounce(filters.country, 200);
+  // Debounce text inputs (use local state to avoid blocking re-renders)
+  const debouncedQueryText = useDebounce(queryTextLocal, 180);
+  const debouncedClientLastName = useDebounce(clientLastNameLocal, 180);
+  const debouncedHotelName = useDebounce(hotelNameLocal, 180);
+  const debouncedCountry = useDebounce(countryLocal, 180);
 
   // Calculate position
   const calculatePosition = useClampedPopoverPosition({
@@ -104,20 +111,33 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
     return unsubscribe;
   }, []);
 
+  // Sync local text state from filters when change is external (e.g. clear, inline input)
+  useEffect(() => {
+    const applied = lastAppliedRef.current;
+    if (filters.queryText !== applied.queryText) setQueryTextLocal(filters.queryText);
+    if (filters.clientLastName !== applied.clientLastName) setClientLastNameLocal(filters.clientLastName);
+    if (filters.hotelName !== applied.hotelName) setHotelNameLocal(filters.hotelName);
+    if (filters.country !== applied.country) setCountryLocal(filters.country);
+  }, [filters.queryText, filters.clientLastName, filters.hotelName, filters.country]);
+
   // Apply debounced text values to store
   useEffect(() => {
+    lastAppliedRef.current.queryText = debouncedQueryText;
     ordersSearchStore.setField("queryText", debouncedQueryText);
   }, [debouncedQueryText]);
 
   useEffect(() => {
+    lastAppliedRef.current.clientLastName = debouncedClientLastName;
     ordersSearchStore.setField("clientLastName", debouncedClientLastName);
   }, [debouncedClientLastName]);
 
   useEffect(() => {
+    lastAppliedRef.current.hotelName = debouncedHotelName;
     ordersSearchStore.setField("hotelName", debouncedHotelName);
   }, [debouncedHotelName]);
 
   useEffect(() => {
+    lastAppliedRef.current.country = debouncedCountry;
     ordersSearchStore.setField("country", debouncedCountry);
   }, [debouncedCountry]);
 
@@ -302,11 +322,12 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
     key: K,
     value: OrdersSearchState[K]
   ) => {
-    // For text fields, update local state (will be debounced)
-    if (key === "queryText" || key === "clientLastName" || key === "hotelName" || key === "country") {
-      setFilters((prev) => ({ ...prev, [key]: value }));
-    } else {
-      // For other fields, update store immediately
+    // Text fields: update local state only (debounced to store) — avoids INP blocking
+    if (key === "queryText") setQueryTextLocal(value as string);
+    else if (key === "clientLastName") setClientLastNameLocal(value as string);
+    else if (key === "hotelName") setHotelNameLocal(value as string);
+    else if (key === "country") setCountryLocal(value as string);
+    else {
       ordersSearchStore.setField(key, value);
     }
   };
@@ -363,8 +384,8 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
         <input
           ref={inputRef}
           type="text"
-          value={filters.queryText}
-          onChange={(e) => handleFieldChange("queryText", e.target.value)}
+          value={queryTextLocal}
+          onChange={(e) => setQueryTextLocal(e.target.value)}
           onFocus={() => setIsOpen(true)}
           placeholder="Search (Orders only)..."
           className={`block w-full rounded-lg border py-1.5 pl-10 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 ${
@@ -479,8 +500,8 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
                     </label>
                     <input
                       type="text"
-                      value={filters.queryText}
-                      onChange={(e) => handleFieldChange("queryText", e.target.value)}
+                      value={queryTextLocal}
+                      onChange={(e) => setQueryTextLocal(e.target.value)}
                       placeholder="Order ID / Client / Ref"
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
                       autoFocus
@@ -516,10 +537,8 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
                         </label>
                         <input
                           type="text"
-                          value={filters.clientLastName}
-                          onChange={(e) =>
-                            handleFieldChange("clientLastName", e.target.value)
-                          }
+                          value={clientLastNameLocal}
+                          onChange={(e) => setClientLastNameLocal(e.target.value)}
                           placeholder="Enter last name"
                           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
                         />
@@ -532,8 +551,8 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
                         </label>
                         <input
                           type="text"
-                          value={filters.hotelName}
-                          onChange={(e) => handleFieldChange("hotelName", e.target.value)}
+                          value={hotelNameLocal}
+                          onChange={(e) => setHotelNameLocal(e.target.value)}
                           placeholder="Enter hotel name"
                           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
                         />
@@ -546,8 +565,8 @@ export default function OrdersSearchPopover({ inputRef }: OrdersSearchPopoverPro
                         </label>
                         <input
                           type="text"
-                          value={filters.country}
-                          onChange={(e) => handleFieldChange("country", e.target.value)}
+                          value={countryLocal}
+                          onChange={(e) => setCountryLocal(e.target.value)}
                           placeholder="Enter country"
                           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none"
                         />
