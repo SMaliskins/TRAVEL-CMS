@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { COUNTRIES } from "@/lib/data/countries";
@@ -23,6 +23,23 @@ export interface PassportData {
   isAlienPassport?: boolean;
 }
 
+/** Base for a new parse: API JSON omits missing keys, so we must not merge onto previous passport data. */
+const BLANK_PASSPORT_MERGE: PassportData = {
+  passportNumber: undefined,
+  passportIssueDate: undefined,
+  passportExpiryDate: undefined,
+  passportIssuingCountry: undefined,
+  passportFullName: undefined,
+  firstName: undefined,
+  lastName: undefined,
+  dob: undefined,
+  nationality: undefined,
+  avatarUrl: undefined,
+  personalCode: undefined,
+  gender: undefined,
+  isAlienPassport: undefined,
+};
+
 interface PassportDetailsInputProps {
   data: PassportData;
   onChange: (data: PassportData, options?: { parsedFields?: Set<string> }) => void;
@@ -44,39 +61,7 @@ export default function PassportDetailsInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
-  // Handle paste from clipboard (Ctrl+V) - works globally
-  useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      if (readonly) return;
-      
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.indexOf("image") !== -1) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) {
-            await handleFileUpload(file);
-          }
-          return;
-        }
-      }
-    };
-
-    document.addEventListener("paste", handlePaste);
-    return () => document.removeEventListener("paste", handlePaste);
-  }, [readonly]);
-
-  // Handle file upload (images and PDFs)
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await handleFileUpload(file);
-  };
-
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = useCallback(async (file: File) => {
     const isImage = file.type.startsWith("image/");
     const isPDF = file.type === "application/pdf";
 
@@ -103,11 +88,16 @@ export default function PassportDetailsInput({
       });
       const result = await response.json();
       if (response.ok && result.passport) {
+        const merged = {
+          ...BLANK_PASSPORT_MERGE,
+          ...(result.passport as PassportData),
+        };
         const p = result.passport as Record<string, unknown>;
         const parsed = new Set<string>(Object.keys(p).filter((k) => p[k] != null && p[k] !== ""));
-        onChange({ ...data, ...result.passport }, { parsedFields: parsed });
+        onChange(merged, { parsedFields: parsed });
         setParseError(null);
         setIsEditing(true);
+        if (fileInputRef.current) fileInputRef.current.value = "";
       } else {
         setParseError(result.error || "Could not parse passport. Please fill in manually.");
         setIsEditing(true);
@@ -120,6 +110,38 @@ export default function PassportDetailsInput({
       setIsUploading(false);
       setIsParsing(false);
     }
+  }, [onChange]);
+
+  // Handle paste from clipboard (Ctrl+V) - works globally
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      if (readonly) return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf("image") !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            await handleFileUpload(file);
+          }
+          return;
+        }
+      }
+    };
+
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [readonly, handleFileUpload]);
+
+  // Handle file upload (images and PDFs)
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await handleFileUpload(file);
   };
 
   // Handle drag and drop

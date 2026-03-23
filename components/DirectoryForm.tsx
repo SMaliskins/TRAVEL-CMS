@@ -1787,7 +1787,17 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       setDob(normalizedDob ?? "");
                       if (options?.parsedFields) setPassportParsedFields(options.parsedFields);
                       if (data.avatarUrl !== undefined) onAvatarChange?.(data.avatarUrl);
-                      if (data.firstName && data.lastName) {
+                      // Fresh AI parse: sync name fields from new doc (do not require both; old merge kept stale names)
+                      if (options?.parsedFields && options.parsedFields.size > 0) {
+                        if (data.firstName) {
+                          setFirstName(data.firstName);
+                          markFieldDirty("firstName");
+                        }
+                        if (data.lastName) {
+                          setLastName(data.lastName);
+                          markFieldDirty("lastName");
+                        }
+                      } else if (data.firstName && data.lastName) {
                         setFirstName(data.firstName);
                         setLastName(data.lastName);
                         markFieldDirty("firstName");

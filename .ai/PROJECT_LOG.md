@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-03-23] CW — Passport re-upload: clear fields before applying new parse
+
+**Task:** New passport upload kept old field values when API omitted keys (JSON merge).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `PassportDetailsInput`: `BLANK_PASSPORT_MERGE` then overlay API result; reset file input; `useCallback` + paste effect deps.
+- `DirectoryForm`: on AI parse (`parsedFields`), update first/last name independently when present.
+
+---
+
 ## [2026-03-22] CW — Order services: selection bar sum uses signed cancellation client price
 
 **Task:** Floating bar showed wrong total (summed positive DB values for cancellation lines).
