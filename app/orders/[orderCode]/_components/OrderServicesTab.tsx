@@ -150,7 +150,7 @@ export default function OrderServicesTab() {
       : "Unknown";
   };
 
-  const getResStatusColor = (status: Service["resStatus"], invoiceId?: string | null) => {
+  const getResStatusColor = (status: Service["resStatus"], _invoiceId?: string | null) => {
     switch (status) {
       case "confirmed":
         return "bg-green-100 text-green-800";
@@ -161,7 +161,7 @@ export default function OrderServicesTab() {
       case "rejected":
         return "bg-red-100 text-red-800";
       case "cancelled":
-        return invoiceId ? "bg-[linear-gradient(to_right,#bbf7d0_50%,#e5e7eb_50%)] text-gray-800" : "bg-gray-100 text-gray-800";
+        return "bg-[linear-gradient(to_right,#bbf7d0_50%,#e5e7eb_50%)] text-gray-800 border border-gray-200/80";
       default:
         return "bg-gray-100 text-gray-800";
     }

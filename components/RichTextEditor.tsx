@@ -4,6 +4,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
+import { ImagePasteExtension } from "@/lib/tiptap/ImagePasteExtension";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import { useState, useCallback, useEffect } from "react";
@@ -18,9 +19,11 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   onImageUpload?: () => Promise<string | null>;
+  /** Compact mode: smaller height, no HTML toggle. For modals. */
+  compact?: boolean;
 }
 
-export default function RichTextEditor({ content, onChange, placeholder, onImageUpload }: RichTextEditorProps) {
+export default function RichTextEditor({ content, onChange, placeholder, onImageUpload, compact }: RichTextEditorProps) {
   const [showSource, setShowSource] = useState(false);
   const [sourceHtml, setSourceHtml] = useState(content);
   const [uploading, setUploading] = useState(false);
@@ -31,6 +34,7 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
       StarterKit,
       Underline,
       Image.configure({ inline: true, allowBase64: true }),
+      ImagePasteExtension,
       Link.configure({ openOnClick: false, HTMLAttributes: { style: "color: #2563eb; text-decoration: underline;" } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
     ],
@@ -42,7 +46,7 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
     },
     editorProps: {
       attributes: {
-        class: "prose prose-sm max-w-none focus:outline-none min-h-[200px] px-4 py-3",
+        class: `prose prose-sm max-w-none focus:outline-none px-4 py-3 ${compact ? "min-h-[100px]" : "min-h-[200px]"}`,
       },
     },
   });
@@ -166,17 +170,19 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
 
         <div className="flex-1" />
 
-        <button
-          type="button"
-          onClick={handleSourceToggle}
-          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-            showSource ? "bg-gray-200 text-gray-800" : "text-gray-500 hover:bg-gray-100"
-          }`}
-          title="Toggle HTML source"
-        >
-          <Code size={12} />
-          {showSource ? "Visual" : "HTML"}
-        </button>
+        {!compact && (
+          <button
+            type="button"
+            onClick={handleSourceToggle}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+              showSource ? "bg-gray-200 text-gray-800" : "text-gray-500 hover:bg-gray-100"
+            }`}
+            title="Toggle HTML source"
+          >
+            <Code size={12} />
+            {showSource ? "Visual" : "HTML"}
+          </button>
+        )}
       </div>
 
       {/* Editor / Source */}

@@ -1562,11 +1562,8 @@ export default function OrderPage({
                   } : prev);
                 }}
                 onIssueInvoice={(services) => {
-                  // Filter out cancelled services
-                  const activeServices = services.filter(s => s.resStatus !== 'cancelled');
-                  
-                  if (activeServices.length === 0) {
-                    alert('No active services selected. Cancelled services are excluded.');
+                  if (services.length === 0) {
+                    alert('No services selected.');
                     return;
                   }
                   
@@ -1574,7 +1571,7 @@ export default function OrderPage({
                   // Group by payer name (normalized) - if names are the same (case-insensitive, trimmed), it's the same payer
                   const groupedByPayerName = new Map<string, any[]>();
                   
-                  activeServices.forEach(service => {
+                  services.forEach(service => {
                     // Normalize payer name: trim, lowercase for comparison, but keep original for display
                     const payerNameRaw = (service.payer || 'no-payer').trim();
                     const payerNameKey = payerNameRaw.toLowerCase();

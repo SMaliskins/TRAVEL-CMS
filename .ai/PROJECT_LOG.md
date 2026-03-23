@@ -5,6 +5,37 @@
 
 ---
 
+## [2026-03-22] CW — Orders search: match clients on service lines
+
+**Task:** Orders list search should find orders when the typed client appears on any service, not only lead passenger.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `GET /api/orders`: select `client_name` on `order_services`; response field `serviceClients[]`; when `?search=` — filter also by service-line names (chunked query).
+- `filterOrders` + `OrderRow`: query text and surname filters also check `serviceClients`.
+
+**Next Step:** QA — search by traveller who is only on a service line; `?search=` from payments modal.
+
+---
+
+## [2026-03-22] CW — Order services: invoice checkbox for cancelled + Cancelled badge style
+
+**Task:** Allow selecting cancelled services for invoicing (net settlement); style Cancelled status half green / half gray.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `OrderServicesBlock.tsx`: checkbox for all non-invoiced rows (including `resStatus === 'cancelled'`); select-all / selection cleanup aligned; Invoice button passes cancelled lines; `getResStatusColor('cancelled')` → gradient green/gray + border.
+- `page.tsx`: `onIssueInvoice` no longer strips cancelled services; empty check on full selection.
+- `OrderServicesTab.tsx`: same Cancelled badge styling for consistency.
+
+**Next Step:** QA — select cancelled + cancellation line, create invoice; verify totals.
+
+---
+
 ## [2026-03-20] CW — Finance: Company expenses (Supervisor/Finance only)
 
 **Task:** Add Finance section for company expense invoices (utilities, insurance, etc.) — not linked to orders. Parse documents; add rows; filter/search by period, supplier, amount. Supervisor and Finance only.

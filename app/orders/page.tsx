@@ -44,6 +44,8 @@ interface OrderRow {
   totalInvoices?: number;
   allInvoicesPaid?: boolean;
   payers?: string[];
+  /** Names on service lines — search matches even when not lead passenger */
+  serviceClients?: string[];
 }
 
 interface OrderTotals {

@@ -1912,10 +1912,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       <label className="block text-xs font-medium text-gray-600 mb-2">Notes</label>
                       <textarea
                         value={preferencesNotes}
-                        onChange={(e) => {
-                          setPreferencesNotes(e.target.value);
-                          markFieldDirty("preferencesNotes");
-                        }}
+                        onChange={(e) => setPreferencesNotes(e.target.value)}
+                        onBlur={() => markFieldDirty("preferencesNotes")}
                         placeholder="Special requests, allergies, other notes..."
                         rows={3}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white resize-none"

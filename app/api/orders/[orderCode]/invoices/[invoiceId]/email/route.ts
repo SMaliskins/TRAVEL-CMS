@@ -129,8 +129,11 @@ export async function POST(
 
     const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo, invoiceTemplateId, invoiceAccentColor);
     const emailSubject = subject?.trim() || `Invoice ${invoice.invoice_number}`;
+    const footer = '<p style="margin-top:12px;color:#6b7280">Invoice is attached as a PDF file.</p>';
     const emailHtml = message?.trim()
-      ? `<p>${message.replace(/\n/g, "<br>")}</p><p style="margin-top:12px;color:#6b7280">Invoice is attached as a PDF file.</p>`
+      ? (message.includes("<") && message.includes(">")
+          ? `${message}${footer}`
+          : `<p>${message.replace(/\n/g, "<br>")}</p>${footer}`)
       : `<p>Please find attached invoice ${invoice.invoice_number}.</p>`;
 
     const attachments: { filename: string; content: Buffer }[] = [];

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
+import RichTextEditor from "@/components/RichTextEditor";
 import DateInput from "@/components/DateInput";
 import { useToast } from "@/contexts/ToastContext";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
@@ -1280,12 +1281,17 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea
-                  value={emailModal.message}
-                  onChange={(e) => setEmailModal({ ...emailModal, message: e.target.value })}
-                  rows={4}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Message <span className="text-gray-400 font-normal text-xs">(Ctrl+V to paste images)</span>
+                </label>
+                <RichTextEditor
+                  content={
+                    emailModal.message.includes("<")
+                      ? emailModal.message
+                      : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                  }
+                  onChange={(html) => setEmailModal({ ...emailModal, message: html })}
+                  compact
                 />
               </div>
 

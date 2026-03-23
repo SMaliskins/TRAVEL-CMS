@@ -554,16 +554,16 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     return () => document.removeEventListener("click", onDocClick);
   }, [filterMenuOpen]);
 
-  // Selectable services: non-invoiced only (checkboxes shown; Invoice/Split/Merge use these)
+  // Selectable services: non-invoiced only (incl. cancelled — for settlement / offset invoices)
   const visibleServicesWithoutInvoice = useMemo(() => {
-    return visibleServices.filter(s => !s.invoice_id && s.resStatus !== 'cancelled').map(s => s.id);
+    return visibleServices.filter(s => !s.invoice_id).map(s => s.id);
   }, [visibleServices]);
   
   // Filter selectedServiceIds: keep only non-invoiced (invoiced have no checkbox; change supplier via Edit)
   useEffect(() => {
     setSelectedServiceIds(prev => prev.filter(id => {
       const service = services.find(s => s.id === id);
-      return service && service.resStatus !== 'cancelled' && !service.invoice_id;
+      return service && !service.invoice_id;
     }));
   }, [services]);
   
@@ -1892,7 +1892,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     ).toUpperCase();
   };
 
-  const getResStatusColor = (status: Service["resStatus"], invoiceId?: string | null) => {
+  const getResStatusColor = (status: Service["resStatus"], _invoiceId?: string | null) => {
     switch (status) {
       case "draft":
         return "bg-slate-100 text-slate-600 border border-dashed border-slate-300";
@@ -1905,7 +1905,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       case "rejected":
         return "bg-red-100 text-red-800";
       case "cancelled":
-        return invoiceId ? "bg-[linear-gradient(to_right,#bbf7d0_50%,#e5e7eb_50%)] text-gray-800" : "bg-gray-100 text-gray-800";
+        // Half green (booked/confirmed side) + half gray (cancelled) — readable on all rows
+        return "bg-[linear-gradient(to_right,#bbf7d0_50%,#e5e7eb_50%)] text-gray-800 border border-gray-200/80";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -2444,9 +2445,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 </div>
                               )}
                               <div className="flex items-center justify-center gap-1">
-                                {service.resStatus === 'cancelled' ? (
-                                  <span className="text-gray-400 text-xs" title="Cancelled service cannot be invoiced">-</span>
-                                ) : service.invoice_id ? (
+                                {service.invoice_id ? (
                                   <div className="flex items-center justify-center">
                                     <button
                                       onClick={(e) => {
@@ -2475,7 +2474,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                     }}
                                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                     aria-label={`Select ${service.name}`}
-                                    title="Select for invoice or bulk ops"
+                                    title={
+                                      service.resStatus === "cancelled"
+                                        ? "Select for invoice (e.g. settlement with cancellation line)"
+                                        : "Select for invoice or bulk ops"
+                                    }
                                     onClick={(e) => e.stopPropagation()}
                                   />
                                 )}
@@ -3057,9 +3060,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             <button
               onClick={() => {
                 if (onIssueInvoice) {
-                  // Filter out cancelled and already-invoiced services before passing to onIssueInvoice
+                  // Exclude only already-invoiced lines (cancelled originals allowed for net settlement)
                   const selectedServicesData = services
-                    .filter(s => selectedServiceIds.includes(s.id) && s.resStatus !== 'cancelled' && !s.invoice_id)
+                    .filter(s => selectedServiceIds.includes(s.id) && !s.invoice_id)
                     .map(s => {
                       const clientNames = (s.assignedTravellerIds?.length && orderTravellers.length)
                         ? orderTravellers
@@ -3093,7 +3096,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     });
                   
                   if (selectedServicesData.length === 0) {
-                    alert('No active, non-invoiced services selected. Cancelled and already-invoiced services are excluded.');
+                    alert('No billable lines selected. Lines already on an invoice cannot be selected again.');
                     return;
                   }
                   onIssueInvoice(selectedServicesData);

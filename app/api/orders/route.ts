@@ -70,13 +70,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // In-memory search with diacritics/layout/typo normalization
+    // In-memory search: order code, lead client (client_display_name), and any service line client_name
     let orders = allOrders || [];
     if (search) {
       const patterns = getSearchPatterns(search);
-      orders = orders.filter((o: any) =>
-        matchesSearch(o.order_code, patterns) ||
-        matchesSearch(o.client_display_name, patterns)
+      const preOrders = allOrders || [];
+      const allOrderIds = preOrders.map((o: any) => o.id as string);
+      const serviceClientNamesByOrder = new Map<string, string[]>();
+      const nameChunk = 400;
+      for (let i = 0; i < allOrderIds.length; i += nameChunk) {
+        const chunk = allOrderIds.slice(i, i + nameChunk);
+        const { data: nameRows } = await supabaseAdmin
+          .from("order_services")
+          .select("order_id, client_name")
+          .eq("company_id", companyId)
+          .in("order_id", chunk);
+        for (const row of nameRows || []) {
+          const r = row as { order_id: string; client_name?: string | null };
+          const name = String(r.client_name || "").trim();
+          if (!name) continue;
+          const arr = serviceClientNamesByOrder.get(r.order_id) || [];
+          if (!arr.includes(name)) arr.push(name);
+          serviceClientNamesByOrder.set(r.order_id, arr);
+        }
+      }
+      orders = preOrders.filter(
+        (o: any) =>
+          matchesSearch(o.order_code, patterns) ||
+          matchesSearch(o.client_display_name, patterns) ||
+          (serviceClientNamesByOrder.get(o.id) || []).some((c) => matchesSearch(c, patterns))
       );
     }
 
@@ -214,6 +236,16 @@ export async function GET(request: NextRequest) {
       payerNamesMap.set(s.order_id, names);
     });
 
+    // Service-line client names (all lines, incl. cancelled) — Orders list search / filters
+    const serviceClientNamesMap = new Map<string, string[]>();
+    servicesData.forEach((s: any) => {
+      const name = String(s.client_name || "").trim();
+      if (!name) return;
+      const list = serviceClientNamesMap.get(s.order_id) || [];
+      if (!list.includes(name)) list.push(name);
+      serviceClientNamesMap.set(s.order_id, list);
+    });
+
     // Derive order dates from services when missing: date_from = min(service_date_from), date_to = max(service_date_to)
     const derivedDates = new Map<string, { dateFrom: string; dateTo: string }>();
     (orders || []).forEach((order: Record<string, unknown>) => {
@@ -280,6 +312,7 @@ export async function GET(request: NextRequest) {
         totalInvoices: invStats?.totalInvoices || 0,
         allInvoicesPaid: invStats?.allInvoicesPaid || false,
         payers: payerNamesMap.get(orderId) || [],
+        serviceClients: serviceClientNamesMap.get(orderId) || [],
         dueDate: invStats?.dueDate || (order.client_payment_due_date as string) || undefined,
       };
     });

@@ -29,6 +29,8 @@ export interface OrderRow {
   invoiceCount?: number;
   dueDate?: string;
   payers?: string[];
+  /** Client names on service lines (not only lead passenger) — from order_services.client_name */
+  serviceClients?: string[];
 }
 
 export interface FilterOrdersOptions {
@@ -59,8 +61,11 @@ export function filterOrders(
       const query = searchState.queryText.toLowerCase();
       const matchesOrderId = order.orderId.toLowerCase().includes(query);
       const matchesClient = order.client.toLowerCase().includes(query);
+      const matchesServiceClient = (order.serviceClients || []).some((c) =>
+        c.toLowerCase().includes(query)
+      );
       const matchesSemantic = semanticSet.size > 0 && semanticSet.has(order.orderId);
-      if (!matchesOrderId && !matchesClient && !matchesSemantic) {
+      if (!matchesOrderId && !matchesClient && !matchesServiceClient && !matchesSemantic) {
         return false;
       }
     }
@@ -69,7 +74,10 @@ export function filterOrders(
     if (surnamePatterns) {
       const matchClient = matchesSearch(order.client, surnamePatterns);
       const matchPayer = (order.payers || []).some(p => matchesSearch(p, surnamePatterns));
-      if (!matchClient && !matchPayer) {
+      const matchServiceClient = (order.serviceClients || []).some((c) =>
+        matchesSearch(c, surnamePatterns)
+      );
+      if (!matchClient && !matchPayer && !matchServiceClient) {
         return false;
       }
     }
