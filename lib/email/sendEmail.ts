@@ -56,8 +56,19 @@ export async function resolveEmailConfig(
   return { apiKey: process.env.RESEND_API_KEY || null, from: overrideFrom?.trim() || defaultFrom };
 }
 
+/** Parse "a@x.com, b@y.com" into ["a@x.com", "b@y.com"]. */
+function parseToAddresses(to: string | string[]): string[] {
+  if (Array.isArray(to)) {
+    return to.flatMap((s) => s.split(",").map((e) => e.trim()).filter(Boolean));
+  }
+  return String(to)
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
 export async function sendEmail(
-  to: string,
+  to: string | string[],
   subject: string,
   html: string,
   text?: string,
@@ -75,10 +86,15 @@ export async function sendEmail(
     return { success: false, reason: "no_api_key" };
   }
 
+  const toList = parseToAddresses(to);
+  if (toList.length === 0) {
+    return { success: false, reason: "api_error", error: "No valid email addresses" };
+  }
+
   const from = options?.from?.trim() || resolvedFrom;
   const body: Record<string, unknown> = {
     from,
-    to: [to],
+    to: toList,
     subject,
     html,
     text: text ?? html.replace(/<[^>]*>/g, ""),

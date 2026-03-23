@@ -1261,10 +1261,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   </div>
                 )}
                 <input
-                  type="email"
+                  type="text"
+                  inputMode="email"
                   value={emailModal.to}
                   onChange={(e) => setEmailModal({ ...emailModal, to: e.target.value })}
-                  placeholder="recipient@example.com"
+                  placeholder="recipient@example.com (comma-separated for multiple)"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   autoFocus
                 />
