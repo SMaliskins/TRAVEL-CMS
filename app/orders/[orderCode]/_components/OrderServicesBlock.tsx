@@ -180,6 +180,13 @@ interface Service {
   servicePriceLineItems?: { description: string; amount: number; commissionable: boolean }[];
 }
 
+/** Client price for sums (matches table row): cancellation lines are credits; DB often stores positive amount. */
+function signedClientPriceForSum(s: Pick<Service, "clientPrice" | "serviceType">): number {
+  const p = Number(s.clientPrice) || 0;
+  if (s.serviceType === "cancellation") return -Math.abs(p);
+  return p;
+}
+
 // Fallback when API is unavailable (for "What service?" chooser)
 const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_rate?: number }[] = [
   { id: "fallback-flight", name: "Flight", type: "flight", vat_rate: 0 },
@@ -3050,7 +3057,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 <span className="text-emerald-400 font-semibold">
                   €{services
                     .filter(s => selectedServiceIds.includes(s.id))
-                    .reduce((sum, s) => sum + s.clientPrice, 0)
+                    .reduce((sum, s) => sum + signedClientPriceForSum(s), 0)
                     .toLocaleString()}
                 </span>
               </div>
