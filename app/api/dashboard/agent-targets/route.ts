@@ -24,23 +24,25 @@ export async function GET(request: NextRequest) {
 
     const { data: servicesData } = await supabaseAdmin
       .from("order_services")
-      .select("client_price, service_price, res_status, category, commission_amount, vat_rate, orders!inner(company_id, created_at, owner_user_id, manager_user_id)")
+      .select("client_price, service_price, res_status, service_type, category, commission_amount, vat_rate, orders!inner(company_id, created_at, owner_user_id, manager_user_id)")
       .eq("orders.company_id", companyId)
       .gte("orders.created_at", periodStart)
       .lte("orders.created_at", periodEnd + "T23:59:59");
 
     const agentProfit: Record<string, number> = {};
 
+    const signed = (svc: { service_type?: string }; field: 'client_price' | 'service_price') => {
+      const v = parseFloat(String(svc[field] ?? 0)) || 0;
+      return svc.service_type === 'cancellation' ? -Math.abs(v) : v;
+    };
     for (const svc of servicesData || []) {
-      if (svc.res_status === "cancelled") continue;
-
       const orderRaw = svc.orders as unknown;
       const order = Array.isArray(orderRaw) ? orderRaw[0] : orderRaw as { owner_user_id?: string; manager_user_id?: string } | null;
       const agentId = order?.owner_user_id || order?.manager_user_id;
       if (!agentId) continue;
 
-      const cp = parseFloat(svc.client_price?.toString() || "0");
-      const sp = parseFloat(svc.service_price?.toString() || "0");
+      const cp = signed(svc, 'client_price');
+      const sp = signed(svc, 'service_price');
       const cat = ((svc.category as string) || "").toLowerCase();
       const isTour = cat.includes("tour") || cat.includes("package");
       const dbRate = Number(svc.vat_rate) || 0;
@@ -48,7 +50,9 @@ export async function GET(request: NextRequest) {
 
       let margin = 0;
       if (isTour && svc.commission_amount != null) {
-        margin = cp - (sp - (Number(svc.commission_amount) || 0));
+        const commission = svc.service_type === 'cancellation'
+          ? -Math.abs(Number(svc.commission_amount) || 0) : Number(svc.commission_amount) || 0;
+        margin = cp - (sp - commission);
       } else {
         margin = cp - sp;
       }

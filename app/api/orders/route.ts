@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     const [servicesResult, ownerProfilesResult, invoicesResult] = await Promise.all([
       supabaseAdmin
         .from("order_services")
-        .select("order_id, invoice_id, res_status, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name")
+        .select("order_id, invoice_id, res_status, service_type, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name")
         .eq("company_id", companyId)
         .in("order_id", orderIds),
       ownerIds.length > 0
@@ -175,21 +175,26 @@ export async function GET(request: NextRequest) {
       const invoicedServices = activeServices.filter((s: any) => s.invoice_id).length;
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
-      
-      const amount = activeServices.reduce((sum: number, s: any) => sum + (Number(s.client_price) || 0), 0);
+
+      // Amount & profit: include ALL services (incl. cancelled); cancellation = negative
+      const signed = (s: any, field: 'client_price' | 'service_price') => {
+        const v = Number(s[field]) || 0;
+        return s.service_type === 'cancellation' ? -Math.abs(v) : v;
+      };
+      const amount = services.reduce((sum: number, s: any) => sum + signed(s, 'client_price'), 0);
       let profit = 0;
       let vat = 0;
-      activeServices.forEach((s: any) => {
-        const clientPrice = Number(s.client_price) || 0;
-        const servicePrice = Number(s.service_price) || 0;
+      services.forEach((s: any) => {
+        const clientPrice = signed(s, 'client_price');
+        const servicePrice = signed(s, 'service_price');
         const cat = (s.category || "").toLowerCase();
         const isTour = cat.includes("tour") || cat.includes("package");
-        // vat_rate=0 в БД — fallback по категории (flight=0, остальные=21)
         const dbRate = Number(s.vat_rate);
         const vatRate = (dbRate > 0) ? dbRate : (cat.includes("flight") ? 0 : 21);
         let margin = 0;
         if (isTour && s.commission_amount != null) {
-          const commission = Number(s.commission_amount) || 0;
+          const commission = s.service_type === 'cancellation'
+            ? -Math.abs(Number(s.commission_amount) || 0) : Number(s.commission_amount) || 0;
           margin = clientPrice - (servicePrice - commission);
         } else {
           margin = clientPrice - servicePrice;
