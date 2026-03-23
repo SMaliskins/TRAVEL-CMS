@@ -5,6 +5,17 @@
 
 ---
 
+## [2026-03-22] CW — Order services: selection bar sum uses signed cancellation client price
+
+**Task:** Floating bar showed wrong total (summed positive DB values for cancellation lines).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `signedClientPriceForSum` — same as table column; reduce uses it for selected rows total.
+
+---
+
 ## [2026-03-22] CW — Orders search: match clients on service lines
 
 **Task:** Orders list search should find orders when the typed client appears on any service, not only lead passenger.
