@@ -392,7 +392,7 @@ export async function POST(
     if (serviceIds.length > 0) {
       const { data: existingServices, error: checkError } = await supabaseAdmin
         .from("order_services")
-        .select("id, invoice_id, res_status")
+        .select("id, invoice_id")
         .in("id", serviceIds);
 
       if (checkError) {
@@ -403,16 +403,9 @@ export async function POST(
         );
       }
 
-      const cancelledServices = existingServices?.filter((s: any) => s.res_status === 'cancelled') || [];
       const invoicedServices = existingServices?.filter((s: any) => s.invoice_id !== null) || [];
 
-      if (cancelledServices.length > 0) {
-        return NextResponse.json(
-          { error: "Some services are cancelled and cannot be invoiced" },
-          { status: 400 }
-        );
-      }
-
+      // Cancelled services (res_status='cancelled') are allowed: e.g. original flight + cancellation (negative) on same invoice
       if (invoicedServices.length > 0) {
         return NextResponse.json(
           { error: "Some services are already invoiced" },
