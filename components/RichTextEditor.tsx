@@ -33,7 +33,13 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
     extensions: [
       StarterKit,
       Underline,
-      Image.configure({ inline: true, allowBase64: true }),
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          style: "max-width: 100%; max-height: 320px; width: auto; height: auto; object-fit: contain;",
+        },
+      }),
       ImagePasteExtension,
       Link.configure({ openOnClick: false, HTMLAttributes: { style: "color: #2563eb; text-decoration: underline;" } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -46,7 +52,7 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
     },
     editorProps: {
       attributes: {
-        class: `prose prose-sm max-w-none focus:outline-none px-4 py-3 ${compact ? "min-h-[100px]" : "min-h-[200px]"}`,
+        class: `prose prose-sm max-w-none focus:outline-none px-4 py-3 text-[13px] [&_h1]:text-[13px] [&_h2]:text-[13px] [&_h3]:text-[13px] [&_p]:text-[13px] [&_li]:text-[13px] [&_td]:text-[13px] [&_th]:text-[13px] [&_img]:max-w-full [&_img]:max-h-[320px] [&_img]:h-auto [&_img]:object-contain ${compact ? "min-h-[100px]" : "min-h-[200px]"}`,
       },
     },
   });

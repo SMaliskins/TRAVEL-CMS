@@ -1145,12 +1145,12 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       )}
 
       {emailModal && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40 p-4">
           <div
             ref={emailTrapRef}
-            className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[calc(100vh-2rem)] overflow-hidden shrink-0 my-auto"
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2">
                 <Mail className="h-5 w-5 text-blue-600" />
                 <h3 className="text-base font-semibold text-gray-900">
@@ -1165,7 +1165,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               </button>
             </div>
 
-            <div className="px-5 py-4 space-y-4">
+            <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <span className="flex items-center gap-1.5">
@@ -1301,7 +1301,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50 shrink-0">
               <button
                 onClick={() => setEmailModal(null)}
                 disabled={emailSending}
