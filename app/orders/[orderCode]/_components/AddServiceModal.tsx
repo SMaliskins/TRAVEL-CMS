@@ -782,7 +782,7 @@ export default function AddServiceModal({
 
   // Load supplier commissions only on dropdown open (lazy), not on supplier change
   const loadSupplierCommissions = useCallback(async () => {
-    if (categoryType !== "tour" || !supplierPartyId) return;
+    if (!usesCommissionPricing || !supplierPartyId) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -800,16 +800,16 @@ export default function AddServiceModal({
         setSelectedCommissionIndex((prev) => (prev < 0 ? 0 : prev));
       }
     } catch {}
-  }, [categoryType, supplierPartyId]);
+  }, [usesCommissionPricing, supplierPartyId]);
 
   useEffect(() => {
-    if (categoryType !== "tour" || !supplierPartyId) {
+    if (!usesCommissionPricing || !supplierPartyId) {
       setSupplierCommissions([]);
       setSelectedCommissionIndex(-1);
     } else {
       loadSupplierCommissions();
     }
-  }, [categoryType, supplierPartyId, loadSupplierCommissions]);
+  }, [usesCommissionPricing, supplierPartyId, loadSupplierCommissions]);
 
   // Derive category name, type and VAT from selected category BY ID (single source of truth: categoryId)
   // Package Tour: VAT always >0 (country/settings); fallback 21 if category has 0
@@ -861,41 +861,41 @@ export default function AddServiceModal({
   // Effective = Service Price (base) + line items. Line items ADD to Service Price.
   const effectiveServicePrice = useMemo(() => {
     const base = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
-    if (categoryType === "tour" && servicePriceLineItems.length > 0) {
+    if (usesCommissionPricing && servicePriceLineItems.length > 0) {
       const lineSum = servicePriceLineItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
       return Math.round((base + lineSum) * 100) / 100;
     }
     return base;
-  }, [categoryType, servicePriceLineItems, servicePrice]);
+  }, [usesCommissionPricing, servicePriceLineItems, servicePrice]);
 
   const commissionableCost = useMemo(() => {
     const base = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
-    if (categoryType === "tour" && servicePriceLineItems.length > 0) {
+    if (usesCommissionPricing && servicePriceLineItems.length > 0) {
       const commissionableSum = servicePriceLineItems.filter((it) => it.commissionable).reduce((s, it) => s + (Number(it.amount) || 0), 0);
       return Math.round((base + commissionableSum) * 100) / 100;
     }
     return effectiveServicePrice;
-  }, [categoryType, servicePriceLineItems, servicePrice, effectiveServicePrice]);
+  }, [usesCommissionPricing, servicePriceLineItems, servicePrice, effectiveServicePrice]);
 
   const getCommissionAmount = (baseCost: number): number => {
-    if (categoryType !== "tour" || selectedCommissionIndex < 0 || !supplierCommissions[selectedCommissionIndex]) return 0;
+    if (!usesCommissionPricing || selectedCommissionIndex < 0 || !supplierCommissions[selectedCommissionIndex]) return 0;
     const rate = supplierCommissions[selectedCommissionIndex].rate;
     if (rate == null || rate <= 0) return 0;
     return Math.round((baseCost * rate / 100) * 100) / 100;
   };
 
-  // Agent discount amount in € (Tour)
+  // Agent discount amount in € (Tour / commission-style)
   const getAgentDiscountAmount = (cost: number): number => {
-    if (categoryType !== "tour") return 0;
+    if (!usesCommissionPricing) return 0;
     const val = parseFloat(agentDiscountValue) || 0;
     if (val <= 0) return 0;
     if (agentDiscountType === "%") return Math.round((cost * val / 100) * 100) / 100;
     return Math.round(val * 100) / 100;
   };
 
-  // Tour: recalc only when user edits Pricing; skip on open (ref === null)
+  // Tour / commission-style: recalc only when user edits Pricing
   useEffect(() => {
-    if (categoryType !== "tour") return;
+    if (!usesCommissionPricing) return;
     if (!pricingLastEditedRef.current) return;
     const cost = effectiveServicePrice;
     const commissionAmount = getCommissionAmount(commissionableCost);
@@ -922,11 +922,11 @@ export default function AddServiceModal({
     setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
-  }, [categoryType, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
+  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
 
-  // Non-Tour: when Sale (Client price) changes, recalculate Marge = Sale - Cost.
+  // Non-commission-style: when Sale (Client price) changes, recalculate Marge = Sale - Cost.
   useEffect(() => {
-    if (categoryType === "tour") return;
+    if (usesCommissionPricing) return;
     if (pricingLastEditedRef.current === "cost" || pricingLastEditedRef.current === "marge") return;
     const totalClient = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
     const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
@@ -936,11 +936,11 @@ export default function AddServiceModal({
     const marginPerNight = units > 0 ? Math.round((totalMargin / units) * 100) / 100 : 0;
     const newMarge = isHotelPerNight ? marginPerNight.toFixed(2) : totalMargin.toFixed(2);
     setMarge(newMarge);
-  }, [categoryType, hotelPricePer, servicePrice, clientPrice, priceUnits]);
+  }, [usesCommissionPricing, categoryType, hotelPricePer, servicePrice, clientPrice, priceUnits]);
 
-  // Non-Tour: when Cost changes, recalculate Sale = Cost + Marge.
+  // Non-commission-style: when Cost changes, recalculate Sale = Cost + Marge.
   useEffect(() => {
-    if (categoryType === "tour") return;
+    if (usesCommissionPricing) return;
     if (pricingLastEditedRef.current !== "cost") return;
     const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
@@ -949,11 +949,11 @@ export default function AddServiceModal({
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-  }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
+  }, [usesCommissionPricing, categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
 
-  // Non-Tour: when user edits Marge, recalculate Sale = Cost + Marge.
+  // Non-commission-style: when user edits Marge, recalculate Sale = Cost + Marge.
   useEffect(() => {
-    if (categoryType === "tour") return;
+    if (usesCommissionPricing) return;
     if (pricingLastEditedRef.current !== "marge") return;
     const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
@@ -1058,6 +1058,8 @@ export default function AddServiceModal({
   const showTransferFields = categoryType === "transfer";
   const isAirportServices = (category || "").toLowerCase().includes("airport") && (category || "").toLowerCase().includes("service");
   const showAirportServicesLinkedFields = isAirportServices && ((flightServices?.length ?? 0) > 0);
+  const COMMISSION_PRICING_CATEGORIES: CategoryType[] = ["tour", "insurance", "ancillary", "cruise", "rent_a_car", "transfer"];
+  const usesCommissionPricing = COMMISSION_PRICING_CATEGORIES.includes(categoryType as CategoryType) || isAirportServices;
   const mgRoutes = useMemo(() => [{
     id: "mg",
     pickup: "",
@@ -1900,14 +1902,14 @@ export default function AddServiceModal({
         clients: clients.filter(c => c.id).map(c => ({ partyId: c.id, name: c.name })),
         payerPartyId,
         payerName,
-        servicePrice: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
+        servicePrice: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
-          : (categoryType === "tour" && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
-        clientPrice: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
+          : (usesCommissionPricing && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
+        clientPrice: categoryType === "flight" && pricingPerClient.length > 0
           ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
           : parseFloat(clientPrice) || 0,
-        quantity: categoryType === "flight" || categoryType === "ancillary" || categoryType === "tour" || categoryType === "transfer" || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
-        pricingPerClient: (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0
+        quantity: categoryType === "flight" || usesCommissionPricing || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
+        pricingPerClient: categoryType === "flight" && pricingPerClient.length > 0
           ? clients.filter(c => c.id || c.name).map((c, i) => ({
               partyId: c.id ?? null,
               cost: parsePrice(pricingPerClient[i]?.cost),
@@ -2045,7 +2047,7 @@ export default function AddServiceModal({
         payload.changeFee = parseFloat(changeFee) || null;
       }
 
-      // Tour (Package Tour): hotel fields + commission + agent discount
+      // Tour (Package Tour): hotel fields
       if (categoryType === "tour") {
         payload.hotelName = hotelName || null;
         if (hotelHid != null) payload.hotelHid = hotelHid;
@@ -2057,6 +2059,9 @@ export default function AddServiceModal({
         payload.mealPlanText = mealPlanText?.trim() || null;
         payload.transferType = transferType?.trim() || null;
         payload.additionalServices = additionalServices?.trim() || null;
+      }
+      // Tour / commission-style (Package Tour, Insurance, Ancillary, Cruise, Rent a Car, Transfer, Airport services)
+      if (usesCommissionPricing) {
         const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
         payload.commissionName = comm?.name ?? null;
         payload.commissionRate = comm?.rate ?? null;
@@ -3704,8 +3709,8 @@ export default function AddServiceModal({
                   )}
                 </div>
 
-                {/* Tour: Row1 Cost | Commission; Row2 Agent discount | Sale; Line items; Row3 Marge | VAT */}
-                {categoryType === "tour" ? (
+                {/* Tour / commission-style: Cost | Commission; Agent discount | Sale; Line items; Marge | VAT (no Units) */}
+                {usesCommissionPricing ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -3714,11 +3719,11 @@ export default function AddServiceModal({
                           type="number"
                           step="0.01"
                           min="0"
-                          value={priceUnits > 0 ? (parseFloat(servicePrice) / priceUnits) || "" : servicePrice}
+                          value={servicePrice}
                           onChange={(e) => {
                             pricingLastEditedRef.current = "cost";
                             const v = parseFloat(e.target.value) || 0;
-                            setServicePrice(String(Math.round(v * priceUnits * 100) / 100));
+                            setServicePrice(String(Math.round(v * 100) / 100));
                           }}
                           placeholder="0.00"
                           className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
@@ -3868,32 +3873,14 @@ export default function AddServiceModal({
                           type="number"
                           step="0.01"
                           min="0"
-                          value={priceUnits > 0 ? (parseFloat(clientPrice) / priceUnits) || "" : clientPrice}
+                          value={clientPrice}
                           onChange={(e) => {
                             pricingLastEditedRef.current = "sale";
                             const v = parseFloat(e.target.value) || 0;
-                            setClientPrice(String(Math.round(v * priceUnits * 100) / 100));
+                            setClientPrice(String(Math.round(v * 100) / 100));
                           }}
                           placeholder="0.00"
                           className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Units</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={priceUnits}
-                          onChange={(e) => {
-                            const u = Math.max(1, Math.floor(Number(e.target.value) || 1));
-                            const perSale = priceUnits > 0 ? (parseFloat(clientPrice) || 0) / priceUnits : 0;
-                            const perCost = priceUnits > 0 ? (parseFloat(servicePrice) || 0) / priceUnits : 0;
-                            setClientPrice(String(Math.round(perSale * u * 100) / 100));
-                            setServicePrice(String(Math.round(perCost * u * 100) / 100));
-                            setPriceUnits(u);
-                          }}
-                          className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                         />
                       </div>
                     </div>
@@ -3922,7 +3909,7 @@ export default function AddServiceModal({
                       </div>
                     </div>
                   </div>
-                ) : (categoryType === "flight" || categoryType === "ancillary") ? (
+                ) : categoryType === "flight" ? (
                   /* Flight / Ancillary: Bulk Price row above clients, per-column down-arrow to apply; then client rows */
                   <div className="space-y-3">
                     <div className="overflow-x-auto">
@@ -4347,31 +4334,11 @@ export default function AddServiceModal({
                       </div>
                     </div>
                     )}
-                      {(categoryType as string) !== "hotel" && (categoryType as string) !== "transfer" && (categoryType as string) !== "other" && (categoryType as string) !== "visa" && (
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm text-slate-600 shrink-0">Units</span>
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={priceUnits}
-                            onChange={(e) => {
-                              const u = Math.max(1, Math.floor(Number(e.target.value) || 1));
-                              const perCost = priceUnits > 0 ? (parseFloat(servicePrice) || 0) / priceUnits : 0;
-                              const perSale = priceUnits > 0 ? (parseFloat(clientPrice) || 0) / priceUnits : 0;
-                              setServicePrice(String(Math.round(perCost * u * 100) / 100));
-                              setClientPrice(String(Math.round(perSale * u * 100) / 100));
-                              setPriceUnits(u);
-                            }}
-                            className="w-20 rounded border border-slate-300 px-1.5 py-1 text-sm text-right modal-input focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                          />
-                        </div>
-                      )}
                   </div>
                 )}
 
-                {/* Margin / Profit for Tour */}
-                {categoryType === "tour" && (parseFloat(marge) || 0) !== 0 && (() => {
+                {/* Margin / Profit for Tour / commission-style */}
+                {usesCommissionPricing && (parseFloat(marge) || 0) !== 0 && (() => {
                   const margin = parseFloat(marge) || 0;
                   const vatAmount = vatRate > 0 ? margin * vatRate / (100 + vatRate) : 0;
                   const profit = margin - vatAmount;
@@ -4396,7 +4363,7 @@ export default function AddServiceModal({
                   );
                 })()}
 
-                {categoryType !== "tour" && (
+                {!usesCommissionPricing && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-slate-600 shrink-0">VAT</span>
@@ -4411,7 +4378,7 @@ export default function AddServiceModal({
                     </select>
                   </div>
                   {(() => {
-                    const usePerClient = (categoryType === "flight" || categoryType === "ancillary") && pricingPerClient.length > 0;
+                    const usePerClient = categoryType === "flight" && pricingPerClient.length > 0;
                     const totalMargin = usePerClient
                       ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.marge), 0) * 100) / 100
                       : Math.round((parseFloat(marge) || 0) * (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits) * 100) / 100;

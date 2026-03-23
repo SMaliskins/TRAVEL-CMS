@@ -118,9 +118,9 @@ export async function GET(
         return NextResponse.json({ nextInvoiceNumbers: out });
       }
 
-      // 2) Need more: first take from released pool (same company), then from sequence
+      // 2) Need more: always allocate from sequence (ascending order). Do NOT reuse released numbers —
+      //    reusing causes "jumping" (e.g. 0199 then 0050) and perceived missing numbers.
       const needCount = count - existingNumbers.length;
-      const currentYearNum = parseInt(currentYear, 10);
 
       // Max sequence to avoid collisions: issued/replaced invoices + reserved/used (cancelled excluded)
       const { data: issuedInvoices } = await supabaseAdmin
@@ -156,62 +156,28 @@ export async function GET(
         });
       }
 
-      // Released numbers for this company and year — reuse smallest sequence first (cross-order)
-      const { data: released } = await supabaseAdmin
-        .from("invoice_reservations")
-        .select("id, invoice_number")
-        .eq("company_id", order.company_id)
-        .eq("status", "released")
-        .like("invoice_number", `___${currentYear}-%`);
-
-      const extractSeq = (num: string): number => {
-        const m = num.match(/-(\d{4})$/);
-        return m ? parseInt(m[1], 10) : Infinity;
-      };
-      const releasedSorted = (released || [])
-        .filter(r => r.invoice_number.slice(3, 5) === currentYear)
-        .sort((a, b) => extractSeq(a.invoice_number) - extractSeq(b.invoice_number));
-      const releasedList = releasedSorted.slice(0, needCount);
-      const toTakeFromReleased = releasedList.length;
-      const toTakeFromSequence = needCount - toTakeFromReleased;
-
       const newNumbers: string[] = [];
 
-      for (let i = 0; i < toTakeFromReleased; i++) {
-        const row = releasedList[i];
-        const seq = extractSeq(row.invoice_number);
-        const newNum = `${prefix}-${userInitials}-${String(seq).padStart(4, "0")}`;
-        const { data: upData, error: upErr } = await supabaseAdmin
-          .from("invoice_reservations")
-          .update({ order_id: order.id, status: "reserved", reserved_at: new Date().toISOString(), invoice_number: newNum })
-          .eq("id", row.id)
-          .eq("status", "released")
-          .select("id");
-        if (!upErr && upData && upData.length > 0) newNumbers.push(newNum);
+      const { data: seqResult, error: rpcErr } = await supabaseAdmin.rpc("reserve_invoice_sequences", {
+        p_company_id: order.company_id,
+        p_year: currentYear,
+        p_count: needCount,
+        p_min_sequence: minSeq,
+      });
+      if (rpcErr) {
+        console.error("[Invoices API] reserve_invoice_sequences error:", rpcErr);
+        return NextResponse.json({ error: "Failed to reserve invoice number" }, { status: 500 });
       }
-
-      if (toTakeFromSequence > 0) {
-        const { data: seqResult, error: rpcErr } = await supabaseAdmin.rpc("reserve_invoice_sequences", {
-          p_company_id: order.company_id,
-          p_year: currentYear,
-          p_count: toTakeFromSequence,
-          p_min_sequence: minSeq,
+      const firstSeq = typeof seqResult === "number" ? seqResult : (seqResult as number[])?.[0] ?? 0;
+      for (let i = 0; i < needCount; i++) {
+        const num = `${prefix}-${userInitials}-${String(firstSeq + i).padStart(4, "0")}`;
+        await supabaseAdmin.from("invoice_reservations").insert({
+          company_id: order.company_id,
+          order_id: order.id,
+          invoice_number: num,
+          status: "reserved",
         });
-        if (rpcErr) {
-          console.error("[Invoices API] reserve_invoice_sequences error:", rpcErr);
-          return NextResponse.json({ error: "Failed to reserve invoice number" }, { status: 500 });
-        }
-        const firstSeq = typeof seqResult === "number" ? seqResult : (seqResult as number[])?.[0] ?? 0;
-        for (let i = 0; i < toTakeFromSequence; i++) {
-          const num = `${prefix}-${userInitials}-${String(firstSeq + i).padStart(4, "0")}`;
-          await supabaseAdmin.from("invoice_reservations").insert({
-            company_id: order.company_id,
-            order_id: order.id,
-            invoice_number: num,
-            status: "reserved",
-          });
-          newNumbers.push(num);
-        }
+        newNumbers.push(num);
       }
 
       const allNumbers = [...existingNumbers, ...newNumbers];
