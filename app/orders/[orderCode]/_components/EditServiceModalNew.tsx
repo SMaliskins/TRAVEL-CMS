@@ -3313,14 +3313,27 @@ export default function EditServiceModalNew({
                   {/* Preferences */}
                   <div className="p-3 modal-section modal-section-amber space-y-2">
                     <h4 className="modal-section-title-amber">Preferences</h4>
-                    <div className="grid grid-cols-4 gap-x-3 gap-y-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
                       <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
                         <input type="checkbox" checked={hotelPreferences.earlyCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckIn: e.target.checked }))} className="modal-checkbox" />
                         Early check-in
                       </label>
+                      {hotelPreferences.earlyCheckIn && <input type="time" value={hotelPreferences.earlyCheckInTime} onChange={(e) => setHotelPreferences(prev => ({ ...prev, earlyCheckInTime: e.target.value }))} className="rounded border border-slate-300 px-2 py-1 text-sm w-24" />}
                       <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
                         <input type="checkbox" checked={hotelPreferences.lateCheckIn} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckIn: e.target.checked }))} className="modal-checkbox" />
                         Late check-in
+                      </label>
+                      {hotelPreferences.lateCheckIn && <input type="time" value={hotelPreferences.lateCheckInTime} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckInTime: e.target.value }))} className="rounded border border-slate-300 px-2 py-1 text-sm w-24" />}
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.lateCheckOut} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckOut: e.target.checked }))} className="modal-checkbox" />
+                        Late check-out
+                      </label>
+                      {hotelPreferences.lateCheckOut && <input type="time" value={hotelPreferences.lateCheckOutTime} onChange={(e) => setHotelPreferences(prev => ({ ...prev, lateCheckOutTime: e.target.value }))} className="rounded border border-slate-300 px-2 py-1 text-sm w-24" />}
+                    </div>
+                    <div className="grid grid-cols-4 gap-x-3 gap-y-2">
+                      <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
+                        <input type="checkbox" checked={hotelPreferences.roomUpgrade} onChange={(e) => setHotelPreferences(prev => ({ ...prev, roomUpgrade: e.target.checked }))} className="modal-checkbox" />
+                        Room upgrade
                       </label>
                       <label className="flex items-center gap-1.5 text-sm font-normal text-slate-700 cursor-pointer hover:text-slate-900">
                         <input type="checkbox" checked={hotelPreferences.higherFloor} onChange={(e) => setHotelPreferences(prev => ({ ...prev, higherFloor: e.target.checked }))} className="modal-checkbox" />
@@ -3358,13 +3371,17 @@ export default function EditServiceModalNew({
                       type="button"
                       onClick={() => {
                         const preferencesList = Object.entries(hotelPreferences)
-                          .filter(([key, value]) => key !== "roomsNextTo" && key !== "freeText" && value === true)
+                          .filter(([key, value]) => !["roomsNextTo", "freeText", "earlyCheckInTime", "lateCheckInTime", "lateCheckOutTime"].includes(key) && value === true)
                           .map(([key]) => key.replace(/([A-Z])/g, " $1").toLowerCase())
                           .join(", ");
+                        const timePrefs: string[] = [];
+                        if (hotelPreferences.earlyCheckIn && hotelPreferences.earlyCheckInTime) timePrefs.push(`Early check-in: ${hotelPreferences.earlyCheckInTime}`);
+                        if (hotelPreferences.lateCheckIn && hotelPreferences.lateCheckInTime) timePrefs.push(`Late check-in: ${hotelPreferences.lateCheckInTime}`);
+                        if (hotelPreferences.lateCheckOut && hotelPreferences.lateCheckOutTime) timePrefs.push(`Late check-out: ${hotelPreferences.lateCheckOutTime}`);
                         const guestNames = clients.filter(c => c.name).map(c => toTitleCaseForDisplay(c.name)).join(", ");
                         const nights = dateFrom && dateTo ? nightsBetween(dateFrom, dateTo) : "";
                         const message = [
-                          `Dear Hotel,`,
+                          `Dear Sir/Madam,`,
                           ``,
                           `We have a reservation at ${hotelName || "your hotel"}.`,
                           ``,
@@ -3375,6 +3392,7 @@ export default function EditServiceModalNew({
                           `Board: ${hotelBoard || "—"}`,
                           `Bed type: ${hotelBedType || "—"}`,
                           preferencesList ? `Preferences: ${preferencesList}` : "",
+                          ...timePrefs,
                           hotelPreferences.freeText ? `Additional: ${hotelPreferences.freeText}` : "",
                           ``,
                           `Please confirm the reservation.`,
@@ -5745,11 +5763,11 @@ export default function EditServiceModalNew({
 
       {hotelEmailModal && (
         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40" onClick={() => setHotelEmailModal(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="send-to-hotel-title" className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <svg className="h-5 w-5 text-[#FF8C00]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                <h3 className="text-base font-semibold text-gray-900">Send to Hotel</h3>
+                <h3 id="send-to-hotel-title" className="text-base font-semibold text-gray-900">Send to Hotel</h3>
               </div>
               <button onClick={() => setHotelEmailModal(null)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>

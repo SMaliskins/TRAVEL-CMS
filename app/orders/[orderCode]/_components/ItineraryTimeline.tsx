@@ -513,6 +513,7 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
   const seenSegmentKeys = new Set<string>();
   const seenHotelKeys = new Set<string>();
   const seenTransferKeys = new Set<string>();
+  const seenTransferRouteKeys = new Set<string>();
   const seenOtherKeys = new Set<string>();
 
   const flightNumberById = new Map<string, string>();
@@ -837,6 +838,11 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
           }
           const hotelOrPlace = isFromAirport ? (route.dropoff || "") : (route.pickup || "");
           const linkedFlight = route.linkedFlightId ? flightNumberById.get(route.linkedFlightId) : undefined;
+
+          // Deduplicate: same date + direction + route (e.g. two services or two routes both Hotel→Airport on same day)
+          const routeKey = `transfer-route|${routeDate}|${isInbound ? "in" : "out"}|${(airportCode || "").toUpperCase()}|${(hotelOrPlace || "").trim()}`;
+          if (seenTransferRouteKeys.has(routeKey)) continue;
+          seenTransferRouteKeys.add(routeKey);
 
           events.push({
             id: `${service.id}-route-${ri}`,
