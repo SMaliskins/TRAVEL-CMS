@@ -38,6 +38,13 @@ interface Service {
   flightSegments?: { airline?: string }[] | null;
 }
 
+/** For cancellation services, returns negative amount; otherwise returns clientPrice as-is. Used for invoice totals. */
+function signedClientPrice(s: { clientPrice?: number | null; serviceType?: string | null; service_type?: string | null }): number {
+  const p = Number(s.clientPrice) || 0;
+  if ((s.serviceType || s.service_type) === "cancellation") return -Math.abs(p);
+  return p;
+}
+
 /** Same string as the "Name" column in the services list, enriched with cabin class + airline for flights. */
 function getServiceDisplayNameForInvoice(s: Service): string {
   const base = getServiceDisplayName(s as ServiceForDisplayName, s.name);
@@ -243,7 +250,7 @@ export default function InvoiceCreator({
       isFinalPaymentManual: false,
     };
     if (services.length === 0) return base;
-    const withLargestSum = services.reduce((a, b) => (a.clientPrice >= b.clientPrice ? a : b));
+    const withLargestSum = services.reduce((a, b) => (signedClientPrice(a) >= signedClientPrice(b) ? a : b));
     const terms = withLargestSum.paymentTerms?.trim();
     const percentMatch = terms ? (terms.match(/(\d+)\s*%\s*deposit/i) || terms.match(/deposit\s*(\d+)\s*%/i)) : null;
     const pct = percentMatch ? parseInt(percentMatch[1], 10) : null;
@@ -467,7 +474,7 @@ export default function InvoiceCreator({
       return {
         ...s,
         editableName: catLabel ? `${catLabel}: ${translatedName}` : translatedName,
-        editablePrice: Number(s.clientPrice) || 0,
+        editablePrice: signedClientPrice(s),
         editableClient: s.client || "",
         editableDateText,
       };
@@ -852,7 +859,7 @@ export default function InvoiceCreator({
       .map((s) => ({
         category: s.category || "Service",
         name: s.name,
-        sum: s.clientPrice,
+        sum: signedClientPrice(s),
         paymentTerms: s.paymentTerms!.trim(),
       }));
   }, [currentServices]);
@@ -860,7 +867,7 @@ export default function InvoiceCreator({
   // Service with largest sum (for default deposit/full from its payment terms)
   const serviceWithLargestSum = useMemo(() => {
     if (currentServices.length === 0) return null;
-    return currentServices.reduce((a, b) => (a.clientPrice >= b.clientPrice ? a : b));
+    return currentServices.reduce((a, b) => (signedClientPrice(a) >= signedClientPrice(b) ? a : b));
   }, [currentServices]);
 
   // Earliest service start date for Final Payment Date presets (from editableDateText when parseable)
@@ -885,7 +892,7 @@ export default function InvoiceCreator({
     if (!hasMultiplePayers || payerGroups.length <= 1) return null;
     const group = payerGroups[currentPayerIndex];
     if (!group?.services?.length) return 0;
-    const sum = group.services.reduce((s, svc) => s + (svc.clientPrice ?? 0), 0);
+    const sum = group.services.reduce((s, svc) => s + signedClientPrice(svc), 0);
     return sum + Math.round((sum * taxRate / 100) * 100) / 100;
   }, [hasMultiplePayers, payerGroups, currentPayerIndex, taxRate]);
 
@@ -1168,7 +1175,7 @@ export default function InvoiceCreator({
               return {
                 ...s,
                 editableName: s.name,
-                editablePrice: Number(s.clientPrice) || 0,
+                editablePrice: signedClientPrice(s),
                 editableClient: s.client || "",
                 editableDateText,
               };
@@ -1329,7 +1336,7 @@ export default function InvoiceCreator({
                       <div className="text-xs text-gray-600">{group.services.length} service(s)</div>
                     </div>
                     <div className="text-xs font-semibold text-gray-700">
-                      {formatCurrency(group.services.reduce((sum, s) => sum + s.clientPrice, 0))}
+                      {formatCurrency(group.services.reduce((sum, s) => sum + signedClientPrice(s), 0))}
                     </div>
                   </div>
                 </div>
@@ -2175,7 +2182,6 @@ export default function InvoiceCreator({
                             <input
                               type="number"
                               step="0.01"
-                              min={0}
                               value={service.editablePrice === 0 ? "" : Number(service.editablePrice)}
                               onChange={(e) => {
                                 const updated = [...editableServices];
