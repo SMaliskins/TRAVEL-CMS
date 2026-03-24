@@ -2752,8 +2752,8 @@ export default function EditServiceModalNew({
   ) : null;
 
   return (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-2 sm:p-4 modal-future-overlay">
-      <div ref={trapRef} className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto modal-future-container rounded-xl" style={modalStyle}>
+    <div className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center p-0 sm:p-4 modal-future-overlay">
+      <div ref={trapRef} className="w-full sm:max-w-4xl max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto modal-future-container rounded-t-xl sm:rounded-xl" style={modalStyle}>
         <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm px-6 py-4 flex items-center justify-between z-10 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
           <div className="flex items-center gap-3">
             <div className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded bg-[#E6FAE6]">

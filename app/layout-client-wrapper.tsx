@@ -18,8 +18,13 @@ function applyLayoutStyles(mode: string, skipLayout: boolean) {
   const mainWrapper = document.getElementById("main-content-wrapper");
   if (!mainWrapper) return;
 
-  // Don't apply sidebar margins on login page
   if (skipLayout) {
+    mainWrapper.style.paddingLeft = "0";
+    return;
+  }
+
+  const isMobile = window.innerWidth < 1024;
+  if (isMobile) {
     mainWrapper.style.paddingLeft = "0";
     return;
   }
@@ -53,14 +58,16 @@ export default function LayoutClientWrapper({
     }
   }, [mode, isClient, skipLayout]);
 
-  // Also use regular effect to ensure styles are applied
   useEffect(() => {
     if (!isClient) return;
     
-    // Use requestAnimationFrame to ensure DOM is ready
     requestAnimationFrame(() => {
       applyLayoutStyles(mode, skipLayout);
     });
+
+    const handleResize = () => applyLayoutStyles(mode, skipLayout);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, [mode, isClient, skipLayout]);
 
   return (

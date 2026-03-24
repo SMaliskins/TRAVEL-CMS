@@ -274,12 +274,12 @@ export default function TopBar() {
   if (isModalOpen) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 theme-card-bg">
-      <div className="flex h-full items-center gap-4 px-4">
+    <div className="fixed top-0 left-0 right-0 z-40 h-14 lg:h-16 border-b border-gray-200 theme-card-bg">
+      <div className="flex h-full items-center gap-2 lg:gap-4 px-3 lg:px-4">
         {/* Left side - Nav + Company Logo */}
         <div className="flex flex-shrink-0 items-center gap-2">
-          {/* Back / Forward */}
-          <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50">
+          {/* Back / Forward — desktop only */}
+          <div className="hidden lg:flex items-center rounded-lg border border-gray-200 bg-gray-50">
             <button
               type="button"
               onClick={goBack}
@@ -303,16 +303,18 @@ export default function TopBar() {
               </svg>
             </button>
           </div>
+          {/* Spacer for mobile hamburger */}
+          <div className="w-10 lg:hidden" />
           {companyLogo && (
             <img 
               src={companyLogo} 
               alt="Company Logo" 
-              className="h-10 max-w-[140px] object-contain"
+              className="h-8 lg:h-10 max-w-[100px] lg:max-w-[140px] object-contain"
             />
           )}
           {shortCommitSha ? (
             <span
-              className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-mono text-gray-600"
+              className="hidden lg:inline rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-mono text-gray-600"
               title={`Deploy: ${gitCommitSha}`}
             >
               Deploy {shortCommitSha}
@@ -321,14 +323,14 @@ export default function TopBar() {
         </div>
         
         {/* Right side - Controls */}
-        <div className="flex flex-1 flex-shrink-0 items-center justify-end gap-2">
+        <div className="flex flex-1 flex-shrink-0 items-center justify-end gap-1 lg:gap-2">
 
           {/* Icons */}
-          <div className="flex items-center gap-2">
-          {/* Help */}
+          <div className="flex items-center gap-1 lg:gap-2">
+          {/* Help — desktop only */}
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
+            className="hidden lg:flex h-9 w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
             title="Help"
           >
             <svg
@@ -352,7 +354,7 @@ export default function TopBar() {
               ref={notifBtnRef}
               type="button"
               onClick={() => setNotifOpen(!notifOpen)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
+              className="relative flex h-10 w-10 lg:h-9 lg:w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
               title="Notifications"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -368,7 +370,7 @@ export default function TopBar() {
             {notifOpen && (
               <div
                 ref={notifRef}
-                className="absolute right-0 mt-2 w-80 max-h-[420px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl z-50 flex flex-col"
+                className="fixed inset-x-3 top-14 lg:absolute lg:inset-x-auto lg:right-0 lg:top-auto lg:mt-2 w-auto lg:w-80 max-h-[70vh] lg:max-h-[420px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl z-50 flex flex-col"
               >
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
                   <span className="text-sm font-semibold text-gray-800">Notifications</span>
@@ -424,7 +426,7 @@ export default function TopBar() {
               <button
                 type="button"
                 onClick={() => setThemeOpen(!themeOpen)}
-                className="flex h-9 w-9 items-center justify-center rounded-full theme-btn-secondary hover:opacity-90 transition-opacity"
+                className="flex h-10 w-10 lg:h-9 lg:w-9 items-center justify-center rounded-full theme-btn-secondary hover:opacity-90 transition-opacity"
                 title="Color theme"
                 aria-label="Color theme"
               >
@@ -475,9 +477,9 @@ export default function TopBar() {
             </div>
           )}
 
-          {/* Date + City */}
+          {/* Date + City — desktop only */}
           {prefsMounted && now.getTime() !== 0 ? (
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="hidden lg:flex flex-col items-center gap-0.5">
               <span className="text-sm text-gray-600">
                 {new Intl.DateTimeFormat(prefs.language, {
                   weekday: "short",
@@ -489,7 +491,7 @@ export default function TopBar() {
               <span className="text-xs text-gray-500">{prefs.cityLabel}</span>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="hidden lg:flex flex-col items-center gap-0.5">
               <span className="text-sm text-gray-600">-- --- --</span>
               <span className="text-xs text-gray-500">--</span>
             </div>
@@ -501,7 +503,7 @@ export default function TopBar() {
               ref={avatarRef}
               type="button"
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-300"
+              className="flex h-10 w-10 lg:h-9 lg:w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-300"
             >
               {profile?.avatar_url ? (
                 <img

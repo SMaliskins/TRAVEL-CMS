@@ -915,13 +915,13 @@ export default function OrdersPage() {
     <div className="theme-page-bg p-3 sm:p-4">
       <div className="mx-auto max-w-[1800px] space-y-2">
         {/* Compact header with view tabs — sticky below TopBar + TabBar */}
-        <div className="sticky top-14 sm:top-0 z-20 theme-panel-bg pb-2 -mb-2 -mt-3 sm:-mt-4 pt-3 sm:pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
+        <div className="sticky top-0 z-20 theme-panel-bg pb-2 -mb-2 -mt-3 sm:-mt-4 pt-3 sm:pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <h1 className="text-lg sm:text-xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
             <button
               onClick={() => router.push("/orders/new")}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 sm:px-2.5 sm:py-1 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
             >
               <Plus size={15} strokeWidth={2} />
               {t(lang, "orders.new")}
@@ -982,7 +982,7 @@ export default function OrdersPage() {
                     ordersSearchStore.setField("clientLastName", val);
                   }, DEBOUNCE_MS);
                 }}
-                className="w-full rounded-lg border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 pl-8 pr-2 py-2.5 sm:py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
               />
             </div>
 
@@ -1147,7 +1147,7 @@ export default function OrdersPage() {
         <div className="rounded-lg theme-card-bg shadow-sm overflow-hidden">
           <div className="overflow-x-auto -mx-3 sm:mx-0">
           <table className="w-full border-collapse min-w-[900px]">
-            <thead className="sticky top-14 sm:top-[76px] z-10 shadow-[0_1px_0_0_#e5e7eb] theme-panel-bg border-b border-gray-200">
+            <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_#e5e7eb] theme-panel-bg border-b border-gray-200">
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.orderId")}
@@ -1532,7 +1532,7 @@ export default function OrdersPage() {
             <button
               onClick={() => fetchOrders(pagination.page + 1, true)}
               disabled={isLoadingMore}
-              className="px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition"
+              className="w-full sm:w-auto px-6 py-3 sm:py-2 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition"
             >
               {isLoadingMore ? `${t(lang, "orders.loading")}...` : t(lang, "orders.loadMore")}
             </button>

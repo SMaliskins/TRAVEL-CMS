@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-03-24 16:30] CW — Order detail: DirectoryClientPopup on client clicks
+
+**Task:** Order page — click clients (lead passenger, services table, traveller avatars) opens draggable `DirectoryClientPopup`; Ctrl/Cmd+click still navigates to `/directory/[id]`; double-click lead name still edits client.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `page.tsx`: `directoryPopupPartyId`, `DirectoryClientPopup`, avatar button, lead name click/dblclick.
+- `OrderServicesBlock.tsx`: `onOpenDirectoryParty` prop; client column + traveller avatar buttons with `stopPropagation`.
+
+**Результат:** `npm run build` OK.
+
+---
+
 ## [2026-03-23] CW — Passport re-upload: clear fields before applying new parse
 
 **Task:** New passport upload kept old field values when API omitted keys (JSON merge).

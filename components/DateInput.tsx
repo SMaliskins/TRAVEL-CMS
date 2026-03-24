@@ -74,9 +74,9 @@ export default function DateInput({ value, onChange, className = "", placeholder
       <button
         type="button"
         onClick={() => hiddenRef.current?.showPicker()}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        className="absolute right-0 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center text-gray-400 hover:text-gray-600"
       >
-        <Calendar size={14} strokeWidth={1.8} />
+        <Calendar size={18} strokeWidth={1.8} />
       </button>
       <input
         ref={hiddenRef}

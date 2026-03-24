@@ -232,9 +232,9 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5">
+    <div className="p-3 sm:p-6">
+      <div className="mb-3 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
           <span className="text-sm text-gray-700 mr-1">{t(lang, "payments.method")}:</span>
           <button
             onClick={() => setFilterMethod("all")}
@@ -290,7 +290,7 @@ export default function PaymentsPage() {
         <div className="w-full sm:w-auto sm:ml-auto">
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+            className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
           >
             + {t(lang, "payments.addPayment")}
           </button>

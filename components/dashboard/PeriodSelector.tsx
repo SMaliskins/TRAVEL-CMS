@@ -332,17 +332,17 @@ export default function PeriodSelector({
 
       {/* Dropdown Menu - Shopify Style with Calendar */}
       {isOpen && (
-        <div className={`absolute ${alignOpen === "left" ? "left-0" : "right-0"} mt-2 rounded-xl border border-gray-200/50 bg-white/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-[9999]`}>
-          <div className="flex">
+        <div className={`fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto ${alignOpen === "left" ? "sm:left-0" : "sm:right-0"} sm:top-auto sm:mt-2 rounded-xl border border-gray-200/50 bg-white/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-[9999] max-h-[80vh] overflow-y-auto`}>
+          <div className="flex flex-col sm:flex-row">
             {/* Left Panel - Period Options */}
-            <div className="w-48 border-r border-gray-200 py-2">
+            <div className="sm:w-48 border-b sm:border-b-0 sm:border-r border-gray-200 py-2">
               {periods.map((period) => {
                 const isSelected = value === period || (period === "custom" && showCalendar);
                 return (
                 <button
                   key={period}
                   onClick={() => handlePeriodChange(period)}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${isSelected ? "bg-blue-50 text-blue-800" : "text-gray-700"
+                  className={`w-full px-4 py-3 sm:py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between transition-colors ${isSelected ? "bg-blue-50 text-blue-800" : "text-gray-700"
                     }`}
                 >
                   <span>{getPeriodLabel(period)}</span>
@@ -385,7 +385,7 @@ export default function PeriodSelector({
 
             {/* Right Panel - Calendar (visible when Custom is selected) */}
             {showCalendar && (
-              <div className="p-4" style={{ minWidth: "680px" }}>
+              <div className="p-4 w-full sm:min-w-[680px]">
                 <RangeCalendar
                   startDate={tempStart}
                   endDate={tempEnd}

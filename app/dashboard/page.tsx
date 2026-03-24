@@ -485,7 +485,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="booking-modern-container !p-4 sm:!p-6">
+    <div className="booking-modern-container !p-3 sm:!p-4 lg:!p-6">
       <div className="mx-auto max-w-[1800px] space-y-4 sm:space-y-6">
         {/* Header with Period Selector */}
         <div className="booking-modern-header relative !mb-0 !overflow-visible">
@@ -515,7 +515,7 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* Row 1: Statistic Cards & Target */}
-            <div className={`grid gap-4 grid-cols-2 md:grid-cols-3 ${isSubagent ? "lg:grid-cols-6" : showTargets ? "lg:grid-cols-5" : "lg:grid-cols-4"} relative z-0 min-h-[8.5rem]`}>
+            <div className={`grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 ${isSubagent ? "lg:grid-cols-6" : showTargets ? "lg:grid-cols-5" : "lg:grid-cols-4"} relative z-0`}>
               <StatisticCard
                 title="Orders"
                 value={getStats("orders")?.ordersCount || 0}

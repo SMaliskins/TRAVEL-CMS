@@ -436,6 +436,8 @@ interface OrderServicesBlockProps {
   onDatesFromServices?: (dates: { dateFrom: string | null; dateTo: string | null }) => void;
   stickyTopOffset?: number;
   userRole?: string | null;
+  /** Open draggable directory card popup (order page) */
+  onOpenDirectoryParty?: (partyId: string) => void;
 }
 
 const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlockProps>(function OrderServicesBlock({ 
@@ -453,6 +455,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   onDatesFromServices,
   stickyTopOffset = 0,
   userRole,
+  onOpenDirectoryParty,
 }, ref) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -2511,12 +2514,25 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               </div>
                             </td>
                             <td 
-                              className={`px-2 py-1 text-sm ${(displayClientPartyId ?? service.clientPartyId) && isCtrlPressed && hoveredPartyId === `client-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                              className={`px-2 py-1 text-sm text-gray-700 ${(() => {
+                                const pid = displayClientPartyId ?? service.clientPartyId;
+                                if (!pid) return "";
+                                if (isCtrlPressed && hoveredPartyId === `client-${service.id}`) {
+                                  return "cursor-pointer text-blue-600 underline";
+                                }
+                                return onOpenDirectoryParty ? "cursor-pointer hover:bg-blue-50/80" : "";
+                              })()}`}
                               onClick={(e) => {
                                 const partyId = displayClientPartyId ?? service.clientPartyId;
                                 if ((e.ctrlKey || e.metaKey) && partyId) {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   router.push(`/directory/${partyId}`);
+                                  return;
+                                }
+                                if (partyId && onOpenDirectoryParty) {
+                                  e.stopPropagation();
+                                  onOpenDirectoryParty(partyId);
                                 }
                               }}
                               onMouseEnter={() => (displayClientPartyId ?? service.clientPartyId) && setHoveredPartyId(`client-${service.id}`)}
@@ -2572,22 +2588,36 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                   {visibleIds.map((travellerId) => {
                                     const trav = orderTravellers.find((t) => t.id === travellerId);
                                     const fullName = trav ? `${trav.firstName} ${trav.lastName}` : "";
+                                    const openCard = (e: React.MouseEvent) => {
+                                      e.stopPropagation();
+                                      onOpenDirectoryParty?.(travellerId);
+                                    };
                                     return trav?.avatarUrl ? (
-                                      <img
+                                      <button
                                         key={travellerId}
-                                        src={trav.avatarUrl}
-                                        alt={fullName}
-                                        title={fullName}
-                                        className="h-5 w-5 rounded-full object-cover border border-blue-200"
-                                      />
+                                        type="button"
+                                        onClick={openCard}
+                                        disabled={!onOpenDirectoryParty}
+                                        title={onOpenDirectoryParty ? `${fullName} — open card` : fullName}
+                                        className={`h-5 w-5 rounded-full border border-blue-200 p-0 overflow-hidden shrink-0 ${onOpenDirectoryParty ? "cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500" : "cursor-default"}`}
+                                      >
+                                        <img
+                                          src={trav.avatarUrl}
+                                          alt=""
+                                          className="h-full w-full object-cover pointer-events-none"
+                                        />
+                                      </button>
                                     ) : (
-                                      <div
+                                      <button
                                         key={travellerId}
-                                        className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-800"
-                                        title={fullName}
+                                        type="button"
+                                        onClick={openCard}
+                                        disabled={!onOpenDirectoryParty}
+                                        title={onOpenDirectoryParty ? `${fullName} — open card` : fullName}
+                                        className={`flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-800 shrink-0 ${onOpenDirectoryParty ? "cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500" : ""}`}
                                       >
                                         {getTravellerInitials(travellerId)}
-                                      </div>
+                                      </button>
                                     );
                                   })}
                                   {remainingCount > 0 && (

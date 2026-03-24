@@ -16,6 +16,7 @@ import "../hotels-booking/modern-booking.css";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 
 // Role colors for badges
 const roleColors: Record<string, string> = {
@@ -65,6 +66,7 @@ export default function DirectoryPage() {
   const [importSuccess, setImportSuccess] = useState<{ imported: number; failed: number } | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [clientPopupId, setClientPopupId] = useState<string | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const [syncLanguagesLoading, setSyncLanguagesLoading] = useState(false);
   const [syncLanguagesResult, setSyncLanguagesResult] = useState<{ updated: number; skipped: number } | null>(null);
@@ -449,8 +451,8 @@ export default function DirectoryPage() {
         )}
         {/* Header */}
         <div className="booking-modern-header !mb-0">
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+            <div className="flex items-center gap-2 sm:gap-4">
               <h1 className="booking-header-title">Directory</h1>
               {showArchiveView ? (
                 <button
@@ -680,7 +682,7 @@ export default function DirectoryPage() {
             <h2 className="text-lg font-semibold text-gray-900">
               {showArchiveView ? "Archived contacts" : hasSearch ? "Search results" : "Contacts"}
             </h2>
-            <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 flex-wrap w-full sm:w-auto">
               <div className="relative flex-shrink-0">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -690,7 +692,7 @@ export default function DirectoryPage() {
                   placeholder="Search by name, email, phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="booking-input !py-2 !pl-10 !pr-10 w-64 max-w-full shadow-sm rounded-lg"
+                  className="booking-input !py-2.5 !pl-10 !pr-10 w-full sm:w-64 max-w-full shadow-sm rounded-lg"
                 />
                 {searchQuery && (
                   <button
@@ -786,7 +788,8 @@ export default function DirectoryPage() {
               <p className="text-gray-500">No records found.</p>
             </div>
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full min-w-[700px]">
               <thead className="bg-gray-50">
                 <tr>
                   {!isSubagent && !showArchiveView && (
@@ -825,10 +828,7 @@ export default function DirectoryPage() {
                     <tr
                       key={record.id}
                       className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => {
-                        sessionStorage.setItem("directory.scrollY", String(window.scrollY));
-                        router.push(`/directory/${record.id}`);
-                      }}
+                      onClick={() => setClientPopupId(record.id)}
                     >
                       {!isSubagent && !showArchiveView && (
                         <td
@@ -925,8 +925,15 @@ export default function DirectoryPage() {
                 })}
               </tbody>
             </table>
+            </div>
         )}
         </div>
+
+        <DirectoryClientPopup
+          recordId={clientPopupId}
+          onClose={() => setClientPopupId(null)}
+          hideContactFields={isSubagent}
+        />
 
         <DirectoryMergeModal
           isOpen={showMergeModal}

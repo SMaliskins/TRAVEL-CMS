@@ -5,14 +5,16 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 
 interface RangeCalendarProps {
-  maxDate?: string; // YYYY-MM-DD - maximum selectable date
-  startDate: string | undefined; // YYYY-MM-DD
-  endDate: string | undefined; // YYYY-MM-DD
-  onDateSelect: (date: string) => void; // YYYY-MM-DD
+  maxDate?: string;
+  startDate: string | undefined;
+  endDate: string | undefined;
+  onDateSelect: (date: string) => void;
   onClear: () => void;
-  autoCloseOnRangeComplete?: boolean; // Close calendar when range is complete
+  autoCloseOnRangeComplete?: boolean;
   /** When true and no startDate, show previous + current month (e.g. for invoices) */
   startFromPreviousMonth?: boolean;
+  /** Show single month (mobile) instead of two side-by-side */
+  singleMonth?: boolean;
 }
 
 export default function RangeCalendar({
@@ -23,6 +25,7 @@ export default function RangeCalendar({
   onClear,
   autoCloseOnRangeComplete = false,
   startFromPreviousMonth = false,
+  singleMonth = false,
 }: RangeCalendarProps) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -214,7 +217,7 @@ export default function RangeCalendar({
       <div className="grid grid-cols-7 gap-1">
         {days.map((date, index) => {
           if (!date) {
-            return <div key={`empty-${side}-${index}`} className="h-8" />;
+            return <div key={`empty-${side}-${index}`} className={singleMonth ? "h-11" : "h-8"} />;
           }
 
           const dateStr = formatDateToISO(date);
@@ -233,7 +236,7 @@ export default function RangeCalendar({
               onClick={() => { if (!isFuture) handleDateClick(date); }}
               className={`
                 ${isFuture ? "text-gray-400 cursor-not-allowed bg-gray-100" : ""}
-                h-8 rounded-md text-sm font-medium transition-colors
+                ${singleMonth ? "h-11 text-base" : "h-8 text-sm"} rounded-md font-medium transition-colors
                 ${isTodayDate && !isRangeEndpoint ? "ring-2 ring-blue-500 text-gray-900 bg-white" : ""}
                 ${inRange && !isRangeEndpoint ? "bg-blue-100 text-blue-900" : ""}
                 ${!inRange && !isRangeEndpoint && !isFuture ? "text-gray-900 hover:bg-gray-200" : ""}
@@ -272,11 +275,17 @@ export default function RangeCalendar({
         </button>
       </div>
 
-      {/* Two months side by side */}
-      <div className="grid grid-cols-2 gap-4">
-        {renderMonth(leftDays, leftMonth, "left")}
-        {renderMonth(rightDays, rightMonth, "right")}
-      </div>
+      {/* Month grid — single on mobile, dual on desktop */}
+      {singleMonth ? (
+        <div>
+          {renderMonth(leftDays, leftMonth, "left")}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {renderMonth(leftDays, leftMonth, "left")}
+          {renderMonth(rightDays, rightMonth, "right")}
+        </div>
+      )}
 
       {/* Month/Year picker popover */}
       {showMonthPicker && (

@@ -357,10 +357,12 @@ export default function Sidebar() {
         {/* Hamburger button */}
         <button
           onClick={() => setIsMobileMenuOpen(true)}
-          className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white shadow-sm lg:hidden"
+          className="fixed left-2 top-2 z-50 flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 bg-white shadow-sm lg:hidden"
           aria-label="Open menu"
         >
-          <span className="text-xl">☰</span>
+          <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
         </button>
 
         {/* Mobile overlay sidebar */}
@@ -370,20 +372,22 @@ export default function Sidebar() {
               className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
               onClick={() => setIsMobileMenuOpen(false)}
             />
-            <aside ref={mobileTrapRef} className="fixed left-0 top-0 z-50 h-screen w-64 border-r border-gray-200 bg-white lg:hidden">
+            <aside ref={mobileTrapRef} className="fixed left-0 top-0 z-50 h-screen w-72 border-r border-gray-200 bg-white lg:hidden">
               <div className="flex h-full flex-col">
                 <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4">
                   <div className="font-semibold text-gray-900">Travel CMS</div>
                   <button
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-gray-100"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
                     aria-label="Close menu"
                   >
-                    ✕
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
-                <nav className="flex-1 overflow-y-auto px-2 py-1">
-                  <ul className="space-y-0.5">
+                <nav className="flex-1 overflow-y-auto px-2 py-2">
+                  <ul className="space-y-1">
                     {renderNavItems({ 
                       showTooltip: false, 
                       onItemClick: () => setIsMobileMenuOpen(false) 

@@ -142,22 +142,46 @@ export default function DateRangePicker({
 
   const displayValue = formatDateRange(from, to, true);
 
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+
   const calendarContent = isCalendarOpen && (
     <div
       ref={calendarRef}
       data-calendar-dropdown
-      className="fixed z-[9999] w-[680px] rounded-lg border border-gray-200 bg-white p-4 shadow-lg"
-      style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+      className={
+        isMobile
+          ? "fixed inset-0 z-[9999] flex flex-col bg-white"
+          : "fixed z-[9999] w-[680px] rounded-lg border border-gray-200 bg-white p-4 shadow-lg"
+      }
+      style={isMobile ? undefined : { top: dropdownPosition.top, left: dropdownPosition.left }}
       onClick={(e) => e.stopPropagation()}
     >
-      <RangeCalendar
-        startDate={tempStart}
-        endDate={tempEnd}
-        onDateSelect={handleDateSelect}
-        onClear={handleClear}
-        autoCloseOnRangeComplete={true}
-      />
-      <div className="mt-4 flex justify-end gap-2 border-t border-gray-200 pt-4">
+      {isMobile && (
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <span className="text-sm font-semibold text-gray-900">{label || "Select dates"}</span>
+          <button
+            type="button"
+            onClick={() => { setTempStart(from); setTempEnd(to); setIsCalendarOpen(false); }}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+      <div className={isMobile ? "flex-1 overflow-y-auto p-4" : ""}>
+        <RangeCalendar
+          startDate={tempStart}
+          endDate={tempEnd}
+          onDateSelect={handleDateSelect}
+          onClear={handleClear}
+          autoCloseOnRangeComplete={true}
+          singleMonth={isMobile}
+        />
+      </div>
+      <div className={isMobile
+        ? "flex gap-3 border-t border-gray-200 p-4"
+        : "mt-4 flex justify-end gap-2 border-t border-gray-200 pt-4"
+      }>
         <button
           type="button"
           onClick={() => {
@@ -165,14 +189,20 @@ export default function DateRangePicker({
             setTempEnd(to);
             setIsCalendarOpen(false);
           }}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          className={isMobile
+            ? "flex-1 rounded-lg border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700"
+            : "rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          }
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={handleApply}
-          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+          className={isMobile
+            ? "flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white"
+            : "rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+          }
         >
           Apply
         </button>
@@ -187,7 +217,7 @@ export default function DateRangePicker({
         ref={triggerRef}
         type="button"
         onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-        className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-left text-sm focus:border-black focus:outline-none ${triggerClassName ?? ""}`}
+        className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 sm:py-1.5 text-left text-sm focus:border-black focus:outline-none ${triggerClassName ?? ""}`}
       >
         {displayValue}
       </button>

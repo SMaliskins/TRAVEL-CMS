@@ -24,6 +24,7 @@ import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
+import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 
 type TabType = "client" | "finance" | "documents" | "communication" | "log";
 const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
@@ -135,6 +136,8 @@ export default function OrderPage({
   const [showOrderSource, setShowOrderSource] = useState(false);
   const currentRole = useCurrentUserRole();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPaymentPlan, setShowPaymentPlan] = useState(false);
+  const [directoryPopupPartyId, setDirectoryPopupPartyId] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -802,7 +805,7 @@ export default function OrderPage({
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-3 py-4 sm:p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
-        <div ref={stickyHeaderRef} className={`mb-0 ${showInvoiceCreator ? "" : "sticky top-14 sm:top-[92px] z-20"} bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)] -mx-3 px-3 sm:mx-0 sm:px-0`}>
+        <div ref={stickyHeaderRef} className={`mb-0 ${showInvoiceCreator ? "" : "sticky top-0 z-20"} bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)] -mx-3 px-3 sm:mx-0 sm:px-0`}>
           <div className="flex flex-col sm:flex-row sm:items-stretch sm:flex-wrap lg:flex-nowrap gap-3 sm:gap-0">
             {/* Block 1: Order Code + Status + Type/Source */}
             <div className="shrink-0 pr-2 flex flex-col justify-center">
@@ -997,19 +1000,28 @@ export default function OrderPage({
                   <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-3 sm:gap-5 min-w-0">
                     {/* Lead Passenger — слева; аватар ~высота двух строк (label + name) */}
                     <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                      <div className="relative h-12 w-12 shrink-0 flex items-center justify-center rounded-full border border-gray-200 bg-blue-100 text-sm font-semibold text-blue-800 overflow-hidden">
+                      <button
+                        type="button"
+                        disabled={!order.client_party_id}
+                        onClick={() => order.client_party_id && setDirectoryPopupPartyId(order.client_party_id)}
+                        className={`relative h-12 w-12 shrink-0 flex items-center justify-center rounded-full border border-gray-200 bg-blue-100 text-sm font-semibold text-blue-800 overflow-hidden ${
+                          order.client_party_id ? "cursor-pointer hover:ring-2 hover:ring-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500" : "cursor-default opacity-90"
+                        }`}
+                        title={order.client_party_id ? "Open directory card" : undefined}
+                        aria-label={order.client_party_id ? "Open lead passenger directory card" : undefined}
+                      >
                         {leadPassengerHeaderAvatar.imageUrl && !leadPassengerAvatarFailed ? (
                           <img
                             src={leadPassengerHeaderAvatar.imageUrl}
                             alt=""
-                            className="absolute inset-0 h-full w-full rounded-full object-cover border-0"
+                            className="absolute inset-0 h-full w-full rounded-full object-cover border-0 pointer-events-none"
                             onError={() => setLeadPassengerAvatarFailed(true)}
                           />
                         ) : null}
-                        <span className={leadPassengerHeaderAvatar.imageUrl && !leadPassengerAvatarFailed ? "sr-only" : "relative z-10"} aria-hidden>
+                        <span className={leadPassengerHeaderAvatar.imageUrl && !leadPassengerAvatarFailed ? "sr-only" : "relative z-10 pointer-events-none"} aria-hidden>
                           {leadPassengerHeaderAvatar.initials}
                         </span>
-                      </div>
+                      </button>
                       <div className="min-w-0 flex flex-col justify-center gap-0.5">
                         <div className="text-[10px] text-gray-400 uppercase tracking-wider leading-none">
                           {t(lang, "order.leadPassenger")}
@@ -1024,14 +1036,22 @@ export default function OrderPage({
                             onClick={() => {
                               if (isCtrlPressed && order.client_party_id) {
                                 router.push(`/directory/${order.client_party_id}`);
+                              } else if (order.client_party_id) {
+                                setDirectoryPopupPartyId(order.client_party_id);
                               } else {
                                 startEditingClient();
                               }
                             }}
+                            onDoubleClick={(e) => {
+                              e.preventDefault();
+                              if (order.client_party_id) startEditingClient();
+                            }}
                             title={
                               isCtrlPressed
                                 ? t(lang, "order.ctrlClickToOpenClient")
-                                : t(lang, "order.clickToChangeClient")
+                                : order.client_party_id
+                                  ? "Click: directory card · Double-click: change client"
+                                  : t(lang, "order.clickToChangeClient")
                             }
                           >
                             {order.client_display_name || t(lang, "order.selectClient")}
@@ -1389,16 +1409,21 @@ export default function OrderPage({
                 <div className="w-px h-full rounded-full bg-gray-300/40 shadow-[1px_0_0_rgba(255,255,255,0.5)]"></div>
               </div>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-2 shrink-0 sm:justify-end w-full sm:w-auto">
-                {/* Total amount with hover tooltip for payment plan */}
-                <div className="text-right relative group/total">
-                  <div className="text-xl font-bold text-gray-900 cursor-default">
-                    €{(order.amount_total ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[10px] text-gray-400">{t(lang, "order.totalActiveServices")}</div>
+                {/* Total amount with tap tooltip for payment plan */}
+                <div className="text-right relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentPlan(p => !p)}
+                    className="text-right"
+                  >
+                    <div className="text-xl font-bold text-gray-900">
+                      €{(order.amount_total ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[10px] text-gray-400">{t(lang, "order.totalActiveServices")}</div>
+                  </button>
 
-                  {/* Payment plan tooltip — appears below the amount on hover */}
-                  {(order.payment_dates?.length ?? 0) > 0 && (
-                    <div className="absolute top-full right-0 mt-1 z-30 hidden group-hover/total:block">
+                  {showPaymentPlan && (order.payment_dates?.length ?? 0) > 0 && (
+                    <div className="absolute top-full right-0 mt-1 z-30">
                       <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-3 py-2 min-w-[200px] text-xs text-gray-700">
                         <div className="font-semibold text-gray-900 mb-1.5 text-[11px]">{t(lang, "order.paymentPlan")}</div>
                         <div className="space-y-1">
@@ -1496,7 +1521,7 @@ export default function OrderPage({
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`shrink-0 whitespace-nowrap rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors ${
+                    className={`shrink-0 whitespace-nowrap rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-gray-900 text-white shadow-sm"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800"
@@ -1517,7 +1542,7 @@ export default function OrderPage({
                     setActiveTab("client");
                   }
                 }}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                className="flex items-center gap-1.5 px-3 py-2.5 sm:px-2.5 sm:py-1 text-sm sm:text-xs font-medium text-white bg-blue-600 rounded-lg sm:rounded hover:bg-blue-700"
               >
                 <Plus size={14} strokeWidth={2} />
                 {t(lang, "order.service")}
@@ -1540,6 +1565,7 @@ export default function OrderPage({
                 orderDateTo={order?.date_to}
                 stickyTopOffset={stickyHeaderBottom}
                 userRole={currentRole}
+                onOpenDirectoryParty={(partyId) => setDirectoryPopupPartyId(partyId)}
                 itineraryDestinations={itineraryDestinations}
                 orderSource={(order?.order_source as 'TA' | 'TO' | 'CORP' | 'NON') || 'NON'}
                 companyCurrencyCode={companyCurrencyCode}
@@ -1670,6 +1696,12 @@ export default function OrderPage({
       </div>
 
       {/* Delete Order Modal */}
+      <DirectoryClientPopup
+        recordId={directoryPopupPartyId}
+        onClose={() => setDirectoryPopupPartyId(null)}
+        hideContactFields={currentRole === "subagent"}
+      />
+
       {showDeleteModal && (
         <DeleteOrderModal
           isOpen={showDeleteModal}
