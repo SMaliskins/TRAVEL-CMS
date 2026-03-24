@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
+import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 
 async function syncOrderDatesFromServices(orderId: string) {
   try {
@@ -41,7 +42,7 @@ export async function GET(
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id")
+      .select("id, company_id")
       .eq("order_code", orderCode)
       .single();
 
@@ -129,7 +130,7 @@ export async function PATCH(
     // Get order by code
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id")
+      .select("id, company_id")
       .eq("order_code", orderCode)
       .single();
 
@@ -306,6 +307,10 @@ export async function PATCH(
 
     syncOrderDatesFromServices(order.id).catch(() => {});
 
+    syncOrderReferralAccruals(supabaseAdmin, order.id, order.company_id as string).catch((e) =>
+      console.warn("[PATCH service] syncOrderReferralAccruals:", e)
+    );
+
     const { data: orderForPush } = await supabaseAdmin
       .from("orders")
       .select("client_party_id, countries_cities")
@@ -395,7 +400,7 @@ export async function DELETE(
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id")
+      .select("id, company_id")
       .eq("order_code", orderCode)
       .single();
 
@@ -439,6 +444,10 @@ export async function DELETE(
     }
 
     syncOrderDatesFromServices(order.id).catch(() => {});
+
+    syncOrderReferralAccruals(supabaseAdmin, order.id, order.company_id as string).catch((e) =>
+      console.warn("[DELETE service] syncOrderReferralAccruals:", e)
+    );
 
     return NextResponse.json({ success: true });
   } catch (err) {

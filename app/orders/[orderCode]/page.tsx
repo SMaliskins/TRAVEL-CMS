@@ -69,6 +69,10 @@ interface OrderData {
   owner_user_id?: string | null;
   owner_name?: string | null;
   created_at?: string | null;
+  referral_party_id?: string | null;
+  referral_party_display_name?: string | null;
+  referral_commission_confirmed?: boolean;
+  referral_commission_confirmed_at?: string | null;
 }
 
 export default function OrderPage({
@@ -554,6 +558,94 @@ export default function OrderPage({
       setIsSavingField(false);
     }
   };
+
+  const tripEndedForReferral = useMemo(() => {
+    if (!order?.date_to) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    return order.date_to < today;
+  }, [order?.date_to]);
+
+  const saveReferralParty = useCallback(
+    async (partyId: string | null, _displayName: string) => {
+      if (!order) return;
+      const normalizedId = partyId;
+      if ((normalizedId ?? null) === (order.referral_party_id ?? null)) return;
+      const prev = {
+        referral_party_id: order.referral_party_id,
+        referral_party_display_name: order.referral_party_display_name,
+      };
+      setOrder({
+        ...order,
+        referral_party_id: normalizedId,
+        referral_party_display_name: _displayName || null,
+      });
+      setIsSavingField(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ referral_party_id: normalizedId }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.order) {
+            setOrder((p) => (p ? { ...p, ...data.order } : p));
+          }
+        } else {
+          setOrder((p) => (p ? { ...p, ...prev } : p));
+        }
+      } catch (err) {
+        console.error("Error saving referral party:", err);
+        setOrder((p) => (p ? { ...p, ...prev } : p));
+      } finally {
+        setIsSavingField(false);
+      }
+    },
+    [order, orderCode]
+  );
+
+  const saveReferralConfirmed = useCallback(
+    async (checked: boolean) => {
+      if (!order) return;
+      const prevConfirmed = order.referral_commission_confirmed ?? false;
+      if (checked === prevConfirmed) return;
+      const prev = {
+        referral_commission_confirmed: order.referral_commission_confirmed,
+        referral_commission_confirmed_at: order.referral_commission_confirmed_at,
+      };
+      setOrder((p) => (p ? { ...p, referral_commission_confirmed: checked } : p));
+      setIsSavingField(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ referral_commission_confirmed: checked }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.order) {
+            setOrder((p) => (p ? { ...p, ...data.order } : p));
+          }
+        } else {
+          setOrder((p) => (p ? { ...p, ...prev } : p));
+        }
+      } catch (err) {
+        console.error("Error saving referral confirmation:", err);
+        setOrder((p) => (p ? { ...p, ...prev } : p));
+      } finally {
+        setIsSavingField(false);
+      }
+    },
+    [order, orderCode]
+  );
 
   const saveItinerary = async () => {
     if (!order) return;
@@ -1295,6 +1387,49 @@ export default function OrderPage({
                         {parsedItinerary.daysUntil} {t(lang, parsedItinerary.daysUntil === 1 ? "order.dayBeforeTrip" : "order.daysBeforeTrip")}
                       </span>
                     )}
+                  </div>
+                )}
+
+                {currentRole !== "subagent" && (
+                  <div className="mt-3 pt-2 border-t border-gray-100/80 space-y-2 max-w-xl">
+                    <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                      {t(lang, "order.referralPartner")}
+                    </div>
+                    <PartySelect
+                      roleFilter="referral"
+                      value={order.referral_party_id ?? null}
+                      initialDisplayName={order.referral_party_display_name || ""}
+                      onChange={(partyId, displayName) => {
+                        void saveReferralParty(partyId, displayName);
+                      }}
+                    />
+                    <label
+                      className={`flex items-start gap-2 text-xs text-gray-700 ${
+                        (!tripEndedForReferral && !order.referral_commission_confirmed) || isSavingField
+                          ? "cursor-not-allowed opacity-70"
+                          : "cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        checked={!!order.referral_commission_confirmed}
+                        disabled={
+                          (!tripEndedForReferral && !order.referral_commission_confirmed) || isSavingField
+                        }
+                        onChange={(e) => {
+                          void saveReferralConfirmed(e.target.checked);
+                        }}
+                      />
+                      <span>
+                        {t(lang, "order.referralCalculationConfirmed")}
+                        {!tripEndedForReferral && order.referral_party_id && (
+                          <span className="block text-[10px] font-normal text-gray-500 mt-0.5">
+                            {t(lang, "order.referralPlannedHint")}
+                          </span>
+                        )}
+                      </span>
+                    </label>
                   </div>
                 )}
               </div>

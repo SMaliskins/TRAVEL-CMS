@@ -193,7 +193,7 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
     }
   };
 
-  const handleRoleChange = (role: "client" | "supplier" | "subagent", checked: boolean) => {
+  const handleRoleChange = (role: "client" | "supplier" | "subagent" | "referral", checked: boolean) => {
     directorySearchStore.getState().setRole(checked ? role : "all");
   };
 
@@ -465,6 +465,15 @@ export default function DirectorySearchPopover({ inputRef }: DirectorySearchPopo
                               className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
                             />
                             <span className="text-xs font-medium text-gray-700">Subagent</span>
+                          </label>
+                          <label className="flex cursor-pointer items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={filters.role === "referral"}
+                              onChange={(e) => handleRoleChange("referral", e.target.checked)}
+                              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
+                            />
+                            <span className="text-xs font-medium text-gray-700">Referral</span>
                           </label>
                         </div>
                       </div>

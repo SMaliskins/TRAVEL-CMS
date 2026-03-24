@@ -57,6 +57,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   if (row.is_client) roles.push("client");
   if (row.is_supplier) roles.push("supplier");
   if (row.is_subagent) roles.push("subagent");
+  if (row.is_referral) roles.push("referral");
 
   const pt = String(row.party_type ?? "").toLowerCase();
   const isCompanyParty = pt === "company";
@@ -409,7 +410,7 @@ export async function GET(request: NextRequest) {
     const partyIds = parties.map((p: any) => p.id);
 
     // Fetch related data in parallel - only columns needed for buildDirectoryRecord
-    const [personData, companyData, clientData, supplierData, subagentData] = await Promise.all([
+    const [personData, companyData, clientData, supplierData, subagentData, referralData] = await Promise.all([
       supabaseAdmin
         .from("party_person")
         .select("party_id,title,first_name,last_name,dob,personal_code,citizenship,passport_number,passport_issue_date,passport_expiry_date,passport_issuing_country,passport_full_name,nationality,avatar_url,gender")
@@ -430,6 +431,10 @@ export async function GET(request: NextRequest) {
         .from("subagents")
         .select("party_id,commission_scheme")
         .in("party_id", partyIds),
+      supabaseAdmin
+        .from("referral_party")
+        .select("party_id")
+        .in("party_id", partyIds),
     ]);
 
     if (personData.error) {
@@ -438,6 +443,9 @@ export async function GET(request: NextRequest) {
     if (companyData.error) {
       console.error("[directory] party_company fetch failed:", companyData.error);
     }
+    if (referralData.error) {
+      console.error("[directory] referral_party fetch failed:", referralData.error);
+    }
 
     // Build maps for quick lookup
     const personMap = buildPersonMapByPartyId(personData.data);
@@ -445,6 +453,7 @@ export async function GET(request: NextRequest) {
     const clientSet = new Set((clientData.data || []).map((c: any) => c.party_id));
     const supplierMap = new Map((supplierData.data || []).map((s: any) => [s.party_id, s]));
     const subagentMap = new Map((subagentData.data || []).map((s: any) => [s.party_id, s]));
+    const referralSet = new Set((referralData.data || []).map((r: any) => r.party_id));
 
     // Apply role filter if specified
     let filteredParties = parties;
@@ -454,6 +463,8 @@ export async function GET(request: NextRequest) {
       filteredParties = parties.filter((p: any) => supplierMap.has(p.id));
     } else if (role === "subagent") {
       filteredParties = parties.filter((p: any) => subagentMap.has(p.id));
+    } else if (role === "referral") {
+      filteredParties = parties.filter((p: any) => referralSet.has(p.id));
     }
 
     // Apply search filter with diacritics, layout, variants (DIR3)
@@ -514,6 +525,7 @@ export async function GET(request: NextRequest) {
         is_client: clientSet.has(party.id),
         is_supplier: !!supplier,
         is_subagent: !!subagent,
+        is_referral: referralSet.has(party.id),
         ...supplierData,
         ...subagentData,
         id: party.id,

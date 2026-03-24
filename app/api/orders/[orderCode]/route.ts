@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -223,6 +224,16 @@ export async function GET(
       }
     }
 
+    let referral_party_display_name: string | null = null;
+    if (order.referral_party_id) {
+      const { data: refParty } = await supabaseAdmin
+        .from("party")
+        .select("display_name")
+        .eq("id", order.referral_party_id)
+        .maybeSingle();
+      referral_party_display_name = refParty?.display_name ?? null;
+    }
+
     return NextResponse.json({ 
       order: {
         ...order,
@@ -234,6 +245,7 @@ export async function GET(
         amount_debt: amountDebt,
         payment_dates: paymentDates,
         overdue_days: overdueDays,
+        referral_party_display_name,
       }
     });
   } catch (error: unknown) {
@@ -270,7 +282,8 @@ export async function PATCH(
       "date_from", 
       "date_to",
       "order_type",
-      "order_source"
+      "order_source",
+      "referral_party_id",
     ];
     
     const updateData: Record<string, unknown> = {
@@ -281,6 +294,36 @@ export async function PATCH(
       if (body[field] !== undefined) {
         updateData[field] = body[field];
       }
+    }
+
+    if (body.referral_party_id !== undefined) {
+      const rid = body.referral_party_id;
+      if (rid === null || rid === "") {
+        updateData.referral_party_id = null;
+      } else {
+        const { data: refOk } = await supabaseAdmin
+          .from("referral_party")
+          .select("party_id")
+          .eq("party_id", rid)
+          .eq("company_id", companyId)
+          .maybeSingle();
+        if (!refOk) {
+          return NextResponse.json(
+            { error: "Selected party does not have Referral role for this company" },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    if (body.referral_commission_confirmed === true) {
+      updateData.referral_commission_confirmed = true;
+      updateData.referral_commission_confirmed_at = new Date().toISOString();
+      updateData.referral_commission_confirmed_by = apiUser.userId;
+    } else if (body.referral_commission_confirmed === false) {
+      updateData.referral_commission_confirmed = false;
+      updateData.referral_commission_confirmed_at = null;
+      updateData.referral_commission_confirmed_by = null;
     }
 
     // Validate status if provided
@@ -381,7 +424,23 @@ export async function PATCH(
       }).catch((e: unknown) => console.error("[Push] fire-and-forget error:", e));
     }
 
-    return NextResponse.json({ order });
+    syncOrderReferralAccruals(supabaseAdmin, order.id, companyId).catch((e) =>
+      console.warn("[Order PATCH] syncOrderReferralAccruals:", e)
+    );
+
+    let referral_party_display_name: string | null = null;
+    if (order.referral_party_id) {
+      const { data: refParty } = await supabaseAdmin
+        .from("party")
+        .select("display_name")
+        .eq("id", order.referral_party_id)
+        .maybeSingle();
+      referral_party_display_name = refParty?.display_name ?? null;
+    }
+
+    return NextResponse.json({
+      order: { ...order, referral_party_display_name },
+    });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Order PATCH error:", errorMsg);

@@ -18,6 +18,10 @@ import * as SecureStore from 'expo-secure-store'
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>
 
+const REFERRAL_ONLY =
+  process.env.EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY === '1' ||
+  process.env.EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY === 'true'
+
 export function RegisterScreen({ route }: Props) {
   const invitationToken = route.params?.invitationToken ?? ''
   const [password, setPassword] = useState('')
@@ -68,7 +72,9 @@ export function RegisterScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.logo}>✈ MyTravelConcierge</Text>
-          <Text style={styles.subtitle}>Create a password for your account</Text>
+          <Text style={styles.subtitle}>
+            {REFERRAL_ONLY ? 'Set password for referral access' : 'Create a password for your account'}
+          </Text>
         </View>
 
         {!invitationToken && (

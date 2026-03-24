@@ -337,6 +337,10 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.dayBeforeTrip": "day before trip",
     "order.daysBeforeTrip": "days before trip",
     "order.routeAndDates": "Route & Dates",
+    "order.referralPartner": "Referral partner",
+    "order.referralCalculationConfirmed": "Referral calculation confirmed",
+    "order.referralPlannedHint":
+      "Lines stay planned until the trip end date on the order and this confirmation.",
   },
   ru: {
     "profile.title": "Мой профиль",
@@ -656,6 +660,10 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.dayBeforeTrip": "день до поездки",
     "order.daysBeforeTrip": "дней до поездки",
     "order.routeAndDates": "Маршрут и даты",
+    "order.referralPartner": "Реферальный партнёр",
+    "order.referralCalculationConfirmed": "Расчёт комиссии подтверждён",
+    "order.referralPlannedHint":
+      "Строки остаются в статусе «план» до даты окончания поездки по заявке и этого подтверждения.",
   },
   lv: {
     "profile.title": "Mans profils",
@@ -975,6 +983,10 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.dayBeforeTrip": "diena līdz ceļojumam",
     "order.daysBeforeTrip": "dienas līdz ceļojumam",
     "order.routeAndDates": "Maršruts un datumi",
+    "order.referralPartner": "Ieteikuma partneris",
+    "order.referralCalculationConfirmed": "Ieteikuma aprēķins apstiprināts",
+    "order.referralPlannedHint":
+      "Rindas paliek plānā līdz ceļojuma beigu datumam pieteikumā un šai apstiprināšanai.",
   },
 };
 

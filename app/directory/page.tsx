@@ -23,6 +23,7 @@ const roleColors: Record<string, string> = {
   client: "bg-blue-100 text-blue-800",
   supplier: "bg-green-100 text-green-800",
   subagent: "bg-purple-100 text-purple-800",
+  referral: "bg-amber-100 text-amber-900",
 };
 
 interface DirectoryStats {

@@ -5,6 +5,8 @@ import {
   DirectoryRecord,
   DirectoryType,
   DirectoryRole,
+  ReferralRateKind,
+  ReferralExtras,
   SupplierDetails,
   SupplierCommission,
   SupplierDocument,
@@ -26,6 +28,24 @@ import { formatDateDDMMYYYY, normalizePersonDobToIso } from "@/utils/dateFormat"
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { BANK_LIST } from "@/lib/constants/banks";
 import { Check, X, Plus, PanelLeft, Columns } from "lucide-react";
+
+function referralRatesMapFromRecord(record: DirectoryRecord | undefined): Record<string, { kind: ReferralRateKind; value: number }> {
+  const m: Record<string, { kind: ReferralRateKind; value: number }> = {};
+  for (const r of record?.referralExtras?.categoryRates ?? []) {
+    m[r.categoryId] = { kind: r.rateKind, value: Number(r.rateValue) };
+  }
+  return m;
+}
+
+function normalizeReferralExtrasForCompare(extras: ReferralExtras | undefined): string {
+  const notes = (extras?.notes || "").trim();
+  const defaultCurrency = extras?.defaultCurrency || "EUR";
+  const categoryRates = [...(extras?.categoryRates || [])]
+    .filter((r) => r.categoryId && Number.isFinite(r.rateValue) && r.rateValue !== 0)
+    .map((r) => ({ categoryId: r.categoryId, rateKind: r.rateKind, rateValue: r.rateValue }))
+    .sort((a, b) => a.categoryId.localeCompare(b.categoryId));
+  return JSON.stringify({ notes, defaultCurrency, categoryRates });
+}
 
 function toTitleCase(str: string): string {
   if (!str) return str;
@@ -110,9 +130,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
   ) {
     const formRef = React.useRef<HTMLFormElement>(null);
     const subagentSectionRef = React.useRef<HTMLDivElement>(null);
+    const referralSectionRef = React.useRef<HTMLDivElement>(null);
     const subagentCommissionTypeSelectRef = React.useRef<HTMLSelectElement>(null);
     const pendingCloseAfterSaveRef = React.useRef<boolean>(false);
-    const [highlightedSection, setHighlightedSection] = useState<"supplier" | "subagent" | null>(null);
+    const [highlightedSection, setHighlightedSection] = useState<"supplier" | "subagent" | "referral" | null>(null);
     
     // Active tab state for Statistics section
     const [activeTab, setActiveTab] = useState<"statistics" | "clientScore">("statistics");
@@ -237,6 +258,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [clientType, setClientType] = useState<DirectoryType>(
       record?.type || "person"
     );
+    const [showReferralInApp, setShowReferralInApp] = useState(() => record?.showReferralInApp === true);
 
     // Person fields
     const [firstName, setFirstName] = useState(record?.firstName || "");
@@ -347,6 +369,25 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       ""
     );
 
+    // Referral (passive commission by service category)
+    const [referralNotes, setReferralNotes] = useState(() => record?.referralExtras?.notes ?? "");
+    const [referralCurrency, setReferralCurrency] = useState(() => record?.referralExtras?.defaultCurrency ?? "EUR");
+    const [referralRatesByCat, setReferralRatesByCat] = useState<Record<string, { kind: ReferralRateKind; value: number }>>(
+      () => referralRatesMapFromRecord(record)
+    );
+    const [referralStats, setReferralStats] = useState<{
+      plannedByCurrency: Record<string, number>;
+      accruedByCurrency: Record<string, number>;
+      settledByCurrency: Record<string, number>;
+      availableByCurrency: Record<string, number>;
+    } | null>(null);
+    const [referralSettlements, setReferralSettlements] = useState<
+      Array<{ id: string; amount: number; currency: string; note: string | null; entry_date: string; created_at: string }>
+    >([]);
+    const [referralSettlementAmount, setReferralSettlementAmount] = useState("");
+    const [referralSettlementNote, setReferralSettlementNote] = useState("");
+    const [referralSettlementSubmitting, setReferralSettlementSubmitting] = useState(false);
+
     // Corporate accounts (Company) / Loyalty cards (Person)
     const [corporateAccounts, setCorporateAccounts] = useState<CorporateAccount[]>(
       record?.corporateAccounts || []
@@ -423,6 +464,44 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       loadCategories();
     }, []);
 
+    useEffect(() => {
+      if (mode !== "edit" || !record?.id || !roles.includes("referral")) {
+        setReferralStats(null);
+        setReferralSettlements([]);
+        return;
+      }
+      let cancelled = false;
+      (async () => {
+        try {
+          const [sRes, lRes] = await Promise.all([
+            fetchWithAuth(`/api/directory/${record.id}/referral-stats`),
+            fetchWithAuth(`/api/directory/${record.id}/referral-settlements?limit=50`),
+          ]);
+          if (cancelled) return;
+          if (sRes.ok) {
+            const j = await sRes.json();
+            setReferralStats(j.data ?? null);
+          } else {
+            setReferralStats(null);
+          }
+          if (lRes.ok) {
+            const j = await lRes.json();
+            setReferralSettlements(Array.isArray(j.data) ? j.data : []);
+          } else {
+            setReferralSettlements([]);
+          }
+        } catch {
+          if (!cancelled) {
+            setReferralStats(null);
+            setReferralSettlements([]);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [mode, record?.id, record?.updatedAt, roles, saveSuccess]);
+
     // Sync fields from record when record changes (after save)
     useEffect(() => {
       if (record) {
@@ -479,6 +558,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           setSupplierDocuments(record.supplierExtras.documents || []);
           setSupplierCommissions(record.supplierExtras.commissions || []);
         }
+        setReferralNotes(record.referralExtras?.notes ?? "");
+        setReferralCurrency(record.referralExtras?.defaultCurrency ?? "EUR");
+        setReferralRatesByCat(referralRatesMapFromRecord(record));
+        setShowReferralInApp(record.showReferralInApp === true);
       } else if (mode === "create") {
         dobRef.current = undefined;
         // Reset passport fields in create mode
@@ -543,6 +626,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         country: record.country,
         supplierExtras: record.supplierExtras,
         subagentExtras: record.subagentExtras,
+        referralExtras: record.referralExtras,
         passportNumber: record.passportNumber,
         passportIssueDate: record.passportIssueDate,
         passportExpiryDate: record.passportExpiryDate,
@@ -556,6 +640,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         preferencesNotes: record.preferencesNotes,
         corporateAccounts: record.corporateAccounts,
         loyaltyCards: record.loyaltyCards,
+        showReferralInApp: record.showReferralInApp ?? false,
       };
     };
 
@@ -620,6 +705,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         return true;
       }
 
+      if (roles.includes("client")) {
+        if (showReferralInApp !== !!(initialValues.showReferralInApp ?? false)) {
+          return true;
+        }
+      }
+
       // Check supplier details
       const initialSupplier = initialValues.supplierExtras;
       if (roles.includes("supplier")) {
@@ -648,6 +739,28 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           return true;
         }
       } else if (initialSubagent) {
+        return true;
+      }
+
+      if (roles.includes("referral")) {
+        const currentExtras: ReferralExtras = {
+          notes: referralNotes.trim() || undefined,
+          defaultCurrency: referralCurrency,
+          categoryRates: Object.entries(referralRatesByCat)
+            .filter(([, v]) => Number.isFinite(v.value) && v.value !== 0)
+            .map(([categoryId, v]) => ({
+              categoryId,
+              rateKind: v.kind,
+              rateValue: v.value,
+            })),
+        };
+        if (
+          normalizeReferralExtrasForCompare(currentExtras) !==
+          normalizeReferralExtrasForCompare(initialValues.referralExtras)
+        ) {
+          return true;
+        }
+      } else if (initialValues.referralExtras) {
         return true;
       }
 
@@ -707,6 +820,24 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           }
 
           // Clear highlight after 1.2 seconds
+          setTimeout(() => setHighlightedSection(null), 1200);
+        }
+        if (role === "referral" && referralSectionRef.current) {
+          const rect = referralSectionRef.current.getBoundingClientRect();
+          const isVisible =
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+          setHighlightedSection("referral");
+          if (!isVisible) {
+            requestAnimationFrame(() => {
+              referralSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            });
+          }
           setTimeout(() => setHighlightedSection(null), 1200);
         }
       }
@@ -827,6 +958,24 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         };
       }
 
+      if (roles.includes("referral")) {
+        formData.referralExtras = {
+          notes: referralNotes.trim() || undefined,
+          defaultCurrency: referralCurrency,
+          categoryRates: Object.entries(referralRatesByCat)
+            .filter(([, v]) => Number.isFinite(v.value) && v.value !== 0)
+            .map(([categoryId, v]) => ({
+              categoryId,
+              rateKind: v.kind,
+              rateValue: v.value,
+            })),
+        };
+      }
+
+      if (roles.includes("client")) {
+        formData.showReferralInApp = showReferralInApp;
+      }
+
       // Corporate accounts / Loyalty cards / Bank accounts
       if (displayType === "company") {
         formData.corporateAccounts = isSupplier
@@ -836,7 +985,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       if (displayType === "person") {
         formData.loyaltyCards = loyaltyCards.filter(c => c.providerName.trim() && c.cardCode.trim());
       }
-      if (isClient || isSupplier || isSubagent) {
+      if (isClient || isSupplier || isSubagent || roles.includes("referral")) {
         formData.bankAccounts = bankAccounts.filter((a) => (a.bankName || "").trim() || (a.iban || "").trim());
       }
 
@@ -856,6 +1005,43 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const isSupplier = roles.includes("supplier");
     const isSubagent = roles.includes("subagent");
     const isClient = roles.includes("client");
+    const isReferral = roles.includes("referral");
+
+    const submitReferralSettlement = React.useCallback(async () => {
+      if (mode !== "edit" || !record?.id) return;
+      const amt = parseFloat(referralSettlementAmount.replace(",", "."));
+      if (!Number.isFinite(amt) || amt <= 0) return;
+      setReferralSettlementSubmitting(true);
+      try {
+        const res = await fetchWithAuth(`/api/directory/${record.id}/referral-settlements`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: amt,
+            currency: referralCurrency,
+            note: referralSettlementNote.trim() || undefined,
+          }),
+        });
+        if (res.ok) {
+          setReferralSettlementAmount("");
+          setReferralSettlementNote("");
+          const [sRes, lRes] = await Promise.all([
+            fetchWithAuth(`/api/directory/${record.id}/referral-stats`),
+            fetchWithAuth(`/api/directory/${record.id}/referral-settlements?limit=50`),
+          ]);
+          if (sRes.ok) {
+            const j = await sRes.json();
+            setReferralStats(j.data ?? null);
+          }
+          if (lRes.ok) {
+            const j = await lRes.json();
+            setReferralSettlements(Array.isArray(j.data) ? j.data : []);
+          }
+        }
+      } finally {
+        setReferralSettlementSubmitting(false);
+      }
+    }, [mode, record?.id, referralCurrency, referralSettlementAmount, referralSettlementNote]);
     
     // Helper function to get input classes based on field state - Modern 2025 styling
     const getInputClasses = (fieldName: string, isRequired: boolean = false, value: string | number | undefined = ""): string => {
@@ -1028,7 +1214,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       </div>
                     )}
                     <div className="flex gap-2.5 items-center flex-wrap">
-                      {(["client", "supplier", "subagent"] as DirectoryRole[]).map((role) => (
+                      {(["client", "supplier", "subagent", "referral"] as DirectoryRole[]).map((role) => (
                         <label 
                           key={role} 
                           className="flex cursor-pointer items-center space-x-1.5 group/checkbox shrink-0"
@@ -1046,6 +1232,27 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         </label>
                       ))}
                     </div>
+                    {roles.includes("client") && (
+                      <div className="mt-2 space-y-1 max-w-lg">
+                        <label className="flex cursor-pointer items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={showReferralInApp}
+                            onChange={(e) => {
+                              setShowReferralInApp(e.target.checked);
+                              markFieldDirty("showReferralInApp");
+                            }}
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-gray-300 text-black focus:ring-2 focus:ring-black focus:ring-offset-1 focus:ring-offset-white cursor-pointer"
+                          />
+                          <span className="text-xs font-medium text-gray-800 leading-snug">
+                            Show referral section in client app
+                            <span className="block font-normal text-gray-500 mt-0.5">
+                              Mobile app users see commission overview when this is on and the contact has the Referral role with rates.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : null}
@@ -1539,7 +1746,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               )}
 
               {/* Bank details - Supplier, Subagent, Client (multiple accounts) */}
-              {(isClient || isSupplier || isSubagent) && (
+              {(isClient || isSupplier || isSubagent || isReferral) && (
                 <div className="md:col-span-2 mt-2 pt-3 border-t border-gray-200">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-800">Bank details</h3>
@@ -2464,6 +2671,232 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                       />
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {isReferral && (
+                <div className="md:col-span-2 mt-6 pt-6 border-t border-gray-200">
+                  <div
+                    id="referral-settings"
+                    ref={referralSectionRef}
+                    className={`rounded-lg bg-gray-50/80 p-4 border border-gray-100 transition-shadow ${
+                      highlightedSection === "referral" ? "ring-2 ring-blue-400 ring-offset-2" : ""
+                    }`}
+                  >
+                    <h2 className="mb-2 text-lg font-semibold text-gray-900">Referral — commission & settlements</h2>
+                    <p className="mb-4 text-sm text-gray-600">
+                      Set commission per travel service category (% of client price or fixed amount per service line).
+                      Accrued totals appear after trips end and calculation is confirmed on the order. Order linking and
+                      accrual sync are configured separately.
+                    </p>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-4">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Default currency</label>
+                        <select
+                          value={referralCurrency}
+                          onChange={(e) => {
+                            setReferralCurrency(e.target.value);
+                            markFieldDirty("referralCurrency");
+                          }}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          aria-label="Referral default currency"
+                        >
+                          <option value="EUR">EUR</option>
+                          <option value="USD">USD</option>
+                          <option value="GBP">GBP</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Internal notes</label>
+                        <textarea
+                          value={referralNotes}
+                          onChange={(e) => {
+                            setReferralNotes(e.target.value);
+                            markFieldDirty("referralNotes");
+                          }}
+                          rows={2}
+                          placeholder="Agreement, contact for payouts…"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Rates by category</h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {availableCategories.length === 0 ? (
+                        <p className="text-sm text-gray-500">Loading categories…</p>
+                      ) : (
+                        availableCategories.map((cat) => {
+                          const row = referralRatesByCat[cat.id];
+                          return (
+                            <div key={cat.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-sm">
+                              <div className="sm:col-span-4 font-medium text-gray-800 truncate" title={cat.name}>
+                                {cat.name}
+                              </div>
+                              <div className="sm:col-span-3">
+                                <select
+                                  value={row?.kind ?? "percent"}
+                                  onChange={(e) => {
+                                    const kind = e.target.value as ReferralRateKind;
+                                    setReferralRatesByCat((prev) => ({
+                                      ...prev,
+                                      [cat.id]: { kind, value: prev[cat.id]?.value ?? 0 },
+                                    }));
+                                    markFieldDirty("referralRates");
+                                  }}
+                                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                                  aria-label={`Rate type for ${cat.name}`}
+                                >
+                                  <option value="percent">Percent</option>
+                                  <option value="fixed">Fixed</option>
+                                </select>
+                              </div>
+                              <div className="sm:col-span-5">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={row?.value === undefined || row?.value === 0 ? "" : row.value}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const num = raw === "" ? 0 : parseFloat(raw);
+                                    setReferralRatesByCat((prev) => ({
+                                      ...prev,
+                                      [cat.id]: {
+                                        kind: prev[cat.id]?.kind ?? "percent",
+                                        value: Number.isFinite(num) ? num : 0,
+                                      },
+                                    }));
+                                    markFieldDirty("referralRates");
+                                  }}
+                                  placeholder={row?.kind === "fixed" ? "Amount" : "%"}
+                                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                                  aria-label={`Rate value for ${cat.name}`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {mode === "edit" && record?.id && (
+                      <div className="mt-6 pt-4 border-t border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-800 mb-3">Balances (no per-order detail)</h3>
+                        {referralStats ? (
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-3">
+                              <p className="text-xs font-semibold text-amber-900">Planned</p>
+                              <p className="text-xs text-amber-800/80">Not yet moved to accrued</p>
+                              <ul className="mt-2 space-y-0.5 text-sm text-gray-900">
+                                {Object.keys(referralStats.plannedByCurrency).length === 0 ? (
+                                  <li className="text-gray-500">—</li>
+                                ) : (
+                                  Object.entries(referralStats.plannedByCurrency).map(([c, v]) => (
+                                    <li key={`p-${c}`}>
+                                      {v.toFixed(2)} {c}
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                            </div>
+                            <div className="rounded-lg border border-green-100 bg-green-50/50 p-3">
+                              <p className="text-xs font-semibold text-green-900">Accumulated</p>
+                              <p className="text-xs text-green-800/80">Accrued after trip + confirmed</p>
+                              <ul className="mt-2 space-y-0.5 text-sm text-gray-900">
+                                {Object.keys(referralStats.accruedByCurrency).length === 0 ? (
+                                  <li className="text-gray-500">—</li>
+                                ) : (
+                                  Object.entries(referralStats.accruedByCurrency).map(([c, v]) => (
+                                    <li key={`a-${c}`}>
+                                      {v.toFixed(2)} {c}
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                            </div>
+                            <div className="rounded-lg border border-gray-200 bg-white p-3 md:col-span-2">
+                              <p className="text-xs font-semibold text-gray-800">Settled / paid out</p>
+                              <ul className="mt-1 space-y-0.5 text-sm">
+                                {Object.keys(referralStats.settledByCurrency).length === 0 ? (
+                                  <li className="text-gray-500">—</li>
+                                ) : (
+                                  Object.entries(referralStats.settledByCurrency).map(([c, v]) => (
+                                    <li key={`s-${c}`}>
+                                      {v.toFixed(2)} {c}
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                              <p className="mt-2 text-xs font-semibold text-gray-800">Available (accrued − settled)</p>
+                              <ul className="mt-1 space-y-0.5 text-sm">
+                                {Object.keys(referralStats.availableByCurrency).length === 0 ? (
+                                  <li className="text-gray-500">—</li>
+                                ) : (
+                                  Object.entries(referralStats.availableByCurrency).map(([c, v]) => (
+                                    <li key={`av-${c}`}>
+                                      {v.toFixed(2)} {c}
+                                    </li>
+                                  ))
+                                )}
+                              </ul>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No balance data yet.</p>
+                        )}
+
+                        <h3 className="text-sm font-semibold text-gray-800 mt-6 mb-2">Settlement entries</h3>
+                        <div className="max-h-40 overflow-y-auto rounded border border-gray-200 bg-white text-sm">
+                          {referralSettlements.length === 0 ? (
+                            <p className="p-3 text-gray-500">No settlements recorded.</p>
+                          ) : (
+                            <ul className="divide-y divide-gray-100">
+                              {referralSettlements.map((s) => (
+                                <li key={s.id} className="px-3 py-2 flex flex-wrap justify-between gap-2">
+                                  <span className="text-gray-700">
+                                    {formatDateDDMMYYYY(s.entry_date)} — {s.amount.toFixed(2)} {s.currency}
+                                  </span>
+                                  {s.note ? <span className="text-gray-500 text-xs">{s.note}</span> : null}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                          <div className="sm:col-span-1">
+                            <label className="mb-1 block text-xs font-medium text-gray-700">Amount</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={referralSettlementAmount}
+                              onChange={(e) => setReferralSettlementAmount(e.target.value)}
+                              className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-gray-700">Note (optional)</label>
+                            <input
+                              type="text"
+                              value={referralSettlementNote}
+                              onChange={(e) => setReferralSettlementNote(e.target.value)}
+                              className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                              placeholder="Bank transfer, offset, …"
+                            />
+                          </div>
+                          <div className="sm:col-span-3">
+                            <button
+                              type="button"
+                              onClick={() => void submitReferralSettlement()}
+                              disabled={referralSettlementSubmitting}
+                              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 min-h-[44px]"
+                            >
+                              {referralSettlementSubmitting ? "Saving…" : "Record settlement"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

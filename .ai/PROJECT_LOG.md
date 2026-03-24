@@ -5,6 +5,88 @@
 
 ---
 
+## [2026-03-24] CW — Influencer invite doc + referral-only app mode + invite script
+
+**Task:** `docs/CLIENT_APP_INFLUENCER_INVITE.md`; `EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY`; `scripts/generate-client-app-invite.ts`; deep link `mytravelconcierge://register`; register `invited_by` UUID guard.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+---
+
+## [2026-03-24] CW — Directory: show referral in client app + mobile Referral tab
+
+**Task:** `client_party.show_referral_in_app` from Directory checkbox; profile + `GET /api/client/v1/referral/overview`; Expo Referral tab and screen.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Migration `migrations/client_party_show_referral_in_app.sql`; `DirectoryRecord.showReferralInApp`; GET/PUT/create directory; DirectoryForm checkbox (client role).
+- Client API: profile field; `referral/overview` (403 if flag off).
+- Client app: `referralApi`, `ReferralScreen`, conditional tab + AppState refresh.
+
+**Next Step:** Apply migration in Supabase; QA: enable flag + Referral role + accruals, log in app.
+
+---
+
+## [2026-03-24] CW — Order referral block: i18n (en/ru/lv)
+
+**Task:** `t(lang, …)` for referral partner label, confirmation checkbox, planned hint.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `lib/i18n.ts` keys `order.referralPartner`, `order.referralCalculationConfirmed`, `order.referralPlannedHint`; `page.tsx` uses them.
+
+---
+
+## [2026-03-24] CW — Order: referral party UI + POST services sync accruals
+
+**Task:** Order header: referral `PartySelect`, “Referral calculation confirmed” checkbox; `POST /api/orders/.../services` calls `syncOrderReferralAccruals` after creates/cancellations.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `app/api/orders/[orderCode]/services/route.ts` — `fireReferralSync` on main insert, minimal insert, cancellation clone paths.
+- `app/orders/[orderCode]/page.tsx` — `OrderData` referral fields; PATCH handlers; UI (hidden for subagent).
+
+**Next Step:** QA on order with migration applied; verify `referral_accrual_line` after service edits.
+
+---
+
+## [2026-03-24] CW — Referral role: API + DirectoryForm + stats/settlements routes
+
+**Task:** Wire `referral` DirectoryRole; persist `referral_party` + category rates; UI section; GET referral-stats / referral-settlements + POST settlement.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Types `ReferralExtras`, `ReferralCategoryRate`; `GET/PUT` directory `[id]`, list `GET /api/directory`, `create`.
+- `referral-stats`, `referral-settlements` API; DirectoryForm: checkbox, rates table, balances, record settlement.
+- Search popover + store role `referral`; directory page badge color.
+
+**Next Step:** Apply SQL migration if not yet; orders: `referral_party_id` + confirm flag + job to build `referral_accrual_line`.
+
+---
+
+## [2026-03-24] CW — Referral role: spec + DB migration (phase 1)
+
+**Task:** Referral directory role, commission by service category, planned/accrued blocks, settlements, order confirmation flag.
+**Status:** SUCCESS (schema + spec only; UI/API next)
+**Agent:** Code Writer
+**Complexity:** 🔴
+
+**Действия:**
+- `.ai/tasks/referral-role-commission-settlements.md` — product rules, phases, formulas.
+- `migrations/add_referral_party_commission.sql` — `referral_party`, category rates, accrual lines, settlements, `orders` columns, RLS.
+
+**Next Step:** Apply SQL in Supabase; then API + DirectoryForm + order checkbox + sync job.
+
+---
+
 ## [2026-03-24 16:30] CW — Order detail: DirectoryClientPopup on client clicks
 
 **Task:** Order page — click clients (lead passenger, services table, traveller avatars) opens draggable `DirectoryClientPopup`; Ctrl/Cmd+click still navigates to `/directory/[id]`; double-click lead name still edits client.

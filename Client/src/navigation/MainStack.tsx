@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { bookingsApi } from '../api/bookings'
 import { TouchableOpacity, View, Text, StyleSheet, AppState } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -13,7 +14,9 @@ import { TripDetailScreen } from '../screens/trips/TripDetailScreen'
 import { ConciergeScreen } from '../screens/concierge/ConciergeScreen'
 import { DocumentsScreen } from '../screens/documents/DocumentsScreen'
 import { ProfileScreen } from '../screens/profile/ProfileScreen'
+import { ReferralScreen } from '../screens/referral/ReferralScreen'
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen'
+import { useAuthStore } from '../store/authStore'
 
 export type HomeStackParamList = {
   HomeList: undefined
@@ -26,6 +29,7 @@ export type MainTabParamList = {
   Concierge: undefined
   Documents: undefined
   Profile: undefined
+  ReferralTab: undefined
 }
 
 export type TripsStackParamList = {
@@ -36,6 +40,24 @@ export type TripsStackParamList = {
 export type RootStackParamList = {
   Tabs: undefined
   Notifications: undefined
+  ReferralOnly: undefined
+}
+
+const REFERRAL_ONLY =
+  process.env.EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY === '1' ||
+  process.env.EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY === 'true'
+
+function SignOutHeaderButton() {
+  const logout = useAuthStore((s) => s.logout)
+  return (
+    <TouchableOpacity
+      onPress={() => logout()}
+      style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+    >
+      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Sign out</Text>
+    </TouchableOpacity>
+  )
 }
 
 const Tab = createBottomTabNavigator<MainTabParamList>()
@@ -135,6 +157,25 @@ function TripsNavigator() {
 
 function TabNavigator() {
   const bellRight = () => ({ headerRight: () => <BellButton /> })
+  const [showReferralTab, setShowReferralTab] = useState(false)
+
+  const refreshReferralTab = useCallback(() => {
+    bookingsApi
+      .getProfile()
+      .then((p) => setShowReferralTab(!!p.showReferralInApp))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    refreshReferralTab()
+  }, [refreshReferralTab])
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') refreshReferralTab()
+    })
+    return () => sub.remove()
+  }, [refreshReferralTab])
 
   return (
     <Tab.Navigator
@@ -176,6 +217,17 @@ function TabNavigator() {
         headerShown: true,
         tabBarIcon: ({ color, size }) => <Feather name="message-circle" size={size} color={color} />,
       }} />
+      {showReferralTab ? (
+        <Tab.Screen
+          name="ReferralTab"
+          component={ReferralScreen}
+          options={{
+            title: 'Referral',
+            headerShown: true,
+            tabBarIcon: ({ color, size }) => <Feather name="percent" size={size} color={color} />,
+          }}
+        />
+      ) : null}
       <Tab.Screen name="Documents" component={DocumentsScreen} options={{
         title: 'Documents',
         headerShown: true,
@@ -187,6 +239,21 @@ function TabNavigator() {
 }
 
 export function MainStack() {
+  if (REFERRAL_ONLY) {
+    return (
+      <RootStack.Navigator screenOptions={{ headerShown: true, ...stackHeaderStyle }}>
+        <RootStack.Screen
+          name="ReferralOnly"
+          component={ReferralScreen}
+          options={{
+            title: 'Referral',
+            headerRight: () => <SignOutHeaderButton />,
+          }}
+        />
+      </RootStack.Navigator>
+    )
+  }
+
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       <RootStack.Screen name="Tabs" component={TabNavigator} />

@@ -12,6 +12,10 @@ import {
 } from 'react-native'
 import { useAuthStore } from '../../store/authStore'
 
+const REFERRAL_ONLY =
+  process.env.EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY === '1' ||
+  process.env.EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY === 'true'
+
 export function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -50,7 +54,9 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.logo}>✈ MyTravelConcierge</Text>
-          <Text style={styles.subtitle}>Your personal travel concierge</Text>
+          <Text style={styles.subtitle}>
+            {REFERRAL_ONLY ? 'Referral partner access' : 'Your personal travel concierge'}
+          </Text>
         </View>
 
         <View style={styles.form}>

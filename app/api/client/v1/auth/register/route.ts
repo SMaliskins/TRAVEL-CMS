@@ -8,6 +8,17 @@ import {
   hashToken,
 } from '@/lib/client-auth/jwt'
 
+function uuidOrNull(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const s = v.trim()
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+  ) {
+    return null
+  }
+  return s
+}
+
 function validateBody(body: unknown): { invitationToken: string; password: string } | null {
   if (typeof body !== 'object' || body === null) return null
   const b = body as Record<string, unknown>
@@ -65,7 +76,7 @@ export async function POST(req: NextRequest) {
         crm_client_id: invitation.crmClientId,
         password_hash: passwordHash,
         refresh_token_hash: initialRefreshTokenHash,
-        invited_by_agent_id: invitation.agentId || null,
+        invited_by_agent_id: uuidOrNull(invitation.agentId),
       })
       .select('id, crm_client_id')
       .single()

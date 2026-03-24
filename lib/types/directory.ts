@@ -1,6 +1,20 @@
 export type DirectoryType = "person" | "company";
-export type DirectoryRole = "client" | "supplier" | "subagent";
+export type DirectoryRole = "client" | "supplier" | "subagent" | "referral";
 export type SubagentCommissionType = "percentage" | "fixed";
+export type ReferralRateKind = "percent" | "fixed";
+
+export interface ReferralCategoryRate {
+  categoryId: string;
+  rateKind: ReferralRateKind;
+  rateValue: number;
+}
+
+/** Passive commission partner (referral / influencer) */
+export interface ReferralExtras {
+  defaultCurrency?: string;
+  notes?: string;
+  categoryRates?: ReferralCategoryRate[];
+}
 
 export interface SupplierCommission {
   name: string;
@@ -136,6 +150,9 @@ export interface DirectoryRecord {
   // Subagent-specific
   subagentExtras?: SubagentDetails;
 
+  // Referral-specific (commission by service category)
+  referralExtras?: ReferralExtras;
+
   // Corporate accounts (Company) / Loyalty cards (Person)
   corporateAccounts?: CorporateAccount[];
   loyaltyCards?: LoyaltyCard[];
@@ -145,4 +162,7 @@ export interface DirectoryRecord {
   updatedById?: string;
   createdByDisplayName?: string;
   updatedByDisplayName?: string;
+
+  /** Client role: show Referral section in mobile client app */
+  showReferralInApp?: boolean;
 }

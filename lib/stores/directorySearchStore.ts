@@ -6,7 +6,7 @@ export interface DirectorySearchState {
   phone: string;
   email: string;
   dob: string;
-  role: "all" | "client" | "supplier" | "subagent";
+  role: "all" | "client" | "supplier" | "subagent" | "referral";
   type: "all" | "person" | "company";
   isActive: "all" | "active" | "inactive";
 }

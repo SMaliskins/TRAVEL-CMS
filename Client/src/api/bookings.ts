@@ -109,5 +109,6 @@ export const bookingsApi = {
     phone: string | null
     avatarUrl: string | null
     referralCode: string
+    showReferralInApp?: boolean
   }> => apiClient.get('/profile').then((r) => r.data.data),
 }

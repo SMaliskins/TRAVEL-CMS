@@ -328,9 +328,10 @@ export async function POST(request: NextRequest) {
       
       // Determine client_type from party_type
       const clientType = partyCheck.party_type === "company" ? "company" : "person";
-      const { error: clientError } = await supabaseAdmin.from("client_party").insert({ 
+      const { error: clientError } = await supabaseAdmin.from("client_party").insert({
         party_id: partyId,
-        client_type: clientType 
+        client_type: clientType,
+        show_referral_in_app: data.showReferralInApp === true,
       });
       if (clientError) {
         console.error("Error creating client_party:", {
@@ -436,6 +437,50 @@ export async function POST(request: NextRequest) {
           { error: "Failed to create subagent record", details: subagentError.message },
           { status: 500 }
         );
+      }
+    }
+
+    if (data.roles.includes("referral")) {
+      const ref = data.referralExtras || {};
+      const { error: referralError } = await supabaseAdmin.from("referral_party").insert({
+        party_id: partyId,
+        company_id: companyId,
+        is_active: true,
+        default_currency: (ref.defaultCurrency || "EUR").trim() || "EUR",
+        notes: ref.notes?.trim() || null,
+      });
+      if (referralError) {
+        console.error("Error inserting referral_party:", referralError);
+        await supabaseAdmin.from("party").delete().eq("id", partyId);
+        return NextResponse.json(
+          { error: "Failed to create referral record", details: referralError.message },
+          { status: 500 }
+        );
+      }
+      const rates = (ref.categoryRates || []).filter(
+        (r) =>
+          r.categoryId &&
+          typeof r.rateValue === "number" &&
+          !Number.isNaN(r.rateValue) &&
+          (r.rateKind === "percent" || r.rateKind === "fixed")
+      );
+      if (rates.length > 0) {
+        const rows = rates.map((r) => ({
+          party_id: partyId,
+          company_id: companyId,
+          category_id: r.categoryId,
+          rate_kind: r.rateKind,
+          rate_value: r.rateValue,
+        }));
+        const { error: ratesError } = await supabaseAdmin.from("referral_party_category_rate").insert(rows);
+        if (ratesError) {
+          console.error("Error inserting referral_party_category_rate:", ratesError);
+          await supabaseAdmin.from("party").delete().eq("id", partyId);
+          return NextResponse.json(
+            { error: "Failed to save referral category rates", details: ratesError.message },
+            { status: 500 }
+          );
+        }
       }
     }
 

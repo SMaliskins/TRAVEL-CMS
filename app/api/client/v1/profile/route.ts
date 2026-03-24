@@ -24,6 +24,12 @@ export async function GET(req: NextRequest) {
       .eq('id', profile.crm_client_id)
       .single()
 
+    const { data: clientPartyRow } = await supabaseAdmin
+      .from('client_party')
+      .select('show_referral_in_app')
+      .eq('party_id', profile.crm_client_id)
+      .maybeSingle()
+
     return Response.json({
       data: {
         id: profile.id,
@@ -35,6 +41,7 @@ export async function GET(req: NextRequest) {
         invitedByAgentId: profile.invited_by_agent_id,
         createdAt: profile.created_at,
         lastLoginAt: profile.last_login_at,
+        showReferralInApp: clientPartyRow?.show_referral_in_app === true,
       },
       error: null,
     })

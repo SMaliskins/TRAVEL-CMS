@@ -32,6 +32,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
   if (row.is_client) roles.push("client");
   if (row.is_supplier) roles.push("supplier");
   if (row.is_subagent) roles.push("subagent");
+  if (row.is_referral) roles.push("referral");
 
   const pt = String(row.party_type ?? "").toLowerCase();
   const isCompanyParty = pt === "company";
@@ -164,6 +165,23 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.subagentExtras = {
       commissionType: row.commission_scheme === "revenue" ? "percentage" : row.commission_scheme === "profit" ? "fixed" : undefined,
     };
+  }
+
+  if (row.is_referral) {
+    const rates = Array.isArray(row.referral_category_rates) ? row.referral_category_rates : [];
+    record.referralExtras = {
+      defaultCurrency: row.referral_default_currency || "EUR",
+      notes: row.referral_notes || undefined,
+      categoryRates: rates.map((r: { category_id: string; rate_kind: string; rate_value: number | string }) => ({
+        categoryId: r.category_id,
+        rateKind: r.rate_kind === "fixed" ? "fixed" : "percent",
+        rateValue: Number(r.rate_value),
+      })),
+    };
+  }
+
+  if (row.is_client) {
+    record.showReferralInApp = !!row.show_referral_in_app;
   }
 
   return record;
@@ -351,7 +369,7 @@ export async function GET(
     }
 
     // Fetch related data in parallel
-    const [personData, companyData, clientData, supplierData, subagentData] = await Promise.all([
+    const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData] = await Promise.all([
       supabaseAdmin
         .from("party_person")
         .select("*")
@@ -364,7 +382,7 @@ export async function GET(
         .maybeSingle(),
       supabaseAdmin
         .from("client_party")
-        .select("party_id")
+        .select("party_id, show_referral_in_app")
         .eq("party_id", id)
         .maybeSingle(),
       supabaseAdmin
@@ -377,6 +395,15 @@ export async function GET(
         .select("*")
         .eq("party_id", id)
         .maybeSingle(),
+      supabaseAdmin
+        .from("referral_party")
+        .select("party_id, default_currency, notes")
+        .eq("party_id", id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("referral_party_category_rate")
+        .select("category_id, rate_kind, rate_value")
+        .eq("party_id", id),
     ]);
 
     // Log any errors but continue (maybeSingle allows null)
@@ -385,6 +412,8 @@ export async function GET(
     if (clientData.error) console.warn("[Directory GET] Error fetching client data:", clientData.error);
     if (supplierData.error) console.warn("[Directory GET] Error fetching supplier data:", supplierData.error);
     if (subagentData.error) console.warn("[Directory GET] Error fetching subagent data:", subagentData.error);
+    if (referralData.error) console.warn("[Directory GET] Error fetching referral_party:", referralData.error);
+    if (referralRatesData.error) console.warn("[Directory GET] Error fetching referral_party_category_rate:", referralRatesData.error);
 
     // Debug: Log fetched data
     console.log("[Directory GET] Fetched data for party:", id, {
@@ -402,8 +431,13 @@ export async function GET(
       ...personData.data,
       ...companyData.data,
       is_client: !!clientData.data,
+      show_referral_in_app: clientData.data?.show_referral_in_app,
       is_supplier: !!supplierData.data,
       is_subagent: !!subagentData.data,
+      is_referral: !!referralData.data,
+      referral_default_currency: referralData.data?.default_currency,
+      referral_notes: referralData.data?.notes,
+      referral_category_rates: referralRatesData.data || [],
       ...supplierData.data,
       ...subagentData.data,
       id: party.id,
@@ -885,10 +919,11 @@ export async function PUT(
       const clientType = partyTypeForClient === "company" ? "company" : "person";
 
       // Remove all existing roles
-      const [clientDeleteResult, partnerDeleteResult, subagentDeleteResult] = await Promise.all([
+      const [clientDeleteResult, partnerDeleteResult, subagentDeleteResult, referralDeleteResult] = await Promise.all([
         supabaseAdmin.from("client_party").delete().eq("party_id", id),
         supabaseAdmin.from("partner_party").delete().eq("party_id", id),
         supabaseAdmin.from("subagents").delete().eq("party_id", id),
+        supabaseAdmin.from("referral_party").delete().eq("party_id", id),
       ]);
 
       // Check for deletion errors
@@ -901,12 +936,16 @@ export async function PUT(
       if (subagentDeleteResult.error) {
         console.error("Error deleting subagents:", subagentDeleteResult.error);
       }
+      if (referralDeleteResult.error) {
+        console.error("Error deleting referral_party:", referralDeleteResult.error);
+      }
 
       // Add new roles
       if (updates.roles.includes("client")) {
-        const { error: clientError } = await supabaseAdmin.from("client_party").insert({ 
+        const { error: clientError } = await supabaseAdmin.from("client_party").insert({
           party_id: id,
-          client_type: clientType 
+          client_type: clientType,
+          show_referral_in_app: updates.showReferralInApp === true,
         });
         if (clientError) {
           console.error("Error inserting client_party:", {
@@ -964,6 +1003,61 @@ export async function PUT(
           );
         }
       }
+      if (updates.roles.includes("referral")) {
+        const companyId = existingParty.company_id as string;
+        const ref = updates.referralExtras || {};
+        const { error: referralInsertError } = await supabaseAdmin.from("referral_party").insert({
+          party_id: id,
+          company_id: companyId,
+          is_active: true,
+          default_currency: (ref.defaultCurrency || "EUR").trim() || "EUR",
+          notes: ref.notes?.trim() || null,
+        });
+        if (referralInsertError) {
+          console.error("Error inserting referral_party:", referralInsertError);
+          return NextResponse.json(
+            { error: `Failed to save referral role: ${referralInsertError.message}` },
+            { status: 500 }
+          );
+        }
+        const rates = (ref.categoryRates || []).filter(
+          (r) =>
+            r.categoryId &&
+            typeof r.rateValue === "number" &&
+            !Number.isNaN(r.rateValue) &&
+            (r.rateKind === "percent" || r.rateKind === "fixed")
+        );
+        if (rates.length > 0) {
+          const rows = rates.map((r) => ({
+            party_id: id,
+            company_id: companyId,
+            category_id: r.categoryId,
+            rate_kind: r.rateKind,
+            rate_value: r.rateValue,
+          }));
+          const { error: ratesError } = await supabaseAdmin.from("referral_party_category_rate").insert(rows);
+          if (ratesError) {
+            console.error("Error inserting referral_party_category_rate:", ratesError);
+            return NextResponse.json(
+              { error: `Failed to save referral category rates: ${ratesError.message}` },
+              { status: 500 }
+            );
+          }
+        }
+      }
+    }
+
+    if (updates.showReferralInApp !== undefined) {
+      const { data: cp } = await supabaseAdmin.from("client_party").select("party_id").eq("party_id", id).maybeSingle();
+      if (cp) {
+        const { error: refAppErr } = await supabaseAdmin
+          .from("client_party")
+          .update({ show_referral_in_app: !!updates.showReferralInApp })
+          .eq("party_id", id);
+        if (refAppErr) {
+          console.error("[Directory PUT] client_party show_referral_in_app:", refAppErr);
+        }
+      }
     }
 
     // Fetch updated record
@@ -995,12 +1089,14 @@ export async function PUT(
     }
 
     // Rebuild record with updated data
-    const [personData, companyData, clientData, supplierData, subagentData] = await Promise.all([
+    const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData] = await Promise.all([
       supabaseAdmin.from("party_person").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("party_company").select("*").eq("party_id", id).maybeSingle(),
-      supabaseAdmin.from("client_party").select("party_id").eq("party_id", id).maybeSingle(),
+      supabaseAdmin.from("client_party").select("party_id, show_referral_in_app").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("partner_party").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("subagents").select("*").eq("party_id", id).maybeSingle(),
+      supabaseAdmin.from("referral_party").select("party_id, default_currency, notes").eq("party_id", id).maybeSingle(),
+      supabaseAdmin.from("referral_party_category_rate").select("category_id, rate_kind, rate_value").eq("party_id", id),
     ]);
 
     const record = buildDirectoryRecord({
@@ -1008,8 +1104,13 @@ export async function PUT(
       ...personData.data,
       ...companyData.data,
       is_client: !!clientData.data,
+      show_referral_in_app: clientData.data?.show_referral_in_app,
       is_supplier: !!supplierData.data,
       is_subagent: !!subagentData.data,
+      is_referral: !!referralData.data,
+      referral_default_currency: referralData.data?.default_currency,
+      referral_notes: referralData.data?.notes,
+      referral_category_rates: referralRatesData.data || [],
       ...supplierData.data,
       ...subagentData.data,
       id: updatedParty.id,
