@@ -1,4 +1,4 @@
--- Optional fixed referral commission per service line (currency of service). When set, overrides % / category rate.
+-- Deprecated split: use order_services_referral_columns.sql (includes this column).
 ALTER TABLE public.order_services
   ADD COLUMN IF NOT EXISTS referral_commission_fixed_amount numeric(14, 2) NULL;
 

@@ -1777,7 +1777,7 @@ export default function OrderPage({
                     />
                     <span>
                       {t(lang, "order.referralCalculationConfirmed")}
-                      {!tripEndedForReferral && order.referral_party_id && (
+                      {order.referral_party_id && (
                         <span className="block text-[10px] font-normal text-gray-500 mt-0.5">
                           {t(lang, "order.referralPlannedHint")}
                         </span>
@@ -1785,7 +1785,7 @@ export default function OrderPage({
                     </span>
                   </label>
                   <OrderReferralServicesPanel
-                    orderCode={orderCode}
+                    orderCode={effectiveOrderCode}
                     referralPartyId={order.referral_party_id ?? null}
                     lang={lang}
                   />

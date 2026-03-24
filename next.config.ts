@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
+import bundleAnalyzer from "@next/bundle-analyzer";
 import packageJson from "./package.json";
 import { execSync } from "node:child_process";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
 
 const appVersion = packageJson.version;
 const gitCommitSha =
@@ -17,7 +22,12 @@ const gitCommitSha =
 const nextConfig: NextConfig = {
   serverExternalPackages: ["unpdf", "@nwpr/airport-codes"],
   experimental: {
-    optimizePackageImports: ["lucide-react", "recharts"],
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "@tiptap/react",
+      "@tiptap/starter-kit",
+    ],
   },
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
@@ -42,4 +52,4 @@ console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL ? 
 console.log("NEXT_PUBLIC_SUPABASE_ANON_KEY:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "SET" : "NOT SET");
 console.log("==================");
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

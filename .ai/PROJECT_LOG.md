@@ -5,6 +5,82 @@
 
 ---
 
+## [2026-03-24] CW — Bundle: analyzer script, lazy ProfitOrdersChart, tiptap optimize
+
+**Task:** Wire `@next/bundle-analyzer`, lazy-load dashboard profit chart, extend `optimizePackageImports` for TipTap.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `next.config.ts`, `package.json` script `analyze`, `app/dashboard/page.tsx` dynamic chart.
+
+**Next Step:** Run `npm run analyze` locally; review treemap; revert tiptap optimize if any runtime issue.
+
+---
+
+## [2026-03-24] CW — Referral panel: % editable with fixed; Est pct-first
+
+**Task:** Allow editing % when fixed is set; Est follows % when % is entered; keep PATCH mutual clear on save.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderReferralServicesPanel` estimatedReferralAmount order; removed read-only %; i18n Est hint.
+
+---
+
+## [2026-03-24] CW — Referral: copy for confirm checkbox + directory Active label
+
+**Task:** Clarify referral confirmation = allocation in app, not payout; planned → active after client trip end; show hint whenever partner set.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `lib/i18n.ts` en/ru/lv; `page.tsx` referral hint visibility; directory accrued → “Active” labels.
+
+**Next Step:** QA copy in EN/RU/LV on Referral tab + directory popup.
+
+---
+
+## [2026-03-24] CW — Referral panel: fixed vs % exclusive + implied %
+
+**Task:** When user sets fixed €, clear stored % and show equivalent % vs profit (ex VAT); setting % clears fixed.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderReferralServicesPanel.tsx` PATCH body; readonly % when fixed set; i18n `order.referralColPctImpliedHint`.
+
+**Next Step:** QA: 15% → €8 fixed → % shows ~5.71; clear fixed → edit % again.
+
+---
+
+## [2026-03-24] CW — DB: combined migration order_services_referral_columns.sql
+
+**Task:** Clarify referral commission persistence — columns must exist on `order_services`; single idempotent SQL for Supabase.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `migrations/order_services_referral_columns.sql`; split files marked deprecated; COMMENT for % aligned with profit-net base.
+
+**Next Step:** Apply `order_services_referral_columns.sql` in Supabase if PATCH still fails.
+
+---
+
+## [2026-03-24] CW — Referral tab: save fix + estimated commission column
+
+**Task:** Referral services panel — PATCH used stale `orderCode` vs `effectiveOrderCode`; silent failures; user wanted € preview for % of profit (ex VAT).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `page.tsx` pass `effectiveOrderCode`; `OrderReferralServicesPanel` — toast on load/PATCH errors, column Est. (`profitNet × % / 100` or fixed); i18n en/ru/lv.
+
+**Next Step:** QA: type %, see Est.; if toast mentions migrations, apply SQL in Supabase.
+
+---
+
 ## [2026-03-24] CW — Referral: orders list badge, i18n, directory popup orders
 
 **Task:** Finish referral UX: REF badge + profit tooltip on orders list; en/ru/lv for referral services panel + directory referral section; `DirectoryClientPopup` loads `GET .../referral-orders` for referral role; TS fix in `OrderReferralServicesPanel` mapService.

@@ -67,12 +67,12 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.referralOrdersLoading": "Loading orders…",
     "directory.referralOrdersEmpty": "No orders linked to this referral yet.",
     "directory.referralStatusPlanned": "Planned",
-    "directory.referralStatusAccrued": "Accumulated",
+    "directory.referralStatusAccrued": "Active",
     "directory.referralPlannedLabel": "Planned",
-    "directory.referralAccruedLabel": "Accumulated",
+    "directory.referralAccruedLabel": "Active",
     "directory.referralTripEnd": "Trip ends",
     "directory.referralBecomesAccruedHint":
-      "Planned commission becomes accumulated after the trip end date and when referral calculation is confirmed on the order.",
+      "Planned amounts move to active on the partner’s balance after the client’s trip end date and once commission is confirmed on the order. This is not a payout.",
     "sidebar.expanded": "Expanded",
     "sidebar.collapsed": "Collapsed",
     "sidebar.expandOnHover": "Expand on hover",
@@ -358,9 +358,9 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.daysBeforeTrip": "days before trip",
     "order.routeAndDates": "Route & Dates",
     "order.referralPartner": "Referral partner",
-    "order.referralCalculationConfirmed": "Referral calculation confirmed",
+    "order.referralCalculationConfirmed": "Referral commission confirmed for partner",
     "order.referralPlannedHint":
-      "Lines stay planned until the trip end date on the order and this confirmation.",
+      "This only confirms you have finished allocating commission and the amounts are visible to the referral in the app — it is not payout authorization. Lines stay planned until the client’s trip end date; then they become active (accumulated) on the partner’s balance.",
     "order.referralTabIntro":
       "Use the table on this tab: Ref includes a service in commission; % is taken from profit after VAT on that line, or set a fixed amount (fixed overrides %). Cancelled lines with an invoice can be included. Empty % uses the partner’s category rate. The orders list shows profit after total referral commission.",
     "order.referralServicesNeedPartner": "Assign a referral partner on this order to manage commission lines here.",
@@ -373,6 +373,11 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.referralColVat": "VAT on margin",
     "order.referralColPctShort": "%",
     "order.referralColPctHint": "Percent of profit after VAT on this line. Leave empty to use the category rate.",
+    "order.referralColPctImpliedHint":
+      "Equivalent % for this fixed amount vs profit (ex VAT). Clear Fixed to type a rate manually.",
+    "order.referralColEstShort": "Est.",
+    "order.referralColEstHint":
+      "Live estimate: percent × profit (ex VAT) when % is filled; otherwise fixed. You can type % while fixed is shown — Est updates; saving one field clears the other in the database.",
     "order.referralColFixedShort": "Fixed",
     "order.referralColFixedHint": "Fixed commission for this line. Overrides percent when set.",
     "order.referralServicesFootnote": "Saving updates planned referral accrual lines.",
@@ -433,12 +438,12 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.referralOrdersLoading": "Загрузка заявок…",
     "directory.referralOrdersEmpty": "Пока нет заявок с этим рефералом.",
     "directory.referralStatusPlanned": "План",
-    "directory.referralStatusAccrued": "Накоплено",
+    "directory.referralStatusAccrued": "Активные",
     "directory.referralPlannedLabel": "План",
-    "directory.referralAccruedLabel": "Накоплено",
+    "directory.referralAccruedLabel": "Активные",
     "directory.referralTripEnd": "Окончание поездки",
     "directory.referralBecomesAccruedHint":
-      "Плановая комиссия переходит в «накоплено» после даты окончания поездки и подтверждения расчёта реферала в заявке.",
+      "Плановые суммы переходят в активные на балансе партнёра после даты окончания поездки клиента и подтверждения комиссии в заявке. Это не выплата.",
     "sidebar.expanded": "Развёрнуто",
     "sidebar.collapsed": "Свёрнуто",
     "sidebar.expandOnHover": "Разворачивать при наведении",
@@ -717,9 +722,9 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.daysBeforeTrip": "дней до поездки",
     "order.routeAndDates": "Маршрут и даты",
     "order.referralPartner": "Реферальный партнёр",
-    "order.referralCalculationConfirmed": "Расчёт комиссии подтверждён",
+    "order.referralCalculationConfirmed": "Комиссия рефералу подтверждена",
     "order.referralPlannedHint":
-      "Строки остаются в статусе «план» до даты окончания поездки по заявке и этого подтверждения.",
+      "Это лишь подтверждение, что вы закончили начисление и суммы видны рефералу в системе — не поручение на выплату. До даты окончания поездки клиента строки остаются в плане; после этого они становятся активными (накопленными) на балансе партнёра.",
     "order.referralTabIntro":
       "Таблица на этой вкладке: «Реф» включает услугу в комиссию; «%» от прибыли после НДС по строке или фиксированная сумма (фикс перекрывает %). Отменённые со счётом можно включить. Пустой % — ставка партнёра по категории. В списке заявок прибыль уже за вычетом комиссии реферала.",
     "order.referralServicesNeedPartner": "Назначьте реферального партнёра в заявке, чтобы настроить строки комиссии здесь.",
@@ -732,6 +737,11 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.referralColVat": "НДС с маржи",
     "order.referralColPctShort": "%",
     "order.referralColPctHint": "Процент от прибыли после НДС по строке. Пусто — ставка категории.",
+    "order.referralColPctImpliedHint":
+      "Эквивалентный % для фиксированной суммы к прибыли без НДС. Очистите Фикс, чтобы ввести % вручную.",
+    "order.referralColEstShort": "Оценка",
+    "order.referralColEstHint":
+      "Оценка: процент × прибыль без НДС, если заполнен %; иначе фикс. Можно вводить % при отображаемом фиксе — Est пересчитается; при сохранении одно поле в БД сбрасывает другое.",
     "order.referralColFixedShort": "Фикс",
     "order.referralColFixedHint": "Фиксированная комиссия по строке. Заданное значение перекрывает процент.",
     "order.referralServicesFootnote": "После сохранения обновляются плановые строки начисления реферала.",
@@ -792,12 +802,12 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.referralOrdersLoading": "Ielādē pieteikumus…",
     "directory.referralOrdersEmpty": "Vēl nav pieteikumu ar šo ieteikuma partneri.",
     "directory.referralStatusPlanned": "Plānots",
-    "directory.referralStatusAccrued": "Uzkrāts",
+    "directory.referralStatusAccrued": "Aktīvs",
     "directory.referralPlannedLabel": "Plānots",
-    "directory.referralAccruedLabel": "Uzkrāts",
+    "directory.referralAccruedLabel": "Aktīvs",
     "directory.referralTripEnd": "Ceļojuma beigas",
     "directory.referralBecomesAccruedHint":
-      "Plānotā komisija kļūst par uzkrāto pēc ceļojuma beigu datuma un kad pieteikumā apstiprināts ieteikuma aprēķins.",
+      "Plānotās summas kļūst aktīvas partnera bilancē pēc klienta ceļojuma beigu datuma un kad pieteikumā apstiprināta komisija. Tas nav izmaksa.",
     "sidebar.expanded": "Izvērsts",
     "sidebar.collapsed": "Sakļauts",
     "sidebar.expandOnHover": "Izvērst pie novietošanas",
@@ -1076,9 +1086,9 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.daysBeforeTrip": "dienas līdz ceļojumam",
     "order.routeAndDates": "Maršruts un datumi",
     "order.referralPartner": "Ieteikuma partneris",
-    "order.referralCalculationConfirmed": "Ieteikuma aprēķins apstiprināts",
+    "order.referralCalculationConfirmed": "Ieteikuma komisija apstiprināta partnerim",
     "order.referralPlannedHint":
-      "Rindas paliek plānā līdz ceļojuma beigu datumam pieteikumā un šai apstiprināšanai.",
+      "Tas tikai apstiprina, ka esat pabeidzis sadalījumu un summas partnerim redzamas lietotnē — nav izmaksas pilnvarojuma. Līdz klienta ceļojuma beigu datumam rindas ir plānā; pēc tam tās kļūst aktīvas (uzkrātās) partnera bilancē.",
     "order.referralTabIntro":
       "Šīs cilnes tabulā: Ref iekļauj pakalpojumu komisijā; % no peļņas pēc PVN šai rindai vai fiksēta summa (fiksētais pārspēj %). Atceltas ar rēķinu var iekļaut. Tukšs % — partnera kategorijas likme. Pieteikumu sarakstā peļņa jau ir pēc ieteikuma komisijas.",
     "order.referralServicesNeedPartner": "Norādiet ieteikuma partneri pieteikumā, lai šeit pārvaldītu komisijas rindas.",
@@ -1091,6 +1101,11 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "order.referralColVat": "PVN no maržas",
     "order.referralColPctShort": "%",
     "order.referralColPctHint": "Procents no peļņas pēc PVN šai rindai. Atstājiet tukšu — kategorijas likme.",
+    "order.referralColPctImpliedHint":
+      "Ekvivalents % fiksētajai summai pret peļņu bez PVN. Notīriet Fiks., lai manuāli ievadītu %.",
+    "order.referralColEstShort": "Apr.",
+    "order.referralColEstHint":
+      "Aprēķins: procents × peļņa bez PVN, ja aizpildīts %; citādi fiksētā summa. Var rakstīt % arī, kamēr redzams fiksētais — Est atjaunojas; saglabājot vienu lauku, otrs DB tiek notīrīts.",
     "order.referralColFixedShort": "Fiks.",
     "order.referralColFixedHint": "Fiksēta komisija šai rindai. Norādītā summa pārspēj procentu.",
     "order.referralServicesFootnote": "Saglabājot, atjauninās plānotās ieteikuma uzkrājuma rindas.",

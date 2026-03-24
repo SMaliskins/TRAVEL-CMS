@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { t } from "@/lib/i18n";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
-import { orderCodeToSlug } from "@/lib/orders/orderCode";
+import { useToast } from "@/contexts/ToastContext";
 
 type ApiService = Record<string, unknown>;
 
@@ -27,6 +27,38 @@ type Row = {
 
 function formatMoney(n: number) {
   return `€${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Draft or stored numeric field; empty string in draft → null */
+function parseDraftDecimal(
+  draft: string | undefined,
+  stored: number | null
+): number | null {
+  if (draft !== undefined) {
+    const trimmed = draft.trim().replace(",", ".");
+    if (trimmed === "") return null;
+    const n = parseFloat(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return stored;
+}
+
+/**
+ * Live estimate: if % is set (draft or saved), use profit (ex VAT) × %; otherwise use fixed.
+ * Lets you type % while fixed is still in the field — Est follows % until you save (then PATCH clears the other).
+ */
+function estimatedReferralAmount(
+  r: Row,
+  draftPct: Record<string, string>,
+  draftFixed: Record<string, string>
+): number | null {
+  const pct = parseDraftDecimal(draftPct[r.id], r.pctOverride);
+  if (pct != null) {
+    return Math.round(r.profitNet * (pct / 100) * 100) / 100;
+  }
+  const fixed = parseDraftDecimal(draftFixed[r.id], r.fixedOverride);
+  if (fixed != null) return fixed;
+  return null;
 }
 
 function mapService(raw: ApiService): Row {
@@ -78,6 +110,7 @@ export default function OrderReferralServicesPanel({
   referralPartyId: string | null;
   lang: string;
 }) {
+  const { showToast } = useToast();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -97,7 +130,11 @@ export default function OrderReferralServicesPanel({
         },
         credentials: "include",
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast("error", (err as { error?: string }).error || `Failed to load services (${res.status})`);
+        return;
+      }
       const data = await res.json();
       setRows((data.services || []).map((r: ApiService) => mapService(r)));
       setDraftPct({});
@@ -105,7 +142,7 @@ export default function OrderReferralServicesPanel({
     } finally {
       setLoading(false);
     }
-  }, [orderCode]);
+  }, [orderCode, showToast]);
 
   useEffect(() => {
     void load();
@@ -129,12 +166,27 @@ export default function OrderReferralServicesPanel({
             body: JSON.stringify(body),
           }
         );
-        if (res.ok) await load();
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          details?: string;
+          message?: string;
+        };
+        if (!res.ok) {
+          const msg =
+            data.error ||
+            data.details ||
+            data.message ||
+            `Could not save (${res.status}). Check DB migrations for referral columns.`;
+          showToast("error", msg);
+          return;
+        }
+        await load();
       } catch {
+        showToast("error", "Network error while saving");
         await load();
       }
     },
-    [orderCode, load]
+    [orderCode, load, showToast]
   );
 
   const schedulePct = (serviceId: string, raw: string) => {
@@ -144,7 +196,10 @@ export default function OrderReferralServicesPanel({
       const trimmed = raw.trim().replace(",", ".");
       const num = trimmed === "" ? null : parseFloat(trimmed);
       if (trimmed !== "" && !Number.isFinite(num)) return;
-      void persist(serviceId, { referralCommissionPercentOverride: num });
+      void persist(serviceId, {
+        referralCommissionPercentOverride: num,
+        referralCommissionFixedAmount: num != null ? null : undefined,
+      });
       delete timers.current[`pct-${serviceId}`];
     }, 500);
   };
@@ -156,7 +211,10 @@ export default function OrderReferralServicesPanel({
       const trimmed = raw.trim().replace(",", ".");
       const num = trimmed === "" ? null : parseFloat(trimmed);
       if (trimmed !== "" && !Number.isFinite(num)) return;
-      void persist(serviceId, { referralCommissionFixedAmount: num });
+      void persist(serviceId, {
+        referralCommissionFixedAmount: num,
+        referralCommissionPercentOverride: num != null ? null : undefined,
+      });
       delete timers.current[`fix-${serviceId}`];
     }, 500);
   };
@@ -183,7 +241,7 @@ export default function OrderReferralServicesPanel({
       </div>
       <p className="text-xs text-gray-500 mb-3">{t(lang, "order.referralServicesHint")}</p>
       <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-2 py-2 font-medium text-gray-700">{t(lang, "order.servCategory")}</th>
@@ -198,11 +256,16 @@ export default function OrderReferralServicesPanel({
               <th className="px-2 py-2 text-right font-medium text-gray-700">{t(lang, "order.referralColVat")}</th>
               <th className="px-2 py-2 text-center font-medium text-gray-700">{t(lang, "order.servReferralIncludeShort")}</th>
               <th className="px-2 py-2 text-center font-medium text-gray-700">{t(lang, "order.referralColPctShort")}</th>
+              <th className="px-2 py-2 text-right font-medium text-gray-700" title={t(lang, "order.referralColEstHint")}>
+                {t(lang, "order.referralColEstShort")}
+              </th>
               <th className="px-2 py-2 text-center font-medium text-gray-700">{t(lang, "order.referralColFixedShort")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {rows.map((r) => (
+            {rows.map((r) => {
+              const est = estimatedReferralAmount(r, draftPct, draftFixed);
+              return (
               <tr key={r.id} className="hover:bg-gray-50/80">
                 <td className="px-2 py-1.5 text-gray-700">{r.category}</td>
                 <td className="px-2 py-1.5 font-medium text-gray-900 max-w-[220px] truncate" title={r.serviceName}>
@@ -252,6 +315,9 @@ export default function OrderReferralServicesPanel({
                     }}
                   />
                 </td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-700" title={t(lang, "order.referralColEstHint")}>
+                  {est != null ? formatMoney(est) : "—"}
+                </td>
                 <td className="px-2 py-1.5">
                   <input
                     type="text"
@@ -274,7 +340,8 @@ export default function OrderReferralServicesPanel({
                   />
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

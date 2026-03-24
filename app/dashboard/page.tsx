@@ -1,12 +1,25 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import StatisticCard, { CardPeriodType } from "@/components/dashboard/StatisticCard";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
-import ProfitOrdersChart from "@/components/dashboard/ProfitOrdersChart";
+
+const ProfitOrdersChart = dynamic(
+  () => import("@/components/dashboard/ProfitOrdersChart"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="booking-glass-panel !p-6">
+        <h3 className="mb-4 text-lg font-bold text-gray-900">Profit & Orders</h3>
+        <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading chart…</div>
+      </div>
+    ),
+  }
+);
 import TargetSpeedometer, { AgentTarget } from "@/components/dashboard/TargetSpeedometer";
 import TouristsMap from "@/components/dashboard/TouristsMap";
 import RecentlyCompletedList from "@/components/dashboard/RecentlyCompletedList";
