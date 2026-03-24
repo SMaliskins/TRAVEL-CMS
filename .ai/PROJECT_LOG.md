@@ -5,6 +5,45 @@
 
 ---
 
+## [2026-03-24] CW — Referral: orders list badge, i18n, directory popup orders
+
+**Task:** Finish referral UX: REF badge + profit tooltip on orders list; en/ru/lv for referral services panel + directory referral section; `DirectoryClientPopup` loads `GET .../referral-orders` for referral role; TS fix in `OrderReferralServicesPanel` mapService.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/orders/page.tsx`, `lib/i18n.ts`, `components/directory/DirectoryClientPopup.tsx`, `OrderReferralServicesPanel.tsx` (types); `OrderServicesBlock` unused `useRef` import removed.
+
+**Next Step:** QA: list badge + profit tooltip; open directory popup for referral party; verify referral tab strings in ru/lv.
+
+---
+
+## [2026-03-24] CW — Client app: production deployment guide + EAS env
+
+**Task:** Document how referral/client users get a real installable app independent of dev machine; EAS builds use Expo env vars, not placeholder domain in repo.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `Client/docs/PRODUCTION_DEPLOYMENT.md`; `Client/eas.json` removed inline fake `EXPO_PUBLIC_API_URL`; `Client/.env.example` notes.
+
+**Next Step:** Owner: deploy Next.js, set EAS env, `eas build` / store submit.
+
+---
+
+## [2026-03-24] CW — Order page: Referral tab + sync category fallback
+
+**Task:** Move referral partner UI from order header to `?tab=referral`; resolve `category_id` from `order_services.category` text in `syncOrderReferralAccruals`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/orders/[orderCode]/page.tsx` — tab `referral`, subagent hidden; `lib/referral/syncOrderReferralAccruals.ts` — load categories, match type/name.
+
+**Next Step:** QA: open order, Referral tab, save partner + confirm after trip; verify accrual lines for all eligible services.
+
+---
+
 ## [2026-03-24] CW — Influencer invite doc + referral-only app mode + invite script
 
 **Task:** `docs/CLIENT_APP_INFLUENCER_INVITE.md`; `EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY`; `scripts/generate-client-app-invite.ts`; deep link `mytravelconcierge://register`; register `invited_by` UUID guard.

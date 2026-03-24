@@ -106,6 +106,22 @@ export async function GET(
       refundAmount: row.refund_amount != null ? parseFloat(String(row.refund_amount)) : null,
       changeFee: row.change_fee != null ? parseFloat(String(row.change_fee)) : null,
       cancellationRefundType: (row as { cancellation_refund_type?: string | null }).cancellation_refund_type ?? null,
+      referralIncludeInCommission:
+        (row as { referral_include_in_commission?: boolean | null }).referral_include_in_commission !== false,
+      referralCommissionPercentOverride: (() => {
+        const v = (row as { referral_commission_percent_override?: number | string | null })
+          .referral_commission_percent_override;
+        if (v == null || v === "") return null;
+        const n = parseFloat(String(v));
+        return Number.isFinite(n) ? n : null;
+      })(),
+      referralCommissionFixedAmount: (() => {
+        const v = (row as { referral_commission_fixed_amount?: number | string | null })
+          .referral_commission_fixed_amount;
+        if (v == null || v === "") return null;
+        const n = parseFloat(String(v));
+        return Number.isFinite(n) ? n : null;
+      })(),
     };
 
     return NextResponse.json({ service });
@@ -275,6 +291,39 @@ export async function PATCH(
     if (body.cancellationFee !== undefined) updates.cancellation_fee = body.cancellationFee != null ? parseFloat(String(body.cancellationFee)) : null;
     if (body.refundAmount !== undefined) updates.refund_amount = body.refundAmount != null ? parseFloat(String(body.refundAmount)) : null;
     if (body.cancellationRefundType !== undefined) (updates as Record<string, unknown>).cancellation_refund_type = body.cancellationRefundType || null;
+
+    if (body.referral_include_in_commission !== undefined) {
+      updates.referral_include_in_commission = !!body.referral_include_in_commission;
+    }
+    if (body.referralIncludeInCommission !== undefined) {
+      updates.referral_include_in_commission = !!body.referralIncludeInCommission;
+    }
+    if (body.referral_commission_percent_override !== undefined) {
+      const v = body.referral_commission_percent_override;
+      updates.referral_commission_percent_override =
+        v === null || v === "" ? null : parseFloat(String(v));
+    }
+    if (body.referralCommissionPercentOverride !== undefined) {
+      const v = body.referralCommissionPercentOverride;
+      updates.referral_commission_percent_override =
+        v === null || v === "" ? null : parseFloat(String(v));
+    }
+    if (updates.referral_commission_percent_override != null && !Number.isFinite(updates.referral_commission_percent_override as number)) {
+      return NextResponse.json({ error: "Invalid referral commission percent override" }, { status: 400 });
+    }
+    if (body.referral_commission_fixed_amount !== undefined) {
+      const v = body.referral_commission_fixed_amount;
+      updates.referral_commission_fixed_amount =
+        v === null || v === "" ? null : parseFloat(String(v));
+    }
+    if (body.referralCommissionFixedAmount !== undefined) {
+      const v = body.referralCommissionFixedAmount;
+      updates.referral_commission_fixed_amount =
+        v === null || v === "" ? null : parseFloat(String(v));
+    }
+    if (updates.referral_commission_fixed_amount != null && !Number.isFinite(updates.referral_commission_fixed_amount as number)) {
+      return NextResponse.json({ error: "Invalid referral commission fixed amount" }, { status: 400 });
+    }
 
     // Fetch old service for notification diff
     const { data: oldSvc } = await supabaseAdmin

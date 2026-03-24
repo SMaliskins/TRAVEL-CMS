@@ -9,25 +9,16 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
-      },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-domain.com"
       }
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "simulator": false
-      },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-domain.com"
       }
     },
     "production": {
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-domain.com"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {

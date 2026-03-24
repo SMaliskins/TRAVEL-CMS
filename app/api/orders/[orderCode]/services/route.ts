@@ -254,6 +254,22 @@ export async function GET(
         ticketNr: s.ticket_nr || "",
         travellerIds: travellerMap[s.id] || [],
         invoice_id: (s as { invoice_id?: string | null }).invoice_id ?? null,
+        referralIncludeInCommission:
+          (s as { referral_include_in_commission?: boolean | null }).referral_include_in_commission !== false,
+        referralCommissionPercentOverride: (() => {
+          const v = (s as { referral_commission_percent_override?: number | string | null })
+            .referral_commission_percent_override;
+          if (v == null || v === "") return null;
+          const n = parseFloat(String(v));
+          return Number.isFinite(n) ? n : null;
+        })(),
+        referralCommissionFixedAmount: (() => {
+          const v = (s as { referral_commission_fixed_amount?: number | string | null })
+            .referral_commission_fixed_amount;
+          if (v == null || v === "") return null;
+          const n = parseFloat(String(v));
+          return Number.isFinite(n) ? n : null;
+        })(),
         splitGroupId: (s as { split_group_id?: string | null }).split_group_id ?? null,
         flightSegments: Array.isArray(row.flight_segments) ? row.flight_segments : [],
         ticketNumbers: Array.isArray(row.ticket_numbers) ? row.ticket_numbers : [],

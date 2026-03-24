@@ -46,6 +46,9 @@ interface OrderRow {
   payers?: string[];
   /** Names on service lines — search matches even when not lead passenger */
   serviceClients?: string[];
+  /** Order has a referral partner (profit in list is after referral commission) */
+  hasReferral?: boolean;
+  referralCommissionTotal?: number;
 }
 
 interface OrderTotals {
@@ -1239,7 +1242,19 @@ export default function OrdersPage() {
                         role="button"
                         aria-label={`Open order ${order.orderId}`}
                       >
-                        <td className="whitespace-nowrap px-1.5 py-0.5 pl-5 text-sm text-gray-900">{order.orderId}</td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 pl-5 text-sm text-gray-900">
+                          <span className="inline-flex items-center gap-1">
+                            {order.orderId}
+                            {order.hasReferral ? (
+                              <span
+                                className="rounded bg-amber-100 px-1 py-0 text-[9px] font-semibold uppercase text-amber-900"
+                                title={t(lang, "orders.referralBadgeTitle")}
+                              >
+                                {t(lang, "orders.referralBadge")}
+                              </span>
+                            ) : null}
+                          </span>
+                        </td>
                         <td className="w-7 px-0.5 py-0.5 text-center">
                           {order.hasInvoice && order.allServicesInvoiced && <span title={t(lang, "orders.tooltipAllServicesInvoiced")} className="cursor-help inline-flex justify-center"><FileCheck size={14} strokeWidth={1.8} className="text-green-600" /></span>}
                           {order.hasInvoice && !order.allServicesInvoiced && order.invoicedServices && order.invoicedServices > 0 && <span title={t(lang, "orders.tooltipServicesInvoiced").replace("{n}", String(order.invoicedServices)).replace("{total}", String(order.totalServices ?? ""))} className="cursor-help inline-flex justify-center"><FileMinus2 size={14} strokeWidth={1.8} className="text-amber-500" /></span>}
@@ -1262,7 +1277,19 @@ export default function OrdersPage() {
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-800">{formatCurrency(order.amount)}</td>
                         <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.paid > 0 && order.amount > 0 && order.paid > order.amount + 0.01 ? "text-purple-700" : "text-gray-800"}`}>{formatCurrency(order.paid)}</td>
                         <td className={`whitespace-nowrap px-1.5 py-0.5 text-right text-sm ${order.debt > 0 ? "text-orange-700" : "text-gray-600"}`}>{formatCurrency(order.debt)}</td>
-                        <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900">{formatCurrency(order.profit)}</td>
+                        <td
+                          className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900"
+                          title={
+                            order.hasReferral && (order.referralCommissionTotal ?? 0) !== 0
+                              ? t(lang, "orders.profitAfterReferralHint").replace(
+                                  "{commission}",
+                                  formatCurrency(order.referralCommissionTotal ?? 0)
+                                )
+                              : undefined
+                          }
+                        >
+                          {formatCurrency(order.profit)}
+                        </td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-600">{formatCurrency(order.vat ?? 0)}</td>
                         <td className="w-7 px-0.5 py-0.5 text-center">
                           {(() => { const colors = getStatusBadgeColor(order.status); const statusKey = order.status === "On hold" ? "order.status.OnHold" : `order.status.${order.status}`; return <span title={t(lang, statusKey)} className={`inline-block h-2.5 w-2.5 rounded-full ${colors.dot} cursor-help`} />; })()}
@@ -1402,7 +1429,17 @@ export default function OrdersPage() {
                                       aria-label={`Open order ${order.orderId}`}
                                     >
                                       <td className="whitespace-nowrap px-1.5 py-0.5 pl-20 text-sm text-gray-900">
-                                        {order.orderId}
+                                        <span className="inline-flex items-center gap-1">
+                                          {order.orderId}
+                                          {order.hasReferral ? (
+                                            <span
+                                              className="rounded bg-amber-100 px-1 py-0 text-[9px] font-semibold uppercase text-amber-900"
+                                              title={t(lang, "orders.referralBadgeTitle")}
+                                            >
+                                              {t(lang, "orders.referralBadge")}
+                                            </span>
+                                          ) : null}
+                                        </span>
                                       </td>
                                       
                                       <td className="w-7 px-0.5 py-0.5 text-center">
@@ -1474,7 +1511,17 @@ export default function OrdersPage() {
                                       >
                                         {formatCurrency(order.debt)}
                                       </td>
-                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900">
+                                      <td
+                                        className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-900"
+                                        title={
+                                          order.hasReferral && (order.referralCommissionTotal ?? 0) !== 0
+                                            ? t(lang, "orders.profitAfterReferralHint").replace(
+                                                "{commission}",
+                                                formatCurrency(order.referralCommissionTotal ?? 0)
+                                              )
+                                            : undefined
+                                        }
+                                      >
                                         {formatCurrency(order.profit)}
                                       </td>
                                       <td className="whitespace-nowrap px-1.5 py-0.5 text-right text-sm text-gray-600">

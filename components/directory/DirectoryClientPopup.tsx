@@ -8,6 +8,10 @@ import { formatPhoneForDisplay } from "@/utils/phone";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
 const DEFAULT_W = 440;
 const DEFAULT_H = 400;
@@ -19,6 +23,19 @@ const roleColors: Record<string, string> = {
   client: "bg-blue-100 text-blue-800",
   supplier: "bg-green-100 text-green-800",
   subagent: "bg-purple-100 text-purple-800",
+  referral: "bg-amber-100 text-amber-900",
+};
+
+type ReferralOrderRow = {
+  orderId: string;
+  orderCode: string;
+  dateTo: string | null;
+  referralCommissionConfirmed: boolean;
+  tripEnded: boolean;
+  plannedCommission: number;
+  accruedCommission: number;
+  primaryStatus: string;
+  becomesAccruedWhenTripEndedAndConfirmed: boolean;
 };
 
 type DragState =
@@ -52,10 +69,14 @@ export default function DirectoryClientPopup({
   const open = Boolean(recordId);
   useModalOverlay(open);
   useEscapeKey(onClose, open);
+  const { prefs } = useUserPreferences();
+  const lang = prefs.language;
 
   const [record, setRecord] = useState<DirectoryRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [referralOrders, setReferralOrders] = useState<ReferralOrderRow[] | null>(null);
+  const [referralOrdersLoading, setReferralOrdersLoading] = useState(false);
 
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
@@ -108,6 +129,48 @@ export default function DirectoryClientPopup({
       cancelled = true;
     };
   }, [recordId, layoutOnOpen]);
+
+  useEffect(() => {
+    if (!record?.id || !record.roles.includes("referral")) {
+      setReferralOrders(null);
+      setReferralOrdersLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setReferralOrdersLoading(true);
+      try {
+        const res = await fetchWithAuth(
+          `/api/directory/${encodeURIComponent(record.id)}/referral-orders`
+        );
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok || data.error) {
+          setReferralOrders([]);
+          return;
+        }
+        setReferralOrders(Array.isArray(data.orders) ? data.orders : []);
+      } catch {
+        if (!cancelled) setReferralOrders([]);
+      } finally {
+        if (!cancelled) setReferralOrdersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [record?.id, record?.roles]);
+
+  const formatMoney = useCallback(
+    (amount: number) =>
+      new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: prefs.currency || "EUR",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount),
+    [prefs.currency]
+  );
 
   const onPointerMove = useCallback((e: PointerEvent) => {
     const d = dragRef.current;
@@ -264,6 +327,68 @@ export default function DirectoryClientPopup({
                   </div>
                 </div>
               </div>
+
+              {record.roles.includes("referral") && (
+                <div className="border-t border-gray-100 pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {t(lang, "directory.referralOrdersSection")}
+                  </h3>
+                  {referralOrdersLoading && (
+                    <p className="mt-2 text-sm text-gray-500">{t(lang, "directory.referralOrdersLoading")}</p>
+                  )}
+                  {!referralOrdersLoading && referralOrders && referralOrders.length === 0 && (
+                    <p className="mt-2 text-sm text-gray-500">{t(lang, "directory.referralOrdersEmpty")}</p>
+                  )}
+                  {!referralOrdersLoading && referralOrders && referralOrders.length > 0 && (
+                    <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
+                      {referralOrders.map((o) => {
+                        const statusKey =
+                          o.primaryStatus === "accrued"
+                            ? "directory.referralStatusAccrued"
+                            : "directory.referralStatusPlanned";
+                        const showAccrualHint =
+                          o.plannedCommission > 0 && o.becomesAccruedWhenTripEndedAndConfirmed;
+                        return (
+                          <li
+                            key={o.orderId}
+                            className="rounded-lg border border-gray-100 bg-gray-50/80 p-2 text-sm"
+                          >
+                            <Link
+                              href={`/orders/${orderCodeToSlug(o.orderCode)}`}
+                              onClick={() => {
+                                sessionStorage.setItem("directory.scrollY", String(window.scrollY));
+                                onClose();
+                              }}
+                              className="font-medium text-blue-700 hover:underline"
+                            >
+                              {o.orderCode}
+                            </Link>
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-600">
+                              <span className="font-medium text-gray-800">{t(lang, statusKey)}</span>
+                              <span>
+                                {t(lang, "directory.referralPlannedLabel")}: {formatMoney(o.plannedCommission)}
+                              </span>
+                              <span>
+                                {t(lang, "directory.referralAccruedLabel")}: {formatMoney(o.accruedCommission)}
+                              </span>
+                              {o.dateTo ? (
+                                <span>
+                                  {t(lang, "directory.referralTripEnd")}: {formatDateDDMMYYYY(o.dateTo)}
+                                </span>
+                              ) : null}
+                            </div>
+                            {showAccrualHint ? (
+                              <p className="mt-1 text-[11px] leading-snug text-amber-900/90">
+                                {t(lang, "directory.referralBecomesAccruedHint")}
+                              </p>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {!hideContactFields && (
                 <dl className="space-y-2 text-sm">

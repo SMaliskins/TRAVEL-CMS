@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
 
 // Edge runtime — lower cold start
 export const runtime = "edge";
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     // Build query - only select columns that definitely exist
     let query = supabaseAdmin
       .from("orders")
-      .select("id, order_code, order_number, client_display_name, countries_cities, date_from, date_to, amount_total, amount_paid, profit_estimated, status, order_type, owner_user_id, manager_user_id, created_at, updated_at, client_payment_due_date", { count: "exact" })
+      .select("id, order_code, order_number, client_display_name, countries_cities, date_from, date_to, amount_total, amount_paid, profit_estimated, status, order_type, owner_user_id, manager_user_id, created_at, updated_at, client_payment_due_date, referral_party_id", { count: "exact" })
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
@@ -172,49 +173,39 @@ export async function GET(request: NextRequest) {
     orderIds.forEach((orderId: string) => {
       const services = servicesByOrder.get(orderId) || [];
       const invoices = invoicesByOrder.get(orderId) || [];
-      
-      const activeServices = services.filter((s: any) => s.res_status !== 'cancelled');
+
+      const activeServices = services.filter((s: any) => s.res_status !== "cancelled");
       const totalServices = activeServices.length;
       const invoicedServices = activeServices.filter((s: any) => s.invoice_id).length;
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
 
       // Amount & profit: include ALL services (incl. cancelled); cancellation = negative
-      const signed = (s: any, field: 'client_price' | 'service_price') => {
+      const signed = (s: any, field: "client_price" | "service_price") => {
         const v = Number(s[field]) || 0;
-        return s.service_type === 'cancellation' ? -Math.abs(v) : v;
+        return s.service_type === "cancellation" ? -Math.abs(v) : v;
       };
-      const amount = services.reduce((sum: number, s: any) => sum + signed(s, 'client_price'), 0);
+      const amount = services.reduce((sum: number, s: any) => sum + signed(s, "client_price"), 0);
       let profit = 0;
       let vat = 0;
       services.forEach((s: any) => {
-        const clientPrice = signed(s, 'client_price');
-        const servicePrice = signed(s, 'service_price');
-        const cat = (s.category || "").toLowerCase();
-        const isTour = cat.includes("tour") || cat.includes("package");
-        const dbRate = Number(s.vat_rate);
-        const vatRate = (dbRate > 0) ? dbRate : (cat.includes("flight") ? 0 : 21);
-        let margin = 0;
-        if (isTour && s.commission_amount != null) {
-          const commission = s.service_type === 'cancellation'
-            ? -Math.abs(Number(s.commission_amount) || 0) : Number(s.commission_amount) || 0;
-          margin = clientPrice - (servicePrice - commission);
-        } else {
-          margin = clientPrice - servicePrice;
-        }
-        const vatAmount = vatRate > 0 && margin >= 0 ? Math.round(margin * vatRate / (100 + vatRate) * 100) / 100 : 0;
-        profit += margin - vatAmount;
-        vat += vatAmount;
+        const econ = computeServiceLineEconomics({
+          client_price: s.client_price,
+          service_price: s.service_price,
+          service_type: s.service_type,
+          category: s.category,
+          commission_amount: s.commission_amount,
+          vat_rate: s.vat_rate,
+        });
+        profit += econ.profitNetOfVat;
+        vat += econ.vatOnMargin;
       });
-      
-      serviceStats.set(orderId, { amount, profit, vat });
-      
-      // Check if all invoices are fully paid (status = 'paid')
-      const allInvoicesPaid = invoices.length > 0 && invoices.every((inv: any) => 
-        inv.status === 'paid'
-      );
 
-      // Due date: from order.client_payment_due_date or latest invoice final_payment_date / due_date
+      serviceStats.set(orderId, { amount, profit, vat });
+
+      const allInvoicesPaid =
+        invoices.length > 0 && invoices.every((inv: any) => inv.status === "paid");
+
       const orderRec = orderMap.get(orderId);
       let dueDate: string | null = (orderRec?.client_payment_due_date as string) || null;
       if (!dueDate && invoices.length > 0) {
@@ -223,7 +214,7 @@ export async function GET(request: NextRequest) {
           .filter(Boolean) as string[];
         dueDate = dates.length > 0 ? dates.sort().pop()! : null;
       }
-      
+
       invoiceStats.set(orderId, {
         totalServices,
         invoicedServices,
@@ -234,6 +225,24 @@ export async function GET(request: NextRequest) {
         dueDate,
       });
     });
+
+    const referralCommissionByOrder = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const { data: refRows } = await supabaseAdmin
+        .from("referral_accrual_line")
+        .select("order_id, commission_amount")
+        .eq("company_id", companyId)
+        .in("order_id", orderIds)
+        .in("status", ["planned", "accrued"]);
+      for (const r of refRows || []) {
+        const row = r as { order_id: string; commission_amount?: number | string | null };
+        const amt = Number(row.commission_amount) || 0;
+        referralCommissionByOrder.set(
+          row.order_id,
+          (referralCommissionByOrder.get(row.order_id) || 0) + amt
+        );
+      }
+    }
 
     // Aggregate payer names per order for search
     const payerNamesMap = new Map<string, string[]>();
@@ -282,9 +291,14 @@ export async function GET(request: NextRequest) {
       const datesFrom = (order.date_from as string) || derived?.dateFrom || "";
       const datesTo = (order.date_to as string) || derived?.dateTo || "";
 
-      // Amount, profit (за вычетом VAT), vat from services
+      // Amount, profit (за вычетом VAT), vat from services; referral orders: profit after referral commission
       const amount = svcStats?.amount || Number(order.amount_total) || 0;
-      const profit = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
+      const profitBeforeReferral = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
+      const hasReferral = Boolean(order.referral_party_id);
+      const referralCommissionTotal = hasReferral
+        ? referralCommissionByOrder.get(orderId) || 0
+        : 0;
+      const profit = hasReferral ? profitBeforeReferral - referralCommissionTotal : profitBeforeReferral;
       const vat = svcStats?.vat ?? 0;
       const paid = Number(order.amount_paid) || 0;
       const debt = amount - paid; // Calculate debt as amount - paid
@@ -322,6 +336,8 @@ export async function GET(request: NextRequest) {
         payers: payerNamesMap.get(orderId) || [],
         serviceClients: serviceClientNamesMap.get(orderId) || [],
         dueDate: invStats?.dueDate || (order.client_payment_due_date as string) || undefined,
+        hasReferral,
+        referralCommissionTotal: hasReferral ? referralCommissionTotal : 0,
       };
     });
 

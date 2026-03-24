@@ -457,6 +457,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   userRole,
   onOpenDirectoryParty,
 }, ref) {
+  const servicesTableColSpan = 11;
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const router = useRouter();
@@ -2392,7 +2393,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
                       onClick={() => toggleGroup(groupKey)}
                     >
-                      <td className="px-3 py-2" colSpan={12}>
+                      <td className="px-3 py-2" colSpan={servicesTableColSpan}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600">
@@ -2709,6 +2710,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               hint={hint}
                               onAction={handleHintAction}
                               onDismiss={handleDismissHint}
+                              tableColSpan={servicesTableColSpan}
                             />
                           ))}
                           </React.Fragment>

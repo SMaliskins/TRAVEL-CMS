@@ -8,6 +8,7 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock, { OrderServicesBlockHandle } from "./_components/OrderServicesBlock";
+import OrderReferralServicesPanel from "./_components/OrderReferralServicesPanel";
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
 import OrderDocumentsTab from "./_components/OrderDocumentsTab";
@@ -26,8 +27,8 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 
-type TabType = "client" | "finance" | "documents" | "communication" | "log";
-const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log"];
+type TabType = "client" | "referral" | "finance" | "documents" | "communication" | "log";
+const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log", "referral"];
 function isValidTab(value: string | null): value is TabType {
   return value !== null && TAB_VALUES.includes(value as TabType);
 }
@@ -90,13 +91,25 @@ export default function OrderPage({
   const lang = prefs.language;
   const [activeTab, setActiveTabState] = useState<TabType>("client");
 
+  const currentRole = useCurrentUserRole();
+
   // Sync tab from URL (on load and when user uses back/forward)
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl === "referral" && currentRole === "subagent") {
+      setActiveTabState("client");
+      return;
+    }
     if (isValidTab(tabFromUrl)) {
       setActiveTabState(tabFromUrl);
     }
-  }, [searchParams]);
+  }, [searchParams, currentRole]);
+
+  useEffect(() => {
+    if (currentRole === "subagent" && activeTab === "referral") {
+      setActiveTabState("client");
+    }
+  }, [currentRole, activeTab]);
 
   // Update URL when tab changes so reload keeps the same tab
   const setActiveTab = useCallback(
@@ -138,7 +151,6 @@ export default function OrderPage({
   const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
-  const currentRole = useCurrentUserRole();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPaymentPlan, setShowPaymentPlan] = useState(false);
   const [directoryPopupPartyId, setDirectoryPopupPartyId] = useState<string | null>(null);
@@ -930,6 +942,12 @@ export default function OrderPage({
                   {t(lang, "order.createdOn")} {formatDateDDMMYYYY(order.created_at)} {t(lang, "order.by")} {order.owner_name || t(lang, "order.unknown")}
                 </div>
               )}
+              {order?.referral_party_id && currentRole !== "subagent" && (
+                <div className="mt-0.5 text-[10px] text-gray-400">
+                  {t(lang, "order.referredBy")}{" "}
+                  {order.referral_party_display_name?.trim() || "—"}
+                </div>
+              )}
               {/* Order Type + Source: только на узких экранах (в шапке — в пустом месте по центру) */}
               {order && (
                 <div className="mt-1 flex sm:hidden items-center gap-1.5 flex-wrap">
@@ -1389,49 +1407,6 @@ export default function OrderPage({
                     )}
                   </div>
                 )}
-
-                {currentRole !== "subagent" && (
-                  <div className="mt-3 pt-2 border-t border-gray-100/80 space-y-2 max-w-xl">
-                    <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
-                      {t(lang, "order.referralPartner")}
-                    </div>
-                    <PartySelect
-                      roleFilter="referral"
-                      value={order.referral_party_id ?? null}
-                      initialDisplayName={order.referral_party_display_name || ""}
-                      onChange={(partyId, displayName) => {
-                        void saveReferralParty(partyId, displayName);
-                      }}
-                    />
-                    <label
-                      className={`flex items-start gap-2 text-xs text-gray-700 ${
-                        (!tripEndedForReferral && !order.referral_commission_confirmed) || isSavingField
-                          ? "cursor-not-allowed opacity-70"
-                          : "cursor-pointer"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={!!order.referral_commission_confirmed}
-                        disabled={
-                          (!tripEndedForReferral && !order.referral_commission_confirmed) || isSavingField
-                        }
-                        onChange={(e) => {
-                          void saveReferralConfirmed(e.target.checked);
-                        }}
-                      />
-                      <span>
-                        {t(lang, "order.referralCalculationConfirmed")}
-                        {!tripEndedForReferral && order.referral_party_id && (
-                          <span className="block text-[10px] font-normal text-gray-500 mt-0.5">
-                            {t(lang, "order.referralPlannedHint")}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  </div>
-                )}
               </div>
             )}
 
@@ -1650,7 +1625,9 @@ export default function OrderPage({
           {/* B) Tabs + Action Buttons */}
           <nav className="-mb-px flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-200/60 mt-1 pt-2">
             <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 min-w-0">
-              {(["client", "finance", "documents", "communication", "log"] as const).map((tab) => {
+              {(["client", "finance", "documents", "communication", "log", "referral"] as const)
+                .filter((tab) => tab !== "referral" || currentRole !== "subagent")
+                .map((tab) => {
                 const isActive = activeTab === tab;
                 return (
                   <button
@@ -1757,6 +1734,67 @@ export default function OrderPage({
                   }
                 }}
               />
+            </div>
+          )}
+
+          {activeTab === "referral" && currentRole !== "subagent" && (
+            <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm space-y-4 w-full max-w-[min(100%,80rem)]">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {t(lang, "order.referralTabIntro")}
+              </p>
+              {order ? (
+                <>
+                  <div>
+                    <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      {t(lang, "order.referralPartner")}
+                    </div>
+                    <PartySelect
+                      roleFilter="referral"
+                      value={order.referral_party_id ?? null}
+                      initialDisplayName={order.referral_party_display_name || ""}
+                      onChange={(partyId, displayName) => {
+                        void saveReferralParty(partyId, displayName);
+                      }}
+                    />
+                  </div>
+                  <label
+                    className={`flex items-start gap-2 text-xs text-gray-700 ${
+                      (!tripEndedForReferral && !order.referral_commission_confirmed) || isSavingField
+                        ? "cursor-not-allowed opacity-70"
+                        : "cursor-pointer"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={!!order.referral_commission_confirmed}
+                      disabled={
+                        (!tripEndedForReferral && !order.referral_commission_confirmed) || isSavingField
+                      }
+                      onChange={(e) => {
+                        void saveReferralConfirmed(e.target.checked);
+                      }}
+                    />
+                    <span>
+                      {t(lang, "order.referralCalculationConfirmed")}
+                      {!tripEndedForReferral && order.referral_party_id && (
+                        <span className="block text-[10px] font-normal text-gray-500 mt-0.5">
+                          {t(lang, "order.referralPlannedHint")}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                  <OrderReferralServicesPanel
+                    orderCode={orderCode}
+                    referralPartyId={order.referral_party_id ?? null}
+                    lang={lang}
+                  />
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  {orderLoading ? t(lang, "order.loading") : "—"}
+                </p>
+              )}
             </div>
           )}
 
