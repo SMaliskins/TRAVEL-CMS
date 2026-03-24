@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import Sidebar from "./Sidebar";
+import TopBar from "./TopBar";
+import TabBar from "./TabBar";
 
 function isExternalApp(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -132,24 +135,18 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         </div>
       );
     }
+    // Show real shell during auth — profile/company can load in parallel
     return (
-      <div className="flex min-h-screen">
-        <div className="w-[72px] min-h-screen bg-gray-900" />
-        <div className="flex-1">
-          <div className="h-14 border-b border-gray-200 bg-white" />
-          <div className="p-6">
-            <div className="mx-auto max-w-[1800px] space-y-4">
-              <div className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
-              <div className="grid grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
-                ))}
-              </div>
-              <div className="h-64 bg-gray-100 rounded-lg animate-pulse" />
-            </div>
-          </div>
+      <>
+        <Sidebar />
+        <TopBar />
+        <div id="main-content-wrapper" className="min-h-screen pl-[72px] pt-16 transition-all duration-200 theme-page-bg">
+          <TabBar />
+          <main className="relative z-0 flex-1 flex items-center justify-center p-12">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
+          </main>
         </div>
-      </div>
+      </>
     );
   }
 

@@ -98,7 +98,19 @@ function calculateTotals(orders: OrderRow[]): OrderTotals {
 
 type DateGroupMode = "created" | "checkIn" | "checkOut";
 
-// Build orders tree structure
+// Parse ISO date string (YYYY-MM-DD or with time) to [year, month, day] — timezone-safe
+function parseIsoToParts(raw: string): { year: string; month: string; day: string } | null {
+  const s = String(raw).trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [year, month, day] = s.split("-");
+  if (!year || !month || !day) return null;
+  const m = parseInt(month, 10);
+  const d = parseInt(day, 10);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { year, month: month.padStart(2, "0"), day: day.padStart(2, "0") };
+}
+
+// Build orders tree structure (timezone-safe: uses date string parts, not Date)
 function buildOrdersTree(orders: OrderRow[], dateMode: DateGroupMode = "created"): OrderTree {
   const yearMap = new Map<string, Map<string, Map<string, OrderRow[]>>>();
 
@@ -107,11 +119,9 @@ function buildOrdersTree(orders: OrderRow[], dateMode: DateGroupMode = "created"
               : dateMode === "checkOut" ? order.datesTo
               : (order.createdAt || order.updated);
     if (!raw) return;
-    const date = new Date(raw);
-    const year = date.getFullYear().toString();
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const day = date.getDate().toString().padStart(2, "0");
-
+    const parts = parseIsoToParts(raw);
+    if (!parts) return;
+    const { year, month, day } = parts;
     const monthKey = `${year}-${month}`;
     const dayKey = `${year}-${month}-${day}`;
 
@@ -156,23 +166,15 @@ function buildOrdersTree(orders: OrderRow[], dateMode: DateGroupMode = "created"
     const monthMap = yearMap.get(year)!;
     const months: OrderTreeMonth[] = [];
 
-    // Sort months DESC
-    const sortedMonths = Array.from(monthMap.keys()).sort((a, b) => {
-      const aDate = new Date(a);
-      const bDate = new Date(b);
-      return bDate.getTime() - aDate.getTime();
-    });
+    // Sort months DESC (string compare YYYY-MM is safe)
+    const sortedMonths = Array.from(monthMap.keys()).sort((a, b) => (b > a ? 1 : a > b ? -1 : 0));
 
     sortedMonths.forEach((monthKey) => {
       const dayMap = monthMap.get(monthKey)!;
       const days: OrderTreeDay[] = [];
 
-      // Sort days DESC
-      const sortedDays = Array.from(dayMap.keys()).sort((a, b) => {
-        const aDate = new Date(a);
-        const bDate = new Date(b);
-        return bDate.getTime() - aDate.getTime();
-      });
+      // Sort days DESC (string compare YYYY-MM-DD is safe)
+      const sortedDays = Array.from(dayMap.keys()).sort((a, b) => (b > a ? 1 : a > b ? -1 : 0));
 
       sortedDays.forEach((dayKey) => {
         const orders = dayMap.get(dayKey)!;
@@ -192,8 +194,9 @@ function buildOrdersTree(orders: OrderRow[], dateMode: DateGroupMode = "created"
         });
       });
 
-      const monthDate = new Date(monthKey);
-      const monthLabel = monthNames[monthDate.getMonth()];
+      // Month label from monthKey (e.g. "2026-02" -> February) — no Date/timezone
+      const monthNum = parseInt(monthKey.split("-")[1] || "1", 10) - 1;
+      const monthLabel = monthNames[Math.max(0, Math.min(11, monthNum))];
 
       months.push({
         monthKey,
@@ -494,7 +497,7 @@ export default function OrdersPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token || null;
 
-      const response = await fetch(`/api/orders?page=${page}&pageSize=200`, {
+      const response = await fetch(`/api/orders?page=${page}&pageSize=50`, {
         headers: {
           ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
         },
@@ -634,28 +637,36 @@ export default function OrdersPage() {
   // Build tree from filtered orders
   const tree = useMemo(() => buildOrdersTree(filteredOrders, dateGroupMode), [filteredOrders, dateGroupMode]);
 
-  // Flat month-grouped list for Start date / End date modes
+  // Flat month-grouped list for Start date / End date modes (timezone-safe)
   const monthGroupedOrders = useMemo(() => {
     if (dateGroupMode === "created") return null;
     const dateKey = dateGroupMode === "checkIn" ? "datesFrom" : "datesTo";
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     const sorted = [...filteredOrders]
-      .filter(o => o[dateKey])
+      .filter(o => o[dateKey] && parseIsoToParts(o[dateKey]))
       .sort((a, b) => {
         const cmp = (a[dateKey] || "").localeCompare(b[dateKey] || "");
         return dateSortAsc ? cmp : -cmp;
       });
     const months = new Map<string, { label: string; orders: OrderRow[]; totals: OrderTotals }>();
-    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     sorted.forEach(o => {
-      const d = new Date(o[dateKey]);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const parts = parseIsoToParts(o[dateKey]);
+      if (!parts) return;
+      const key = `${parts.year}-${parts.month}`;
+      const monthIdx = parseInt(parts.month, 10) - 1;
       if (!months.has(key)) {
-        months.set(key, { label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`, orders: [], totals: { amount: 0, paid: 0, debt: 0, vat: 0, profit: 0 } });
+        months.set(key, {
+          label: `${monthNames[Math.max(0, Math.min(11, monthIdx))]} ${parts.year}`,
+          orders: [],
+          totals: { amount: 0, paid: 0, debt: 0, vat: 0, profit: 0 },
+        });
       }
       months.get(key)!.orders.push(o);
     });
-    months.forEach(g => { g.totals = calculateTotals(g.orders); });
-    return Array.from(months.values());
+    const entries = Array.from(months.entries());
+    entries.forEach(([, g]) => { g.totals = calculateTotals(g.orders); });
+    entries.sort(([a], [b]) => (dateSortAsc ? a.localeCompare(b) : b.localeCompare(a)));
+    return entries.map(([, g]) => g);
   }, [dateGroupMode, filteredOrders, dateSortAsc]);
 
   // Initialize expanded state - all groups expanded by default, merge with stored preferences
@@ -821,7 +832,7 @@ export default function OrdersPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="bg-gray-50 p-3 sm:p-6">
+      <div className="theme-page-bg p-3 sm:p-6">
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -848,7 +859,7 @@ export default function OrdersPage() {
   // Error state
   if (loadError) {
     return (
-      <div className="bg-gray-50 p-3 sm:p-6">
+      <div className="theme-page-bg p-3 sm:p-6">
         <div className="mx-auto max-w-[1800px] space-y-6">
           <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -901,10 +912,10 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="bg-gray-50 p-3 sm:p-4">
+    <div className="theme-page-bg p-3 sm:p-4">
       <div className="mx-auto max-w-[1800px] space-y-2">
         {/* Compact header with view tabs — sticky below TopBar + TabBar */}
-        <div className="sticky top-14 sm:top-0 z-20 bg-gray-50 pb-2 -mb-2 -mt-3 sm:-mt-4 pt-3 sm:pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
+        <div className="sticky top-14 sm:top-0 z-20 theme-panel-bg pb-2 -mb-2 -mt-3 sm:-mt-4 pt-3 sm:pt-4 space-y-2 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <h1 className="text-lg sm:text-xl font-semibold text-gray-900">{t(lang, "orders.title")}</h1>
@@ -1133,10 +1144,10 @@ export default function OrdersPage() {
 
         {/* Table (List view) */}
         {orders.length > 0 && viewMode === "list" && (
-        <div className="rounded-lg bg-white shadow-sm overflow-hidden">
+        <div className="rounded-lg theme-card-bg shadow-sm overflow-hidden">
           <div className="overflow-x-auto -mx-3 sm:mx-0">
           <table className="w-full border-collapse min-w-[900px]">
-            <thead className="sticky top-14 sm:top-[76px] z-10 shadow-[0_1px_0_0_#e5e7eb] bg-gray-50">
+            <thead className="sticky top-14 sm:top-[76px] z-10 shadow-[0_1px_0_0_#e5e7eb] theme-panel-bg border-b border-gray-200">
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.orderId")}
@@ -1199,11 +1210,11 @@ export default function OrdersPage() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
+            <tbody className="divide-y divide-gray-200 theme-card-bg">
               {/* Flat month-grouped view for Start date / End date */}
               {monthGroupedOrders && monthGroupedOrders.map((group) => (
                 <React.Fragment key={group.label}>
-                  <tr className="bg-gray-100/80">
+                  <tr className="theme-panel-bg">
                     <td className="px-1.5 py-0.5 text-sm font-bold text-gray-900">{group.label}</td>
                     <td className="px-0.5 py-0.5" colSpan={3}></td>
                     <td className="px-1.5 py-1" colSpan={2}></td>
@@ -1269,10 +1280,10 @@ export default function OrdersPage() {
                 <React.Fragment key={`year-${year.year}`}>
                   {/* Year row */}
                   <tr
-                    className="cursor-pointer bg-gray-100 font-semibold hover:bg-gray-200 transition-colors"
+                    className="cursor-pointer bg-gray-100 font-semibold hover:bg-gray-200 transition-colors border-b border-gray-200/60"
                     onClick={() => toggleYear(year.year)}
                   >
-                    <td className="px-1.5 py-0.5 text-sm font-bold text-gray-900">
+                    <td className="px-1.5 py-1.5 text-sm font-bold text-gray-900">
                       <span className="mr-1.5 inline-block text-[11px]">
                         {isExpanded("year", year.year) ? "▾" : "▸"}
                       </span>
@@ -1304,10 +1315,10 @@ export default function OrdersPage() {
                     year.months.map((month) => (
                       <React.Fragment key={`month-${month.monthKey}`}>
                         <tr
-                          className="cursor-pointer bg-gray-50 font-medium hover:bg-gray-100 transition-colors"
+                          className="cursor-pointer bg-blue-50/50 font-medium hover:bg-blue-50 transition-colors border-b border-gray-100"
                           onClick={() => toggleMonth(month.monthKey)}
                         >
-                          <td className="px-1.5 py-0.5 pl-7 text-sm font-semibold text-gray-900">
+                          <td className="px-1.5 py-1 pl-8 text-sm font-semibold text-gray-900">
                             <span className="mr-1.5 inline-block text-[11px]">
                               {isExpanded("month", month.monthKey) ? "▾" : "▸"}
                             </span>
@@ -1339,10 +1350,10 @@ export default function OrdersPage() {
                           month.days.map((day) => (
                             <React.Fragment key={`day-${day.dayKey}`}>
                               <tr
-                                className="cursor-pointer bg-gray-50 font-medium hover:bg-gray-100 transition-colors"
+                                className="cursor-pointer bg-white hover:bg-gray-50 transition-colors border-b border-gray-100"
                                 onClick={() => toggleDay(day.dayKey)}
                               >
-                                <td className="px-1.5 py-0.5 pl-14 text-sm font-medium text-gray-800">
+                                <td className="px-1.5 py-1 pl-12 text-sm font-medium text-gray-800">
                                   <span className="mr-1.5 inline-block text-[11px]">
                                     {isExpanded("day", day.dayKey) ? "▾" : "▸"}
                                   </span>

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     const agentProfit: Record<string, number> = {};
 
-    const signed = (svc: { service_type?: string }; field: 'client_price' | 'service_price') => {
+    const signed = (svc: { service_type?: string; client_price?: unknown; service_price?: unknown }, field: 'client_price' | 'service_price') => {
       const v = parseFloat(String(svc[field] ?? 0)) || 0;
       return svc.service_type === 'cancellation' ? -Math.abs(v) : v;
     };

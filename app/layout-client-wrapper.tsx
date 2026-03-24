@@ -8,6 +8,7 @@ import { TabsProvider } from "@/contexts/TabsContext";
 import { ModalOverlayProvider } from "@/contexts/ModalOverlayContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { CompanySettingsProvider } from "@/contexts/CompanySettingsContext";
+import ThemeInitializer from "@/components/ThemeInitializer";
 
 const RAIL_WIDTH = 72;
 const EXPANDED_WIDTH = 260;
@@ -65,6 +66,7 @@ export default function LayoutClientWrapper({
   return (
     <UserProvider>
       <CompanySettingsProvider>
+        <ThemeInitializer />
         <NavigationHistoryProvider>
           <TabsProvider>
             <ModalOverlayProvider>{children}</ModalOverlayProvider>

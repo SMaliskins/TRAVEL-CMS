@@ -15,16 +15,11 @@ export const SCALE_PRESETS = [
   { value: 1.2, label: "Extra Large", description: "Largest size" },
 ] as const;
 
-// Font family presets (using CSS variables from next/font)
+// Font family presets (3 fonts for faster load)
 export const FONT_PRESETS = [
   { value: "system", label: "System", css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
+  { value: "geist", label: "Geist", css: "var(--font-geist-sans), -apple-system, sans-serif" },
   { value: "inter", label: "Inter", css: "var(--font-inter), -apple-system, sans-serif" },
-  { value: "roboto", label: "Roboto", css: "var(--font-roboto), -apple-system, sans-serif" },
-  { value: "opensans", label: "Open Sans", css: "var(--font-opensans), -apple-system, sans-serif" },
-  { value: "lato", label: "Lato", css: "var(--font-lato), -apple-system, sans-serif" },
-  { value: "nunito", label: "Nunito", css: "var(--font-nunito), -apple-system, sans-serif" },
-  { value: "poppins", label: "Poppins", css: "var(--font-poppins), -apple-system, sans-serif" },
-  { value: "sourcesans", label: "Source Sans", css: "var(--font-sourcesans), -apple-system, sans-serif" },
 ] as const;
 
 const DEFAULT_SCALE = 1;
@@ -73,14 +68,11 @@ export function useFontScale() {
       applyScale(DEFAULT_SCALE);
     }
     
-    // Load font family
+    // Load font family (fallback to default if preset was removed)
     const storedFont = localStorage.getItem(FONT_STORAGE_KEY);
-    if (storedFont) {
-      setFontFamilyState(storedFont);
-      applyFontFamily(storedFont);
-    } else {
-      applyFontFamily(DEFAULT_FONT);
-    }
+    const validFont = storedFont && FONT_PRESETS.some((f) => f.value === storedFont) ? storedFont : DEFAULT_FONT;
+    setFontFamilyState(validFont);
+    applyFontFamily(validFont);
   }, []);
 
   const setScale = (newScale: number) => {

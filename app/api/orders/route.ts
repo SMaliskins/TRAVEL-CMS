@@ -3,6 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { getApiUser } from "@/lib/auth/getApiUser";
 
+// Edge runtime — lower cold start
+export const runtime = "edge";
+
 // Placeholder URLs for build-time
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key";

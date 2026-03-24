@@ -9,6 +9,8 @@ import { useClock } from "@/hooks/useClock";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@/contexts/UserContext";
 import { useCompanyLogo } from "@/contexts/CompanySettingsContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import { THEME_SCHEMES } from "@/lib/themeSchemes";
 
 interface StaffNotification {
   id: string;
@@ -63,6 +65,9 @@ export default function TopBar() {
   const router = useRouter();
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const themeRef = useRef<HTMLDivElement>(null);
+  const { scheme, setColorScheme, isClient: themeReady } = useColorScheme();
   const [notifications, setNotifications] = useState<StaffNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
@@ -251,12 +256,25 @@ export default function TopBar() {
     }
   }, [isDropdownOpen]);
 
+  // Close theme dropdown on outside click
+  useEffect(() => {
+    function handleThemeClickOutside(event: MouseEvent) {
+      if (themeRef.current && !themeRef.current.contains(event.target as Node)) {
+        setThemeOpen(false);
+      }
+    }
+    if (themeOpen) {
+      document.addEventListener("mousedown", handleThemeClickOutside);
+      return () => document.removeEventListener("mousedown", handleThemeClickOutside);
+    }
+  }, [themeOpen]);
+
   const modalOverlay = useModalOverlayContext();
   const isModalOpen = (modalOverlay?.modalCount ?? 0) > 0;
   if (isModalOpen) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 bg-white">
+    <div className="fixed top-0 left-0 right-0 z-40 h-16 border-b border-gray-200 theme-card-bg">
       <div className="flex h-full items-center gap-4 px-4">
         {/* Left side - Nav + Company Logo */}
         <div className="flex flex-shrink-0 items-center gap-2">
@@ -400,20 +418,62 @@ export default function TopBar() {
             )}
           </div>
 
-          {/* Status */}
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
-            title="Status"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="12" cy="12" r="10" />
-            </svg>
-          </button>
+          {/* Theme switcher — replaces gray Status circle */}
+          {themeReady && (
+            <div ref={themeRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setThemeOpen(!themeOpen)}
+                className="flex h-9 w-9 items-center justify-center rounded-full theme-btn-secondary hover:opacity-90 transition-opacity"
+                title="Color theme"
+                aria-label="Color theme"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+              </button>
+              {themeOpen && (
+                <div className="absolute right-0 mt-2 w-56 max-h-[320px] overflow-auto rounded-lg border border-gray-200 theme-card-bg shadow-xl z-50 py-2">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-[var(--theme-fg-muted)] uppercase tracking-wider">
+                    Color theme
+                  </div>
+                  {THEME_SCHEMES.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setColorScheme(s.id);
+                        setThemeOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                        scheme === s.id
+                          ? "bg-[var(--theme-btn-bg)] font-medium"
+                          : "hover:bg-[var(--theme-btn-bg)]/50"
+                      }`}
+                    >
+                      <span
+                        className="h-6 w-6 rounded-full shrink-0 border border-[var(--theme-btn-border)]"
+                        style={{
+                          backgroundColor: s.vars["--theme-btn-bg"],
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <span className="block truncate">{s.label}</span>
+                        <span className="block text-xs text-[var(--theme-fg-muted)] truncate">
+                          {s.description}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Date + City */}
           {prefsMounted && now.getTime() !== 0 ? (

@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
+/* Default theme (Classic) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f9fafb;
+  --foreground: #111827;
+  --theme-btn-bg: #e5e7eb;
+  --theme-btn-fg: #1f2937;
+  --theme-btn-border: #d1d5db;
+  --theme-border: rgba(75, 85, 99, 0.25);
+  --theme-bg-alt: #f3f4f6;
+  --theme-fg-muted: #4b5563;
+  --theme-card-bg: #ffffff;
 }
 
 @theme inline {
@@ -12,11 +20,114 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Only apply system dark when no theme chosen */
 @media (prefers-color-scheme: dark) {
-  :root {
+  html:not([data-theme]) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+/* Theme: Pastel */
+html[data-theme="pastel"] {
+  --background: #fefefe;
+  --foreground: #1e1b4b;
+  --theme-btn-bg: #e9e5ff;
+  --theme-btn-fg: #312e81;
+  --theme-btn-border: #c4b5fd;
+  --theme-border: rgba(100, 116, 139, 0.2);
+  --theme-bg-alt: #f5f3ff;
+  --theme-fg-muted: #4c4a6a;
+  --theme-card-bg: #ffffff;
+}
+
+/* Theme: Soft */
+html[data-theme="soft"] {
+  --background: #fefdfb;
+  --foreground: #292524;
+  --theme-btn-bg: #fde68a;
+  --theme-btn-fg: #78350f;
+  --theme-btn-border: #fcd34d;
+  --theme-border: rgba(120, 113, 108, 0.25);
+  --theme-bg-alt: #fef3c7;
+  --theme-fg-muted: #57534e;
+  --theme-card-bg: #ffffff;
+}
+
+/* Theme: Natural */
+html[data-theme="natural"] {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --theme-btn-bg: #d1fae5;
+  --theme-btn-fg: #064e3b;
+  --theme-btn-border: #a7f3d0;
+  --theme-border: rgba(68, 64, 60, 0.2);
+  --theme-bg-alt: #ecfdf5;
+  --theme-fg-muted: #44403c;
+  --theme-card-bg: #ffffff;
+}
+
+/* Theme: Ocean */
+html[data-theme="ocean"] {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --theme-btn-bg: #e0f2fe;
+  --theme-btn-fg: #0c4a6e;
+  --theme-btn-border: #bae6fd;
+  --theme-border: rgba(51, 65, 85, 0.2);
+  --theme-bg-alt: #f0f9ff;
+  --theme-fg-muted: #334155;
+  --theme-card-bg: #ffffff;
+}
+
+/* Theme: Classic (default) */
+html[data-theme="classic"] {
+  --background: #f9fafb;
+  --foreground: #111827;
+  --theme-btn-bg: #e5e7eb;
+  --theme-btn-fg: #1f2937;
+  --theme-btn-border: #d1d5db;
+  --theme-border: rgba(75, 85, 99, 0.25);
+  --theme-bg-alt: #f3f4f6;
+  --theme-fg-muted: #4b5563;
+  --theme-card-bg: #ffffff;
+}
+
+/* Theme: Corporate */
+html[data-theme="corporate"] {
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --theme-btn-bg: #cbd5e1;
+  --theme-btn-fg: #0f172a;
+  --theme-btn-border: #94a3b8;
+  --theme-border: rgba(15, 23, 42, 0.2);
+  --theme-bg-alt: #e2e8f0;
+  --theme-fg-muted: #334155;
+  --theme-card-bg: #ffffff;
+}
+
+/* Theme-aware secondary button (replaces hardcoded gray) */
+.btn-theme-secondary {
+  background-color: var(--theme-btn-bg);
+  color: var(--theme-btn-fg);
+  border: 1px solid var(--theme-btn-border);
+}
+
+/* Theme utilities — use these for page/panel backgrounds so theme actually applies */
+.theme-page-bg {
+  background-color: var(--background) !important;
+  color: var(--foreground);
+}
+.theme-panel-bg {
+  background-color: var(--theme-bg-alt, #f3f4f6) !important;
+}
+.theme-card-bg {
+  background-color: var(--theme-card-bg, #ffffff) !important;
+}
+.theme-btn-secondary {
+  background-color: var(--theme-btn-bg) !important;
+  color: var(--theme-btn-fg) !important;
+  border-color: var(--theme-btn-border) !important;
 }
 
 body {

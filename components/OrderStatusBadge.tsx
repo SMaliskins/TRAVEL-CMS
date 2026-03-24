@@ -18,8 +18,8 @@ const STATUS_CONFIG: Record<OrderStatus, {
   label: string;
 }> = {
   Draft: { 
-    color: "text-gray-700", 
-    bgColor: "bg-gray-100", 
+    color: "text-[var(--theme-btn-fg)]", 
+    bgColor: "bg-[var(--theme-btn-bg)]",
     dotColor: "bg-gray-400",
     label: "Draft" 
   },

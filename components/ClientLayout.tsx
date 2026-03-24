@@ -29,7 +29,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <>
               <Sidebar />
               <TopBar />
-              <div id="main-content-wrapper" className="min-h-screen pl-[72px] pt-16 transition-all duration-200">
+              <div id="main-content-wrapper" className="min-h-screen pl-[72px] pt-16 transition-all duration-200 theme-page-bg">
                 <TabBar />
                 <main className="relative z-0 flex-1">
                   {children}

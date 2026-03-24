@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter, Roboto, Open_Sans, Lato, Nunito, Poppins, Source_Sans_3 } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import LayoutClientWrapper from "./layout-client-wrapper";
 import ClientLayout from "@/components/ClientLayout";
@@ -14,42 +14,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Additional fonts for user selection
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin", "cyrillic"],
-});
-
-const roboto = Roboto({
-  variable: "--font-roboto",
-  weight: ["300", "400", "500", "700"],
-  subsets: ["latin", "cyrillic"],
-});
-
-const openSans = Open_Sans({
-  variable: "--font-opensans",
-  subsets: ["latin", "cyrillic"],
-});
-
-const lato = Lato({
-  variable: "--font-lato",
-  weight: ["300", "400", "700"],
-  subsets: ["latin"],
-});
-
-const nunito = Nunito({
-  variable: "--font-nunito",
-  subsets: ["latin", "cyrillic"],
-});
-
-const poppins = Poppins({
-  variable: "--font-poppins",
-  weight: ["300", "400", "500", "600", "700"],
-  subsets: ["latin"],
-});
-
-const sourceSans = Source_Sans_3({
-  variable: "--font-sourcesans",
   subsets: ["latin", "cyrillic"],
 });
 
@@ -58,12 +24,13 @@ export const metadata: Metadata = {
   description: "Travel CMS - Order Management System",
 };
 
-// Inline script to apply font settings before React hydration (prevents flash)
+// Inline script to apply font + theme settings before React hydration (prevents flash)
 const fontSettingsScript = `
 (function() {
   try {
     var scale = localStorage.getItem('ui-font-scale');
     var font = localStorage.getItem('ui-font-family');
+    var theme = localStorage.getItem('ui-color-scheme');
     
     if (scale) {
       var s = parseFloat(scale);
@@ -76,17 +43,19 @@ const fontSettingsScript = `
     if (font) {
       var fonts = {
         'system': "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        'inter': "var(--font-inter), -apple-system, sans-serif",
-        'roboto': "var(--font-roboto), -apple-system, sans-serif",
-        'opensans': "var(--font-opensans), -apple-system, sans-serif",
-        'lato': "var(--font-lato), -apple-system, sans-serif",
-        'nunito': "var(--font-nunito), -apple-system, sans-serif",
-        'poppins': "var(--font-poppins), -apple-system, sans-serif",
-        'sourcesans': "var(--font-sourcesans), -apple-system, sans-serif"
+        'geist': "var(--font-geist-sans), -apple-system, sans-serif",
+        'inter': "var(--font-inter), -apple-system, sans-serif"
       };
       if (fonts[font]) {
         document.documentElement.style.setProperty('--font-family', fonts[font]);
       }
+    }
+    
+    var validThemes = ['pastel','soft','natural','ocean','classic','corporate'];
+    if (theme && validThemes.indexOf(theme) >= 0) {
+      document.documentElement.setAttribute('data-theme', theme);
+    } else {
+      document.documentElement.setAttribute('data-theme', 'classic');
     }
   } catch(e) {}
 })();
@@ -104,7 +73,7 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${roboto.variable} ${openSans.variable} ${lato.variable} ${nunito.variable} ${poppins.variable} ${sourceSans.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} antialiased`}
         suppressHydrationWarning
       >
         <LayoutClientWrapper>

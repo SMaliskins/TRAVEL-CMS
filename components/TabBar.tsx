@@ -299,7 +299,7 @@ export default function TabBar() {
   }
 
   return (
-    <div className="sticky top-16 z-30 flex items-end gap-0 bg-gray-100 px-3 pt-2 pb-0 overflow-x-auto">
+    <div className="sticky top-16 z-30 flex items-end gap-0 theme-panel-bg px-3 pt-2 pb-0 overflow-x-auto">
       {tabs.map((tab, index) => (
         <div key={tab.id} className="flex items-end">
           <TabItem

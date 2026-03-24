@@ -1,6 +1,7 @@
 "use client";
 
 import { useFontScale, SCALE_PRESETS, FONT_PRESETS } from "@/hooks/useFontScale";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import Link from "next/link";
 
 export default function AccessibilityPage() {
@@ -13,6 +14,8 @@ export default function AccessibilityPage() {
     resetFont,
     isClient,
   } = useFontScale();
+
+  const { scheme, setColorScheme, schemes, resetColorScheme } = useColorScheme();
 
   const currentPresetIndex = getCurrentPresetIndex();
   const scalePercentage = Math.round(scale * 100);
@@ -32,7 +35,9 @@ export default function AccessibilityPage() {
         <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Accessibility</h1>
-            <p className="text-sm text-gray-500 mt-1">Customize font size and font family for better readability</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Customize font, color scheme, and layout for better readability
+            </p>
           </div>
           <Link
             href="/settings"
@@ -49,7 +54,10 @@ export default function AccessibilityPage() {
               Accessibility Settings
             </h2>
             <button
-              onClick={resetFont}
+              onClick={() => {
+                resetFont();
+                resetColorScheme();
+              }}
               className="text-sm text-blue-600 hover:text-blue-700"
             >
               Reset to defaults
@@ -122,6 +130,46 @@ export default function AccessibilityPage() {
               
               <p className="mt-3 text-xs text-gray-500">
                 Choose your preferred font. Some fonts require Google Fonts to be loaded.
+              </p>
+            </div>
+
+            {/* Color Scheme */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Color Scheme
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {schemes.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setColorScheme(s.id)}
+                    className={`flex flex-col p-3 rounded-lg border-2 transition-all text-left ${
+                      scheme === s.id
+                        ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div
+                      className="h-10 rounded mb-2 flex items-center px-2"
+                      style={{
+                        backgroundColor: s.vars["--theme-btn-bg"],
+                        color: s.vars["--theme-btn-fg"],
+                        border: `1px solid ${s.vars["--theme-btn-border"]}`,
+                      }}
+                    >
+                      <span className="text-xs font-medium">Status</span>
+                    </div>
+                    <span className="text-sm font-medium text-gray-900">
+                      {s.label}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-0.5">
+                      {s.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-gray-500">
+                Choose a color scheme from pastel to corporate. All themes meet WCAG AA contrast.
               </p>
             </div>
 
