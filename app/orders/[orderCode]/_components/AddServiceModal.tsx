@@ -780,6 +780,10 @@ export default function AddServiceModal({
     loadCategories();
   }, [loadCategories, categoryLocked]);
 
+  const isAirportServices = (category || "").toLowerCase().includes("airport") && (category || "").toLowerCase().includes("service");
+  const COMMISSION_PRICING_CATEGORIES: CategoryType[] = ["tour", "insurance", "ancillary", "cruise", "rent_a_car", "transfer"];
+  const usesCommissionPricing = COMMISSION_PRICING_CATEGORIES.includes(categoryType as CategoryType) || isAirportServices;
+
   // Load supplier commissions only on dropdown open (lazy), not on supplier change
   const loadSupplierCommissions = useCallback(async () => {
     if (!usesCommissionPricing || !supplierPartyId) return;
@@ -1056,10 +1060,7 @@ export default function AddServiceModal({
   const showTicketNr = categoryType === "flight";
   const showHotelFields = categoryType === "hotel";
   const showTransferFields = categoryType === "transfer";
-  const isAirportServices = (category || "").toLowerCase().includes("airport") && (category || "").toLowerCase().includes("service");
   const showAirportServicesLinkedFields = isAirportServices && ((flightServices?.length ?? 0) > 0);
-  const COMMISSION_PRICING_CATEGORIES: CategoryType[] = ["tour", "insurance", "ancillary", "cruise", "rent_a_car", "transfer"];
-  const usesCommissionPricing = COMMISSION_PRICING_CATEGORIES.includes(categoryType as CategoryType) || isAirportServices;
   const mgRoutes = useMemo(() => [{
     id: "mg",
     pickup: "",
