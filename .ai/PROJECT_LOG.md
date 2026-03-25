@@ -5,6 +5,32 @@
 
 ---
 
+## [2026-03-25] CW — Passport AI upload: MIME sniff when type empty / octet-stream
+
+**Task:** JPEG/PDF passport parse failed when browser sent empty `file.type` or `application/octet-stream` (common on drag-drop).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `lib/files/inferUploadMime.ts` (extension + magic bytes); `app/api/ai/parse-passport/route.ts` + `components/PassportDetailsInput.tsx` use sniff + filename fallback; PDF vs image routing trusts bytes over wrong declared type.
+
+**Next Step:** QA: drag-drop JPG/PDF with no extension vs with extension; verify 401 only when unauthenticated.
+
+---
+
+## [2026-03-24] CW — Person names: preserve caps in double first/last (formatNameForDb)
+
+**Task:** `formatNameForDb` used only first char upper + rest lower → broke "Ričards Dins" in one field; per-word normalize + preserve mixed-case words.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `utils/nameFormat.ts`; `DirectoryForm` + `PartySelect` use `formatNameForDb` for first/last blur/save.
+
+**Next Step:** Re-save affected directory persons or run sync-format-names if desired.
+
+---
+
 ## [2026-03-24] CW — Bundle: analyzer script, lazy ProfitOrdersChart, tiptap optimize
 
 **Task:** Wire `@next/bundle-analyzer`, lazy-load dashboard profit chart, extend `optimizePackageImports` for TipTap.

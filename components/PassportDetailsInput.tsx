@@ -4,6 +4,11 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { COUNTRIES } from "@/lib/data/countries";
+import {
+  inferMimeFromBytes,
+  inferMimeFromFilename,
+  normalizeImageMime,
+} from "@/lib/files/inferUploadMime";
 
 export interface PassportData {
   passportNumber?: string;
@@ -62,10 +67,20 @@ export default function PassportDetailsInput({
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
   const handleFileUpload = useCallback(async (file: File) => {
-    const isImage = file.type.startsWith("image/");
-    const isPDF = file.type === "application/pdf";
+    const declared = normalizeImageMime(file.type?.trim() || "");
+    const fromName = inferMimeFromFilename(file.name);
+    const head = new Uint8Array(await file.slice(0, 64).arrayBuffer());
+    const fromBytes = inferMimeFromBytes(head);
+    const looksPdf =
+      declared === "application/pdf" ||
+      fromName === "application/pdf" ||
+      fromBytes === "application/pdf";
+    const looksImage =
+      declared.startsWith("image/") ||
+      (fromName?.startsWith("image/") ?? false) ||
+      (fromBytes?.startsWith("image/") ?? false);
 
-    if (!isImage && !isPDF) {
+    if (!looksPdf && !looksImage) {
       setParseError("Please upload an image or PDF");
       return;
     }

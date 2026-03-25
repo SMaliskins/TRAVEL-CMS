@@ -7,6 +7,7 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
+import { formatNameForDb } from "@/utils/nameFormat";
 
 function toTitleCase(str: string): string {
   if (!str) return str;
@@ -281,8 +282,8 @@ export default function PartySelect({
       };
 
       if (createType === "person") {
-        payload.firstName = toTitleCase(createFirstName.trim());
-        payload.lastName = toTitleCase(createLastName.trim());
+        payload.firstName = formatNameForDb(createFirstName.trim());
+        payload.lastName = formatNameForDb(createLastName.trim());
         if (createPersonalCode.trim()) payload.personalCode = createPersonalCode.trim();
         if (createPhone.trim()) payload.phone = createPhone.trim();
         if (createEmail.trim()) payload.email = createEmail.trim();
@@ -387,8 +388,8 @@ export default function PartySelect({
         skipDedupCheck: true,
       };
       if (createType === "person") {
-        payload.firstName = toTitleCase(createFirstName.trim());
-        payload.lastName = toTitleCase(createLastName.trim());
+        payload.firstName = formatNameForDb(createFirstName.trim());
+        payload.lastName = formatNameForDb(createLastName.trim());
         if (createPersonalCode.trim()) payload.personalCode = createPersonalCode.trim();
         if (createPhone.trim()) payload.phone = createPhone.trim();
         if (createEmail.trim()) payload.email = createEmail.trim();
@@ -719,7 +720,7 @@ export default function PartySelect({
                   placeholder="First Name *"
                   value={createFirstName}
                   onChange={(e) => setCreateFirstName(e.target.value)}
-                  onBlur={() => setCreateFirstName(v => toTitleCase(v))}
+                  onBlur={() => setCreateFirstName((v) => formatNameForDb(v))}
                   className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
                 />
                 <input
@@ -727,7 +728,7 @@ export default function PartySelect({
                   placeholder="Last Name *"
                   value={createLastName}
                   onChange={(e) => setCreateLastName(e.target.value)}
-                  onBlur={() => setCreateLastName(v => toTitleCase(v))}
+                  onBlur={() => setCreateLastName((v) => formatNameForDb(v))}
                   className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>

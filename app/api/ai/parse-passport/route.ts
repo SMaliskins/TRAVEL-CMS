@@ -5,6 +5,11 @@ import type { PassportDataFromMrz } from "@/lib/passport/parseMrz";
 import { MODELS } from "@/lib/ai/config";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
+import {
+  inferMimeFromBytes,
+  inferMimeFromFilename,
+  normalizeImageMime,
+} from "@/lib/files/inferUploadMime";
 
 /**
  * AI-powered passport parsing
@@ -321,23 +326,39 @@ export async function POST(request: NextRequest) {
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const file = formData.get("file") as File | null;
-      
+
       if (!file) {
         return NextResponse.json(
           { error: "File is required" },
           { status: 400 }
         );
       }
-      
-      mimeType = file.type;
-      isPDF = file.type === "application/pdf";
-      
-      if (isPDF) {
-        // Send PDF directly to GPT-4o (native PDF support - works for scanned/image-based PDFs, Ukrainian passports, etc.)
-        const buffer = await file.arrayBuffer();
+
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const sniffed = inferMimeFromBytes(bytes);
+      let declared = normalizeImageMime(file.type?.trim() || "");
+      let fallback = inferMimeFromFilename(file.name) || "";
+      if (fallback === "image/jpg") fallback = "image/jpeg";
+      if (!declared || declared === "application/octet-stream") {
+        declared = normalizeImageMime(fallback);
+      }
+
+      if (sniffed === "application/pdf") {
+        isPDF = true;
+        mimeType = "application/pdf";
         pdfBase64 = Buffer.from(buffer).toString("base64");
-      } else if (file.type.startsWith("image/")) {
-        const buffer = await file.arrayBuffer();
+      } else if (sniffed?.startsWith("image/")) {
+        isPDF = false;
+        mimeType = normalizeImageMime(sniffed);
+        imageBase64 = Buffer.from(buffer).toString("base64");
+      } else if (declared === "application/pdf") {
+        isPDF = true;
+        mimeType = "application/pdf";
+        pdfBase64 = Buffer.from(buffer).toString("base64");
+      } else if (declared.startsWith("image/")) {
+        isPDF = false;
+        mimeType = declared;
         imageBase64 = Buffer.from(buffer).toString("base64");
       } else {
         return NextResponse.json(

@@ -25,6 +25,7 @@ import SingleDatePicker from "@/components/SingleDatePicker";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
 import { formatDateDDMMYYYY, normalizePersonDobToIso } from "@/utils/dateFormat";
+import { formatNameForDb } from "@/utils/nameFormat";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { BANK_LIST } from "@/lib/constants/banks";
 import { Check, X, Plus, PanelLeft, Columns } from "lucide-react";
@@ -892,8 +893,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
       // Set person or company fields based on actual type
       if (actualType === "person") {
-        formData.firstName = toTitleCase(firstName);
-        formData.lastName = toTitleCase(lastName);
+        formData.firstName = formatNameForDb(firstName);
+        formData.lastName = formatNameForDb(lastName);
         formData.gender = gender || undefined;
         formData.personalCode = personalCode || undefined;
         {
@@ -1272,7 +1273,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setFirstName(e.target.value);
                           markFieldDirty("firstName");
                         }}
-                        onBlur={() => { setFirstName(v => toTitleCase(v)); markFieldTouched("firstName"); }}
+                        onBlur={() => { setFirstName((v) => formatNameForDb(v)); markFieldTouched("firstName"); }}
                         onFocus={() => markFieldTouched("firstName")}
                         className={getInputClasses("firstName", true, firstName)}
                         required
@@ -1290,7 +1291,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                           setLastName(e.target.value);
                           markFieldDirty("lastName");
                         }}
-                        onBlur={() => { setLastName(v => toTitleCase(v)); markFieldTouched("lastName"); }}
+                        onBlur={() => { setLastName((v) => formatNameForDb(v)); markFieldTouched("lastName"); }}
                         onFocus={() => markFieldTouched("lastName")}
                         className={getInputClasses("lastName", true, lastName)}
                         required
