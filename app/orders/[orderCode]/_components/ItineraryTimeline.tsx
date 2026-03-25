@@ -72,6 +72,15 @@ function formatBaggageTooltip(baggage: string): string {
   }
 }
 
+/** Package Tour transfer label: skip itinerary cards when user entered only a dash (ASCII/Unicode) or spaces. */
+function tourPackageTransferShouldRender(transferType: string | null | undefined): boolean {
+  if (transferType == null) return false;
+  const t = transferType.trim();
+  if (!t) return false;
+  const withoutDashes = t.replace(/[\s\u00A0\-\u2013\u2014\u2212]+/g, "");
+  return withoutDashes.length > 0;
+}
+
 // Copy button component with feedback
 function CopyButton({ text, title }: { text: string; title: string }) {
   const [copied, setCopied] = useState(false);
@@ -755,9 +764,10 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
           }
           // Package Tour transfers (inbound: airport->hotel, outbound: hotel->airport)
           const txType = (service as { transferType?: string | null }).transferType;
-          if (txType && txType !== "—") {
-            const isGroup = txType.toLowerCase() === "group";
-            const txTitle = isGroup ? "Group Transfer" : `Transfer: ${txType}`;
+          if (tourPackageTransferShouldRender(txType)) {
+            const txLabel = (txType ?? "").trim();
+            const isGroup = txLabel.toLowerCase() === "group";
+            const txTitle = isGroup ? "Group Transfer" : `Transfer: ${txLabel}`;
             const txIcon = isGroup ? <Bus size={16} strokeWidth={1.8} /> : <CarTaxiFront size={16} strokeWidth={1.8} />;
             const segments = service.flightSegments || [];
             const firstSeg = segments.length > 0 ? segments[0] as unknown as Record<string, unknown> : null;
@@ -912,9 +922,10 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
             });
           }
           const txType2 = (service as { transferType?: string | null }).transferType;
-          if (txType2 && txType2 !== "—") {
-            const isGroup2 = txType2.toLowerCase() === "group";
-            const txTitle2 = isGroup2 ? "Group Transfer" : `Transfer: ${txType2}`;
+          if (tourPackageTransferShouldRender(txType2)) {
+            const txLabel2 = (txType2 ?? "").trim();
+            const isGroup2 = txLabel2.toLowerCase() === "group";
+            const txTitle2 = isGroup2 ? "Group Transfer" : `Transfer: ${txLabel2}`;
             const txIcon2 = isGroup2 ? <Bus size={16} strokeWidth={1.8} /> : <CarTaxiFront size={16} strokeWidth={1.8} />;
             events.push({
               id: `${service.id}-transfer-in`,

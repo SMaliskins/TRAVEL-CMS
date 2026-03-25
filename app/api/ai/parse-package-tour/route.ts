@@ -72,7 +72,8 @@ Return a JSON object with this structure:
         "arrivalDate": "2026-09-19",
         "arrivalTimeScheduled": "08:50",
         "duration": "3h 50m",
-        "cabinClass": "economy"
+        "cabinClass": "economy",
+        "baggage": "8kg hand luggage, 20kg checked"
       }
     ]
   },
@@ -120,6 +121,17 @@ Tez Tour specific (Latvian "LĪGUMS Par tūrisma pakalpojumu sniegšanu", PAKALP
 - paymentTerms: "Maksājumu plāns saskaņā ar līguma punktu 5.1: 27.02.2026-140.44EUR, 19.05.2026-561.76EUR" (or similar) → first date+amount = deposit, last = final. Convert DD.MM.YYYY to YYYY-MM-DD
 - operator: "SIA Tez Tour", reg "Vienotais reģistrācijas Nr. 40003586306", license "T-2018-24"
 - direction: Format "from - to" (departure - arrival). E.g. "Latvia, Riga - Turkey, Antalya". Use departure city/country FIRST, then arrival. From first outbound segment: departure = from, arrival = to. If country unknown, infer (Riga→Latvia, Antalya→Turkey).
+
+ANEX TOUR / ANEX (Latvian "Ceļojumu pakalpojumu sniegšanas līgums", agency e.g. GULLIVER + operator BALTIC WORLD / ANEX):
+- bookingRef: The application number in the document header after "Nr." — e.g. "Ceļojumu pakalpojumu sniegšanas līgums Nr. 2002458" → bookingRef "2002458". Also check "līgums Nr." variants.
+- detectedOperator: "ANEX Tour" or "ANEX" when ANEX / BALTIC WORLD / ANEX TOUR branding appears.
+- travellers (CEĻOTĀJI): Table columns Uzvārds (surname), Vārds (given name), Dzimšanas datums. Names may be ALL CAPS and concatenated (e.g. "INESEELIZABETE" with surname "PAGA") — split into sensible firstName/lastName (e.g. lastName "Paga", firstName "Inese Elizabete"). Birth date DD-MM-YYYY → add optional "dateOfBirth": "1990-10-25" per traveller when visible.
+- direction: From flight route (e.g. RIX–AYT) set "Latvia, Riga - Turkey, Antalya" or equivalent.
+- flights.segments (LIDOJUMI): Each row — departure/arrival IATA (RIX, AYT), dates/times in DD-MM-YYYY HH:mm → YYYY-MM-DD and HH:mm. Flight number e.g. "4M 806" (store as "4M 806"). Class column "Y" → cabinClass "economy" unless clearly business/first.
+- baggage: From BAGĀŽA / baggage section — e.g. hand 8kg (Rokas) and registered 20kg (reģistrējamā). Put the SAME human-readable summary on EACH flight segment in "baggage" (e.g. "8kg hand, 20kg checked") so CRM baggage field can be filled.
+- transfers (TRANSFĒRS): e.g. "GROUP TRANSFER ANEX (AIRPORT-HOTEL)" → type "Group"; put full operator wording in transfers.description. Daudzums (quantity) can be noted in description.
+- accommodation (IZMITINĀŠANA): hotelName, room type (Istabas tips), meal (Ēdināšanas types e.g. Ultra AI → mealPlan "UAI" or "Ultra All Inclusive"), check-in Ierašanās / check-out Izbraukšana dates DD-MM-YYYY → YYYY-MM-DD as arrivalDate/departureDate.
+- pricing/paymentTerms: extract if shown on ANEX voucher; omit if not present.
 - hotelName: Extract hotel name UP TO the star rating (*). E.g. "STARLIGHT RESORT HOTEL 5* Ultra All Inclusive" -> hotelName: "STARLIGHT RESORT HOTEL", starRating: "5*"
 - starRating: Category/star rating (5*, 4*, etc.)
 - roomType: Standard, Club Superior, Club Deluxe, etc.
@@ -129,7 +141,7 @@ Tez Tour specific (Latvian "LĪGUMS Par tūrisma pakalpojumu sniegšanu", PAKALP
 - bookingRef: Application/booking number if present in document
 - totalPrice, cost: Extract Cost (€), Kopējā ceļojuma cena, total trip price, package price - any field showing total cost in EUR. Put in pricing.totalPrice and pricing.cost
 - paymentTerms: Extract deposit/final dates and percentages if present
-- flights.segments: Same structure as flight itinerary parser - IATA codes, dates YYYY-MM-DD, times HH:mm
+- flights.segments: Same structure as flight itinerary parser - IATA codes, dates YYYY-MM-DD, times HH:mm. Include "baggage" per segment when the document lists allowance (hand + checked kg).
 - additionalServices: List each extra service with description and price
 - For text input: user may paste agreement text from email, PDF copy, or any source - adapt to the format
 - Only return valid JSON, no other text`;

@@ -313,6 +313,7 @@ export default function AddServiceModal({
   interface ClientEntry {
     id: string | null;
     name: string;
+    parseUnmatched?: boolean;
   }
   const [clients, setClients] = useState<ClientEntry[]>(() => {
     // Initialize with default client from Order (requires both id and name)
@@ -1040,7 +1041,9 @@ export default function AddServiceModal({
   
   const updateClient = (index: number, id: string | null, name: string) => {
     const updated = [...clients];
-    updated[index] = { id, name };
+    updated[index] = id
+      ? { id, name }
+      : { id, name, parseUnmatched: clients[index]?.parseUnmatched };
     setClients(updated);
     markCorrected("clients");
   };
@@ -1635,12 +1638,18 @@ export default function AddServiceModal({
         arrivalTimeScheduled: s.arrivalTimeScheduled || "",
         duration: s.duration || "",
         cabinClass: (s.cabinClass || "economy") as "economy" | "premium_economy" | "business" | "first",
+        baggage: typeof s.baggage === "string" && s.baggage.trim() ? s.baggage.trim() : undefined,
         departureStatus: "scheduled",
         arrivalStatus: "scheduled",
       }));
       const normalized = normalizeSegmentsArrivalYear(mapped) as FlightSegment[];
       setFlightSegments(normalized);
       fields.add("flightSegments");
+      const bagFromSeg = normalized.map((x) => x.baggage).find(Boolean);
+      if (bagFromSeg) {
+        setBaggage(bagFromSeg);
+        fields.add("baggage");
+      }
       if (normalized.length > 0) {
         const first = normalized[0];
         const last = normalized[normalized.length - 1];
@@ -1749,18 +1758,21 @@ export default function AddServiceModal({
               "Content-Type": "application/json",
               ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
             },
-            body: JSON.stringify({ travellers }),
+            body: JSON.stringify({ travellers, matchOnly: true }),
           });
           if (res.ok) {
             const data = await res.json();
             const parties = data.parties || [];
-            const clientEntries = parties.map((r: { name: string; id: string; displayName: string }) => ({
-              id: r.id,
-              name: r.displayName || r.name,
-            }));
+            const clientEntries = parties.map(
+              (r: { name: string; id: string | null; displayName: string; matched?: boolean }) => ({
+                id: r.id,
+                name: r.displayName || r.name,
+                parseUnmatched: r.matched === false,
+              })
+            );
             if (clientEntries.length > 0) {
               setClients(clientEntries);
-              if (clientEntries.length === 1) {
+              if (clientEntries.length === 1 && clientEntries[0].id) {
                 setPayerPartyId(clientEntries[0].id);
                 setPayerName(clientEntries[0].name);
               }
@@ -3285,9 +3297,15 @@ export default function AddServiceModal({
                             </div>
                           ) : (
                             <span
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm cursor-pointer hover:bg-gray-200 transition-colors ${correctedFields.has("clients") ? "bg-amber-100 ring-1 ring-amber-400" : "bg-gray-100"}`}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm cursor-pointer hover:bg-gray-200 transition-colors ${
+                                client.parseUnmatched
+                                  ? "bg-amber-50 ring-2 ring-amber-400"
+                                  : correctedFields.has("clients")
+                                    ? "bg-amber-100 ring-1 ring-amber-400"
+                                    : "bg-gray-100"
+                              }`}
                               onClick={() => setReplacingClientIdx(realIdx)}
-                              title="Click to replace client"
+                              title={client.parseUnmatched ? "Not in directory — click to select or add" : "Click to replace client"}
                             >
                               {displayName}
                               {clients.filter(c => c.id || c.name).length > 1 && (

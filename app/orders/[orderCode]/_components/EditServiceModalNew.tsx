@@ -174,6 +174,8 @@ interface Service {
 interface ClientEntry {
   id: string | null;
   name: string;
+  /** Parsed from voucher but not matched in directory (user should pick or add) */
+  parseUnmatched?: boolean;
 }
 
 interface FlightServiceRef {
@@ -1443,12 +1445,18 @@ export default function EditServiceModalNew({
         arrivalTimeScheduled: s.arrivalTimeScheduled || "",
         duration: s.duration || "",
         cabinClass: (s.cabinClass || "economy") as "economy" | "premium_economy" | "business" | "first",
+        baggage: typeof s.baggage === "string" && s.baggage.trim() ? s.baggage.trim() : undefined,
         departureStatus: "scheduled" as const,
         arrivalStatus: "scheduled" as const,
       }));
       const normalized = normalizeSegmentsArrivalYear(mapped) as FlightSegment[];
       setFlightSegments(normalized);
       fields.add("flightSegments");
+      const bagFromSeg = normalized.map((x) => x.baggage).find(Boolean);
+      if (bagFromSeg) {
+        setBaggage(bagFromSeg);
+        fields.add("baggage");
+      }
       if (normalized.length > 0) {
         const first = normalized[0];
         const last = normalized[normalized.length - 1];
@@ -1551,15 +1559,18 @@ export default function EditServiceModalNew({
               "Content-Type": "application/json",
               ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
             },
-            body: JSON.stringify({ travellers }),
+            body: JSON.stringify({ travellers, matchOnly: true }),
           });
           if (res.ok) {
             const data = await res.json();
             const parties = data.parties || [];
-            const clientEntries = parties.map((r: { name: string; id: string; displayName: string }) => ({
-              id: r.id,
-              name: r.displayName || r.name,
-            }));
+            const clientEntries = parties.map(
+              (r: { name: string; id: string | null; displayName: string; matched?: boolean }) => ({
+                id: r.id,
+                name: r.displayName || r.name,
+                parseUnmatched: r.matched === false,
+              })
+            );
             if (clientEntries.length > 0) {
               setClients(clientEntries);
               fields.add("clients");
@@ -1818,7 +1829,9 @@ export default function EditServiceModalNew({
   
   const updateClient = (index: number, id: string | null, name: string) => {
     const updated = [...clients];
-    updated[index] = { id, name };
+    updated[index] = id
+      ? { id, name }
+      : { id, name, parseUnmatched: clients[index]?.parseUnmatched };
     setClients(updated);
     markCorrected("clients");
   };
@@ -3870,8 +3883,11 @@ export default function EditServiceModalNew({
                   <div className="space-y-1.5">
                     {clients.map((client, index) => (
                       <div key={index} className="flex gap-1 items-center">
-                        <div className="flex-1 min-w-0">
-                          <PartySelect key={`client-${client.id || index}`} value={client.id} onChange={(id, name) => updateClient(index, id, name)} initialDisplayName={client.name} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                        <div
+                          className={`flex-1 min-w-0 ${client.parseUnmatched ? "rounded-md ring-2 ring-amber-400 bg-amber-50/50 p-0.5" : ""}`}
+                          title={client.parseUnmatched ? "Not found in directory — select client or add new" : undefined}
+                        >
+                          <PartySelect key={`client-${client.id || index}`} value={client.id} onChange={(id, name) => updateClient(index, id, name)} roleFilter="client" initialDisplayName={client.name} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                         </div>
                         {clients.length > 1 && (
                           <button type="button" onClick={() => removeClient(index)} className="px-1.5 text-red-400 hover:text-red-600">

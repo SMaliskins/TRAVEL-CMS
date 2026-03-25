@@ -5,6 +5,45 @@
 
 ---
 
+## [2026-03-25] CW — Passport AI: Responses output + incomplete + PDF text fallback
+
+**Task:** "AI parsing failed" — OpenAI Responses `incomplete`/new output shapes left empty text; images with bad MIME.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `parse-passport/route.ts` — richer `extractOpenAiResponsesOutputText` (text/output_text); treat failed/cancelled/incomplete only when no extracted text; PDF fallback unpdf + Chat Completions; vision `detail: high` + safe image MIME.
+
+**Next Step:** QA: scanned PDF, photo JPEG; if still fail, check server logs for OpenAI `details`.
+
+---
+
+## [2026-03-25] CW — Package Tour: ANEX prompt + traveller match-only + baggage from parse
+
+**Task:** ANEX TOUR Latvian contract parsing; match travellers to directory without auto-create; highlight unmatched; richer name matching; baggage on segments.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/api/ai/parse-package-tour/route.ts` — ANEX section (Nr., CEĻOTĀJI, LIDOJUMI, BAGĀŽA, TRANSFĒRS, IZMITINĀŠANA); `find-or-create-travellers` — `matchOnly`, token-set + fuzzy + initials+surname; response `matched`; Add/Edit tour parse uses `matchOnly: true`, `baggage` on segments + service baggage; amber highlight unmatched clients.
+
+**Next Step:** QA with real ANEX PDF; verify save still find-or-creates name-only clients on submit.
+
+---
+
+## [2026-03-25] CW — Package Tour itinerary: hide transfer when field is dash-only
+
+**Task:** Transfer "—" or "-" in Package Tour must not render transfer cards in Itinerary.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `ItineraryTimeline.tsx` — `tourPackageTransferShouldRender()` strips ASCII/Unicode dashes and whitespace; both tour+flights and tour-no-flights branches use it (replaces check for em dash only).
+
+**Next Step:** QA: Individual/Group still show; `-` / `–` / `—` / spaces only hide.
+
+---
+
 ## [2026-03-25] CW — Order header: click client name to change (not directory popup)
 
 **Task:** Lead passenger name click opened directory card; change client only on double-click — confusing.

@@ -238,7 +238,21 @@ function recoverMrzLinesFromModelText(content: string, existing1?: string, exist
   return { mrzLine1: extracted[0], mrzLine2: extracted[1] };
 }
 
-/** OpenAI Responses API: aggregate text from `output` message parts (raw fetch has no `output_text`). */
+function collectOpenAiResponseTextPart(part: unknown, chunks: string[]): void {
+  if (!part || typeof part !== "object") return;
+  const p = part as Record<string, unknown>;
+  const typ = String(p.type || "");
+  if (typeof p.text === "string" && p.text.trim()) {
+    if (typ === "output_text" || typ === "text" || typ === "summary_text") {
+      chunks.push(p.text);
+    }
+  }
+  if (Array.isArray(p.content)) {
+    for (const c of p.content) collectOpenAiResponseTextPart(c, chunks);
+  }
+}
+
+/** OpenAI Responses API: aggregate text from `output` (message blocks, output_text, text). */
 function extractOpenAiResponsesOutputText(data: unknown): string {
   if (!data || typeof data !== "object") return "";
   const d = data as Record<string, unknown>;
@@ -249,16 +263,45 @@ function extractOpenAiResponsesOutputText(data: unknown): string {
   for (const item of output) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
-    if (o.type !== "message") continue;
-    const contentParts = o.content;
-    if (!Array.isArray(contentParts)) continue;
-    for (const part of contentParts) {
-      if (!part || typeof part !== "object") continue;
-      const p = part as Record<string, unknown>;
-      if (p.type === "output_text" && typeof p.text === "string") chunks.push(p.text);
+    if (o.type === "message" && Array.isArray(o.content)) {
+      for (const part of o.content) collectOpenAiResponseTextPart(part, chunks);
+    } else {
+      collectOpenAiResponseTextPart(item, chunks);
     }
   }
   return chunks.join("");
+}
+
+async function openAiChatPassportText(
+  openaiKey: string,
+  userPlainText: string
+): Promise<{ ok: boolean; content: string; error?: unknown }> {
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `Parse this passport text and extract all passport information:\n\n${userPlainText.slice(0, 120_000)}`,
+    },
+  ];
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openaiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODELS.OPENAI_VISION,
+      messages,
+      max_tokens: 1500,
+      temperature: 0.1,
+    }),
+  });
+  const errorData = !response.ok ? await response.json().catch(() => ({})) : undefined;
+  if (!response.ok) {
+    return { ok: false, content: "", error: errorData };
+  }
+  const data = await response.json();
+  return { ok: true, content: (data.choices?.[0]?.message?.content as string) || "" };
 }
 
 async function openaiUploadUserDataPdf(
@@ -397,36 +440,15 @@ export async function POST(request: NextRequest) {
       let content = "";
 
       if (textContent) {
-        const messages = [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Parse this passport text and extract all passport information:\n\n${textContent}`,
-          },
-        ];
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openaiKey}`,
-          },
-          body: JSON.stringify({
-            model: MODELS.OPENAI_VISION,
-            messages,
-            max_tokens: 1500,
-            temperature: 0.1,
-          }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error("OpenAI API error:", errorData);
+        const txt = await openAiChatPassportText(openaiKey, textContent);
+        if (!txt.ok) {
+          console.error("OpenAI API error:", txt.error);
           return NextResponse.json(
-            { error: "AI parsing failed", details: errorData, passport: null },
+            { error: "AI parsing failed", details: txt.error, passport: null },
             { status: 500 }
           );
         }
-        const data = await response.json();
-        content = data.choices?.[0]?.message?.content || "";
+        content = txt.content;
       } else if (isPDF && pdfBase64) {
         /**
          * PDFs must use Responses API + Files API (`input_file`).
@@ -475,22 +497,53 @@ export async function POST(request: NextRequest) {
               { status: 500 }
             );
           }
+          content = extractOpenAiResponsesOutputText(respData);
           const status =
             respData && typeof respData === "object"
               ? (respData as { status?: string }).status
               : undefined;
-          if (status === "failed" || status === "cancelled" || status === "incomplete") {
-            console.error("OpenAI Responses status:", respData);
+          if (
+            !content.trim() &&
+            (status === "failed" || status === "cancelled" || status === "incomplete")
+          ) {
+            console.error("OpenAI Responses status (no output text):", respData);
             return NextResponse.json(
               { error: "AI parsing failed", details: respData, passport: null },
               { status: 500 }
             );
           }
-          content = extractOpenAiResponsesOutputText(respData);
+          if (!content.trim() && pdfBase64) {
+            try {
+              const { getDocumentProxy, extractText } = await import("unpdf");
+              const uint8 = new Uint8Array(Buffer.from(pdfBase64, "base64"));
+              const pdf = await getDocumentProxy(uint8);
+              const extracted = await extractText(pdf, { mergePages: true });
+              const rawText = Array.isArray(extracted?.text)
+                ? extracted.text.join("\n")
+                : String(extracted?.text || "");
+              const raw = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+              if (raw.length >= 30) {
+                const txt = await openAiChatPassportText(openaiKey, raw);
+                if (txt.ok && txt.content.trim()) {
+                  content = txt.content;
+                }
+              }
+            } catch (fbErr) {
+              console.warn("Passport PDF text-layer fallback failed:", fbErr);
+            }
+          }
         } finally {
           await openaiDeleteFileSafe(openaiKey, upload.fileId);
         }
       } else {
+        const imgMime =
+          mimeType && mimeType.startsWith("image/") ? normalizeImageMime(mimeType) : "image/jpeg";
+        if (!imageBase64) {
+          return NextResponse.json(
+            { error: "No image data. Try another file or format.", passport: null },
+            { status: 400 }
+          );
+        }
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -499,7 +552,8 @@ export async function POST(request: NextRequest) {
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:${mimeType};base64,${imageBase64}`,
+                  url: `data:${imgMime};base64,${imageBase64}`,
+                  detail: "high" as const,
                 },
               },
               {
