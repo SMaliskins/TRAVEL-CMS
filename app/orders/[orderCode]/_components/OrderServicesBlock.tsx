@@ -78,6 +78,7 @@ interface Service {
   vatRate?: number | null;
   name: string;
   supplier: string;
+  supplierNameRaw?: string;
   client: string;
   payer: string;
   supplierPartyId?: string;
@@ -1416,6 +1417,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           categoryType: ((s.categoryType ?? s.category_type) || undefined) as Service["categoryType"],
           vatRate: (s.vatRate ?? s.vat_rate) as number | null,
           name: String(s.serviceName ?? s.service_name ?? ""),
+          supplierNameRaw: String(s.supplierName ?? s.supplier_name ?? ""),
           supplier: (() => {
             const base = String(s.supplierName ?? s.supplier_name ?? "-");
             const airlineChannel = !!(s.airlineChannel ?? s.airline_channel);
@@ -1850,6 +1852,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       categoryType: (service.categoryType ?? (raw.categoryType as string) ?? null) as Service["categoryType"],
       vatRate: ((raw.vatRate ?? raw.vat_rate) ?? null) as number | null,
       name: service.serviceName,
+      supplierNameRaw: service.supplierName || "",
       supplier: (() => {
         const base = service.supplierName || "-";
         const airlineChannel = !!(service.airlineChannel ?? raw.airlineChannel);
@@ -2013,7 +2016,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         
         // Parties - copy all IDs and names
         supplierPartyId: service.supplierPartyId || service.supplier_party_id,
-        supplierName: service.supplier !== "-" ? service.supplier : null,
+        supplierName: service.supplierNameRaw || (service.supplier !== "-" ? service.supplier : null),
         clientPartyId: service.clientPartyId || service.client_party_id,
         clientName: service.client !== "-" ? service.client : null,
         payerPartyId: service.payerPartyId || service.payer_party_id,
@@ -3521,7 +3524,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     dateFrom: serviceData.dateFrom,
                     dateTo: serviceData.dateTo,
                     supplierPartyId: serviceData.supplierPartyId || serviceData.supplier_party_id,
-                    supplierName: serviceData.supplier !== "-" ? serviceData.supplier : null,
+                    supplierName: serviceData.supplierNameRaw || (serviceData.supplier !== "-" ? serviceData.supplier : null),
                     clientPartyId: serviceData.clientPartyId || serviceData.client_party_id,
                     clientName: serviceData.client !== "-" ? serviceData.client : null,
                     payerPartyId: serviceData.payerPartyId || serviceData.payer_party_id,

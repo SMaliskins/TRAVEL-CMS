@@ -83,6 +83,7 @@ interface Service {
   dateFrom?: string | null;
   dateTo?: string | null;
   supplier?: string | null;
+  supplierNameRaw?: string;
   client?: string | null;
   payer?: string | null;
   supplierPartyId?: string | null;
@@ -311,7 +312,17 @@ export default function EditServiceModalNew({
   const [dateFrom, setDateFrom] = useState<string | undefined>(service.dateFrom || undefined);
   const [dateTo, setDateTo] = useState<string | undefined>(service.dateTo || undefined);
   const [supplierPartyId, setSupplierPartyId] = useState<string | null>(service.supplierPartyId || null);
-  const [supplierName, setSupplierName] = useState(service.supplier || "");
+  const [supplierName, setSupplierName] = useState(() => {
+    if (service.supplierNameRaw) return service.supplierNameRaw;
+    let name = service.supplier || "";
+    if (service.airlineChannel && service.airlineChannelSupplierName) {
+      const suffix = "/" + service.airlineChannelSupplierName;
+      while (name.endsWith(suffix)) {
+        name = name.slice(0, -suffix.length);
+      }
+    }
+    return name;
+  });
   const [airlineChannel, setAirlineChannel] = useState(service.airlineChannel || false);
   const [airlineChannelSupplierId, setAirlineChannelSupplierId] = useState<string | null>(service.airlineChannelSupplierId || null);
   const [airlineChannelSupplierName, setAirlineChannelSupplierName] = useState(service.airlineChannelSupplierName || "");
