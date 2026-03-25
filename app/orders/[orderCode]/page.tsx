@@ -1143,25 +1143,18 @@ export default function OrderPage({
                                 ? "text-blue-600 underline"
                                 : "text-gray-900 hover:bg-gray-100"
                             }`}
-                            onClick={() => {
-                              if (isCtrlPressed && order.client_party_id) {
+                            onClick={(e) => {
+                              if ((e.ctrlKey || e.metaKey) && order.client_party_id) {
+                                e.preventDefault();
                                 router.push(`/directory/${order.client_party_id}`);
-                              } else if (order.client_party_id) {
-                                setDirectoryPopupPartyId(order.client_party_id);
                               } else {
                                 startEditingClient();
                               }
                             }}
-                            onDoubleClick={(e) => {
-                              e.preventDefault();
-                              if (order.client_party_id) startEditingClient();
-                            }}
                             title={
-                              isCtrlPressed
-                                ? t(lang, "order.ctrlClickToOpenClient")
-                                : order.client_party_id
-                                  ? "Click: directory card · Double-click: change client"
-                                  : t(lang, "order.clickToChangeClient")
+                              order.client_party_id
+                                ? `${t(lang, "order.clickToChangeClient")} · ${t(lang, "order.ctrlClickToOpenClient")}`
+                                : t(lang, "order.clickToChangeClient")
                             }
                           >
                             {order.client_display_name || t(lang, "order.selectClient")}

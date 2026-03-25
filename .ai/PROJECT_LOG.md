@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-03-25] CW — Order header: click client name to change (not directory popup)
+
+**Task:** Lead passenger name click opened directory card; change client only on double-click — confusing.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `app/orders/[orderCode]/page.tsx` — single click → `startEditingClient()`; Ctrl/Cmd+click → `/directory/[id]`; avatar button still opens directory popup. `lib/i18n.ts` tooltip strings updated.
+
+**Next Step:** QA: click name → PartySelect; Cmd+click → directory page; avatar → popup.
+
+---
+
 ## [2026-03-25] CW — Passport AI upload: MIME sniff when type empty / octet-stream
 
 **Task:** JPEG/PDF passport parse failed when browser sent empty `file.type` or `application/octet-stream` (common on drag-drop).
