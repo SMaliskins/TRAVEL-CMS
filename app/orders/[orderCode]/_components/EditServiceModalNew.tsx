@@ -3531,6 +3531,7 @@ export default function EditServiceModalNew({
                 {/* Tour: Paste & Parse in Basic Info */}
                 {categoryType === "tour" && (
                   !showTourPasteInput ? (
+                    <>
                     <div
                       role="region"
                       aria-label="Drop or paste Tour Package document"
@@ -3575,8 +3576,13 @@ export default function EditServiceModalNew({
                         </>
                       )}
                       <input ref={tourParseInputRef} type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleParsePackageTour(f); e.target.value = ""; }} />
-                      {parseError && !showTourPasteInput && <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>}
                     </div>
+                    {parseError && !showTourPasteInput && (
+                      (parseError.includes("module") || parseError.includes("upgrade"))
+                        ? <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded">{parseError}</div>
+                        : <div className="mt-1 text-sm text-red-600 bg-red-50 p-2 rounded">{parseError}</div>
+                    )}
+                    </>
                   ) : (
                     <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="text-xs text-gray-600 font-medium mb-1">Paste document text — will fill tour fields</div>
