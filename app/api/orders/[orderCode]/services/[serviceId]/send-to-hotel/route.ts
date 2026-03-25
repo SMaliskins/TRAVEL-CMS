@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendEmail } from "@/lib/email/sendEmail";
+import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -69,10 +70,13 @@ export async function POST(
       }
     }
 
+    const rawEmailHtml = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333">${htmlBody}${signatureHtml}</div>`;
+    const finalEmailHtml = await replaceBase64Images(rawEmailHtml);
+
     const result = await sendEmail(
       to.trim(),
       subject || "Hotel reservation",
-      `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333">${htmlBody}${signatureHtml}</div>`,
+      finalEmailHtml,
       message,
       undefined,
       { companyId: order.company_id }

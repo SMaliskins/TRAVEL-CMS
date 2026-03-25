@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 import { sendEmail } from "@/lib/email/sendEmail";
+import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -149,10 +150,12 @@ export async function POST(
       content: pdfBuffer,
     });
 
+    const finalHtml = await replaceBase64Images(emailHtml);
+
     const result = await sendEmail(
       to.trim(),
       emailSubject,
-      emailHtml,
+      finalHtml,
       undefined,
       attachments,
       { from: emailFrom || undefined, companyId: companyId || undefined }
