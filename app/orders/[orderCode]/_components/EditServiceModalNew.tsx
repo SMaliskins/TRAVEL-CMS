@@ -2728,7 +2728,7 @@ export default function EditServiceModalNew({
             body: JSON.stringify({ document_type: docType, corrections }),
           }).catch(() => {});
         }
-        if (categoryType !== "tour") onClose();
+        onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
         setError(errData.error || 'Failed to update service');
@@ -3606,7 +3606,7 @@ export default function EditServiceModalNew({
                           </svg>
                           Saving...
                         </>
-                      ) : "Save Changes"}
+                      ) : "Save & Exit"}
                     </button>
                   </div>
 
@@ -5314,7 +5314,7 @@ export default function EditServiceModalNew({
                           </svg>
                           Saving...
                         </>
-                      ) : "Save Changes"}
+                      ) : "Save & Exit"}
                     </button>
                     <button 
                       type="button" 
@@ -5823,7 +5823,7 @@ export default function EditServiceModalNew({
                     </svg>
                     Saving...
                   </>
-                ) : "Save Changes"}
+                ) : "Save & Exit"}
               </button>
             </div>
           )}
