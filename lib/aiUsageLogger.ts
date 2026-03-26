@@ -4,7 +4,7 @@ import { MODEL_PRICING, MODELS } from "@/lib/ai/config";
 interface UsageLogParams {
   companyId: string;
   userId: string;
-  operation: "parse_flight" | "parse_package_tour" | "parse_hotel" | "other";
+  operation: "parse_flight" | "parse_package_tour" | "parse_hotel" | "parse_passport" | "parse_flight_ticket" | "parse_invoice" | "parse_company_doc" | "parse_expense" | "other";
   model: string;
   inputTokens?: number;
   outputTokens?: number;
