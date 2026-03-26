@@ -546,7 +546,7 @@ export default function DashboardPage() {
                 onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, orders: p }))}
                 onClick={() => {
                   const d = getCardEffectiveDates("orders");
-                  router.push(`/orders?createdFrom=${d.start}&createdTo=${d.end}`);
+                  window.open(`/orders?createdFrom=${d.start}&createdTo=${d.end}`, "_blank");
                 }}
               />
               <StatisticCard
@@ -563,7 +563,7 @@ export default function DashboardPage() {
                 }
                 cardPeriod={cardPeriods.bookings}
                 onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, bookings: p }))}
-                onClick={() => router.push("/orders?status=Active")}
+                onClick={() => window.open("/orders?status=Active", "_blank")}
               />
               <StatisticCard
                 title="Revenue"
@@ -581,7 +581,7 @@ export default function DashboardPage() {
                 onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, revenue: p }))}
                 onClick={() => {
                   const d = getCardEffectiveDates("revenue");
-                  router.push(`/orders?createdFrom=${d.start}&createdTo=${d.end}`);
+                  window.open(`/orders?createdFrom=${d.start}&createdTo=${d.end}`, "_blank");
                 }}
               />
               <StatisticCard
@@ -590,7 +590,7 @@ export default function DashboardPage() {
                 valueClassName="text-red-600"
                 cardPeriod={cardPeriods.overdue}
                 onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, overdue: p }))}
-                onClick={!isSubagent ? () => router.push("/finances/invoices?status=overdue") : undefined}
+                onClick={!isSubagent ? () => window.open("/finances/invoices?status=overdue", "_blank") : undefined}
               />
               {isSubagent && (
                 <StatisticCard

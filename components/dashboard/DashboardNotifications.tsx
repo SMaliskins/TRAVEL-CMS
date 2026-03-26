@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { ExternalLink } from "lucide-react";
@@ -53,8 +52,6 @@ function timeAgo(dateStr: string, lang: string): string {
 export default function DashboardNotifications() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language || "en";
-  const router = useRouter();
-
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -94,7 +91,7 @@ export default function DashboardNotifications() {
         </h3>
         {total > 0 && (
           <button
-            onClick={() => router.push("/notifications")}
+            onClick={() => window.open("/notifications", "_blank")}
             className="flex items-center gap-1 text-[10px] font-medium text-blue-600 hover:text-blue-800 transition-colors"
           >
             {viewAllLabel[lang as keyof typeof viewAllLabel] || viewAllLabel.en}
@@ -121,7 +118,7 @@ export default function DashboardNotifications() {
             {notifications.slice(0, 3).map((n) => (
               <button
                 key={n.id}
-                onClick={() => router.push(n.link || "/notifications")}
+                onClick={() => window.open(n.link || "/notifications", "_blank")}
                 className={`w-full rounded-lg px-2.5 py-1.5 text-left transition-colors ${
                   n.read ? "hover:bg-gray-50" : "bg-blue-50/50 hover:bg-blue-50"
                 }`}

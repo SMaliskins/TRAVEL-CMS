@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { Plane, ExternalLink, Clock } from "lucide-react";
@@ -30,8 +29,6 @@ export default function DashboardCheckins() {
   const { prefs } = useUserPreferences();
   const lang = (prefs.language || "en") as keyof typeof labels;
   const t = labels[lang] || labels.en;
-  const router = useRouter();
-
   const [checkins, setCheckins] = useState<CheckinItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -115,7 +112,7 @@ export default function DashboardCheckins() {
                         {new Date(c.departureDateTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                       </span>
                     )}
-                    <button onClick={() => router.push(`/orders/${c.orderCode}`)}
+                    <button onClick={() => window.open(`/orders/${c.orderCode}`, "_blank")}
                       className="text-[10px] text-blue-600 hover:text-blue-800 font-medium ml-0.5">
                       →
                     </button>
