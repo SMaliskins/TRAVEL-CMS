@@ -92,41 +92,22 @@ function createClusterIcon(cluster: { getChildCount: () => number; getAllChildMa
   let hasGreen = false;
   let allGreen = true;
   for (const m of children) {
-    const countStr = m.options.alt || "1";
-    const parts = countStr.split("|");
+    const parts = (m.options.alt || "1").split("|");
     totalCount += parseInt(parts[0]) || 1;
     if (parts[1] === "g") hasGreen = true;
     if (parts[1] !== "g") allGreen = false;
   }
 
   const size = totalCount < 10 ? 40 : totalCount < 50 ? 48 : 56;
+  const r = size / 2;
   const bg = allGreen ? "#10b981" : "#3b82f6";
-  const ring = hasGreen && !allGreen ? "#10b981" : "white";
-  const strokeW = hasGreen && !allGreen ? 3 : 2;
+  const stroke = hasGreen && !allGreen ? "#10b981" : "white";
+  const sw = hasGreen && !allGreen ? 3 : 2;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="${bg}" stroke="${stroke}" stroke-width="${sw}"/><text x="${r}" y="${r + 5}" text-anchor="middle" font-size="${size < 44 ? 14 : 16}" font-weight="700" fill="white">${totalCount}</text></svg>`;
 
   return L.divIcon({
-    html: circleSvg(bg, totalCount, ring).replace(
-      /width="\d+" height="\d+"/,
-      `width="${size}" height="${size}"`
-    ).replace(
-      /viewBox="0 0 \d+ \d+"/,
-      `viewBox="0 0 ${size} ${size}"`
-    ).replace(
-      /cx="\d+(\.\d+)?" cy="\d+(\.\d+)?" r="\d+(\.\d+)?"/,
-      `cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}"`
-    ).replace(
-      /stroke-width="\d+"/,
-      `stroke-width="${strokeW}"`
-    ).replace(
-      /stroke="[^"]+"/,
-      `stroke="${ring}"`
-    ).replace(
-      /y="\d+(\.\d+)?"/,
-      `y="${size / 2 + 5}"`
-    ).replace(
-      /x="\d+(\.\d+)?"/g,
-      `x="${size / 2}"`
-    ),
+    html: svg,
     className: "",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
