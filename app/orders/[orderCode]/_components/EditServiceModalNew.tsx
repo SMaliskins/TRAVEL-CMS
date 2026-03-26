@@ -3675,9 +3675,9 @@ export default function EditServiceModalNew({
                   <input
                     type="text"
                     value={serviceName}
-                    onChange={(e) => setServiceName(e.target.value)}
+                    onChange={(e) => { setServiceName(e.target.value); markCorrected("serviceName"); }}
                     placeholder={categoryType === "tour" ? "e.g. RIX-BOJ or paste below" : categoryType === "visa" ? "Visa to Turkey" : isAirportServices ? "Airport name, arrival/departure/transfer" : "e.g. Airport - Hotel - Airport, Hotel - Hotel, Train Station - Hotel"}
-                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
+                    className={`w-full rounded-lg border px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 ${correctedFields.has("serviceName") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("serviceName") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("serviceName") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500"}`}
                   />
                 </div>
 
@@ -3988,13 +3988,14 @@ export default function EditServiceModalNew({
               )}
                 {basicInfoTab === "parties" && CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && (
               <div className="p-3 space-y-2">
-                <div className={categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
+                <div className={correctedFields.has("supplierName") ? "ring-2 ring-amber-400 border-amber-400 rounded-lg p-0.5 -m-0.5 bg-amber-50/30" : categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   <PartySelect
                     value={supplierPartyId}
                     onChange={(id, name) => {
                       setSupplierPartyId(id);
                       setSupplierName(name);
+                      markCorrected("supplierName");
                       if (!name.toUpperCase().includes("BSP")) {
                         setAirlineChannel(false);
                         setAirlineChannelSupplierId(null);
@@ -4542,9 +4543,10 @@ export default function EditServiceModalNew({
                               pricingLastEditedRef.current = "cost";
                               const v = parseFloat(e.target.value) || 0;
                               setServicePrice(String(Math.round(v * 100) / 100));
+                              markCorrected("servicePrice");
                             }}
                             placeholder="0.00"
-                            className={`flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] border-0 bg-transparent ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : ""}`}
+                            className={`flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] border-0 bg-transparent ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : ""}`}
                           />
                         </div>
                       </div>
