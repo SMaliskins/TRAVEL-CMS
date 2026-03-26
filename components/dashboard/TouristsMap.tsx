@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { formatDateRange } from "@/utils/dateFormat";
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -24,10 +24,6 @@ const MapFitBounds = dynamic(
   () => import("./MapFitBounds"),
   { ssr: false }
 );
-const MarkerClusterGroup = dynamic(
-  () => import("react-leaflet-cluster"),
-  { ssr: false }
-);
 
 export interface TouristLocation {
   id: string;
@@ -47,42 +43,38 @@ interface TouristsMapProps {
   className?: string;
 }
 
-function pinSvg(color: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="${color}"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>`;
+interface CityGroup {
+  key: string;
+  city: string;
+  location: [number, number];
+  travelers: TouristLocation[];
+  hasInProgress: boolean;
+  allInProgress: boolean;
 }
 
-function createPinIcon(status?: string) {
-  if (typeof window === "undefined") return undefined;
-  const L = require("leaflet");
-  const color = status === "in-progress" ? "#10b981" : "#3b82f6";
-  return L.divIcon({
-    html: pinSvg(color),
-    className: "",
-    iconSize: [28, 40],
-    iconAnchor: [14, 40],
-    popupAnchor: [0, -40],
-  });
+function pinSvg(color: string, count: number): string {
+  if (count <= 1) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="${color}"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>`;
+  }
+  const w = 34;
+  const h = 46;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="M${w / 2} 0C${w * 0.225} 0 0 ${h * 0.157} 0 ${h * 0.35}c0 ${h * 0.26} ${w / 2} ${h * 0.65} ${w / 2} ${h * 0.65}s${w / 2}-${h * 0.39} ${w / 2}-${h * 0.65}C${w} ${h * 0.157} ${w * 0.775} 0 ${w / 2} 0z" fill="${color}"/><circle cx="${w / 2}" cy="${h * 0.33}" r="${w * 0.32}" fill="white"/><text x="${w / 2}" y="${h * 0.37}" text-anchor="middle" font-size="13" font-weight="700" fill="${color}">${count}</text></svg>`;
 }
 
-function createClusterIcon(cluster: { getChildCount: () => number; getAllChildMarkers: () => { options: { alt?: string } }[] }) {
+function createCityIcon(group: CityGroup) {
   if (typeof window === "undefined") return undefined;
   const L = require("leaflet");
-  const count = cluster.getChildCount();
-  const size = count < 10 ? 36 : count < 50 ? 44 : 52;
-
-  const children = cluster.getAllChildMarkers();
-  const hasInProgress = children.some((m) => m.options.alt === "in-progress");
-  const allInProgress = children.every((m) => m.options.alt === "in-progress");
-
-  const bg = allInProgress ? "#10b981" : "#3b82f6";
-  const ring = hasInProgress && !allInProgress ? "border:3px solid #10b981" : "border:2px solid white";
-  const shadow = allInProgress ? "rgba(16,185,129,0.4)" : "rgba(59,130,246,0.4)";
-
+  const color = group.allInProgress ? "#10b981" : group.hasInProgress ? "#0d9488" : "#3b82f6";
+  const count = group.travelers.length;
+  const isMulti = count > 1;
+  const w = isMulti ? 34 : 28;
+  const h = isMulti ? 46 : 40;
   return L.divIcon({
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${size < 40 ? 13 : 15}px;box-shadow:0 2px 8px ${shadow};${ring}">${count}</div>`,
+    html: pinSvg(color, count),
     className: "",
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+    iconSize: [w, h],
+    iconAnchor: [w / 2, h],
+    popupAnchor: [0, -h],
   });
 }
 
@@ -107,13 +99,39 @@ export default function TouristsMap({
     (loc) => loc.status === "upcoming" || loc.status === "in-progress"
   );
 
+  const cityGroups = useMemo(() => {
+    const map = new Map<string, CityGroup>();
+    for (const loc of activeLocations) {
+      const key = `${loc.location[0].toFixed(2)},${loc.location[1].toFixed(2)}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          city: loc.destination || "Unknown",
+          location: loc.location,
+          travelers: [],
+          hasInProgress: false,
+          allInProgress: true,
+        });
+      }
+      const g = map.get(key)!;
+      g.travelers.push(loc);
+      if (loc.status === "in-progress") g.hasInProgress = true;
+      if (loc.status !== "in-progress") g.allInProgress = false;
+    }
+    for (const g of map.values()) {
+      g.travelers.sort((a, b) => (a.dateFrom || "").localeCompare(b.dateFrom || ""));
+    }
+    return Array.from(map.values());
+  }, [activeLocations]);
+
   const icons = useMemo(() => {
-    if (typeof window === "undefined") return {};
-    return {
-      upcoming: createPinIcon("upcoming"),
-      "in-progress": createPinIcon("in-progress"),
-    };
-  }, []);
+    if (typeof window === "undefined") return new Map<string, unknown>();
+    const m = new Map<string, unknown>();
+    for (const g of cityGroups) {
+      m.set(g.key, createCityIcon(g));
+    }
+    return m;
+  }, [cityGroups]);
 
   if (!activeLocations || activeLocations.length === 0) {
     return (
@@ -128,9 +146,9 @@ export default function TouristsMap({
     );
   }
 
-  const boundsArr = activeLocations.map((loc) => loc.location);
-  const avgLat = activeLocations.reduce((sum, loc) => sum + loc.location[0], 0) / activeLocations.length;
-  const avgLng = activeLocations.reduce((sum, loc) => sum + loc.location[1], 0) / activeLocations.length;
+  const boundsArr = cityGroups.map((g) => g.location);
+  const avgLat = boundsArr.reduce((s, l) => s + l[0], 0) / boundsArr.length;
+  const avgLng = boundsArr.reduce((s, l) => s + l[1], 0) / boundsArr.length;
 
   return (
     <div className={`booking-glass-panel !p-6 ${className}`}>
@@ -139,57 +157,46 @@ export default function TouristsMap({
       </h3>
       <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
         <MapContainer center={[avgLat, avgLng]} zoom={4} style={{ height: "100%", width: "100%" }} attributionControl={false}>
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <MapFitBounds bounds={boundsArr} />
-          <MarkerClusterGroup
-            chunkedLoading
-            maxClusterRadius={40}
-            spiderfyOnMaxZoom
-            showCoverageOnHover={false}
-            iconCreateFunction={createClusterIcon}
-          >
-            {activeLocations.map((tourist) => (
-              <Marker
-                key={tourist.id}
-                position={tourist.location}
-                icon={icons[tourist.status as "upcoming" | "in-progress"] || icons.upcoming}
-                alt={tourist.status || "upcoming"}
-              >
-                <Popup>
-                  <div className="text-sm min-w-[160px]">
-                    <p className="font-bold text-gray-900 text-[13px]">{tourist.name}</p>
-                    {tourist.destination && (
-                      <p className="text-gray-500 text-xs">{tourist.destination}</p>
-                    )}
-                    {(tourist.dateFrom || tourist.dateTo) && (
-                      <p className="text-gray-600 text-xs mt-1">
-                        {formatDateRange(tourist.dateFrom || "", tourist.dateTo || "", true)}
-                      </p>
-                    )}
-                    {tourist.status && (
-                      <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                        tourist.status === "in-progress"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}>
-                        {tourist.status === "in-progress" ? "In Progress" : "Upcoming"}
-                      </span>
-                    )}
-                    {tourist.orderCode && (
-                      <a
-                        href={`/orders/${tourist.orderCode}`}
-                        className="block mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        {tourist.orderCode} →
-                      </a>
-                    )}
+          {cityGroups.map((group) => (
+            <Marker
+              key={group.key}
+              position={group.location}
+              icon={icons.get(group.key) as never}
+            >
+              <Popup maxWidth={320} minWidth={200}>
+                <div className="text-sm">
+                  <p className="font-bold text-gray-900 text-sm mb-2">
+                    {group.city}
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      {group.travelers.length} {group.travelers.length === 1 ? "traveler" : "travelers"}
+                    </span>
+                  </p>
+                  <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                    {group.travelers.map((t) => (
+                      <div key={t.id} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          t.status === "in-progress" ? "bg-emerald-500" : "bg-blue-500"
+                        }`} />
+                        <span className="text-xs text-gray-500 shrink-0 w-[60px]">
+                          {t.dateFrom ? formatDateDDMMYYYY(t.dateFrom).slice(0, 5) : "—"}
+                        </span>
+                        <a
+                          href={`/orders/${t.orderCode}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-gray-900 font-medium truncate hover:text-blue-600"
+                        >
+                          {t.name}
+                        </a>
+                      </div>
+                    ))}
                   </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MarkerClusterGroup>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
       </div>
       <div className="mt-4 flex items-center justify-center gap-4">
@@ -200,6 +207,10 @@ export default function TouristsMap({
         <div className="flex items-center gap-2">
           <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#10b981"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
           <span className="text-xs text-gray-600">In Progress</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#0d9488"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
+          <span className="text-xs text-gray-600">Mixed</span>
         </div>
       </div>
     </div>
