@@ -64,13 +64,22 @@ function createPinIcon(status?: string) {
   });
 }
 
-function createClusterIcon(cluster: { getChildCount: () => number }) {
+function createClusterIcon(cluster: { getChildCount: () => number; getAllChildMarkers: () => { options: { alt?: string } }[] }) {
   if (typeof window === "undefined") return undefined;
   const L = require("leaflet");
   const count = cluster.getChildCount();
   const size = count < 10 ? 36 : count < 50 ? 44 : 52;
+
+  const children = cluster.getAllChildMarkers();
+  const hasInProgress = children.some((m) => m.options.alt === "in-progress");
+  const allInProgress = children.every((m) => m.options.alt === "in-progress");
+
+  const bg = allInProgress ? "#10b981" : "#3b82f6";
+  const ring = hasInProgress && !allInProgress ? "border:3px solid #10b981" : "border:2px solid white";
+  const shadow = allInProgress ? "rgba(16,185,129,0.4)" : "rgba(59,130,246,0.4)";
+
   return L.divIcon({
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${size < 40 ? 13 : 15}px;box-shadow:0 2px 8px rgba(59,130,246,0.4);border:2px solid white">${count}</div>`,
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${size < 40 ? 13 : 15}px;box-shadow:0 2px 8px ${shadow};${ring}">${count}</div>`,
     className: "",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
@@ -129,9 +138,8 @@ export default function TouristsMap({
         {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
       </h3>
       <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
-        <MapContainer center={[avgLat, avgLng]} zoom={4} style={{ height: "100%", width: "100%" }}>
+        <MapContainer center={[avgLat, avgLng]} zoom={4} style={{ height: "100%", width: "100%" }} attributionControl={false}>
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MapFitBounds bounds={boundsArr} />
@@ -147,6 +155,7 @@ export default function TouristsMap({
                 key={tourist.id}
                 position={tourist.location}
                 icon={icons[tourist.status as "upcoming" | "in-progress"] || icons.upcoming}
+                alt={tourist.status || "upcoming"}
               >
                 <Popup>
                   <div className="text-sm min-w-[160px]">
