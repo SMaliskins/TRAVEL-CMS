@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         let status: "open" | "upcoming" | "closing_soon" | "scheduled";
         if (msUntilOpen <= 0 && msUntilClose > 0) {
           status = msUntilClose < 3 * 3600000 ? "closing_soon" : "open";
-        } else if (msUntilOpen > 0 && msUntilOpen <= 24 * 3600000) {
+        } else if (msUntilOpen > 0 && msUntilOpen <= 48 * 3600000) {
           status = "upcoming";
         } else {
           status = "scheduled";
