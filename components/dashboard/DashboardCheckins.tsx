@@ -78,9 +78,9 @@ export default function DashboardCheckins() {
             </div>
           )}
 
-          <div className="mt-3 space-y-1.5">
-            {checkins.slice(0, 3).map((c) => (
-              <div key={`${c.serviceId}-${c.flightNumber}`}
+          <div className="mt-3 space-y-1.5 max-h-[240px] overflow-y-auto">
+            {checkins.slice(0, 12).map((c, i) => (
+              <div key={`${c.serviceId}-${c.flightNumber}-${c.pnr}-${i}`}
                 className={`rounded-lg px-2.5 py-2 ${
                   c.status === "open" ? "bg-emerald-50 border border-emerald-200" :
                   c.status === "closing_soon" ? "bg-amber-50 border border-amber-200" :
@@ -88,35 +88,37 @@ export default function DashboardCheckins() {
                   "bg-gray-50 border border-gray-100"
                 }`}>
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-gray-900 truncate">{c.flightNumber}</span>
-                  {c.route && <span className="text-[10px] text-gray-500 shrink-0">{c.route}</span>}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-bold text-gray-900">{c.flightNumber}</span>
+                    {c.route && <span className="text-[10px] text-gray-500">{c.route}</span>}
+                  </div>
+                  {c.status === "open" || c.status === "closing_soon" ? (
+                    c.checkinUrl ? (
+                      <a href={c.checkinUrl} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700 transition shrink-0">
+                        Check-in <ExternalLink size={8} />
+                      </a>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-700 shrink-0">{t.open}</span>
+                    )
+                  ) : c.status === "upcoming" ? (
+                    <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5 shrink-0">
+                      <Clock size={8} /> {c.opensIn}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-gray-400 shrink-0">
+                      {new Date(c.departureDateTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center justify-between gap-1 mt-0.5">
-                  <span className="text-[11px] text-gray-700 truncate">{c.clientName}</span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {c.status === "open" || c.status === "closing_soon" ? (
-                      c.checkinUrl ? (
-                        <a href={c.checkinUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700 transition">
-                          Check-in <ExternalLink size={8} />
-                        </a>
-                      ) : (
-                        <span className="text-[10px] font-bold text-emerald-700">{t.open}</span>
-                      )
-                    ) : c.status === "upcoming" ? (
-                      <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5">
-                        <Clock size={8} /> {c.opensIn}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-gray-400">
-                        {new Date(c.departureDateTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                      </span>
-                    )}
-                    <button onClick={() => window.open(`/orders/${c.orderCode}`, "_blank")}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-medium ml-0.5">
-                      →
-                    </button>
-                  </div>
+                  <span className="text-[10px] font-mono font-bold text-gray-800 bg-gray-100 px-1 py-0.5 rounded select-all cursor-pointer" title="Click to select PNR">
+                    {c.pnr}
+                  </span>
+                  <button onClick={() => window.open(`/orders/${c.orderCode}`, "_blank")}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-medium shrink-0">
+                    {c.orderCode} →
+                  </button>
                 </div>
               </div>
             ))}

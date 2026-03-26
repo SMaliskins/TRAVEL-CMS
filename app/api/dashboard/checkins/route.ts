@@ -96,24 +96,34 @@ export async function GET(request: NextRequest) {
           status = "scheduled";
         }
 
-        const clientName = tickets?.[0]?.clientName || svc.client_name || "—";
         const depAirport = seg.departure || seg.departureAirport || "";
         const arrAirport = seg.arrival || seg.arrivalAirport || "";
         const route = [depAirport, arrAirport].filter(Boolean).join(" → ");
+        const oCode = (order as { order_code: string }).order_code;
 
-        checkins.push({
-          serviceId: svc.id,
-          orderCode: (order as { order_code: string }).order_code,
-          flightNumber: seg.flightNumber,
-          clientName,
-          pnr: svc.ref_nr || "—",
-          departureDateTime: depStr,
-          route,
-          checkinUrl: info?.checkinUrl || null,
-          status,
-          opensIn: msUntilOpen > 0 ? formatDuration(msUntilOpen) : null,
-          closesIn: msUntilClose > 0 ? formatDuration(msUntilClose) : null,
-        });
+        const pnrs = svc.ref_nr
+          ? svc.ref_nr.split(/[,;]\s*/).map((p: string) => p.trim()).filter(Boolean)
+          : ["—"];
+
+        const passengerNames = tickets && tickets.length > 0
+          ? tickets.map((t) => t.clientName).filter(Boolean)
+          : [svc.client_name || "—"];
+
+        for (const pnr of pnrs) {
+          checkins.push({
+            serviceId: svc.id,
+            orderCode: oCode,
+            flightNumber: seg.flightNumber,
+            clientName: passengerNames.join(", "),
+            pnr,
+            departureDateTime: depStr,
+            route,
+            checkinUrl: info?.checkinUrl || null,
+            status,
+            opensIn: msUntilOpen > 0 ? formatDuration(msUntilOpen) : null,
+            closesIn: msUntilClose > 0 ? formatDuration(msUntilClose) : null,
+          });
+        }
       }
     }
 
