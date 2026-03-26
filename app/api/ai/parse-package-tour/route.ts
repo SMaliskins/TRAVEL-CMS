@@ -122,6 +122,19 @@ Tez Tour specific (Latvian "LĪGUMS Par tūrisma pakalpojumu sniegšanu", PAKALP
 - operator: "SIA Tez Tour", reg "Vienotais reģistrācijas Nr. 40003586306", license "T-2018-24"
 - direction: Format "from - to" (departure - arrival). E.g. "Latvia, Riga - Turkey, Antalya". Use departure city/country FIRST, then arrival. From first outbound segment: departure = from, arrival = to. If country unknown, infer (Riga→Latvia, Antalya→Turkey).
 
+Novatours / SIA Novatours (Latvian "Rezervācijas numurs: RNxxxxxx"):
+- bookingRef: from "Rezervācijas numurs: RN410413" or "Rezervācijas Nr." header → bookingRef "RN410413"
+- detectedOperator: "Novatours" when "SIA Novatours" / "Novatours" branding appears.
+- travellers (Klienti): Table with "Uzvārds, vārds" (Surname, name), "Dzimšanas dati", "Pases nr..". Names come as "Mrs Bychkova, Galina" or "Mr Ivanov, Sergejs" — strip title (Mrs/Mr/Miss), split by comma: before comma = lastName, after comma = firstName. "Mrs Bychkova, Galina" → firstName "Galina", lastName "Bychkova".
+- flights (Lidojums): Format "BT683 (RIX->BCN),Y, 2026.04.26, 11:00" — parse: flightNumber "BT 683", departure "RIX", arrival "BCN", cabinClass from "Y"=economy, date "2026-04-26" (convert YYYY.MM.DD → YYYY-MM-DD), departureTimeScheduled "11:00". BT = airBaltic. Return flight: "BT684 (BCN->RIX),Y, 2026.05.03, 14:25". Baggage: not explicitly listed per flight in Novatours — omit or leave empty.
+- direction: From flight route (RIX->BCN) set "Latvia, Riga - Spain, Barcelona" (infer country from IATA code).
+- accommodation (Viesnīca): "Best Cambrils (4), Cambrils (Standard, Double, Half Board) 2026.04.26 - 2026.05.03" → hotelName "Best Cambrils", starRating "4*" (number in parentheses), roomType "Standard Double", mealPlan "HB" (Half Board→HB, All Inclusive→AI, Bed & Breakfast→BB, Full Board→FB). arrivalDate/departureDate in YYYY-MM-DD. Calculate nights from dates.
+- transfers (Transferš): "GRPTR" = Group transfer → type "Group". "Transferš no lidostas uz viesnīcu" = Airport to Hotel. "Transfers no viesnīcas uz lidostu" = Hotel to Airport.
+- pricing: "Cena:" = packagePrice, "Atlaide:" = discount, "Summa apmaksai no klienta:" = totalPrice. Currency EUR. Novatours uses comma as decimal (1,478,00 = 1478.00; 295.6 = 295.60).
+- paymentTerms: "Avansa maksājuma summa:" = depositAmount, "Atlikušī summa:" = finalAmount. Calculate depositPercent = round(deposit/total*100). No explicit due dates in standard voucher — omit depositDueDate/finalDueDate if not present.
+- additionalServices: Items in second "Pakalpojumi" table — "Zelta elastīgais ceļojums", "Pasažieru nodeva" etc. with descriptions and dates.
+- operator: "SIA Novatours", extract Reg. Nr., PVN Nr., bank details from header.
+
 ANEX TOUR / ANEX (Latvian "Ceļojumu pakalpojumu sniegšanas līgums", agency e.g. GULLIVER + operator BALTIC WORLD / ANEX):
 - bookingRef: The application number in the document header after "Nr." — e.g. "Ceļojumu pakalpojumu sniegšanas līgums Nr. 2002458" → bookingRef "2002458". Also check "līgums Nr." variants.
 - detectedOperator: "ANEX Tour" or "ANEX" when ANEX / BALTIC WORLD / ANEX TOUR branding appears.
