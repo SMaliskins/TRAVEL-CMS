@@ -75,6 +75,25 @@ export const AI_CONFIGS = {
     maxTokens: 2000,
     temperature: 0.7,
   },
+  // Parsing pipeline configs (gpt-4o for all — quality over cost)
+  parsing_vision: {
+    provider: "openai" as AIProvider,
+    model: MODELS.OPENAI_VISION,
+    maxTokens: 4000,
+    temperature: 0.1,
+  },
+  parsing_text: {
+    provider: "openai" as AIProvider,
+    model: MODELS.OPENAI_COMPLEX,
+    maxTokens: 4000,
+    temperature: 0.1,
+  },
+  parsing_fallback: {
+    provider: "anthropic" as AIProvider,
+    model: MODELS.ANTHROPIC_CHAT,
+    maxTokens: 4000,
+    temperature: 0.1,
+  },
 };
 
 // Get API key for provider
