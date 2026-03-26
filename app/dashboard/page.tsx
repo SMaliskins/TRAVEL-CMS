@@ -26,6 +26,7 @@ import RecentlyCompletedList from "@/components/dashboard/RecentlyCompletedList"
 import CalendarWithDots from "@/components/dashboard/CalendarWithDots";
 import AIWindowPlaceholder from "@/components/dashboard/AIWindowPlaceholder";
 import DashboardNotifications from "@/components/dashboard/DashboardNotifications";
+import DashboardCheckins from "@/components/dashboard/DashboardCheckins";
 import FinanceDashboard from "@/components/dashboard/FinanceDashboard";
 import "../hotels-booking/modern-booking.css";
 
@@ -628,6 +629,9 @@ export default function DashboardPage() {
                 );
               })()}
             </div>
+
+            {/* Flight Check-in Widget */}
+            <DashboardCheckins />
 
             {/* Row 2: Map and Calendar + Notifications */}
             <div className="grid gap-4 lg:grid-cols-3">
