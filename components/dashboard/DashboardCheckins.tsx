@@ -112,12 +112,23 @@ export default function DashboardCheckins() {
                   )}
                 </div>
                 <div className="flex items-center justify-between gap-1 mt-0.5">
-                  <span className="text-[10px] font-mono font-bold text-gray-800 bg-gray-100 px-1 py-0.5 rounded select-all cursor-pointer" title="Click to select PNR">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(c.pnr); }}
+                    className="text-[10px] font-mono font-bold text-gray-800 bg-gray-100 px-1 py-0.5 rounded cursor-pointer hover:bg-gray-200 transition active:bg-emerald-100"
+                    title="Copy PNR"
+                  >
                     {c.pnr}
-                  </span>
+                  </button>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(c.clientName); }}
+                    className="text-[11px] text-gray-700 font-medium truncate cursor-pointer hover:text-gray-900 transition active:text-emerald-700"
+                    title="Copy name"
+                  >
+                    {c.clientName}
+                  </button>
                   <button onClick={() => window.open(`/orders/${c.orderCode}`, "_blank")}
                     className="text-[10px] text-blue-600 hover:text-blue-800 font-medium shrink-0">
-                    {c.orderCode} →
+                    →
                   </button>
                 </div>
               </div>
