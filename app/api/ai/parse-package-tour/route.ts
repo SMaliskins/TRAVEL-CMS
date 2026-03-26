@@ -4,6 +4,7 @@ import { logAiUsage } from "@/lib/aiUsageLogger";
 import { requireModule } from "@/lib/modules/checkModule";
 import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
 import { MODELS } from "@/lib/ai/config";
+import { findCorrections, buildCorrectionPrompt } from "@/lib/ai/parseCorrections";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
 
@@ -343,12 +344,30 @@ export async function POST(request: NextRequest) {
     }
 
     const anthropic = new Anthropic({ apiKey: anthropicKey });
-    const TOUR_MODEL = MODELS.ANTHROPIC_FAST;
+    // Use Claude Sonnet for better extraction quality (Haiku was too weak)
+    const TOUR_MODEL = MODELS.ANTHROPIC_CHAT;
+
+    // Inject user corrections from past feedback
+    let correctionsSuffix = "";
+    try {
+      // Detect operator from text for context-specific corrections
+      const operatorMatch = (textContent || "")
+        .match(/(?:coral\s*travel|novatours|tez\s*tour|anex|join\s*up)/i);
+      const contextHint = operatorMatch?.[0] || undefined;
+      const corrections = await findCorrections({
+        companyId: authInfo.companyId,
+        documentType: "package_tour",
+        contextHint,
+      });
+      correctionsSuffix = buildCorrectionPrompt(corrections);
+    } catch (e) {
+      console.error("Corrections lookup error (non-fatal):", e);
+    }
 
     const msg = await anthropic.messages.create({
       model: TOUR_MODEL,
       max_tokens: 3000,
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + correctionsSuffix,
       messages: [{ role: "user", content: userContent }],
     });
 
@@ -391,7 +410,7 @@ export async function POST(request: NextRequest) {
         companyId: authInfo.companyId,
         userId: authInfo.userId,
         operation: "parse_package_tour",
-        model: MODELS.ANTHROPIC_FAST,
+        model: MODELS.ANTHROPIC_CHAT,
         success: false,
         errorMessage: err instanceof Error ? err.message : "Unknown error",
       });

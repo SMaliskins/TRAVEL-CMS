@@ -24,6 +24,9 @@ export const MODELS = {
   OPENAI_COMPLEX: "gpt-4o",
   ANTHROPIC_FAST: "claude-3-haiku-20240307",
   ANTHROPIC_CHAT: "claude-sonnet-4-5",
+  // Parsing-specific: use capable models for structured extraction
+  OPENAI_PARSE: "gpt-4o",        // text parsing (was gpt-4o-mini — too weak)
+  ANTHROPIC_PARSE: "claude-sonnet-4-5", // tour/doc parsing (was haiku — too weak)
 } as const;
 
 export type ModelId = (typeof MODELS)[keyof typeof MODELS];
@@ -65,7 +68,7 @@ export const AI_CONFIGS = {
   },
   parsing: {
     provider: "anthropic" as AIProvider,
-    model: MODELS.ANTHROPIC_FAST,
+    model: MODELS.ANTHROPIC_PARSE,
     maxTokens: 3000,
     temperature: 0.1,
   },

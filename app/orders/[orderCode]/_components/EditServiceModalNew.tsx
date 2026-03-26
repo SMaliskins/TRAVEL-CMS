@@ -827,6 +827,7 @@ export default function EditServiceModalNew({
   const [correctedFields, setCorrectedFields] = useState<Set<string>>(new Set());
   const [replacingClientIdx, setReplacingClientIdx] = useState<number | null>(null);
   const parseSourceTextRef = useRef<string>("");
+  const originalParsedRef = useRef<Record<string, unknown> | null>(null);
   const flightFileInputRef = useRef<HTMLInputElement>(null);
   const flightPasteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -2085,6 +2086,8 @@ export default function EditServiceModalNew({
 
   // Apply parsed flight data (shared by AI and regex); normalize arrival year so Schedule shows correct dates
   const applyParsedFlightData = (segments: FlightSegment[], booking: Record<string, unknown>) => {
+    // Store original AI output for correction tracking
+    originalParsedRef.current = { segments: JSON.parse(JSON.stringify(segments)), booking: JSON.parse(JSON.stringify(booking)) };
     setFlightSegments(normalizeSegmentsArrivalYear(segments) as FlightSegment[]);
     const ref = booking.bookingRef ? String(booking.bookingRef).trim() : "";
     if (ref) {
@@ -2617,6 +2620,7 @@ export default function EditServiceModalNew({
               segments: flightSegments,
               booking: { bookingRef: refNr, airline: supplierName, totalPrice: servicePrice, baggage, cabinClass, refundPolicy },
               correctedFields: correctedFields.size > 0 ? [...correctedFields] : undefined,
+              originalParsed: correctedFields.size > 0 ? originalParsedRef.current : undefined,
             }),
           }).catch(() => {});
           parseSourceTextRef.current = "";

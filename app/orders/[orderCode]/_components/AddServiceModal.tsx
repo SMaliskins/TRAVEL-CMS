@@ -578,6 +578,7 @@ export default function AddServiceModal({
   const [correctedFields, setCorrectedFields] = useState<Set<string>>(new Set());
   const [replacingClientIdx, setReplacingClientIdx] = useState<number | null>(null);
   const parseSourceTextRef = useRef<string>("");
+  const originalParsedRef = useRef<Record<string, unknown> | null>(null);
   const flightFileInputRef = useRef<HTMLInputElement>(null);
   const flightPasteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1287,6 +1288,8 @@ export default function AddServiceModal({
 
   // Apply parsed data to form
   const applyParsedData = (segments: FlightSegment[], booking: Record<string, unknown>) => {
+    // Store original AI output for correction tracking
+    originalParsedRef.current = { segments: JSON.parse(JSON.stringify(segments)), booking: JSON.parse(JSON.stringify(booking)) };
     const parsed = new Set<string>();
 
     if (booking.bookingRef) {
@@ -2123,6 +2126,7 @@ export default function AddServiceModal({
               segments: flightSegments,
               booking: { bookingRef: refNr, airline: supplierName, totalPrice: servicePrice, baggage, cabinClass, refundPolicy },
               correctedFields: correctedFields.size > 0 ? [...correctedFields] : undefined,
+              originalParsed: correctedFields.size > 0 ? originalParsedRef.current : undefined,
             }),
           }).catch(() => {});
           parseSourceTextRef.current = "";

@@ -5,6 +5,7 @@ import { requireModule } from "@/lib/modules/checkModule";
 import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
 import { MODELS } from "@/lib/ai/config";
 import { findSimilarTemplates, buildFewShotExamples, saveTemplate } from "@/lib/flights/parseTemplates";
+import { findCorrections, buildCorrectionPrompt } from "@/lib/ai/parseCorrections";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
 import { decryptSecret } from "@/lib/security/secrets";
@@ -262,12 +263,99 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use cheaper model for text, vision model for images
-    const selectedModel = textContent ? MODELS.OPENAI_FAST : MODELS.OPENAI_VISION;
+    // Use gpt-4o for all parsing (gpt-4o-mini is too weak for structured extraction)
+    const selectedModel = MODELS.OPENAI_VISION; // gpt-4o
+
+    // JSON schema for structured output — guarantees valid JSON from the API
+    const flightJsonSchema = {
+      name: "flight_itinerary",
+      strict: true,
+      schema: {
+        type: "object",
+        properties: {
+          booking: {
+            type: "object",
+            properties: {
+              bookingRef: { type: "string" },
+              airline: { type: "string" },
+              totalPrice: { type: ["number", "null"] },
+              currency: { type: "string" },
+              ticketNumbers: { type: "array", items: { type: "string" } },
+              passengers: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    ticketNumber: { type: "string" },
+                  },
+                  required: ["name", "ticketNumber"],
+                  additionalProperties: false,
+                },
+              },
+              cabinClass: { type: "string" },
+              refundPolicy: { type: "string" },
+              changeFee: { type: ["number", "null"] },
+              baggage: { type: "string" },
+            },
+            required: [
+              "bookingRef", "airline", "totalPrice", "currency",
+              "ticketNumbers", "passengers", "cabinClass", "refundPolicy",
+              "changeFee", "baggage",
+            ],
+            additionalProperties: false,
+          },
+          segments: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                flightNumber: { type: "string" },
+                airline: { type: "string" },
+                departure: { type: "string" },
+                departureCity: { type: "string" },
+                departureCountry: { type: "string" },
+                arrival: { type: "string" },
+                arrivalCity: { type: "string" },
+                arrivalCountry: { type: "string" },
+                departureDate: { type: "string" },
+                departureTimeScheduled: { type: "string" },
+                arrivalDate: { type: "string" },
+                arrivalTimeScheduled: { type: "string" },
+                duration: { type: "string" },
+                departureTerminal: { type: "string" },
+                arrivalTerminal: { type: "string" },
+                cabinClass: { type: "string" },
+                bookingClass: { type: "string" },
+                bookingRef: { type: "string" },
+                ticketNumber: { type: "string" },
+                baggage: { type: "string" },
+                seat: { type: "string" },
+                passengerName: { type: "string" },
+                aircraft: { type: "string" },
+              },
+              required: [
+                "flightNumber", "airline", "departure", "departureCity",
+                "departureCountry", "arrival", "arrivalCity", "arrivalCountry",
+                "departureDate", "departureTimeScheduled", "arrivalDate",
+                "arrivalTimeScheduled", "duration", "departureTerminal",
+                "arrivalTerminal", "cabinClass", "bookingClass", "bookingRef",
+                "ticketNumber", "baggage", "seat", "passengerName", "aircraft",
+              ],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["booking", "segments"],
+        additionalProperties: false,
+      },
+    };
 
     try {
       let messages;
-      
+      // Whether we can use structured output (only for non-vision text requests)
+      let useStructuredOutput = false;
+
       if (textContent) {
         // Look up similar templates for few-shot learning
         let fewShotSuffix = "";
@@ -278,19 +366,32 @@ export async function POST(request: NextRequest) {
           console.error("Template lookup error (non-fatal):", e);
         }
 
+        // Look up past user corrections for this airline/context
+        let correctionsSuffix = "";
+        try {
+          const airline = textContent.match(/(?:turkish\s*airlines|lufthansa|air\s*france|british\s*airways|airbaltic|ryanair|easyjet|wizz\s*air|emirates|flydubai|klm|lot|finnair|sas|scandinavian)/i)?.[0] || "";
+          const corrections = await findCorrections({
+            companyId: authInfo.companyId,
+            documentType: "flight",
+            contextHint: airline || undefined,
+          });
+          correctionsSuffix = buildCorrectionPrompt(corrections);
+        } catch (e) {
+          console.error("Corrections lookup error (non-fatal):", e);
+        }
+
         messages = [
           {
             role: "system",
-            content: getSystemPrompt() + fewShotSuffix,
+            content: getSystemPrompt() + fewShotSuffix + correctionsSuffix,
           },
           {
             role: "user",
             content: `Parse this flight booking text and extract all flight segments:\n\n${textContent}`,
           },
         ];
+        useStructuredOutput = true;
       } else if (isPDF) {
-        // PDF parsing - GPT-4V can process PDFs as images
-        // For complex PDFs, consider extracting text first
         messages = [
           {
             role: "system",
@@ -307,7 +408,7 @@ export async function POST(request: NextRequest) {
               },
               {
                 type: "text",
-                text: "This is a PDF document containing flight booking information. Extract all flight segments from it. Return JSON only.",
+                text: "This is a PDF document containing flight booking information. Extract all flight segments from it.",
               },
             ],
           },
@@ -330,11 +431,27 @@ export async function POST(request: NextRequest) {
               },
               {
                 type: "text",
-                text: "Extract all flight segments from this image. Return JSON only.",
+                text: "Extract all flight segments from this image.",
               },
             ],
           },
         ];
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const requestBody: Record<string, any> = {
+        model: selectedModel,
+        messages,
+        max_tokens: 2000,
+        temperature: 0.1,
+      };
+
+      // Use structured output for text-only requests (guaranteed valid JSON)
+      if (useStructuredOutput) {
+        requestBody.response_format = {
+          type: "json_schema",
+          json_schema: flightJsonSchema,
+        };
       }
 
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -343,12 +460,7 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${openaiKey}`,
         },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages,
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
