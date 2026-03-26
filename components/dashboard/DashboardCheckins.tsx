@@ -126,7 +126,7 @@ export default function DashboardCheckins() {
                   >
                     {c.clientName}
                   </button>
-                  <button onClick={() => window.open(`/orders/${encodeURIComponent(c.orderCode)}`, "_blank")}
+                  <button onClick={() => window.open(`/orders/${c.orderCode.replace("/", "-").toLowerCase()}`, "_blank")}
                     className="text-[10px] text-blue-600 hover:text-blue-800 font-medium shrink-0">
                     →
                   </button>
