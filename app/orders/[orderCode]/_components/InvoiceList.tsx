@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { sanitizeNumber } from "@/utils/sanitizeNumber";
 import ContentModal from "@/components/ContentModal";
 import RichTextEditor from "@/components/RichTextEditor";
 import DateInput from "@/components/DateInput";
@@ -1076,7 +1077,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                       step="0.01"
                       placeholder="Unit price"
                       value={addLineForm.unit_price}
-                      onChange={(e) => setAddLineForm((f) => ({ ...f, unit_price: e.target.value }))}
+                      onChange={(e) => setAddLineForm((f) => ({ ...f, unit_price: sanitizeNumber(e.target.value) }))}
                       className="rounded border border-gray-300 px-2 py-1.5 text-sm"
                     />
                     <input

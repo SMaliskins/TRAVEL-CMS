@@ -9,6 +9,7 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { t } from "@/lib/i18n";
 import { Upload, Pencil, Trash2, X, FileText } from "lucide-react";
+import { sanitizeNumber } from "@/utils/sanitizeNumber";
 
 interface CompanyExpenseRow {
   id: string;
@@ -377,7 +378,7 @@ export default function CompanyExpensesPage() {
           min="0"
           placeholder={t(lang, "companyExpenses.amountMin")}
           value={amountMin}
-          onChange={(e) => setAmountMin(e.target.value)}
+          onChange={(e) => setAmountMin(sanitizeNumber(e.target.value))}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-md w-24 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
         />
         <input
@@ -386,7 +387,7 @@ export default function CompanyExpensesPage() {
           min="0"
           placeholder={t(lang, "companyExpenses.amountMax")}
           value={amountMax}
-          onChange={(e) => setAmountMax(e.target.value)}
+          onChange={(e) => setAmountMax(sanitizeNumber(e.target.value))}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-md w-24 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
         />
       </div>

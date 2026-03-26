@@ -9,6 +9,7 @@ import { useModalOverlayContext } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, type DateFormatPattern } from "@/utils/dateFormat";
 import PartySelect from "@/components/PartySelect";
 import { Landmark, Banknote, CreditCard } from "lucide-react";
+import { sanitizeNumber } from "@/utils/sanitizeNumber";
 
 interface BankAccount {
   id: string;
@@ -645,7 +646,7 @@ export default function AddPaymentModal({
                 step="0.01"
                 min={(isCreditInvoice || isEditingRefund) ? undefined : "0"}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(sanitizeNumber(e.target.value))}
                 placeholder={(isCreditInvoice || isEditingRefund) ? "Refund amount" : "0.00"}
                 className={`w-full border rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${(isCreditInvoice || isEditingRefund) ? "border-red-200 bg-red-50/30" : "border-gray-300"}`}
               />
@@ -710,7 +711,7 @@ export default function AddPaymentModal({
                     step="0.01"
                     min="0"
                     value={processingFee}
-                    onChange={(e) => setProcessingFee(e.target.value)}
+                    onChange={(e) => setProcessingFee(sanitizeNumber(e.target.value))}
                     placeholder="0.00"
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                   />

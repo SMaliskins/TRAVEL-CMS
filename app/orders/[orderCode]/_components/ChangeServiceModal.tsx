@@ -8,6 +8,7 @@ import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
+import { sanitizeNumber } from '@/utils/sanitizeNumber';
 
 interface Service {
   id: string;
@@ -719,7 +720,7 @@ export default function ChangeServiceModal({
                     value={changeFee}
                     onChange={(e) => {
                       lastEditedRef.current = 'fee';
-                      setChangeFee(e.target.value);
+                      setChangeFee(sanitizeNumber(e.target.value));
                     }}
                     placeholder="0.00"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
@@ -738,7 +739,7 @@ export default function ChangeServiceModal({
                     value={marge}
                     onChange={(e) => {
                       lastEditedRef.current = 'marge';
-                      setMarge(e.target.value);
+                      setMarge(sanitizeNumber(e.target.value));
                     }}
                     placeholder="0.00"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
@@ -757,7 +758,7 @@ export default function ChangeServiceModal({
                     value={clientPrice}
                     onChange={(e) => {
                       lastEditedRef.current = 'clientPrice';
-                      setClientPrice(e.target.value);
+                      setClientPrice(sanitizeNumber(e.target.value));
                     }}
                     placeholder="0.00"
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500"

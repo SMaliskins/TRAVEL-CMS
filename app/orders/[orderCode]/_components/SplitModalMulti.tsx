@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { sanitizeNumber } from "@/utils/sanitizeNumber";
 
 interface Service {
   id: string;
@@ -524,7 +525,7 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
                                 type="number"
                                 step="0.01"
                                 value={part.clientAmount || ''}
-                                onChange={(e) => updatePart(service.id, partIdx, "clientAmount", e.target.value, service)}
+                                onChange={(e) => updatePart(service.id, partIdx, "clientAmount", sanitizeNumber(e.target.value), service)}
                                 disabled={partIdx === config.numParts - 1}
                                 className={`w-full px-2 py-1 text-sm border rounded ${
                                   partIdx === config.numParts - 1 ? 'bg-gray-50 text-gray-500' : 'border-gray-300'

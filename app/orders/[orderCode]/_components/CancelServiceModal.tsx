@@ -7,6 +7,7 @@ import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from '@/utils/dateFormat';
+import { sanitizeNumber } from '@/utils/sanitizeNumber';
 
 export type CancellationRefundType = 'fully_refunded' | 'partial_refunded' | 'non_refunded';
 
@@ -236,7 +237,7 @@ export default function CancelServiceModal({
                     step="0.01"
                     min="0"
                     value={refundAmount}
-                    onChange={(e) => setRefundAmount(e.target.value)}
+                    onChange={(e) => setRefundAmount(sanitizeNumber(e.target.value))}
                     onInput={(e) => setRefundAmount((e.target as HTMLInputElement).value)}
                     disabled={refundType === 'non_refunded'}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 disabled:bg-gray-100"
@@ -253,7 +254,7 @@ export default function CancelServiceModal({
                     step="0.01"
                     min="0"
                     value={cancellationFee}
-                    onChange={(e) => setCancellationFee(e.target.value)}
+                    onChange={(e) => setCancellationFee(sanitizeNumber(e.target.value))}
                     onInput={(e) => setCancellationFee((e.target as HTMLInputElement).value)}
                     disabled={refundType === 'non_refunded'}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 disabled:bg-gray-100"
