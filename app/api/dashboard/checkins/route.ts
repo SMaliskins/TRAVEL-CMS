@@ -27,9 +27,9 @@ export async function GET(request: NextRequest) {
     const { companyId } = apiUser;
 
     const now = new Date();
-    const maxLookahead = new Date(now.getTime() + 80 * 60 * 60 * 1000);
+    const maxLookahead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const { data: services } = await supabaseAdmin
+    const { data: services, error: svcError } = await supabaseAdmin
       .from("order_services")
       .select(`
         id, ref_nr, flight_segments, ticket_numbers, client_name, supplier_name,
@@ -41,6 +41,10 @@ export async function GET(request: NextRequest) {
       .gte("date_from", now.toISOString().split("T")[0])
       .lte("date_from", maxLookahead.toISOString().split("T")[0]);
 
+    if (svcError) {
+      console.error("[Dashboard Checkins] Query error:", svcError);
+    }
+
     const checkins: Array<{
       serviceId: string;
       orderCode: string;
@@ -50,7 +54,7 @@ export async function GET(request: NextRequest) {
       departureDateTime: string;
       route: string;
       checkinUrl: string | null;
-      status: "open" | "upcoming" | "closing_soon";
+      status: "open" | "upcoming" | "closing_soon" | "scheduled";
       opensIn: string | null;
       closesIn: string | null;
     }> = [];
@@ -60,7 +64,8 @@ export async function GET(request: NextRequest) {
       if (!segments || segments.length === 0) continue;
 
       const tickets = svc.ticket_numbers as TicketEntry[] | null;
-      const order = Array.isArray(svc.orders) ? svc.orders[0] : svc.orders;
+      const orderRaw = svc.orders;
+      const order = Array.isArray(orderRaw) ? orderRaw[0] : orderRaw;
       if (!order) continue;
 
       for (const seg of segments) {
@@ -73,23 +78,20 @@ export async function GET(request: NextRequest) {
         if (isNaN(depTime.getTime()) || depTime < now) continue;
 
         const match = seg.flightNumber.match(/^([A-Z]{2})/i);
-        if (!match) continue;
-        const airlineCode = match[1].toUpperCase();
-        const info = AIRLINE_CHECKIN[airlineCode];
-        if (!info) continue;
+        const airlineCode = match ? match[1].toUpperCase() : null;
+        const info = airlineCode ? AIRLINE_CHECKIN[airlineCode] : null;
 
         const msUntilDep = depTime.getTime() - now.getTime();
-        const hoursUntilDep = msUntilDep / (1000 * 60 * 60);
-        const msUntilOpen = msUntilDep - info.checkinHoursBefore * 3600000;
-        const msUntilClose = msUntilDep - info.checkinHoursClose * 3600000;
+        const msUntilOpen = info ? msUntilDep - info.checkinHoursBefore * 3600000 : msUntilDep - 24 * 3600000;
+        const msUntilClose = info ? msUntilDep - info.checkinHoursClose * 3600000 : msUntilDep - 3600000;
 
-        let status: "open" | "upcoming" | "closing_soon";
+        let status: "open" | "upcoming" | "closing_soon" | "scheduled";
         if (msUntilOpen <= 0 && msUntilClose > 0) {
           status = msUntilClose < 3 * 3600000 ? "closing_soon" : "open";
-        } else if (msUntilOpen > 0 && msUntilOpen <= 6 * 3600000) {
+        } else if (msUntilOpen > 0 && msUntilOpen <= 24 * 3600000) {
           status = "upcoming";
         } else {
-          continue;
+          status = "scheduled";
         }
 
         const clientName = tickets?.[0]?.clientName || svc.client_name || "—";
@@ -103,7 +105,7 @@ export async function GET(request: NextRequest) {
           pnr: svc.ref_nr || "—",
           departureDateTime: depStr,
           route,
-          checkinUrl: info.checkinUrl,
+          checkinUrl: info?.checkinUrl || null,
           status,
           opensIn: msUntilOpen > 0 ? formatDuration(msUntilOpen) : null,
           closesIn: msUntilClose > 0 ? formatDuration(msUntilClose) : null,
@@ -112,8 +114,8 @@ export async function GET(request: NextRequest) {
     }
 
     checkins.sort((a, b) => {
-      const order = { open: 0, closing_soon: 0, upcoming: 1 };
-      if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+      const pri: Record<string, number> = { open: 0, closing_soon: 0, upcoming: 1, scheduled: 2 };
+      if (pri[a.status] !== pri[b.status]) return pri[a.status] - pri[b.status];
       return new Date(a.departureDateTime).getTime() - new Date(b.departureDateTime).getTime();
     });
 
