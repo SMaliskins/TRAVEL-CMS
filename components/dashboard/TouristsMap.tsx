@@ -274,11 +274,36 @@ export default function TouristsMap({
   const avgLat = boundsArr.reduce((s, l) => s + l[0], 0) / boundsArr.length;
   const avgLng = boundsArr.reduce((s, l) => s + l[1], 0) / boundsArr.length;
 
+  const upcomingCount = activeLocations.filter(l => l.status === "upcoming").length;
+  const inProgressCount = activeLocations.filter(l => l.status === "in-progress").length;
+
   return (
     <div className={`booking-glass-panel !p-6 ${className}`}>
-      <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">
-        {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
-      </h3>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <h3 className="text-xl font-bold text-gray-900 tracking-tight">
+          {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
+        </h3>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-blue-500" />
+            <span className="text-xs text-gray-600">Upcoming ({upcomingCount})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-emerald-500" />
+            <span className="text-xs text-gray-600">In Progress ({inProgressCount})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-blue-500 ring-2 ring-emerald-500 ring-offset-1" />
+            <span className="text-xs text-gray-600">Mixed</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-4 w-4 rounded-full bg-blue-500/80 flex items-center justify-center">
+              <span className="text-[8px] font-bold text-white leading-none">3</span>
+            </div>
+            <span className="text-xs text-gray-600">Grouped cities</span>
+          </div>
+        </div>
+      </div>
       <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
         <MapContainer center={[avgLat, avgLng]} zoom={4} style={{ height: "100%", width: "100%" }} attributionControl={false}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -342,16 +367,6 @@ export default function TouristsMap({
             })}
           </MarkerClusterGroup>
         </MapContainer>
-      </div>
-      <div className="mt-4 flex items-center justify-center gap-4">
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-blue-500" />
-          <span className="text-xs text-gray-600">Upcoming</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-emerald-500" />
-          <span className="text-xs text-gray-600">In Progress</span>
-        </div>
       </div>
     </div>
   );
