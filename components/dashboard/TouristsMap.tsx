@@ -52,13 +52,13 @@ interface CityGroup {
   allInProgress: boolean;
 }
 
-function pinSvg(color: string, count: number): string {
+function circleSvg(color: string, count: number): string {
+  const size = count < 10 ? 36 : count < 100 ? 42 : 48;
+  const r = size / 2;
   if (count <= 1) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="${color}"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="${color}" stroke="white" stroke-width="2"/><circle cx="${r}" cy="${r * 0.7}" r="${r * 0.22}" fill="white"/><ellipse cx="${r}" cy="${r * 1.2}" rx="${r * 0.32}" ry="${r * 0.22}" fill="white"/></svg>`;
   }
-  const w = 34;
-  const h = 46;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="M${w / 2} 0C${w * 0.225} 0 0 ${h * 0.157} 0 ${h * 0.35}c0 ${h * 0.26} ${w / 2} ${h * 0.65} ${w / 2} ${h * 0.65}s${w / 2}-${h * 0.39} ${w / 2}-${h * 0.65}C${w} ${h * 0.157} ${w * 0.775} 0 ${w / 2} 0z" fill="${color}"/><circle cx="${w / 2}" cy="${h * 0.33}" r="${w * 0.32}" fill="white"/><text x="${w / 2}" y="${h * 0.37}" text-anchor="middle" font-size="13" font-weight="700" fill="${color}">${count}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="${color}" stroke="white" stroke-width="2"/><text x="${r}" y="${r + 5}" text-anchor="middle" font-size="14" font-weight="700" fill="white">${count}</text></svg>`;
 }
 
 function createCityIcon(group: CityGroup) {
@@ -66,15 +66,13 @@ function createCityIcon(group: CityGroup) {
   const L = require("leaflet");
   const color = group.allInProgress ? "#10b981" : group.hasInProgress ? "#0d9488" : "#3b82f6";
   const count = group.travelers.length;
-  const isMulti = count > 1;
-  const w = isMulti ? 34 : 28;
-  const h = isMulti ? 46 : 40;
+  const size = count < 10 ? 36 : count < 100 ? 42 : 48;
   return L.divIcon({
-    html: pinSvg(color, count),
+    html: circleSvg(color, count),
     className: "",
-    iconSize: [w, h],
-    iconAnchor: [w / 2, h],
-    popupAnchor: [0, -h],
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
   });
 }
 
@@ -201,15 +199,15 @@ export default function TouristsMap({
       </div>
       <div className="mt-4 flex items-center justify-center gap-4">
         <div className="flex items-center gap-2">
-          <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#3b82f6"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
+          <div className="h-3 w-3 rounded-full bg-blue-500" />
           <span className="text-xs text-gray-600">Upcoming</span>
         </div>
         <div className="flex items-center gap-2">
-          <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#10b981"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
+          <div className="h-3 w-3 rounded-full bg-emerald-500" />
           <span className="text-xs text-gray-600">In Progress</span>
         </div>
         <div className="flex items-center gap-2">
-          <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#0d9488"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
+          <div className="h-3 w-3 rounded-full bg-teal-600" />
           <span className="text-xs text-gray-600">Mixed</span>
         </div>
       </div>
