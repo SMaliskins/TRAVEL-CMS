@@ -24,6 +24,8 @@ interface Payment {
   account_id?: string | null;
   account_name?: string | null;
   status?: string;
+  processor?: string | null;
+  processing_fee?: number | null;
 }
 
 interface OrderPaymentsListProps {
@@ -118,6 +120,8 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
       payer_party_id: p.payer_party_id,
       note: p.note,
       account_id: p.account_id,
+      processor: p.processor,
+      processing_fee: p.processing_fee,
     });
   };
 

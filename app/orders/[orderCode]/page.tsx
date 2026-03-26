@@ -14,6 +14,8 @@ import InvoiceList from "./_components/InvoiceList";
 import OrderDocumentsTab from "./_components/OrderDocumentsTab";
 import OrderCommunicationsTab from "./_components/OrderCommunicationsTab";
 import OrderPaymentsList from "./_components/OrderPaymentsList";
+import dynamic from "next/dynamic";
+const OrderFinanceOverview = dynamic(() => import("./_components/OrderFinanceOverview"), { ssr: false });
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
@@ -27,8 +29,8 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 
-type TabType = "client" | "referral" | "finance" | "documents" | "communication" | "log";
-const TAB_VALUES: TabType[] = ["client", "finance", "documents", "communication", "log", "referral"];
+type TabType = "client" | "finances" | "referral" | "finance" | "documents" | "communication" | "log";
+const TAB_VALUES: TabType[] = ["client", "finance", "finances", "documents", "communication", "log", "referral"];
 function isValidTab(value: string | null): value is TabType {
   return value !== null && TAB_VALUES.includes(value as TabType);
 }
@@ -1618,7 +1620,7 @@ export default function OrderPage({
           {/* B) Tabs + Action Buttons */}
           <nav className="-mb-px flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-200/60 mt-1 pt-2">
             <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 min-w-0">
-              {(["client", "finance", "documents", "communication", "log", "referral"] as const)
+              {(["client", "finance", "finances", "documents", "communication", "log", "referral"] as const)
                 .filter((tab) => tab !== "referral" || currentRole !== "subagent")
                 .map((tab) => {
                 const isActive = activeTab === tab;
@@ -1790,6 +1792,16 @@ export default function OrderPage({
                 </p>
               )}
             </div>
+          )}
+
+          {activeTab === "finances" && order && (
+            <OrderFinanceOverview
+              orderCode={effectiveOrderCode}
+              orderId={order.id}
+              currency={companyCurrencyCode || "EUR"}
+              lang={lang}
+              hasReferral={Boolean(order.referral_party_id)}
+            />
           )}
 
           {activeTab === "finance" && (

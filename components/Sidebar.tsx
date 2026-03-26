@@ -43,7 +43,7 @@ const navConfig: NavElement[] = [
   { name: "Dashboard", nameKey: "nav.dashboard", href: "/dashboard", icon: <LayoutDashboard size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
   { name: "Orders", nameKey: "nav.orders", href: "/orders", icon: <ClipboardList size={ICON_SIZE} strokeWidth={ICON_STROKE} /> },
   {
-    name: "Finances",
+    name: "Invoices & Payments",
     nameKey: "nav.finances",
     href: "/finances/invoices",
     icon: <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} />,
@@ -204,7 +204,7 @@ export default function Sidebar() {
     .filter((item) => {
       if (userRole === null) return true;
 
-      if (item.name === "Finances") {
+      if (item.name === "Invoices & Payments") {
         return (
           roleHasPermission(roleKey, "invoices.view") ||
           roleHasPermission(roleKey, "payments.view")
@@ -216,7 +216,7 @@ export default function Sidebar() {
       return true;
     })
     .map((item) => {
-      if (roleKey === "subagent" && item.name === "Finances" && item.children) {
+      if (roleKey === "subagent" && item.name === "Invoices & Payments" && item.children) {
         return { ...item, children: item.children.filter((c) => c.name === "Invoices" || c.name === "Suppliers Invoices") };
       }
       return item;

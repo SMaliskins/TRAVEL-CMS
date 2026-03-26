@@ -28,6 +28,8 @@ interface Payment {
   note: string | null;
   created_at: string;
   status?: string;
+  processor?: string | null;
+  processing_fee?: number | null;
 }
 
 
@@ -133,6 +135,8 @@ export default function PaymentsPage() {
       payer_party_id: undefined,
       note: p.note ?? undefined,
       account_id: p.account_id ?? undefined,
+      processor: p.processor,
+      processing_fee: p.processing_fee,
     });
   };
 

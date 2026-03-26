@@ -329,21 +329,29 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Referral commission
+      // Referral commission (percent-based calculated on profit AFTER processing fees)
       const hasReferral = Boolean(order.referral_party_id);
       let referralCommissionTotal = 0;
       if (hasReferral) {
         referralCommissionTotal = referralCommissionByOrder.get(orderId) || 0;
         if (referralCommissionTotal === 0) {
           const svcLines = servicesByOrder.get(orderId) || [];
+          const origProfitByLine: { svc: any; origProfit: number }[] = [];
+          let totalOrigProfit = 0;
           for (const svc of svcLines) {
             if (svc.res_status === "cancelled" || !svc.referral_include_in_commission) continue;
-            const lineEcon = computeServiceLineEconomics(svc);
-            const lineProfit = lineEcon.profitNetOfVat;
+            const lineProfit = computeServiceLineEconomics(svc).profitNetOfVat;
+            origProfitByLine.push({ svc, origProfit: lineProfit });
+            totalOrigProfit += lineProfit;
+          }
+          for (const { svc, origProfit } of origProfitByLine) {
             if (svc.referral_commission_fixed_amount != null && Number(svc.referral_commission_fixed_amount) > 0) {
               referralCommissionTotal += Number(svc.referral_commission_fixed_amount);
             } else if (svc.referral_commission_percent_override != null && Number(svc.referral_commission_percent_override) > 0) {
-              referralCommissionTotal += Math.round(lineProfit * Number(svc.referral_commission_percent_override) / 100 * 100) / 100;
+              const adjustedLineProfit = totalOrigProfit > 0
+                ? Math.round(profitFromServices * (origProfit / totalOrigProfit) * 100) / 100
+                : 0;
+              referralCommissionTotal += Math.round(adjustedLineProfit * Number(svc.referral_commission_percent_override) / 100 * 100) / 100;
             }
           }
         }
