@@ -24,6 +24,10 @@ const MapFitBounds = dynamic(
   () => import("./MapFitBounds"),
   { ssr: false }
 );
+const MarkerClusterGroup = dynamic(
+  () => import("react-leaflet-cluster"),
+  { ssr: false }
+);
 
 export interface TouristLocation {
   id: string;
@@ -57,6 +61,19 @@ function createPinIcon(status?: string) {
     iconSize: [28, 40],
     iconAnchor: [14, 40],
     popupAnchor: [0, -40],
+  });
+}
+
+function createClusterIcon(cluster: { getChildCount: () => number }) {
+  if (typeof window === "undefined") return undefined;
+  const L = require("leaflet");
+  const count = cluster.getChildCount();
+  const size = count < 10 ? 36 : count < 50 ? 44 : 52;
+  return L.divIcon({
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#3b82f6;color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${size < 40 ? 13 : 15}px;box-shadow:0 2px 8px rgba(59,130,246,0.4);border:2px solid white">${count}</div>`,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
 }
 
@@ -118,44 +135,52 @@ export default function TouristsMap({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MapFitBounds bounds={boundsArr} />
-          {activeLocations.map((tourist) => (
-            <Marker
-              key={tourist.id}
-              position={tourist.location}
-              icon={icons[tourist.status as "upcoming" | "in-progress"] || icons.upcoming}
-            >
-              <Popup>
-                <div className="text-sm min-w-[160px]">
-                  <p className="font-bold text-gray-900 text-[13px]">{tourist.name}</p>
-                  {tourist.destination && (
-                    <p className="text-gray-500 text-xs">{tourist.destination}</p>
-                  )}
-                  {(tourist.dateFrom || tourist.dateTo) && (
-                    <p className="text-gray-600 text-xs mt-1">
-                      {formatDateRange(tourist.dateFrom || "", tourist.dateTo || "", true)}
-                    </p>
-                  )}
-                  {tourist.status && (
-                    <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                      tourist.status === "in-progress"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-blue-100 text-blue-700"
-                    }`}>
-                      {tourist.status === "in-progress" ? "In Progress" : "Upcoming"}
-                    </span>
-                  )}
-                  {tourist.orderCode && (
-                    <a
-                      href={`/orders/${tourist.orderCode}`}
-                      className="block mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      {tourist.orderCode} →
-                    </a>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          <MarkerClusterGroup
+            chunkedLoading
+            maxClusterRadius={40}
+            spiderfyOnMaxZoom
+            showCoverageOnHover={false}
+            iconCreateFunction={createClusterIcon}
+          >
+            {activeLocations.map((tourist) => (
+              <Marker
+                key={tourist.id}
+                position={tourist.location}
+                icon={icons[tourist.status as "upcoming" | "in-progress"] || icons.upcoming}
+              >
+                <Popup>
+                  <div className="text-sm min-w-[160px]">
+                    <p className="font-bold text-gray-900 text-[13px]">{tourist.name}</p>
+                    {tourist.destination && (
+                      <p className="text-gray-500 text-xs">{tourist.destination}</p>
+                    )}
+                    {(tourist.dateFrom || tourist.dateTo) && (
+                      <p className="text-gray-600 text-xs mt-1">
+                        {formatDateRange(tourist.dateFrom || "", tourist.dateTo || "", true)}
+                      </p>
+                    )}
+                    {tourist.status && (
+                      <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        tourist.status === "in-progress"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}>
+                        {tourist.status === "in-progress" ? "In Progress" : "Upcoming"}
+                      </span>
+                    )}
+                    {tourist.orderCode && (
+                      <a
+                        href={`/orders/${tourist.orderCode}`}
+                        className="block mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        {tourist.orderCode} →
+                      </a>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MarkerClusterGroup>
         </MapContainer>
       </div>
       <div className="mt-4 flex items-center justify-center gap-4">
