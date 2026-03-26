@@ -72,6 +72,8 @@ export async function PATCH(
     if (body.account_id !== undefined) updateData.account_id = body.account_id || null;
     if ("invoice_id" in body) updateData.invoice_id = body.invoice_id || null;
     if (body.payer_party_id !== undefined) updateData.payer_party_id = body.payer_party_id || null;
+    if (body.processor !== undefined) updateData.processor = body.processor || null;
+    if (body.processing_fee !== undefined) updateData.processing_fee = Number(body.processing_fee) || 0;
     if (body.status !== undefined) updateData.status = body.status;
 
     const { data: updated, error } = await supabaseAdmin

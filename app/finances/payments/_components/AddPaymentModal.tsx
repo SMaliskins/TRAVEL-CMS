@@ -51,6 +51,8 @@ export interface EditPaymentData {
   payer_party_id?: string | null;
   note?: string | null;
   account_id?: string | null;
+  processor?: string | null;
+  processing_fee?: number | null;
 }
 
 interface Props {
@@ -83,6 +85,9 @@ export default function AddPaymentModal({
   const [method, setMethod] = useState<"cash" | "bank" | "card">("bank");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("EUR");
+  const [processor, setProcessor] = useState("");
+  const [processingFee, setProcessingFee] = useState("");
+  const [showProcessorDropdown, setShowProcessorDropdown] = useState(false);
   const [accountId, setAccountId] = useState("");
   const [payerName, setPayerName] = useState("");
   const [payerPartyId, setPayerPartyId] = useState<string | null>(null);
@@ -140,6 +145,8 @@ export default function AddPaymentModal({
       setAmount(String(editPayment.amount));
       setCurrency(editPayment.currency || "EUR");
       setAccountId(editPayment.account_id || "");
+      setProcessor(editPayment.processor || "");
+      setProcessingFee(editPayment.processing_fee ? String(editPayment.processing_fee) : "");
       setPayerName(editPayment.payer_name || "");
       setPayerPartyId(editPayment.payer_party_id || null);
       setPayerSearch(editPayment.payer_name || "");
@@ -169,6 +176,8 @@ export default function AddPaymentModal({
       setMethod("bank");
       setAmount("");
       setCurrency("EUR");
+      setProcessor("");
+      setProcessingFee("");
       setAccountId("");
       setPayerName("");
       setPayerPartyId(null);
@@ -378,6 +387,8 @@ export default function AddPaymentModal({
           currency,
           paid_at: paidAt,
           account_id: method === "cash" ? null : (accountId || null),
+          processor: method === "card" && processor ? processor : null,
+          processing_fee: method === "card" && processingFee ? parseFloat(processingFee) : 0,
           payer_name: payerName || payerSearch || null,
           payer_party_id: payerPartyId || null,
           note: note || null,
@@ -654,6 +665,77 @@ export default function AddPaymentModal({
               </select>
             </div>
           </div>
+
+          {/* Processor + Processing Fee — Card only */}
+          {method === "card" && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="relative">
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">
+                    Processor
+                  </label>
+                  <input
+                    type="text"
+                    value={processor}
+                    onChange={(e) => { setProcessor(e.target.value); setShowProcessorDropdown(true); }}
+                    onFocus={() => setShowProcessorDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowProcessorDropdown(false), 150)}
+                    placeholder="Select or type..."
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                  {showProcessorDropdown && (
+                    <div className="absolute z-50 mt-0.5 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                      {["Stripe", "Revolut", "SumUp", "Square", "Terminal", "Other"]
+                        .filter((p) => !processor || p.toLowerCase().includes(processor.toLowerCase()))
+                        .map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => { setProcessor(p); setShowProcessorDropdown(false); }}
+                            className="w-full text-left px-2.5 py-1.5 text-sm hover:bg-purple-50 transition"
+                          >
+                            {p}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-0.5">
+                    Processing Fee
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={processingFee}
+                    onChange={(e) => setProcessingFee(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              {amount && (
+                <div className="bg-purple-50/60 border border-purple-100 rounded-md px-3 py-2 space-y-0.5">
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Payment amount</span>
+                    <span className="font-medium">{currency} {parseFloat(amount || "0").toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Processing Fee</span>
+                    <span className="font-medium text-red-600">
+                      &minus; {currency} {parseFloat(processingFee || "0").toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="border-t border-purple-200 pt-1 flex justify-between text-xs font-semibold text-gray-900">
+                    <span>Net amount</span>
+                    <span>{currency} {(parseFloat(amount || "0") - parseFloat(processingFee || "0")).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           {/* Credit to Account / Refunded from account — only for Bank/Card */}
           {method !== "cash" && (

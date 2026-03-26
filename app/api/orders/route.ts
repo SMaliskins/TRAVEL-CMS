@@ -244,6 +244,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Processing fees from card payments
+    const processingFeesByOrder = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const { data: feeRows } = await supabaseAdmin
+        .from("payments")
+        .select("order_id, processing_fee")
+        .eq("company_id", companyId)
+        .in("order_id", orderIds)
+        .neq("status", "cancelled")
+        .gt("processing_fee", 0);
+      for (const r of (feeRows || []) as { order_id: string; processing_fee: number | string }[]) {
+        const fee = Number(r.processing_fee) || 0;
+        if (fee > 0) {
+          processingFeesByOrder.set(
+            r.order_id,
+            (processingFeesByOrder.get(r.order_id) || 0) + fee
+          );
+        }
+      }
+    }
+
     // Aggregate payer names per order for search
     const payerNamesMap = new Map<string, string[]>();
     servicesData.forEach((s: any) => {
@@ -291,15 +312,28 @@ export async function GET(request: NextRequest) {
       const datesFrom = (order.date_from as string) || derived?.dateFrom || "";
       const datesTo = (order.date_to as string) || derived?.dateTo || "";
 
-      // Amount, profit (за вычетом VAT), vat from services; referral orders: profit after referral commission
+      // Amount, profit (за вычетом VAT), vat from services
       const amount = svcStats?.amount || Number(order.amount_total) || 0;
-      const profitBeforeReferral = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
-      const hasReferral = Boolean(order.referral_party_id);
+      let profitFromServices = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
+      let vatFromServices = svcStats?.vat ?? 0;
 
+      // Processing fees reduce gross margin → proportionally reduce both VAT and profit
+      const totalProcessingFees = processingFeesByOrder.get(orderId) || 0;
+      if (totalProcessingFees > 0) {
+        const grossMargin = profitFromServices + vatFromServices;
+        if (grossMargin > 0) {
+          const adjustedMargin = grossMargin - totalProcessingFees;
+          const ratio = adjustedMargin / grossMargin;
+          vatFromServices = Math.round(vatFromServices * ratio * 100) / 100;
+          profitFromServices = Math.round((adjustedMargin - vatFromServices) * 100) / 100;
+        }
+      }
+
+      // Referral commission
+      const hasReferral = Boolean(order.referral_party_id);
       let referralCommissionTotal = 0;
       if (hasReferral) {
         referralCommissionTotal = referralCommissionByOrder.get(orderId) || 0;
-        // Fallback: compute from service lines when no accrual records exist
         if (referralCommissionTotal === 0) {
           const svcLines = servicesByOrder.get(orderId) || [];
           for (const svc of svcLines) {
@@ -314,8 +348,8 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-      const profit = hasReferral ? profitBeforeReferral - referralCommissionTotal : profitBeforeReferral;
-      const vat = svcStats?.vat ?? 0;
+      const profit = hasReferral ? profitFromServices - referralCommissionTotal : profitFromServices;
+      const vat = vatFromServices;
       const paid = Number(order.amount_paid) || 0;
       const debt = amount - paid; // Calculate debt as amount - paid
 
