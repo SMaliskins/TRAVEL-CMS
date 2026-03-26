@@ -191,7 +191,8 @@ export async function parseFromRequest<T>(
   request: NextRequest,
   documentType: DocumentType,
   companyId: string,
-  userId: string
+  userId: string,
+  userFeedback?: string
 ): Promise<ParseResult<T>> {
   const start = Date.now();
   const schemaEntry = PARSE_SCHEMAS[documentType];
@@ -199,7 +200,13 @@ export async function parseFromRequest<T>(
   try {
     const intake = await processRequest(request, documentType);
     const rules = await loadActiveRules(companyId, documentType);
-    const systemPrompt = buildSystemPrompt(documentType, rules);
+    let systemPrompt = buildSystemPrompt(documentType, rules);
+
+    // Inject user feedback as additional instructions (for re-parse with corrections)
+    if (userFeedback && userFeedback.trim()) {
+      systemPrompt += `\n\n--- USER FEEDBACK (CRITICAL — follow these instructions) ---\nThe user reviewed the previous result and says: "${userFeedback.trim()}"\nMake sure to address this feedback. Extract ALL fields the user mentions are missing.\n---`;
+    }
+
     const configKey = intake.contentMode === "text" ? "parsing_text" : "parsing_vision";
 
     let jsonSchema: { name: string; schema: Record<string, unknown>; strict: boolean } | undefined;

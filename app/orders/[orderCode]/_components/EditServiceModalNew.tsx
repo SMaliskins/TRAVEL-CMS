@@ -826,6 +826,12 @@ export default function EditServiceModalNew({
   const [showAIParsedBanner, setShowAIParsedBanner] = useState(false);
   const [correctionMode, setCorrectionMode] = useState(false);
   const [correctedFields, setCorrectedFields] = useState<Set<string>>(new Set());
+  const [showReparseChat, setShowReparseChat] = useState(false);
+  const [reparseMessage, setReparseMessage] = useState("");
+  const [isReparsing, setIsReparsing] = useState(false);
+  const [reparseChatHistory, setReparseChatHistory] = useState<{ role: "user" | "parser"; text: string }[]>([]);
+  const lastParsedFileRef = useRef<File | null>(null);
+  const lastParsedTextRef = useRef<string>("");
   const [replacingClientIdx, setReplacingClientIdx] = useState<number | null>(null);
   const parseSourceTextRef = useRef<string>("");
   const flightFileInputRef = useRef<HTMLInputElement>(null);
@@ -1647,6 +1653,8 @@ export default function EditServiceModalNew({
         setParseError(data.error || "Could not parse document.");
         return;
       }
+      lastParsedFileRef.current = file;
+      lastParsedTextRef.current = "";
       await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
     } catch (err) {
       console.error("Parse package tour error:", err);
@@ -1676,6 +1684,8 @@ export default function EditServiceModalNew({
         setParseError(data.error || "Could not parse text.");
         return;
       }
+      lastParsedFileRef.current = null;
+      lastParsedTextRef.current = tourPasteText.trim();
       await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
       setShowTourPasteInput(false);
       setTourPasteText("");
@@ -1686,6 +1696,86 @@ export default function EditServiceModalNew({
       setIsParsingTour(false);
     }
   }, [tourPasteText, applyParsedTourData]);
+
+  // Reparse with user feedback — re-send the same document with instructions
+  const handleReparseWithFeedback = useCallback(async () => {
+    const feedback = reparseMessage.trim();
+    if (!feedback) return;
+    if (!lastParsedFileRef.current && !lastParsedTextRef.current) {
+      setReparseChatHistory(prev => [...prev,
+        { role: "user", text: feedback },
+        { role: "parser", text: "Нет исходного документа для перепарсинга. Загрузите документ заново." },
+      ]);
+      setReparseMessage("");
+      return;
+    }
+
+    setIsReparsing(true);
+    setReparseChatHistory(prev => [...prev, { role: "user", text: feedback }]);
+    setReparseMessage("");
+
+    const docType = categoryType === "flight" ? "flight_ticket" : categoryType === "tour" ? "package_tour" : "package_tour";
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+
+      let res: Response;
+      if (lastParsedFileRef.current) {
+        const formData = new FormData();
+        formData.append("file", lastParsedFileRef.current);
+        formData.append("documentType", docType);
+        formData.append("feedback", feedback);
+        res = await fetch("/api/ai/reparse", {
+          method: "POST",
+          headers,
+          body: formData,
+        });
+      } else {
+        res = await fetch("/api/ai/reparse", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: lastParsedTextRef.current,
+            documentType: docType,
+            feedback,
+          }),
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.parsed) {
+        setReparseChatHistory(prev => [...prev,
+          { role: "parser", text: `Ошибка: ${data.error || "не удалось перепарсить"}` },
+        ]);
+        return;
+      }
+
+      // Apply new parsed data
+      setCorrectedFields(new Set());
+      setParsedFields(new Set());
+      setParseAttemptedButEmpty(new Set());
+      await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
+
+      // Count what was parsed
+      const parsed = data.parsed as Record<string, unknown>;
+      const filledKeys = Object.keys(parsed).filter(k => {
+        const v = parsed[k];
+        return v !== null && v !== undefined && v !== "";
+      });
+      setReparseChatHistory(prev => [...prev,
+        { role: "parser", text: `Перепарсил с учётом ваших указаний. Заполнено полей: ${filledKeys.length}. Проверьте результат.` },
+      ]);
+    } catch (err) {
+      console.error("Reparse error:", err);
+      setReparseChatHistory(prev => [...prev,
+        { role: "parser", text: "Ошибка при перепарсинге. Попробуйте ещё раз." },
+      ]);
+    } finally {
+      setIsReparsing(false);
+    }
+  }, [reparseMessage, categoryType, applyParsedTourData]);
 
   // Helper to guess category type from name (for legacy services without categoryId)
   const guessTypeFromName = (name: string): CategoryType => {
@@ -2174,10 +2264,11 @@ export default function EditServiceModalNew({
   };
 
   const markCorrected = useCallback((field: string) => {
-    if (correctionMode) {
+    // Auto-track corrections: if AI parsed this field and user changes it → mark as corrected
+    if (showAIParsedBanner && (parsedFields.has(field) || parseAttemptedButEmpty.has(field))) {
       setCorrectedFields(prev => { const n = new Set(prev); n.add(field); return n; });
     }
-  }, [correctionMode]);
+  }, [showAIParsedBanner, parsedFields, parseAttemptedButEmpty]);
 
   const fieldRingClass = useCallback((field: string) => {
     if (correctedFields.has(field)) return "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30";
@@ -2826,29 +2917,57 @@ export default function EditServiceModalNew({
             </div>
           )}
           {showAIParsedBanner && (
-            <div className={`mb-3 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${correctionMode ? "bg-amber-100 border-amber-300 text-amber-900" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
-              {correctionMode ? (
-                <>
-                  <span>✏️ Correction mode — fields you edit are highlighted in <strong>orange</strong>. Click <strong>Save</strong> when done.</span>
-                  <button type="button" onClick={() => setCorrectionMode(false)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 shrink-0">Done</button>
-                </>
-              ) : (
-                <>
-                  <span>📋 Data parsed from document. To correct missing or wrong fields, click <strong>Edit Form</strong>.</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button type="button" onClick={() => setCorrectionMode(true)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700">Edit Form</button>
-                    <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
+            <div className="mb-3 space-y-2">
+              <div className="flex items-center justify-between gap-2 rounded-lg border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-800">
+                <span>📋 Данные распознаны из документа. {correctedFields.size > 0 ? `Исправлено полей: ${correctedFields.size}` : "Измените поле — оно станет оранжевым."}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => setShowReparseChat(prev => !prev)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700">
+                    {showReparseChat ? "Скрыть чат" : "💬 Чат с парсером"}
+                  </button>
+                  <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
+                </div>
+              </div>
+              {showReparseChat && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+                  <p className="text-xs text-blue-800 font-medium">💬 Напишите парсеру что не так — он перепарсит документ с вашими указаниями:</p>
+                  {reparseChatHistory.length > 0 && (
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {reparseChatHistory.map((msg, i) => (
+                        <div key={i} className={`text-xs px-2 py-1 rounded ${msg.role === "user" ? "bg-white border border-gray-200 text-gray-800" : "bg-blue-100 text-blue-800"}`}>
+                          <span className="font-medium">{msg.role === "user" ? "Вы:" : "Парсер:"}</span> {msg.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={reparseMessage}
+                      onChange={(e) => setReparseMessage(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && !isReparsing && reparseMessage.trim() && handleReparseWithFeedback()}
+                      placeholder="Напр: 'Нет авиабилетов — добавь рейсы' или 'Direction должен быть Латвия-Турция'"
+                      className="flex-1 text-sm border border-blue-300 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      disabled={isReparsing}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleReparseWithFeedback}
+                      disabled={isReparsing || !reparseMessage.trim()}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isReparsing ? "⏳ Парсю..." : "🔄 Перепарсить"}
+                    </button>
                   </div>
-                </>
+                </div>
+              )}
+              {correctedFields.size > 0 && (
+                <ParseFeedbackPanel
+                  documentType={categoryType === "flight" ? "flight_ticket" : categoryType === "tour" ? "package_tour" : categoryType || "other"}
+                  corrections={[...correctedFields].map(f => ({ field: f }))}
+                  className=""
+                />
               )}
             </div>
-          )}
-          {showAIParsedBanner && correctedFields.size > 0 && (
-            <ParseFeedbackPanel
-              documentType={categoryType === "flight" ? "flight_ticket" : categoryType === "tour" ? "package_tour" : categoryType || "other"}
-              corrections={[...correctedFields].map(f => ({ field: f }))}
-              className="mb-3"
-            />
           )}
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -3728,15 +3847,15 @@ export default function EditServiceModalNew({
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Hotel</label>
                         <HotelSuggestInput
                           value={hotelName}
-                          onChange={setHotelName}
+                          onChange={(v) => { setHotelName(v); markCorrected("hotelName"); }}
                           onHotelSelected={(d) => {
-                            setHotelName(d.name);
+                            setHotelName(d.name); markCorrected("hotelName");
                             if (d.address) setHotelAddress(d.address);
                             if (d.phone) setHotelPhone(d.phone);
                             if (d.email) setHotelEmail(d.email);
                           }}
                           placeholder="Search hotel..."
-                          className={parsedFields.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-green-300 [&_input]:border-green-400" : parseAttemptedButEmpty.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-red-300 [&_input]:border-red-400" : ""}
+                          className={correctedFields.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-amber-400 [&_input]:border-amber-400 [&_input]:bg-amber-50/30" : parsedFields.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-green-300 [&_input]:border-green-400" : parseAttemptedButEmpty.has("hotelName") ? "[&_input]:ring-2 [&_input]:ring-red-300 [&_input]:border-red-400" : ""}
                         />
                       </div>
                       <div>
@@ -3744,9 +3863,9 @@ export default function EditServiceModalNew({
                         <input
                           type="text"
                           value={hotelStarRating}
-                          onChange={(e) => setHotelStarRating(e.target.value)}
+                          onChange={(e) => { setHotelStarRating(e.target.value); markCorrected("hotelStarRating"); }}
                           placeholder="5*"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${correctedFields.has("hotelStarRating") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("hotelStarRating") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelStarRating") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                         />
                       </div>
                     </div>
@@ -3783,9 +3902,9 @@ export default function EditServiceModalNew({
                       <input
                         type="text"
                         value={hotelRoom}
-                        onChange={(e) => setHotelRoom(e.target.value)}
+                        onChange={(e) => { setHotelRoom(e.target.value); markCorrected("hotelRoom"); }}
                         placeholder="Club Superior"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelRoom") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${correctedFields.has("hotelRoom") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("hotelRoom") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelRoom") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
@@ -3796,8 +3915,9 @@ export default function EditServiceModalNew({
                           const v = e.target.value as typeof hotelBoard;
                           setHotelBoard(v);
                           setMealPlanText(BOARD_LABELS[v] || "");
+                          markCorrected("hotelBoard");
                         }}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("hotelBoard") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${correctedFields.has("hotelBoard") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("hotelBoard") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("hotelBoard") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       >
                         <option value="room_only">RO</option>
                         <option value="breakfast">BB</option>
@@ -3818,19 +3938,19 @@ export default function EditServiceModalNew({
                       <input
                         type="text"
                         value={transferType}
-                        onChange={(e) => setTransferType(e.target.value)}
+                        onChange={(e) => { setTransferType(e.target.value); markCorrected("transferType"); }}
                         placeholder="Group / Individual / —"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${parseAttemptedButEmpty.has("transferType") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white ${correctedFields.has("transferType") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("transferType") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("transferType") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Additional</label>
                       <textarea
                         value={additionalServices}
-                        onChange={(e) => setAdditionalServices(e.target.value)}
+                        onChange={(e) => { setAdditionalServices(e.target.value); markCorrected("additionalServices"); }}
                         placeholder="Extra services"
                         rows={2}
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${parseAttemptedButEmpty.has("additionalServices") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-sm bg-white resize-none ${correctedFields.has("additionalServices") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("additionalServices") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("additionalServices") ? "ring-2 ring-green-300 border-green-400" : "border-gray-300 focus:border-blue-500 focus:ring-1"}`}
                       />
                     </div>
                   </>
