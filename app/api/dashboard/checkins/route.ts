@@ -9,6 +9,8 @@ interface FlightSegment {
   departureTimeScheduled?: string;
   arrivalDate?: string;
   arrivalTimeScheduled?: string;
+  departure?: string;
+  arrival?: string;
   departureAirport?: string;
   arrivalAirport?: string;
 }
@@ -36,10 +38,10 @@ export async function GET(request: NextRequest) {
         orders!inner(order_code, company_id)
       `)
       .eq("orders.company_id", companyId)
-      .eq("category", "Flight")
+      .in("category", ["Flight", "Air Ticket"])
       .in("res_status", ["confirmed", "ticketed"])
-      .gte("date_from", now.toISOString().split("T")[0])
-      .lte("date_from", maxLookahead.toISOString().split("T")[0]);
+      .gte("service_date_from", now.toISOString().split("T")[0])
+      .lte("service_date_to", maxLookahead.toISOString().split("T")[0]);
 
     if (svcError) {
       console.error("[Dashboard Checkins] Query error:", svcError);
@@ -95,7 +97,9 @@ export async function GET(request: NextRequest) {
         }
 
         const clientName = tickets?.[0]?.clientName || svc.client_name || "—";
-        const route = [seg.departureAirport, seg.arrivalAirport].filter(Boolean).join(" → ") || "";
+        const depAirport = seg.departure || seg.departureAirport || "";
+        const arrAirport = seg.arrival || seg.arrivalAirport || "";
+        const route = [depAirport, arrAirport].filter(Boolean).join(" → ");
 
         checkins.push({
           serviceId: svc.id,
