@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       .eq("orders.company_id", companyId)
       .in("category", ["Flight", "Air Ticket"])
       .in("res_status", ["confirmed", "ticketed"])
-      .gte("service_date_from", now.toISOString().split("T")[0])
+      .gte("service_date_to", now.toISOString().split("T")[0])
       .lte("service_date_to", maxLookahead.toISOString().split("T")[0]);
 
     if (svcError) {
