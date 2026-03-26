@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
     const [servicesResult, ownerProfilesResult, invoicesResult] = await Promise.all([
       supabaseAdmin
         .from("order_services")
-        .select("order_id, invoice_id, res_status, service_type, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name")
+        .select("order_id, invoice_id, res_status, service_type, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount")
         .eq("company_id", companyId)
         .in("order_id", orderIds),
       ownerIds.length > 0
@@ -295,9 +295,25 @@ export async function GET(request: NextRequest) {
       const amount = svcStats?.amount || Number(order.amount_total) || 0;
       const profitBeforeReferral = svcStats?.profit ?? Number(order.profit_estimated) ?? 0;
       const hasReferral = Boolean(order.referral_party_id);
-      const referralCommissionTotal = hasReferral
-        ? referralCommissionByOrder.get(orderId) || 0
-        : 0;
+
+      let referralCommissionTotal = 0;
+      if (hasReferral) {
+        referralCommissionTotal = referralCommissionByOrder.get(orderId) || 0;
+        // Fallback: compute from service lines when no accrual records exist
+        if (referralCommissionTotal === 0) {
+          const svcLines = servicesByOrder.get(orderId) || [];
+          for (const svc of svcLines) {
+            if (svc.res_status === "cancelled" || !svc.referral_include_in_commission) continue;
+            const lineEcon = computeServiceLineEconomics(svc);
+            const lineProfit = lineEcon.profitNetOfVat;
+            if (svc.referral_commission_fixed_amount != null && Number(svc.referral_commission_fixed_amount) > 0) {
+              referralCommissionTotal += Number(svc.referral_commission_fixed_amount);
+            } else if (svc.referral_commission_percent_override != null && Number(svc.referral_commission_percent_override) > 0) {
+              referralCommissionTotal += Math.round(lineProfit * Number(svc.referral_commission_percent_override) / 100 * 100) / 100;
+            }
+          }
+        }
+      }
       const profit = hasReferral ? profitBeforeReferral - referralCommissionTotal : profitBeforeReferral;
       const vat = svcStats?.vat ?? 0;
       const paid = Number(order.amount_paid) || 0;
