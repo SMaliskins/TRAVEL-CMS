@@ -19,6 +19,7 @@ import HotelSuggestInput from '@/components/HotelSuggestInput';
 import AddAccompanyingModal from './AddAccompanyingModal';
 import { Hotel, Link2, Sparkles } from "lucide-react";
 import LinkedServicesModal from "./LinkedServicesModal";
+import ParseFeedbackPanel from "@/components/ParseFeedbackPanel";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import type { SupplierCommission } from '@/lib/types/directory';
 
@@ -2621,6 +2622,21 @@ export default function EditServiceModalNew({
           }).catch(() => {});
           parseSourceTextRef.current = "";
         }
+        // Submit corrections to parse_feedback API for learning
+        if (correctedFields.size > 0 && showAIParsedBanner) {
+          const docType = categoryType === "flight" ? "flight_ticket" : categoryType === "tour" ? "package_tour" : categoryType || "other";
+          const corrections = [...correctedFields].map(field => ({
+            field_name: field,
+            old_value: null,
+            new_value: null,
+            feedback_type: "correction" as const,
+          }));
+          fetch("/api/ai/parse-feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ document_type: docType, corrections }),
+          }).catch(() => {});
+        }
         if (categoryType !== "tour") onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -2827,9 +2843,16 @@ export default function EditServiceModalNew({
               )}
             </div>
           )}
+          {showAIParsedBanner && correctedFields.size > 0 && (
+            <ParseFeedbackPanel
+              documentType={categoryType === "flight" ? "flight_ticket" : categoryType === "tour" ? "package_tour" : categoryType || "other"}
+              corrections={[...correctedFields].map(f => ({ field: f }))}
+              className="mb-3"
+            />
+          )}
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            
+
             <div className={`space-y-3 min-w-0 ${categoryType === "hotel" ? "" : ""}`}>
               {/* BASIC INFO for flight — first, aligns with PRICING on the right */}
               {categoryType === "flight" && (

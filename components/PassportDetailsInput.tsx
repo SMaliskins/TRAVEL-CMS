@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import ParseFeedbackPanel from "@/components/ParseFeedbackPanel";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { COUNTRIES } from "@/lib/data/countries";
 import {
@@ -63,6 +64,7 @@ export default function PassportDetailsInput({
   const [parseError, setParseError] = useState<string | null>(null);
   const [parseWarning, setParseWarning] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [correctedPassportFields, setCorrectedPassportFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
@@ -182,6 +184,9 @@ export default function PassportDetailsInput({
 
   const updateField = (field: keyof PassportData, value: string | undefined) => {
     onChange({ ...data, [field]: value } as PassportData);
+    if (parsedFields?.has(field)) {
+      setCorrectedPassportFields(prev => { const n = new Set(prev); n.add(field); return n; });
+    }
   };
 
   const isParsed = (field: string) => parsedFields?.has(field) ?? false;
@@ -475,6 +480,12 @@ export default function PassportDetailsInput({
         <div className="rounded bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
           {parseWarning}
         </div>
+      )}
+      {parsedFields && parsedFields.size > 0 && correctedPassportFields.size > 0 && (
+        <ParseFeedbackPanel
+          documentType="passport"
+          corrections={[...correctedPassportFields].map(f => ({ field: f }))}
+        />
       )}
     </div>
   );
