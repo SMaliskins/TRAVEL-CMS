@@ -164,6 +164,8 @@ export async function GET(request: NextRequest) {
       location: [number, number];
       orderCode: string;
       status: "upcoming" | "in-progress" | "completed";
+      dateFrom?: string;
+      dateTo?: string;
       completedAt?: string;
       destination?: string;
     }
@@ -199,6 +201,8 @@ export async function GET(request: NextRequest) {
         location: coords,
         orderCode: order.order_code,
         status,
+        dateFrom: from || undefined,
+        dateTo: to || undefined,
         completedAt: status === "completed" ? to : undefined,
         destination: firstCity,
       });

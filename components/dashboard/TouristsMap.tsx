@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { formatDateRange } from "@/utils/dateFormat";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -23,11 +24,13 @@ const Popup = dynamic(
 export interface TouristLocation {
   id: string;
   name: string;
-  location: [number, number]; // [lat, lng]
+  location: [number, number];
   orderCode?: string;
   status?: "upcoming" | "in-progress" | "completed";
-  completedAt?: string; // ISO date when trip was completed
-  destination?: string; // For display in Recently Completed
+  dateFrom?: string;
+  dateTo?: string;
+  completedAt?: string;
+  destination?: string;
 }
 
 interface TouristsMapProps {
@@ -36,12 +39,32 @@ interface TouristsMapProps {
   className?: string;
 }
 
+function personSvg(color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <circle cx="14" cy="8" r="6" fill="${color}" stroke="white" stroke-width="2"/>
+    <path d="M4 28 C4 18 24 18 24 28" fill="${color}" stroke="white" stroke-width="2"/>
+    <polygon points="14,36 8,28 20,28" fill="${color}"/>
+  </svg>`;
+}
+
+function createPersonIcon(status?: string) {
+  if (typeof window === "undefined") return undefined;
+  const L = require("leaflet");
+  const color = status === "in-progress" ? "#10b981" : "#3b82f6";
+  return L.divIcon({
+    html: personSvg(color),
+    className: "",
+    iconSize: [28, 36],
+    iconAnchor: [14, 36],
+    popupAnchor: [0, -36],
+  });
+}
+
 export default function TouristsMap({
   locations,
   showAgentOnly = false,
   className = "",
 }: TouristsMapProps) {
-  // Load Leaflet CSS dynamically
   useEffect(() => {
     if (typeof document !== "undefined") {
       const link = document.createElement("link");
@@ -50,16 +73,21 @@ export default function TouristsMap({
       link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
       link.crossOrigin = "";
       document.head.appendChild(link);
-      return () => {
-        document.head.removeChild(link);
-      };
+      return () => { document.head.removeChild(link); };
     }
   }, []);
 
-  // Filter locations - show only upcoming and in-progress on map
   const activeLocations = locations.filter(
     (loc) => loc.status === "upcoming" || loc.status === "in-progress"
   );
+
+  const icons = useMemo(() => {
+    if (typeof window === "undefined") return {};
+    return {
+      upcoming: createPersonIcon("upcoming"),
+      "in-progress": createPersonIcon("in-progress"),
+    };
+  }, []);
 
   if (!activeLocations || activeLocations.length === 0) {
     return (
@@ -74,24 +102,8 @@ export default function TouristsMap({
     );
   }
 
-  // Calculate map center (average of active locations)
-  const avgLat =
-    activeLocations.reduce((sum, loc) => sum + loc.location[0], 0) / activeLocations.length;
-  const avgLng =
-    activeLocations.reduce((sum, loc) => sum + loc.location[1], 0) / activeLocations.length;
-
-  const getMarkerColor = (status?: string): string => {
-    switch (status) {
-      case "upcoming":
-        return "#3b82f6"; // blue
-      case "in-progress":
-        return "#10b981"; // green
-      case "completed":
-        return "#f97316"; // orange
-      default:
-        return "#6b7280"; // gray
-    }
-  };
+  const avgLat = activeLocations.reduce((sum, loc) => sum + loc.location[0], 0) / activeLocations.length;
+  const avgLng = activeLocations.reduce((sum, loc) => sum + loc.location[1], 0) / activeLocations.length;
 
   return (
     <div className={`booking-glass-panel !p-6 ${className}`}>
@@ -99,25 +111,44 @@ export default function TouristsMap({
         {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
       </h3>
       <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
-        <MapContainer
-          center={[avgLat, avgLng]}
-          zoom={5}
-          style={{ height: "100%", width: "100%" }}
-        >
+        <MapContainer center={[avgLat, avgLng]} zoom={5} style={{ height: "100%", width: "100%" }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           {activeLocations.map((tourist) => (
-            <Marker key={tourist.id} position={tourist.location}>
+            <Marker
+              key={tourist.id}
+              position={tourist.location}
+              icon={icons[tourist.status as "upcoming" | "in-progress"] || icons.upcoming}
+            >
               <Popup>
-                <div className="text-sm">
-                  <p className="font-semibold">{tourist.name}</p>
-                  {tourist.orderCode && (
-                    <p className="text-gray-600">Order: {tourist.orderCode}</p>
+                <div className="text-sm min-w-[160px]">
+                  <p className="font-bold text-gray-900 text-[13px]">{tourist.name}</p>
+                  {tourist.destination && (
+                    <p className="text-gray-500 text-xs">{tourist.destination}</p>
+                  )}
+                  {(tourist.dateFrom || tourist.dateTo) && (
+                    <p className="text-gray-600 text-xs mt-1">
+                      {formatDateRange(tourist.dateFrom || "", tourist.dateTo || "", true)}
+                    </p>
                   )}
                   {tourist.status && (
-                    <p className="text-gray-600">Status: {tourist.status}</p>
+                    <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      tourist.status === "in-progress"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-blue-100 text-blue-700"
+                    }`}>
+                      {tourist.status === "in-progress" ? "In Progress" : "Upcoming"}
+                    </span>
+                  )}
+                  {tourist.orderCode && (
+                    <a
+                      href={`/orders/${tourist.orderCode}`}
+                      className="block mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      {tourist.orderCode} →
+                    </a>
                   )}
                 </div>
               </Popup>
@@ -127,15 +158,14 @@ export default function TouristsMap({
       </div>
       <div className="mt-4 flex items-center justify-center gap-4">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+          <svg width="14" height="14" viewBox="0 0 28 28"><circle cx="14" cy="8" r="6" fill="#3b82f6"/><path d="M4 28 C4 18 24 18 24 28" fill="#3b82f6"/></svg>
           <span className="text-xs text-gray-600">Upcoming</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-green-500"></div>
+          <svg width="14" height="14" viewBox="0 0 28 28"><circle cx="14" cy="8" r="6" fill="#10b981"/><path d="M4 28 C4 18 24 18 24 28" fill="#10b981"/></svg>
           <span className="text-xs text-gray-600">In Progress</span>
         </div>
       </div>
     </div>
   );
 }
-
