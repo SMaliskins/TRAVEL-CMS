@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
 // ============== PASSPORT ==============
 
@@ -227,7 +228,6 @@ export async function zodSchemaToOpenAI(
   zodSchema: any,
   name: string
 ): Promise<{ name: string; schema: Record<string, unknown>; strict: boolean }> {
-  const { zodToJsonSchema } = await import("zod-to-json-schema");
   const jsonSchema = zodToJsonSchema(zodSchema, { target: "openAi" });
 
   return {
