@@ -353,17 +353,26 @@ export async function POST(request: NextRequest) {
       { role: "user", content: userParts },
     ];
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiApiKey}` },
-      body: JSON.stringify({ model, messages, max_tokens: 4000, temperature: 0.1 }),
-    });
+    const reqBody = JSON.stringify({ model, messages, max_tokens: 4000, temperature: 0.1 });
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiApiKey}` },
+        body: reqBody,
+      });
+      if (response.status !== 429) break;
+      const retryAfter = parseInt(response.headers.get("retry-after") || "", 10);
+      const waitMs = (retryAfter > 0 ? retryAfter * 1000 : 2000) * (attempt + 1);
+      console.warn(`[parse-package-tour] 429 rate-limited, retry ${attempt + 1} after ${waitMs}ms`);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error("OpenAI package tour parse error:", response.status, errText);
+    if (!response || !response.ok) {
+      const errText = await response?.text().catch(() => "") || "";
+      console.error("OpenAI package tour parse error:", response?.status, errText);
       return NextResponse.json(
-        { error: `AI service error (${response.status}). Try again or paste text manually.`, parsed: null },
+        { error: `AI service error (${response?.status || "unknown"}). Try again or paste text manually.`, parsed: null },
         { status: 502 }
       );
     }
