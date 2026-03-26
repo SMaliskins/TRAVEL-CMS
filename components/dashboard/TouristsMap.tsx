@@ -70,7 +70,7 @@ function circleSvg(color: string, count: number, ring?: string): string {
 function createCityIcon(group: CityGroup) {
   if (typeof window === "undefined") return undefined;
   const L = require("leaflet");
-  const color = group.allInProgress ? "#10b981" : group.hasInProgress ? "#0d9488" : "#3b82f6";
+  const color = group.allInProgress ? "#10b981" : "#3b82f6";
   const ring = group.hasInProgress && !group.allInProgress ? "#10b981" : undefined;
   const count = group.travelers.length;
   const size = count < 10 ? 36 : count < 100 ? 42 : 48;
