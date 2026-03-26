@@ -630,15 +630,34 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            {/* Row 2: Map and Calendar + Check-in + Notifications */}
+            {/* Row 2: Operational Cards */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              <DashboardCheckins />
+              <DashboardNotifications />
+              <div className="booking-glass-panel !p-5 !overflow-visible">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Tasks</h3>
+                <p className="mt-1 text-3xl font-black text-gray-900">—</p>
+                <p className="mt-2 text-xs text-gray-400">Coming soon</p>
+              </div>
+              <div className="booking-glass-panel !p-5 !overflow-visible">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Deadlines</h3>
+                <p className="mt-1 text-3xl font-black text-gray-900">—</p>
+                <p className="mt-2 text-xs text-gray-400">Coming soon</p>
+              </div>
+              <div className="booking-glass-panel !p-5 !overflow-visible">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Birthdays</h3>
+                <p className="mt-1 text-3xl font-black text-gray-900">—</p>
+                <p className="mt-2 text-xs text-gray-400">Coming soon</p>
+              </div>
+            </div>
+
+            {/* Row 3: Map and Calendar */}
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <TouristsMap locations={touristLocations} />
               </div>
               <div className="flex flex-col gap-4">
                 <CalendarWithDots events={calendarEvents} />
-                <DashboardCheckins />
-                <DashboardNotifications />
               </div>
             </div>
 

@@ -59,79 +59,75 @@ export default function DashboardCheckins() {
   }, [fetchCheckins]);
 
   const openCount = checkins.filter((c) => c.status === "open" || c.status === "closing_soon").length;
+  const total = checkins.length;
 
   return (
-    <div className="booking-glass-panel !p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Plane size={18} className="text-blue-500" />
-          <h3 className="text-base font-bold text-gray-900">{t.title}</h3>
-          {openCount > 0 && (
-            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">
-              {openCount}
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="booking-glass-panel !p-5 !overflow-visible">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+        {t.title}
+      </h3>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-6">
+        <div className="mt-2 flex items-center justify-center py-3">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500" />
         </div>
-      ) : checkins.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-4">{t.empty}</p>
       ) : (
-        <div className="space-y-2">
-          {checkins.slice(0, 6).map((c) => (
-            <div key={`${c.serviceId}-${c.flightNumber}`}
-              className={`rounded-lg px-3 py-2.5 ${
-                c.status === "open" ? "bg-emerald-50 border border-emerald-200" :
-                c.status === "closing_soon" ? "bg-amber-50 border border-amber-200" :
-                c.status === "upcoming" ? "bg-blue-50/50 border border-blue-100" :
-                "bg-gray-50 border border-gray-100"
-              }`}>
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-bold text-gray-900">{c.flightNumber}</span>
-                  {c.route && <span className="text-xs text-gray-500">{c.route}</span>}
-                </div>
-                {c.status === "open" || c.status === "closing_soon" ? (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                    c.status === "closing_soon" ? "bg-amber-200 text-amber-800" : "bg-emerald-200 text-emerald-800"
-                  }`}>
-                    {c.status === "closing_soon" ? `${t.closing} ${c.closesIn}` : t.open}
-                  </span>
-                ) : c.status === "upcoming" ? (
-                  <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5 shrink-0">
-                    <Clock size={10} /> {t.upcoming} {c.opensIn}
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-400 font-medium shrink-0">
-                    {new Date(c.departureDateTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm text-gray-700 font-medium truncate">{c.clientName}</span>
-                  <span className="text-xs text-gray-400 shrink-0">PNR: {c.pnr}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {c.checkinUrl && (c.status === "open" || c.status === "closing_soon") && (
-                    <a href={c.checkinUrl} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition">
-                      Check-in <ExternalLink size={10} />
-                    </a>
-                  )}
-                  <button onClick={() => router.push(`/orders/${c.orderCode}`)}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                    {t.viewOrder}
-                  </button>
-                </div>
-              </div>
+        <>
+          <p className="mt-1 text-3xl font-black text-gray-900">{total}</p>
+
+          {openCount > 0 && (
+            <div className="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold text-emerald-600 bg-emerald-50">
+              {openCount} open
             </div>
-          ))}
-        </div>
+          )}
+
+          <div className="mt-3 space-y-1.5">
+            {checkins.slice(0, 3).map((c) => (
+              <div key={`${c.serviceId}-${c.flightNumber}`}
+                className={`rounded-lg px-2.5 py-2 ${
+                  c.status === "open" ? "bg-emerald-50 border border-emerald-200" :
+                  c.status === "closing_soon" ? "bg-amber-50 border border-amber-200" :
+                  c.status === "upcoming" ? "bg-blue-50/50 border border-blue-100" :
+                  "bg-gray-50 border border-gray-100"
+                }`}>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-gray-900 truncate">{c.flightNumber}</span>
+                  {c.route && <span className="text-[10px] text-gray-500 shrink-0">{c.route}</span>}
+                </div>
+                <div className="flex items-center justify-between gap-1 mt-0.5">
+                  <span className="text-[11px] text-gray-700 truncate">{c.clientName}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {c.status === "open" || c.status === "closing_soon" ? (
+                      c.checkinUrl ? (
+                        <a href={c.checkinUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700 transition">
+                          Check-in <ExternalLink size={8} />
+                        </a>
+                      ) : (
+                        <span className="text-[10px] font-bold text-emerald-700">{t.open}</span>
+                      )
+                    ) : c.status === "upcoming" ? (
+                      <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5">
+                        <Clock size={8} /> {c.opensIn}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(c.departureDateTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                      </span>
+                    )}
+                    <button onClick={() => router.push(`/orders/${c.orderCode}`)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-medium ml-0.5">
+                      →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {total === 0 && (
+              <p className="text-xs text-gray-400 text-center py-2">{t.empty}</p>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
