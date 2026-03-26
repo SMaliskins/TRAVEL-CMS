@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { logAiUsage } from "@/lib/aiUsageLogger";
 import { requireModule } from "@/lib/modules/checkModule";
 import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
@@ -237,11 +236,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
-    if (!anthropicKey) {
+    if (!openaiKey) {
       return NextResponse.json(
-        { error: "AI parsing not configured. Add ANTHROPIC_API_KEY.", parsed: null },
+        { error: "AI parsing not configured. Add OPENAI_API_KEY.", parsed: null },
         { status: 503 }
       );
     }
@@ -258,7 +256,7 @@ export async function POST(request: NextRequest) {
           .replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
         if (raw && raw.length >= 10) {
           textContent = raw;
-          pdfBase64 = null; // use Anthropic with text
+          pdfBase64 = null; // use OpenAI with extracted text
         }
         // else keep pdfBase64 for OpenAI fallback below
       } catch (pdfErr) {
@@ -282,7 +280,7 @@ export async function POST(request: NextRequest) {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
-        body: JSON.stringify({ model: MODELS.OPENAI_VISION, messages, max_tokens: 3000, temperature: 0.1 }),
+        body: JSON.stringify({ model: MODELS.OPENAI_VISION, messages, max_tokens: 4000, temperature: 0.1 }),
       });
       if (response.ok) {
         const data = await response.json();
@@ -322,19 +320,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build user message for Anthropic: text or image (inline type — SDK MessageCreateParams shape varies by version)
-    type ContentBlock =
-      | { type: "text"; text: string }
-      | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
-    let userContent: ContentBlock[];
+    // Build messages for OpenAI Chat Completions (unified for text + image)
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (!openaiApiKey) {
+      return NextResponse.json(
+        { error: "AI parsing not configured. Add OPENAI_API_KEY.", parsed: null },
+        { status: 503 }
+      );
+    }
+
+    let userParts: object[];
+    let model: string;
     if (textContent) {
-      userContent = [{ type: "text" as const, text: `Parse this Package Tour document:\n\n${textContent}` }];
+      userParts = [{ type: "text", text: `Parse this Package Tour document:\n\n${textContent}` }];
+      model = MODELS.OPENAI_FAST;
     } else if (imageBase64) {
-      const mediaType = (mimeType === "image/jpeg" ? "image/jpeg" : mimeType === "image/gif" ? "image/gif" : mimeType === "image/webp" ? "image/webp" : "image/png") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-      userContent = [
-        { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: imageBase64 } },
-        { type: "text" as const, text: "Extract all Package Tour information from this image. Return JSON only." },
+      const imgMime = (mimeType && mimeType.startsWith("image/")) ? mimeType : "image/png";
+      userParts = [
+        { type: "image_url", image_url: { url: `data:${imgMime};base64,${imageBase64}`, detail: "high" } },
+        { type: "text", text: "Extract all Package Tour information from this image. Return JSON only." },
       ];
+      model = MODELS.OPENAI_VISION;
     } else {
       return NextResponse.json(
         { error: "No text or image to parse.", parsed: null },
@@ -342,29 +348,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const anthropic = new Anthropic({ apiKey: anthropicKey });
-    const TOUR_MODEL = MODELS.ANTHROPIC_FAST;
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userParts },
+    ];
 
-    const msg = await anthropic.messages.create({
-      model: TOUR_MODEL,
-      max_tokens: 3000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userContent }],
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiApiKey}` },
+      body: JSON.stringify({ model, messages, max_tokens: 4000, temperature: 0.1 }),
     });
 
-    const textBlock = msg.content.find((c) => c.type === "text");
-    const content = textBlock && "text" in textBlock ? textBlock.text : "";
-    const usage = msg.usage ?? { input_tokens: 0, output_tokens: 0 };
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("OpenAI package tour parse error:", response.status, errText);
+      return NextResponse.json(
+        { error: `AI service error (${response.status}). Try again or paste text manually.`, parsed: null },
+        { status: 502 }
+      );
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const usage = data.usage || {};
 
     if (authInfo) {
       await logAiUsage({
         companyId: authInfo.companyId,
         userId: authInfo.userId,
         operation: "parse_package_tour",
-        model: TOUR_MODEL,
-        inputTokens: usage.input_tokens || 0,
-        outputTokens: usage.output_tokens || 0,
-        totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+        model,
+        inputTokens: usage.prompt_tokens || 0,
+        outputTokens: usage.completion_tokens || 0,
+        totalTokens: usage.total_tokens || 0,
         success: true,
         metadata: { inputType },
       });
@@ -380,10 +396,10 @@ export async function POST(request: NextRequest) {
         });
       }
     } catch (parseErr) {
-      console.error("Failed to parse Anthropic response:", parseErr, "Content:", content);
+      console.error("Failed to parse OpenAI response:", parseErr, "Content:", content.slice(0, 500));
     }
 
-    return NextResponse.json({ error: "Could not extract tour information", parsed: null });
+    return NextResponse.json({ error: "Could not extract tour information from this document.", parsed: null });
   } catch (err) {
     console.error("Parse package tour error:", err);
     if (authInfo) {
@@ -391,11 +407,14 @@ export async function POST(request: NextRequest) {
         companyId: authInfo.companyId,
         userId: authInfo.userId,
         operation: "parse_package_tour",
-        model: MODELS.ANTHROPIC_FAST,
+        model: MODELS.OPENAI_FAST,
         success: false,
         errorMessage: err instanceof Error ? err.message : "Unknown error",
       });
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal server error" },
+      { status: 500 }
+    );
   }
 }
