@@ -1,101 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { extractTd3MrzLinesFromText, parseMrzToPassportData } from "@/lib/passport/parseMrz";
 import type { PassportDataFromMrz } from "@/lib/passport/parseMrz";
-import { MODELS } from "@/lib/ai/config";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
-import {
-  inferMimeFromBytes,
-  inferMimeFromFilename,
-  normalizeImageMime,
-} from "@/lib/files/inferUploadMime";
+import { aiComplete, type AIMessage, type AIMessageContent } from "@/lib/ai/client";
+import { processRequest } from "@/lib/ai/documentIntake";
+import { buildSystemPrompt } from "@/lib/ai/parsePrompts";
+import { logAiUsage } from "@/lib/aiUsageLogger";
 
 /**
  * AI-powered passport parsing
- * 
- * Supports:
- * - Image upload (base64 or FormData)
- * - PDF upload (FormData) — OpenAI Files API + Responses API (`input_file`, gpt-4o); not Chat Completions
- * - Text parsing (JSON body)
- * 
- * Expected FormData:
- *   file: File (image or PDF)
- *   type: "image" | "pdf" (optional, auto-detected)
- * 
- * Expected JSON body:
- *   { image: string (base64), mimeType: string }
- *   OR
- *   { text: string }
+ *
+ * Uses unified pipeline for file intake + AI client,
+ * but keeps passport-specific orchestration:
+ * - MRZ library parsing (pre-AI, most reliable for DOB/expiry)
+ * - Dual-model: OpenAI primary + Anthropic fallback
+ * - Merge results from both models
+ * - MRZ overrides on final result
+ *
+ * Supports: Image (base64/FormData), PDF (FormData), Text (JSON body)
  */
 
 interface PassportData {
   passportNumber?: string;
-  passportIssueDate?: string; // YYYY-MM-DD
-  passportExpiryDate?: string; // YYYY-MM-DD
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
   passportIssuingCountry?: string;
   passportFullName?: string;
-  firstName?: string;  // Given name(s) - from MRZ line 2 or visual zone
-  lastName?: string;   // Surname - from MRZ line 1 (before <<) or visual zone
-  dob?: string; // YYYY-MM-DD
+  firstName?: string;
+  lastName?: string;
+  dob?: string;
   nationality?: string;
-  personalCode?: string; // Personal ID / national ID (e.g. "123456-12345", "Запис N")
-  /** male | female — from Sex/Gender field (e.g. M/F, Male/Female, Dzimums, Vīrietis/Sieviete) */
+  personalCode?: string;
   gender?: string;
-  /** Estonia/Latvia Alien's passport – document explicitly says "Alien's passport" / "Välismaalase pass" / "Ārzemnieka pase" */
   isAlienPassport?: boolean;
 }
 
-const SYSTEM_PROMPT = `You are a passport document parser. Extract passport information from images of passport pages, passport scans, or PDFs.
-
-Passport MRZ (Machine Readable Zone) format: Line 1 = Surname<<Given Names (e.g. SMITH<<JOHN MICHAEL means lastName=SMITH, firstName=JOHN MICHAEL).
-Visual zone may show "Surname / Given names" or "Last name / First name" - use that order.
-
-Return a JSON object with this structure:
-{
-  "passport": {
-    "passportNumber": "AB123456",
-    "passportIssueDate": "2020-01-15",
-    "passportExpiryDate": "2030-01-14",
-    "passportIssuingCountry": "Latvia",
-    "passportFullName": "Ravis Guntis",
-    "firstName": "Ravis",
-    "lastName": "Guntis",
-    "dob": "1985-05-20",
-    "nationality": "LV",
-    "personalCode": "123456-12345",
-    "gender": "male",
-    "isAlienPassport": false,
-    "mrzLine1": "P<LVTEMPLATE<<JOHN<DOE<<<<<<<<<<<<<<<<<<<<<<<<<<",
-    "mrzLine2": "AB12345670LV1101014M3001018<<<<<<<<<<<<<<04"
-  }
-}
-
-CRITICAL — Date of birth (dob):
-- European format DD.MM.YYYY means day.month.year (e.g. 07.09.2011 = 7 September 2011 → 2011-09-07).
-- Look for the field labeled "Date of birth" / "Dzimšanas datums" / "Dzimšanas datums/Date of birth/Date de naissance" / "Date de naissance" — extract EXACTLY the value shown there.
-- NEVER swap day and month. 07.09 = 7 Sept, 27.04 = 27 April.
-- If the date is unclear or ambiguous, omit dob rather than guess.
-- Always output YYYY-MM-DD (ISO).
-
-MRZ (Machine Readable Zone):
-- If the passport has MRZ at the bottom (2 lines of ~44 chars, A-Z 0-9 <), copy them EXACTLY as printed into mrzLine1 and mrzLine2. Used for reliable DOB and expiry extraction. Omit if not visible.
-- United Kingdom (GBR) and all ICAO passports: each MRZ line must be exactly 44 characters (pad with <). UK line 1 starts with P<GBR.
-
-Date of issue (passportIssueDate) and Date of expiry (passportExpiryDate):
-- Look for "Izdošanas datums/Date of issue", "Derīga līdz/Date of expiry", "Date de validité". European DD.MM.YYYY — convert to YYYY-MM-DD. NEVER swap day and month.
-
-Rules:
-- Dates in YYYY-MM-DD format (always year-month-day). European passports use DD.MM.YYYY — convert to YYYY-MM-DD. Example: 15.03.2028 → 2028-03-15 (March 15, not day 15 of month 3). NEVER swap month and day.
-- passportIssuingCountry: full country name in English (e.g. "Latvia", "United States", "Ukraine", "United Kingdom"), NOT a 2-letter code. This is used for statistics.
-- passportFullName, firstName, lastName: First letter of each word UPPERCASE, rest lowercase. CRITICAL — preserve EXACT diacritics from the human-readable zone (NOT MRZ). Latvian: ā, č, ē, ģ, ī, ķ, ļ, ņ, š, ū, ž. Example: Pavloviča, Žaklīna — NEVER write Pavlovica, Zaklina. Copy characters exactly as printed on the passport.
-- Supports all passport formats: EU, US, UK, Ukrainian (Україна), Russian (Россия), Estonian, Latvian, etc. Parse Cyrillic names correctly and output in Latin with Title Case.
-- nationality: 2-letter ISO country code is acceptable.
-- personalCode: ALWAYS extract if present. National personal ID / personal code. Look for: "Personal No.", "Personal code", "Isikukood" (Estonia), "Personas kods" (Latvia), "Asmens kodas" (Lithuania), "Record No.", "Запис N", or any numeric ID field. Copy exactly as shown (with or without hyphen). Omit only if truly not on the document.
-- gender: Extract when present. Output "male" or "female" only. Look for: "Sex", "Gender", "Dzimums" (Latvian), "Стать" (Ukrainian), M/F, Male/Female, Vīrietis/Sieviete (LV), Чол./Жін. (UA). Omit if not on the document.
-- isAlienPassport: You MUST always include this field. Set to true when the document is an Alien's passport (Estonia: "Välismaalase pass"; Latvia: "Ārzemnieka pase"). For regular (citizen) passports set false.
-- If you cannot determine a value, omit it or use empty string.
-- Only return valid JSON, no other text.`;
+// ---------------------------------------------------------------------------
+// Normalization helpers (passport-specific)
+// ---------------------------------------------------------------------------
 
 const COUNTRY_CODE_TO_NAME: Record<string, string> = {
   UA: "Ukraine", LV: "Latvia", RU: "Russia", DE: "Germany", FR: "France",
@@ -106,8 +49,7 @@ function formatDate(dateStr: string | undefined): string | undefined {
   if (!dateStr) return undefined;
   const s = String(dateStr).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // DD.MM.YYYY or DD/MM/YYYY (European) — avoid JS Date parsing month/day swap
-  const eu = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+  const eu = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
   if (eu) {
     const [, d, mo, y] = eu;
     const dN = parseInt(d, 10);
@@ -121,76 +63,47 @@ function formatDate(dateStr: string | undefined): string | undefined {
   return undefined;
 }
 
-/** Title case preserving diacritics (Rāvis, Žaklīna). */
 function toTitleCase(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
+  return s.toLowerCase().replace(/(^|[\s\-'])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
 }
 
-/** Support both camelCase and snake_case from AI response */
-function getRaw<T>(p: Record<string, unknown>, camel: string, snake: string): T | undefined {
-  const v = p[camel] ?? p[snake];
-  return (typeof v === "string" ? v.trim() : v) as T | undefined;
-}
+function normalizePassport(passport: Record<string, unknown>): PassportData {
+  const get = (camel: string, snake: string): string | undefined => {
+    const v = passport[camel] ?? passport[snake];
+    return typeof v === "string" ? v.trim() || undefined : undefined;
+  };
 
-function normalizePassport(passport: Record<string, unknown> & Partial<PassportData>): PassportData {
-  let issuingCountry = getRaw<string>(passport, "passportIssuingCountry", "passport_issuing_country") || undefined;
+  let issuingCountry = get("passportIssuingCountry", "passport_issuing_country");
   if (issuingCountry && issuingCountry.length === 2) {
     issuingCountry = COUNTRY_CODE_TO_NAME[issuingCountry.toUpperCase()] || issuingCountry;
   }
-  let nationality = passport.nationality?.trim() || undefined;
+  let nationality = (passport.nationality as string)?.trim() || undefined;
   if (nationality && nationality.length === 2) {
     nationality = COUNTRY_CODE_TO_NAME[nationality.toUpperCase()] || nationality;
   }
-  let fullName = passport.passportFullName?.trim() || undefined;
+  let fullName = (passport.passportFullName as string)?.trim() || undefined;
   if (fullName && fullName === fullName.toUpperCase()) fullName = toTitleCase(fullName);
-  const g = passport.gender?.trim()?.toLowerCase();
+
+  const g = (passport.gender as string)?.trim()?.toLowerCase();
   const gender =
-    g === "male" || g === "female"
-      ? g
-      : g === "m" || g === "mr"
-        ? "male"
-        : g === "f" || g === "mrs" || g === "ms"
-          ? "female"
-          : undefined;
+    g === "male" || g === "female" ? g
+    : g === "m" || g === "mr" ? "male"
+    : g === "f" || g === "mrs" || g === "ms" ? "female"
+    : undefined;
 
   return {
-    passportNumber: passport.passportNumber || undefined,
-    passportIssueDate: formatDate(passport.passportIssueDate),
-    passportExpiryDate: formatDate(passport.passportExpiryDate),
+    passportNumber: (passport.passportNumber as string)?.trim() || undefined,
+    passportIssueDate: formatDate(passport.passportIssueDate as string),
+    passportExpiryDate: formatDate(passport.passportExpiryDate as string),
     passportIssuingCountry: issuingCountry,
     passportFullName: fullName,
-    firstName: passport.firstName ? toTitleCase(passport.firstName.trim()) : undefined,
-    lastName: passport.lastName ? toTitleCase(passport.lastName.trim()) : undefined,
-    dob: formatDate(passport.dob),
+    firstName: passport.firstName ? toTitleCase((passport.firstName as string).trim()) : undefined,
+    lastName: passport.lastName ? toTitleCase((passport.lastName as string).trim()) : undefined,
+    dob: formatDate(passport.dob as string),
     nationality,
     personalCode: passport.personalCode ? String(passport.personalCode).trim() || undefined : undefined,
     gender: gender === "male" || gender === "female" ? gender : undefined,
     isAlienPassport: passport.isAlienPassport === true,
-  };
-}
-
-function stripMarkdownCodeFences(s: string): string {
-  let t = s.trim();
-  if (t.startsWith("```")) {
-    t = t.replace(/^```(?:json)?\s*/i, "");
-    t = t.replace(/\s*```\s*$/i, "");
-  }
-  return t.trim();
-}
-
-function mrzBlocksToPassportData(m: PassportDataFromMrz): PassportData {
-  return {
-    passportNumber: m.passportNumber,
-    passportExpiryDate: m.passportExpiryDate,
-    passportIssuingCountry: m.passportIssuingCountry,
-    passportFullName: m.passportFullName,
-    firstName: m.firstName,
-    lastName: m.lastName,
-    dob: m.dob,
-    nationality: m.nationality,
-    gender: m.gender,
   };
 }
 
@@ -207,15 +120,9 @@ function mergePassports(primary: PassportData, secondary: PassportData): Passpor
   return merged;
 }
 
-/** When MRZ parses (ICAO TD3), prefer it for identity + dates — fixes wrong visual OCR (e.g. UK biodata). */
-function applyMrzOverrides(
-  passport: PassportData,
-  mrzLine1?: string,
-  mrzLine2?: string
-): PassportData {
+function applyMrzOverrides(passport: PassportData, mrzLine1?: string, mrzLine2?: string): PassportData {
   if (!mrzLine1 || !mrzLine2) return passport;
-  const mrzText = `${mrzLine1.trim()}\n${mrzLine2.trim()}`;
-  const mrz = parseMrzToPassportData(mrzText);
+  const mrz = parseMrzToPassportData(`${mrzLine1.trim()}\n${mrzLine2.trim()}`);
   if (!mrz) return passport;
   return {
     ...passport,
@@ -231,112 +138,93 @@ function applyMrzOverrides(
   };
 }
 
-function recoverMrzLinesFromModelText(content: string, existing1?: string, existing2?: string): { mrzLine1?: string; mrzLine2?: string } {
-  if (existing1 && existing2) return { mrzLine1: existing1, mrzLine2: existing2 };
-  const extracted = extractTd3MrzLinesFromText(content);
-  if (!extracted || extracted.length < 2) return { mrzLine1: existing1, mrzLine2: existing2 };
-  return { mrzLine1: extracted[0], mrzLine2: extracted[1] };
+function mrzBlocksToPassportData(m: PassportDataFromMrz): PassportData {
+  return {
+    passportNumber: m.passportNumber,
+    passportExpiryDate: m.passportExpiryDate,
+    passportIssuingCountry: m.passportIssuingCountry,
+    passportFullName: m.passportFullName,
+    firstName: m.firstName,
+    lastName: m.lastName,
+    dob: m.dob,
+    nationality: m.nationality,
+    gender: m.gender,
+  };
 }
 
-function collectOpenAiResponseTextPart(part: unknown, chunks: string[]): void {
-  if (!part || typeof part !== "object") return;
-  const p = part as Record<string, unknown>;
-  const typ = String(p.type || "");
-  if (typeof p.text === "string" && p.text.trim()) {
-    if (typ === "output_text" || typ === "text" || typ === "summary_text") {
-      chunks.push(p.text);
-    }
+// ---------------------------------------------------------------------------
+// JSON extraction from AI response
+// ---------------------------------------------------------------------------
+
+function extractPassportFromContent(content: string): {
+  passport: PassportData | null;
+  mrzLine1?: string;
+  mrzLine2?: string;
+} {
+  let cleaned = content.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
   }
-  if (Array.isArray(p.content)) {
-    for (const c of p.content) collectOpenAiResponseTextPart(c, chunks);
-  }
-}
 
-/** OpenAI Responses API: aggregate text from `output` (message blocks, output_text, text). */
-function extractOpenAiResponsesOutputText(data: unknown): string {
-  if (!data || typeof data !== "object") return "";
-  const d = data as Record<string, unknown>;
-  if (typeof d.output_text === "string" && d.output_text.trim()) return d.output_text;
-  const output = d.output;
-  if (!Array.isArray(output)) return "";
-  const chunks: string[] = [];
-  for (const item of output) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    if (o.type === "message" && Array.isArray(o.content)) {
-      for (const part of o.content) collectOpenAiResponseTextPart(part, chunks);
-    } else {
-      collectOpenAiResponseTextPart(item, chunks);
-    }
-  }
-  return chunks.join("");
-}
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { passport: null };
 
-async function openAiChatPassportText(
-  openaiKey: string,
-  userPlainText: string
-): Promise<{ ok: boolean; content: string; error?: unknown }> {
-  const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: `Parse this passport text and extract all passport information:\n\n${userPlainText.slice(0, 120_000)}`,
-    },
-  ];
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${openaiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODELS.OPENAI_VISION,
-      messages,
-      max_tokens: 1500,
-      temperature: 0.1,
-    }),
-  });
-  const errorData = !response.ok ? await response.json().catch(() => ({})) : undefined;
-  if (!response.ok) {
-    return { ok: false, content: "", error: errorData };
-  }
-  const data = await response.json();
-  return { ok: true, content: (data.choices?.[0]?.message?.content as string) || "" };
-}
-
-async function openaiUploadUserDataPdf(
-  apiKey: string,
-  pdfBase64: string,
-  filename: string
-): Promise<{ fileId: string } | { error: unknown }> {
-  const bytes = Buffer.from(pdfBase64, "base64");
-  const form = new FormData();
-  form.append("purpose", "user_data");
-  form.append("file", new Blob([bytes], { type: "application/pdf" }), filename);
-  const res = await fetch("https://api.openai.com/v1/files", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) return { error: json };
-  const id = json && typeof json === "object" && typeof (json as { id?: unknown }).id === "string"
-    ? (json as { id: string }).id
-    : null;
-  if (!id) return { error: json };
-  return { fileId: id };
-}
-
-async function openaiDeleteFileSafe(apiKey: string, fileId: string): Promise<void> {
   try {
-    await fetch(`https://api.openai.com/v1/files/${encodeURIComponent(fileId)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    const parsed = JSON.parse(jsonMatch[0]);
+    const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
+    const mrzLine1 = typeof raw.mrzLine1 === "string" ? raw.mrzLine1.trim() : undefined;
+    const mrzLine2 = typeof raw.mrzLine2 === "string" ? raw.mrzLine2.trim() : undefined;
+    return { passport: normalizePassport(raw), mrzLine1, mrzLine2 };
   } catch {
-    /* ignore */
+    return { passport: null };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Build AI messages from intake
+// ---------------------------------------------------------------------------
+
+function buildPassportMessages(
+  systemPrompt: string,
+  intake: { contentMode: string; extractedText: string | null; pageImages: string[]; pdfBase64: string | null }
+): AIMessage[] {
+  const messages: AIMessage[] = [{ role: "system", content: systemPrompt }];
+  const userContent: AIMessageContent[] = [];
+
+  if (intake.contentMode === "text" && intake.extractedText) {
+    userContent.push({
+      type: "text",
+      text: `Parse this passport text and extract all passport information:\n\n${intake.extractedText.slice(0, 120_000)}`,
+    });
+  } else if (intake.pdfBase64) {
+    userContent.push({
+      type: "file",
+      file: { filename: "passport.pdf", file_data: `data:application/pdf;base64,${intake.pdfBase64}` },
+    });
+    userContent.push({
+      type: "text",
+      text: "Extract all passport information from this PDF document. Include isAlienPassport field. Return JSON only.",
+    });
+  } else if (intake.pageImages.length > 0) {
+    for (const img of intake.pageImages) {
+      userContent.push({
+        type: "image_url",
+        image_url: { url: `data:image/png;base64,${img}`, detail: "high" },
+      });
+    }
+    userContent.push({
+      type: "text",
+      text: "Extract all passport information from this image. Include isAlienPassport field. Return JSON only.",
+    });
+  }
+
+  messages.push({ role: "user", content: userContent });
+  return messages;
+}
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   try {
@@ -344,12 +232,8 @@ export async function POST(request: NextRequest) {
     if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const rl = consumeRateLimit({
-      bucket: "ai-parse-passport",
-      key: authUser.userId,
-      limit: 12,
-      windowMs: 60_000,
-    });
+
+    const rl = consumeRateLimit({ bucket: "ai-parse-passport", key: authUser.userId, limit: 12, windowMs: 60_000 });
     if (!rl.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please try again shortly." },
@@ -357,331 +241,108 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const contentType = request.headers.get("content-type") || "";
-    
-    let imageBase64: string | null = null;
-    let pdfBase64: string | null = null;
-    let mimeType: string = "image/png";
-    let textContent: string | null = null;
-    let isPDF = false;
+    // 1. INTAKE — shared pipeline handles FormData/JSON, PDF/image/text detection
+    const intake = await processRequest(request, "passport");
 
-    // Handle FormData (file upload)
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-      const file = formData.get("file") as File | null;
+    // 2. BUILD PROMPT (includes correction rules from DB)
+    const systemPrompt = buildSystemPrompt("passport");
 
-      if (!file) {
-        return NextResponse.json(
-          { error: "File is required" },
-          { status: 400 }
-        );
-      }
+    // 3. PRIMARY: OpenAI
+    const messages = buildPassportMessages(systemPrompt, intake);
+    const primaryResult = await aiComplete({
+      configKey: "parsing_vision",
+      messages,
+      jsonMode: true,
+      timeout: 90_000,
+    });
 
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      const sniffed = inferMimeFromBytes(bytes);
-      let declared = normalizeImageMime(file.type?.trim() || "");
-      let fallback = inferMimeFromFilename(file.name) || "";
-      if (fallback === "image/jpg") fallback = "image/jpeg";
-      if (!declared || declared === "application/octet-stream") {
-        declared = normalizeImageMime(fallback);
-      }
+    const primaryContent = primaryResult.success ? primaryResult.content || "" : "";
+    let { passport: openaiPassport, mrzLine1, mrzLine2 } = extractPassportFromContent(primaryContent);
 
-      if (sniffed === "application/pdf") {
-        isPDF = true;
-        mimeType = "application/pdf";
-        pdfBase64 = Buffer.from(buffer).toString("base64");
-      } else if (sniffed?.startsWith("image/")) {
-        isPDF = false;
-        mimeType = normalizeImageMime(sniffed);
-        imageBase64 = Buffer.from(buffer).toString("base64");
-      } else if (declared === "application/pdf") {
-        isPDF = true;
-        mimeType = "application/pdf";
-        pdfBase64 = Buffer.from(buffer).toString("base64");
-      } else if (declared.startsWith("image/")) {
-        isPDF = false;
-        mimeType = declared;
-        imageBase64 = Buffer.from(buffer).toString("base64");
-      } else {
-        return NextResponse.json(
-          { error: "Unsupported file type. Please upload an image or PDF." },
-          { status: 400 }
-        );
-      }
-    } else {
-      // Handle JSON body
-      const body = await request.json();
-      
-      if (body.text) {
-        textContent = body.text;
-      } else if (body.image) {
-        imageBase64 = body.image;
-        mimeType = body.mimeType || "image/png";
-      } else {
-        return NextResponse.json(
-          { error: "Image or text is required" },
-          { status: 400 }
-        );
-      }
-    }
+    // Log primary usage
+    await logAiUsage({
+      companyId: authUser.companyId,
+      userId: authUser.userId,
+      operation: "parse_passport",
+      model: primaryResult.model || "gpt-4o",
+      inputTokens: primaryResult.usage?.promptTokens || 0,
+      outputTokens: primaryResult.usage?.completionTokens || 0,
+      success: primaryResult.success,
+      metadata: { provider: "openai", pass: "primary" },
+    }).catch(() => {});
 
-    // Check if OpenAI API key is configured
-    const openaiKey = process.env.OPENAI_API_KEY;
-    
-    if (!openaiKey) {
-      return NextResponse.json(
-        { error: "AI parsing not configured. Please add OPENAI_API_KEY to environment.", passport: null },
-        { status: 503 }
-      );
-    }
+    // 4. FALLBACK: Anthropic (non-PDF — Anthropic doesn't support native PDF)
+    let anthropicPassport: PassportData | null = null;
+    let anthropicRawText = "";
+    const canDoFallback = intake.contentMode !== "text"
+      ? intake.pageImages.length > 0
+      : !!intake.extractedText;
 
-    try {
-      let content = "";
-
-      if (textContent) {
-        const txt = await openAiChatPassportText(openaiKey, textContent);
-        if (!txt.ok) {
-          console.error("OpenAI API error:", txt.error);
-          return NextResponse.json(
-            { error: "AI parsing failed", details: txt.error, passport: null },
-            { status: 500 }
-          );
-        }
-        content = txt.content;
-      } else if (isPDF && pdfBase64) {
-        /**
-         * PDFs must use Responses API + Files API (`input_file`).
-         * Chat Completions does not accept `type: file` / data-URL PDFs reliably.
-         */
-        const upload = await openaiUploadUserDataPdf(openaiKey, pdfBase64, "passport.pdf");
-        if ("error" in upload) {
-          console.error("OpenAI PDF upload error:", upload.error);
-          return NextResponse.json(
-            { error: "AI parsing failed (PDF upload)", details: upload.error, passport: null },
-            { status: 500 }
-          );
-        }
-        try {
-          const response = await fetch("https://api.openai.com/v1/responses", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${openaiKey}`,
-            },
-            body: JSON.stringify({
-              model: MODELS.OPENAI_VISION,
-              instructions: SYSTEM_PROMPT,
-              max_output_tokens: 1500,
-              temperature: 0.1,
-              store: false,
-              input: [
-                {
-                  role: "user",
-                  content: [
-                    { type: "input_file", file_id: upload.fileId },
-                    {
-                      type: "input_text",
-                      text: "Extract all passport information from this PDF document. Include isAlienPassport: true if the document type is Alien's passport (Estonia: Välismaalase pass; Latvia: Ārzemnieka pase). Return JSON only.",
-                    },
-                  ],
-                },
-              ],
-            }),
-          });
-          const respData = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            console.error("OpenAI Responses API error:", respData);
-            return NextResponse.json(
-              { error: "AI parsing failed", details: respData, passport: null },
-              { status: 500 }
-            );
-          }
-          content = extractOpenAiResponsesOutputText(respData);
-          const status =
-            respData && typeof respData === "object"
-              ? (respData as { status?: string }).status
-              : undefined;
-          if (
-            !content.trim() &&
-            (status === "failed" || status === "cancelled" || status === "incomplete")
-          ) {
-            console.error("OpenAI Responses status (no output text):", respData);
-            return NextResponse.json(
-              { error: "AI parsing failed", details: respData, passport: null },
-              { status: 500 }
-            );
-          }
-          if (!content.trim() && pdfBase64) {
-            try {
-              const { getDocumentProxy, extractText } = await import("unpdf");
-              const uint8 = new Uint8Array(Buffer.from(pdfBase64, "base64"));
-              const pdf = await getDocumentProxy(uint8);
-              const extracted = await extractText(pdf, { mergePages: true });
-              const rawText = Array.isArray(extracted?.text)
-                ? extracted.text.join("\n")
-                : String(extracted?.text || "");
-              const raw = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-              if (raw.length >= 30) {
-                const txt = await openAiChatPassportText(openaiKey, raw);
-                if (txt.ok && txt.content.trim()) {
-                  content = txt.content;
-                }
-              }
-            } catch (fbErr) {
-              console.warn("Passport PDF text-layer fallback failed:", fbErr);
-            }
-          }
-        } finally {
-          await openaiDeleteFileSafe(openaiKey, upload.fileId);
-        }
-      } else {
-        const imgMime =
-          mimeType && mimeType.startsWith("image/") ? normalizeImageMime(mimeType) : "image/jpeg";
-        if (!imageBase64) {
-          return NextResponse.json(
-            { error: "No image data. Try another file or format.", passport: null },
-            { status: 400 }
-          );
-        }
-        const messages = [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${imgMime};base64,${imageBase64}`,
-                  detail: "high" as const,
-                },
-              },
-              {
-                type: "text",
-                text: "Extract all passport information from this image. Include isAlienPassport: true if the document type is Alien's passport (Estonia: Välismaalase pass; Latvia: Ārzemnieka pase). Return JSON only.",
-              },
-            ],
-          },
-        ];
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openaiKey}`,
-          },
-          body: JSON.stringify({
-            model: MODELS.OPENAI_VISION,
-            messages,
-            max_tokens: 1500,
-            temperature: 0.1,
-          }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error("OpenAI API error:", errorData);
-          return NextResponse.json(
-            { error: "AI parsing failed", details: errorData, passport: null },
-            { status: 500 }
-          );
-        }
-        const data = await response.json();
-        content = data.choices?.[0]?.message?.content || "";
-      }
-      const contentStripped = stripMarkdownCodeFences(content);
-
-      let openaiPassport: PassportData | null = null;
-      let mrzLine1: string | undefined;
-      let mrzLine2: string | undefined;
+    if (canDoFallback) {
       try {
-        const jsonMatch = contentStripped.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
-          const r = raw || {};
-          mrzLine1 = typeof r.mrzLine1 === "string" ? r.mrzLine1.trim() : undefined;
-          mrzLine2 = typeof r.mrzLine2 === "string" ? r.mrzLine2.trim() : undefined;
-          openaiPassport = normalizePassport(r);
+        const fallbackMessages = buildPassportMessages(systemPrompt, { ...intake, pdfBase64: null });
+        const fallbackResult = await aiComplete({
+          configKey: "parsing_fallback",
+          messages: fallbackMessages,
+          jsonMode: true,
+          timeout: 90_000,
+        });
+
+        if (fallbackResult.success && fallbackResult.content) {
+          anthropicRawText = fallbackResult.content;
+          const extracted = extractPassportFromContent(anthropicRawText);
+          anthropicPassport = extracted.passport;
+          if (!mrzLine1 && extracted.mrzLine1) mrzLine1 = extracted.mrzLine1;
+          if (!mrzLine2 && extracted.mrzLine2) mrzLine2 = extracted.mrzLine2;
         }
-      } catch (parseErr) {
-        console.error("Failed to parse OpenAI response:", parseErr, "Content:", content);
+
+        await logAiUsage({
+          companyId: authUser.companyId,
+          userId: authUser.userId,
+          operation: "parse_passport",
+          model: fallbackResult.model || "claude-sonnet-4-5",
+          inputTokens: fallbackResult.usage?.promptTokens || 0,
+          outputTokens: fallbackResult.usage?.completionTokens || 0,
+          success: fallbackResult.success,
+          metadata: { provider: "anthropic", pass: "fallback" },
+        }).catch(() => {});
+      } catch (err) {
+        console.warn("Anthropic passport fallback failed:", err);
       }
-
-      // Second pass: Anthropic (if configured and we have image/text)
-      const anthropicKey = process.env.ANTHROPIC_API_KEY;
-      let anthropicPassport: PassportData | null = null;
-      let anthropicRawText = "";
-      if (anthropicKey && (imageBase64 || textContent) && !isPDF) {
-        try {
-          const anthropic = new Anthropic({ apiKey: anthropicKey });
-          const userContent = textContent
-            ? [{ type: "text" as const, text: `Parse this passport text and extract all passport information. Return JSON only.\n\n${textContent}` }]
-            : [
-                { type: "image" as const, source: { type: "base64" as const, media_type: (mimeType || "image/png") as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageBase64! } },
-                { type: "text" as const, text: "Extract all passport information from this image. Return JSON only." },
-              ];
-          const msg = await anthropic.messages.create({
-            model: MODELS.ANTHROPIC_FAST,
-            max_tokens: 1000,
-            system: SYSTEM_PROMPT,
-            messages: [{ role: "user", content: userContent }],
-          });
-          const text = msg.content.find((c) => c.type === "text");
-          anthropicRawText = text && "text" in text ? text.text : "";
-          const text2Stripped = stripMarkdownCodeFences(anthropicRawText);
-          const jsonMatch2 = text2Stripped.match(/\{[\s\S]*\}/);
-          if (jsonMatch2?.[0]) {
-            const parsed = JSON.parse(jsonMatch2[0]);
-            const raw = parsed.passport && typeof parsed.passport === "object" ? parsed.passport : parsed;
-            const r = raw || {};
-            if (!mrzLine1 && typeof r.mrzLine1 === "string") mrzLine1 = r.mrzLine1.trim();
-            if (!mrzLine2 && typeof r.mrzLine2 === "string") mrzLine2 = r.mrzLine2.trim();
-            anthropicPassport = normalizePassport(r);
-          }
-        } catch (anthErr) {
-          console.warn("Anthropic second pass failed:", anthErr);
-        }
-      }
-
-      // Recover MRZ from raw model text if JSON omitted lines (common on UK biodata pages)
-      const textBlob = `${content}\n${anthropicRawText}`;
-      ({ mrzLine1, mrzLine2 } = recoverMrzLinesFromModelText(textBlob, mrzLine1, mrzLine2));
-
-      // Merge: prefer OpenAI as primary, fill gaps from Anthropic
-      let finalPassport = openaiPassport
-        ? anthropicPassport
-          ? mergePassports(openaiPassport, anthropicPassport)
-          : openaiPassport
-        : anthropicPassport;
-
-      if (finalPassport) {
-        finalPassport = applyMrzOverrides(finalPassport, mrzLine1, mrzLine2);
-        return NextResponse.json({ passport: finalPassport });
-      }
-
-      if (mrzLine1 && mrzLine2) {
-        const mrzOnly = parseMrzToPassportData(`${mrzLine1}\n${mrzLine2}`);
-        if (mrzOnly && (mrzOnly.passportNumber || mrzOnly.lastName || mrzOnly.firstName)) {
-          return NextResponse.json({ passport: mrzBlocksToPassportData(mrzOnly) });
-        }
-      }
-
-      return NextResponse.json({ 
-        error: "Could not extract passport information",
-        passport: null 
-      });
-    } catch (aiError) {
-      console.error("OpenAI API call failed:", aiError);
-      return NextResponse.json(
-        { error: "AI service unavailable", passport: null },
-        { status: 503 }
-      );
     }
+
+    // 5. RECOVER MRZ from raw model text if JSON omitted lines
+    const textBlob = `${primaryContent}\n${anthropicRawText}`;
+    const recovered = extractTd3MrzLinesFromText(textBlob);
+    if (recovered && recovered.length >= 2) {
+      if (!mrzLine1) mrzLine1 = recovered[0];
+      if (!mrzLine2) mrzLine2 = recovered[1];
+    }
+
+    // 6. MERGE: prefer OpenAI primary, fill gaps from Anthropic
+    let finalPassport = openaiPassport
+      ? anthropicPassport
+        ? mergePassports(openaiPassport, anthropicPassport)
+        : openaiPassport
+      : anthropicPassport;
+
+    // 7. APPLY MRZ OVERRIDES (most reliable for DOB, expiry, passport number)
+    if (finalPassport) {
+      finalPassport = applyMrzOverrides(finalPassport, mrzLine1, mrzLine2);
+      return NextResponse.json({ passport: finalPassport });
+    }
+
+    // 8. LAST RESORT: MRZ-only parse
+    if (mrzLine1 && mrzLine2) {
+      const mrzOnly = parseMrzToPassportData(`${mrzLine1}\n${mrzLine2}`);
+      if (mrzOnly && (mrzOnly.passportNumber || mrzOnly.lastName || mrzOnly.firstName)) {
+        return NextResponse.json({ passport: mrzBlocksToPassportData(mrzOnly) });
+      }
+    }
+
+    return NextResponse.json({ error: "Could not extract passport information", passport: null });
   } catch (err) {
     console.error("Parse passport error:", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
