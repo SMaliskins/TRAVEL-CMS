@@ -20,6 +20,10 @@ const Popup = dynamic(
   () => import("react-leaflet").then((mod) => mod.Popup),
   { ssr: false }
 );
+const MapFitBounds = dynamic(
+  () => import("./MapFitBounds"),
+  { ssr: false }
+);
 
 export interface TouristLocation {
   id: string;
@@ -39,24 +43,20 @@ interface TouristsMapProps {
   className?: string;
 }
 
-function personSvg(color: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-    <circle cx="14" cy="8" r="6" fill="${color}" stroke="white" stroke-width="2"/>
-    <path d="M4 28 C4 18 24 18 24 28" fill="${color}" stroke="white" stroke-width="2"/>
-    <polygon points="14,36 8,28 20,28" fill="${color}"/>
-  </svg>`;
+function pinSvg(color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="${color}"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>`;
 }
 
-function createPersonIcon(status?: string) {
+function createPinIcon(status?: string) {
   if (typeof window === "undefined") return undefined;
   const L = require("leaflet");
   const color = status === "in-progress" ? "#10b981" : "#3b82f6";
   return L.divIcon({
-    html: personSvg(color),
+    html: pinSvg(color),
     className: "",
-    iconSize: [28, 36],
-    iconAnchor: [14, 36],
-    popupAnchor: [0, -36],
+    iconSize: [28, 40],
+    iconAnchor: [14, 40],
+    popupAnchor: [0, -40],
   });
 }
 
@@ -84,8 +84,8 @@ export default function TouristsMap({
   const icons = useMemo(() => {
     if (typeof window === "undefined") return {};
     return {
-      upcoming: createPersonIcon("upcoming"),
-      "in-progress": createPersonIcon("in-progress"),
+      upcoming: createPinIcon("upcoming"),
+      "in-progress": createPinIcon("in-progress"),
     };
   }, []);
 
@@ -102,6 +102,7 @@ export default function TouristsMap({
     );
   }
 
+  const boundsArr = activeLocations.map((loc) => loc.location);
   const avgLat = activeLocations.reduce((sum, loc) => sum + loc.location[0], 0) / activeLocations.length;
   const avgLng = activeLocations.reduce((sum, loc) => sum + loc.location[1], 0) / activeLocations.length;
 
@@ -111,11 +112,12 @@ export default function TouristsMap({
         {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
       </h3>
       <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
-        <MapContainer center={[avgLat, avgLng]} zoom={5} style={{ height: "100%", width: "100%" }}>
+        <MapContainer center={[avgLat, avgLng]} zoom={4} style={{ height: "100%", width: "100%" }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <MapFitBounds bounds={boundsArr} />
           {activeLocations.map((tourist) => (
             <Marker
               key={tourist.id}
@@ -158,11 +160,11 @@ export default function TouristsMap({
       </div>
       <div className="mt-4 flex items-center justify-center gap-4">
         <div className="flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 28 28"><circle cx="14" cy="8" r="6" fill="#3b82f6"/><path d="M4 28 C4 18 24 18 24 28" fill="#3b82f6"/></svg>
+          <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#3b82f6"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
           <span className="text-xs text-gray-600">Upcoming</span>
         </div>
         <div className="flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 28 28"><circle cx="14" cy="8" r="6" fill="#10b981"/><path d="M4 28 C4 18 24 18 24 28" fill="#10b981"/></svg>
+          <svg width="12" height="17" viewBox="0 0 28 40"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.3 21.7 0 14 0z" fill="#10b981"/><circle cx="14" cy="10" r="4" fill="white"/><ellipse cx="14" cy="19" rx="5.5" ry="4" fill="white"/></svg>
           <span className="text-xs text-gray-600">In Progress</span>
         </div>
       </div>
