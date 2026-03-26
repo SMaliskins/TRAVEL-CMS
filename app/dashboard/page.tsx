@@ -630,16 +630,14 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            {/* Flight Check-in Widget */}
-            <DashboardCheckins />
-
-            {/* Row 2: Map and Calendar + Notifications */}
+            {/* Row 2: Map and Calendar + Check-in + Notifications */}
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <TouristsMap locations={touristLocations} />
               </div>
               <div className="flex flex-col gap-4">
                 <CalendarWithDots events={calendarEvents} />
+                <DashboardCheckins />
                 <DashboardNotifications />
               </div>
             </div>
