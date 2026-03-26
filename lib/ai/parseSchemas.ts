@@ -228,11 +228,60 @@ export async function zodSchemaToOpenAI(
   zodSchema: any,
   name: string
 ): Promise<{ name: string; schema: Record<string, unknown>; strict: boolean }> {
-  const jsonSchema = zodToJsonSchema(zodSchema, { target: "openAi" });
+  const raw = zodToJsonSchema(zodSchema, { target: "openAi" }) as Record<string, unknown>;
 
-  return {
-    name,
-    schema: jsonSchema as Record<string, unknown>,
-    strict: true,
-  };
+  // zodToJsonSchema may produce a wrapper with $defs + $ref or a direct schema.
+  // OpenAI Structured Outputs requires { type: "object", properties: {...} } at root.
+  let schema: Record<string, unknown>;
+
+  if (raw.type === "object" && raw.properties) {
+    // Direct schema — use as-is
+    schema = raw;
+  } else if (raw.$ref && raw.$defs) {
+    // Resolve $ref: e.g. { $ref: "#/$defs/...", $defs: { ...: { type: "object", ... } } }
+    const refKey = (raw.$ref as string).replace("#/$defs/", "");
+    const defs = raw.$defs as Record<string, Record<string, unknown>>;
+    if (defs[refKey]?.type === "object") {
+      schema = { ...defs[refKey] };
+      // Include $defs for nested refs
+      if (Object.keys(defs).length > 1) {
+        schema.$defs = defs;
+      }
+    } else {
+      throw new Error(`Cannot resolve JSON schema $ref for ${name}`);
+    }
+  } else {
+    // Fallback: wrap in object if needed
+    throw new Error(`zodToJsonSchema produced invalid root type for ${name}: ${JSON.stringify(raw).slice(0, 200)}`);
+  }
+
+  // OpenAI strict mode requires additionalProperties: false on all objects
+  ensureAdditionalPropertiesFalse(schema);
+
+  return { name, schema, strict: true };
+}
+
+function ensureAdditionalPropertiesFalse(obj: Record<string, unknown>): void {
+  if (obj.type === "object" && obj.properties) {
+    obj.additionalProperties = false;
+    // Make all properties required for strict mode (OpenAI requirement)
+    if (!obj.required) {
+      obj.required = Object.keys(obj.properties as Record<string, unknown>);
+    }
+    for (const prop of Object.values(obj.properties as Record<string, Record<string, unknown>>)) {
+      if (prop && typeof prop === "object") {
+        ensureAdditionalPropertiesFalse(prop);
+      }
+    }
+  }
+  if (obj.items && typeof obj.items === "object") {
+    ensureAdditionalPropertiesFalse(obj.items as Record<string, unknown>);
+  }
+  if (obj.$defs && typeof obj.$defs === "object") {
+    for (const def of Object.values(obj.$defs as Record<string, Record<string, unknown>>)) {
+      if (def && typeof def === "object") {
+        ensureAdditionalPropertiesFalse(def);
+      }
+    }
+  }
 }
