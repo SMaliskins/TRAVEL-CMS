@@ -121,6 +121,28 @@ const CITY_COORDS: Record<string, [number, number]> = {
   "amman": [31.9454, 35.9284],
 };
 
+function parseDestination(raw: string): { city: string; country: string } {
+  // New format: "origin:Riga, Latvia|Antalya, Turkey|return:Riga, Latvia"
+  if (raw.includes("|")) {
+    const segments = raw.split("|").map(s => s.trim()).filter(Boolean);
+    for (const seg of segments) {
+      if (seg.startsWith("origin:") || seg.startsWith("return:")) continue;
+      const parts = seg.split(",").map(s => s.trim());
+      return { city: parts[0] || "", country: parts[1] || "" };
+    }
+    const first = segments[0]?.replace(/^(origin|return):/, "").trim() || "";
+    const parts = first.split(",").map(s => s.trim());
+    return { city: parts[0] || "", country: parts[1] || "" };
+  }
+
+  // Old format: "Antalya, Turcija" or "Dubaija,Londona, AAE,Lielbritānija"
+  const parts = raw.split(",").map(s => s.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return { city: parts[0], country: parts[1] };
+  }
+  return { city: parts[0] || "", country: "" };
+}
+
 function geocodeCity(cityName: string): [number, number] | null {
   const lower = cityName.toLowerCase().trim();
   if (CITY_COORDS[lower]) return CITY_COORDS[lower];
@@ -173,14 +195,13 @@ export async function GET(request: NextRequest) {
     const locations: MapLocation[] = [];
 
     for (const order of orders || []) {
-      const destination = (order.countries_cities as string) || "";
-      if (!destination) continue;
+      const raw = (order.countries_cities as string) || "";
+      if (!raw) continue;
 
-      const cities = destination.split(",").map((c: string) => c.trim()).filter(Boolean);
-      const firstCity = cities[0];
-      if (!firstCity) continue;
+      const { city, country } = parseDestination(raw);
+      if (!city) continue;
 
-      const coords = geocodeCity(firstCity);
+      const coords = geocodeCity(city);
       if (!coords) continue;
 
       let status: "upcoming" | "in-progress" | "completed";
@@ -195,6 +216,8 @@ export async function GET(request: NextRequest) {
         status = "in-progress";
       }
 
+      const label = country ? `${city}, ${country}` : city;
+
       locations.push({
         id: order.id,
         name: order.client_display_name || "Client",
@@ -204,7 +227,7 @@ export async function GET(request: NextRequest) {
         dateFrom: from || undefined,
         dateTo: to || undefined,
         completedAt: status === "completed" ? to : undefined,
-        destination: firstCity,
+        destination: label,
       });
     }
 

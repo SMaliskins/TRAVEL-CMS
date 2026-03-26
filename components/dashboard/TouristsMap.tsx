@@ -56,6 +56,94 @@ interface CityGroup {
   allInProgress: boolean;
 }
 
+const COUNTRY_TO_ISO: Record<string, string> = {
+  "turkey": "TR", "turcija": "TR", "türkiye": "TR",
+  "egypt": "EG", "ēģipte": "EG", "ēģitpe": "EG",
+  "greece": "GR", "grieķija": "GR",
+  "spain": "ES", "spānija": "ES",
+  "italy": "IT", "itālija": "IT",
+  "france": "FR", "francija": "FR",
+  "germany": "DE", "vācija": "DE",
+  "united kingdom": "GB", "lielbritānija": "GB", "uk": "GB",
+  "uae": "AE", "aae": "AE", "united arab emirates": "AE",
+  "thailand": "TH", "taizeme": "TH",
+  "georgia": "GE", "gruzija": "GE",
+  "albania": "AL", "albānija": "AL",
+  "portugal": "PT", "portugāle": "PT",
+  "croatia": "HR", "horvātija": "HR",
+  "cyprus": "CY", "kipra": "CY",
+  "montenegro": "ME", "melnkalne": "ME",
+  "latvia": "LV", "latvija": "LV",
+  "lithuania": "LT", "lietuva": "LT",
+  "estonia": "EE", "igaunija": "EE",
+  "sweden": "SE", "zviedrija": "SE",
+  "denmark": "DK", "dānija": "DK",
+  "finland": "FI", "somija": "FI",
+  "norway": "NO", "norvēģija": "NO",
+  "switzerland": "CH", "šveice": "CH",
+  "austria": "AT", "austrija": "AT",
+  "poland": "PL", "polija": "PL",
+  "czech republic": "CZ", "čehija": "CZ",
+  "netherlands": "NL", "nīderlande": "NL",
+  "belgium": "BE", "beļģija": "BE",
+  "jordan": "JO", "jordānija": "JO",
+  "israel": "IL", "izraēla": "IL",
+  "oman": "OM", "omāna": "OM",
+  "maldives": "MV", "maldīvija": "MV",
+  "morocco": "MA", "maroka": "MA",
+  "tanzania": "TZ", "tanzānija": "TZ",
+  "canada": "CA", "kanāda": "CA",
+  "usa": "US", "asv": "US", "united states": "US",
+  "mexico": "MX", "meksika": "MX",
+  "japan": "JP", "japāna": "JP",
+  "south korea": "KR", "dienvidkoreja": "KR",
+  "india": "IN", "indija": "IN",
+  "sri lanka": "LK", "šrilanka": "LK",
+  "indonesia": "ID", "indonēzija": "ID",
+  "vietnam": "VN", "vjetnama": "VN",
+  "bulgaria": "BG", "bulgārija": "BG",
+  "romania": "RO", "rumānija": "RO",
+  "hungary": "HU", "ungārija": "HU",
+  "ireland": "IE", "īrija": "IE",
+  "malta": "MT",
+  "tunisia": "TN", "tunisija": "TN",
+  "cuba": "CU", "kuba": "CU",
+  "dominican republic": "DO", "dominikāna": "DO",
+  "brazil": "BR", "brazīlija": "BR",
+  "argentina": "AR", "argentīna": "AR",
+  "australia": "AU", "austrālija": "AU",
+  "new zealand": "NZ", "jaunzēlande": "NZ",
+  "china": "CN", "ķīna": "CN",
+  "singapore": "SG", "singapūra": "SG",
+  "malaysia": "MY", "malaizija": "MY",
+  "philippines": "PH", "filipīnas": "PH",
+  "kenya": "KE", "kenija": "KE",
+  "south africa": "ZA", "dienvidāfrika": "ZA",
+  "iceland": "IS", "islande": "IS",
+  "luxembourg": "LU", "luksemburga": "LU",
+  "serbia": "RS", "serbija": "RS",
+  "bosnia and herzegovina": "BA", "bosnija": "BA",
+  "north macedonia": "MK", "maķedonija": "MK",
+  "slovenia": "SI", "slovēnija": "SI",
+  "slovakia": "SK", "slovākija": "SK",
+};
+
+function countryFlag(country: string): string {
+  if (!country) return "";
+  const iso = COUNTRY_TO_ISO[country.toLowerCase().trim()];
+  if (!iso) return "";
+  return String.fromCodePoint(
+    iso.charCodeAt(0) - 65 + 0x1F1E6,
+    iso.charCodeAt(1) - 65 + 0x1F1E6
+  );
+}
+
+function splitDestination(dest: string): { city: string; country: string } {
+  const parts = dest.split(",").map(s => s.trim());
+  if (parts.length >= 2) return { city: parts[0], country: parts[1] };
+  return { city: parts[0] || "", country: "" };
+}
+
 function circleSvg(color: string, count: number, ring?: string): string {
   const size = count < 10 ? 36 : count < 100 ? 42 : 48;
   const r = size / 2;
@@ -213,12 +301,20 @@ export default function TouristsMap({
                 >
                   <Popup maxWidth={320} minWidth={200}>
                     <div className="text-sm">
-                      <p className="font-bold text-gray-900 text-sm mb-2">
-                        {group.city}
-                        <span className="ml-2 text-xs font-normal text-gray-500">
-                          {group.travelers.length} {group.travelers.length === 1 ? "traveler" : "travelers"}
-                        </span>
-                      </p>
+                      {(() => {
+                        const { city, country } = splitDestination(group.city);
+                        const flag = countryFlag(country);
+                        return (
+                          <p className="font-bold text-gray-900 text-sm mb-2">
+                            {flag && <span className="mr-1">{flag}</span>}
+                            {country && <span className="text-gray-500 font-normal">{country}, </span>}
+                            {city}
+                            <span className="ml-2 text-xs font-normal text-gray-500">
+                              {group.travelers.length} {group.travelers.length === 1 ? "traveler" : "travelers"}
+                            </span>
+                          </p>
+                        );
+                      })()}
                       <div className="max-h-[200px] overflow-y-auto space-y-0.5">
                         {group.travelers.map((t) => (
                           <div key={t.id} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
