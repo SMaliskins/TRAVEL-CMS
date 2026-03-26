@@ -342,6 +342,10 @@ function validateAndScore<T>(
   // Unwrap nested objects (e.g. { "passport": {...} } → {...})
   const unwrapped = unwrapNestedResult(json, documentType);
 
+  // Convert null → undefined (OpenAI Structured Outputs returns null for optional fields,
+  // but Zod v4 .optional() only accepts undefined, not null)
+  nullsToUndefined(unwrapped);
+
   // Validate with Zod
   const parseResult = schemaEntry.schema.safeParse(unwrapped);
   if (!parseResult.success) {
@@ -405,6 +409,33 @@ function calculateConfidence(
 
   // Weighted: 70% required fields, 30% fill rate
   return Math.round((requiredScore * 0.7 + fillRate * 0.3) * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
+// Null → undefined conversion
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursively convert null values to undefined in an object.
+ * OpenAI Structured Outputs returns null for optional fields,
+ * but Zod v4 .optional() only accepts undefined.
+ */
+function nullsToUndefined(obj: Record<string, unknown>): void {
+  for (const key of Object.keys(obj)) {
+    if (obj[key] === null) {
+      delete obj[key]; // delete = undefined for Zod
+    } else if (Array.isArray(obj[key])) {
+      // Recurse into arrays, but filter out null items
+      const arr = obj[key] as unknown[];
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] && typeof arr[i] === "object" && !Array.isArray(arr[i])) {
+          nullsToUndefined(arr[i] as Record<string, unknown>);
+        }
+      }
+    } else if (typeof obj[key] === "object") {
+      nullsToUndefined(obj[key] as Record<string, unknown>);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

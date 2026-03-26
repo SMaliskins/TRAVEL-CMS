@@ -9,7 +9,6 @@
  */
 
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 // ============== PASSPORT ==============
 
@@ -218,69 +217,130 @@ export const PARSE_SCHEMAS = {
 
 /**
  * Convert a Zod schema to an OpenAI-compatible JSON schema for Structured Outputs.
- * Uses zod-to-json-schema for the conversion, then wraps for OpenAI format.
+ *
+ * Uses Zod v4 built-in z.toJSONSchema(), then adapts for OpenAI strict mode:
+ * - ALL properties must be in `required` array
+ * - Optional properties become nullable (anyOf: [{...}, {type: "null"}])
+ * - additionalProperties: false on all objects
  */
-/**
- * Convert a Zod schema to an OpenAI-compatible JSON schema for Structured Outputs.
- */
-export async function zodSchemaToOpenAI(
+export function zodSchemaToOpenAI(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   zodSchema: any,
   name: string
-): Promise<{ name: string; schema: Record<string, unknown>; strict: boolean }> {
-  const raw = zodToJsonSchema(zodSchema, { target: "openAi" }) as Record<string, unknown>;
+): { name: string; schema: Record<string, unknown>; strict: boolean } {
+  // Zod v4 built-in JSON Schema conversion
+  const raw = z.toJSONSchema(zodSchema) as Record<string, unknown>;
 
-  // zodToJsonSchema may produce a wrapper with $defs + $ref or a direct schema.
-  // OpenAI Structured Outputs requires { type: "object", properties: {...} } at root.
-  let schema: Record<string, unknown>;
+  // Remove $schema — OpenAI doesn't want it
+  delete raw.$schema;
 
-  if (raw.type === "object" && raw.properties) {
-    // Direct schema — use as-is
-    schema = raw;
-  } else if (raw.$ref && raw.$defs) {
-    // Resolve $ref: e.g. { $ref: "#/$defs/...", $defs: { ...: { type: "object", ... } } }
-    const refKey = (raw.$ref as string).replace("#/$defs/", "");
-    const defs = raw.$defs as Record<string, Record<string, unknown>>;
-    if (defs[refKey]?.type === "object") {
-      schema = { ...defs[refKey] };
-      // Include $defs for nested refs
-      if (Object.keys(defs).length > 1) {
-        schema.$defs = defs;
-      }
-    } else {
-      throw new Error(`Cannot resolve JSON schema $ref for ${name}`);
-    }
-  } else {
-    // Fallback: wrap in object if needed
-    throw new Error(`zodToJsonSchema produced invalid root type for ${name}: ${JSON.stringify(raw).slice(0, 200)}`);
-  }
+  // Adapt for OpenAI strict mode
+  makeOpenAIStrict(raw);
 
-  // OpenAI strict mode requires additionalProperties: false on all objects
-  ensureAdditionalPropertiesFalse(schema);
-
-  return { name, schema, strict: true };
+  return { name, schema: raw, strict: true };
 }
 
-function ensureAdditionalPropertiesFalse(obj: Record<string, unknown>): void {
+// Keys not supported by OpenAI Structured Outputs strict mode
+const UNSUPPORTED_KEYS = new Set([
+  "pattern", "default", "format", "minimum", "maximum",
+  "minLength", "maxLength", "minItems", "maxItems",
+  "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+  "minProperties", "maxProperties", "uniqueItems",
+]);
+
+/**
+ * Remove keys not supported by OpenAI Structured Outputs from a schema node.
+ */
+function stripUnsupportedKeys(obj: Record<string, unknown>): void {
+  UNSUPPORTED_KEYS.forEach((key) => {
+    delete obj[key];
+  });
+}
+
+/**
+ * Recursively adapt a JSON Schema for OpenAI Structured Outputs strict mode:
+ * 1. All properties must be in `required`
+ * 2. Properties not originally required become nullable
+ * 3. additionalProperties: false on all objects
+ * 4. Remove unsupported keys (pattern, default, format, etc.)
+ */
+function makeOpenAIStrict(obj: Record<string, unknown>): void {
+  stripUnsupportedKeys(obj);
+
   if (obj.type === "object" && obj.properties) {
-    obj.additionalProperties = false;
-    // Make all properties required for strict mode (OpenAI requirement)
-    if (!obj.required) {
-      obj.required = Object.keys(obj.properties as Record<string, unknown>);
+    const props = obj.properties as Record<string, Record<string, unknown>>;
+    const currentRequired = new Set(
+      Array.isArray(obj.required) ? (obj.required as string[]) : []
+    );
+    const allKeys = Object.keys(props);
+
+    // Clean each property first, then make optional ones nullable
+    for (const key of allKeys) {
+      const propSchema = props[key];
+      if (propSchema && typeof propSchema === "object") {
+        stripUnsupportedKeys(propSchema);
+        if (!currentRequired.has(key)) {
+          // Wrap in anyOf: [original, null] to make it nullable
+          props[key] = {
+            anyOf: [
+              { ...propSchema },
+              { type: "null" },
+            ],
+          };
+        }
+      }
     }
-    for (const prop of Object.values(obj.properties as Record<string, Record<string, unknown>>)) {
+
+    // ALL properties required for strict mode
+    obj.required = allKeys;
+    obj.additionalProperties = false;
+
+    // Recurse into all property schemas
+    for (const prop of Object.values(props)) {
       if (prop && typeof prop === "object") {
-        ensureAdditionalPropertiesFalse(prop);
+        recurseIntoSchema(prop);
       }
     }
   }
+
+  // Handle arrays
   if (obj.items && typeof obj.items === "object") {
-    ensureAdditionalPropertiesFalse(obj.items as Record<string, unknown>);
+    recurseIntoSchema(obj.items as Record<string, unknown>);
   }
+
+  // Handle $defs
   if (obj.$defs && typeof obj.$defs === "object") {
     for (const def of Object.values(obj.$defs as Record<string, Record<string, unknown>>)) {
       if (def && typeof def === "object") {
-        ensureAdditionalPropertiesFalse(def);
+        makeOpenAIStrict(def);
+      }
+    }
+  }
+}
+
+/**
+ * Recurse into nested schemas, handling anyOf/oneOf/allOf wrappers.
+ */
+function recurseIntoSchema(obj: Record<string, unknown>): void {
+  // Direct object type
+  if (obj.type === "object" && obj.properties) {
+    makeOpenAIStrict(obj);
+    return;
+  }
+
+  // Array items
+  if (obj.type === "array" && obj.items && typeof obj.items === "object") {
+    recurseIntoSchema(obj.items as Record<string, unknown>);
+    return;
+  }
+
+  // anyOf / oneOf / allOf — recurse into each branch
+  for (const combiner of ["anyOf", "oneOf", "allOf"] as const) {
+    if (Array.isArray(obj[combiner])) {
+      for (const branch of obj[combiner] as Record<string, unknown>[]) {
+        if (branch && typeof branch === "object") {
+          recurseIntoSchema(branch);
+        }
       }
     }
   }
