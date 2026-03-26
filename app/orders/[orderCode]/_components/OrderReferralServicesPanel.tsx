@@ -103,16 +103,19 @@ function mapService(raw: ApiService): Row {
 
 export default function OrderReferralServicesPanel({
   orderCode,
+  orderId: orderIdProp,
   referralPartyId,
   lang,
 }: {
   orderCode: string;
+  orderId?: string;
   referralPartyId: string | null;
   lang: string;
 }) {
   const { showToast } = useToast();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [totalProcessingFees, setTotalProcessingFees] = useState(0);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [draftPct, setDraftPct] = useState<Record<string, string>>({});
   const [draftFixed, setDraftFixed] = useState<Record<string, string>>({});
@@ -139,10 +142,30 @@ export default function OrderReferralServicesPanel({
       setRows((data.services || []).map((r: ApiService) => mapService(r)));
       setDraftPct({});
       setDraftFixed({});
+
+      // Load processing fees from payments
+      if (orderIdProp) {
+        const feesRes = await fetch(
+          `/api/finances/payments?orderId=${orderIdProp}`,
+          {
+            headers: {
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            credentials: "include",
+          }
+        );
+        if (feesRes.ok) {
+          const feesData = await feesRes.json();
+          const fees = ((feesData.data || []) as { processing_fee?: number; status?: string }[])
+            .filter((p) => p.status !== "cancelled")
+            .reduce((sum, p) => sum + (Number(p.processing_fee) || 0), 0);
+          setTotalProcessingFees(fees);
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [orderCode, showToast]);
+  }, [orderCode, orderIdProp, showToast]);
 
   useEffect(() => {
     void load();
@@ -241,7 +264,7 @@ export default function OrderReferralServicesPanel({
       </div>
       <p className="text-xs text-gray-500 mb-3">{t(lang, "order.referralServicesHint")}</p>
       <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[1260px] border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-2 py-2 font-medium text-gray-700">{t(lang, "order.servCategory")}</th>
@@ -251,6 +274,7 @@ export default function OrderReferralServicesPanel({
               <th className="px-2 py-2 font-medium text-gray-700">{t(lang, "order.servSupplier")}</th>
               <th className="px-2 py-2 text-right font-medium text-gray-700">{t(lang, "order.servClientPrice")}</th>
               <th className="px-2 py-2 text-right font-medium text-gray-700">{t(lang, "order.servServicePrice")}</th>
+              <th className="px-2 py-2 text-right font-medium text-gray-700">Fees</th>
               <th className="px-2 py-2 text-right font-medium text-gray-700">{t(lang, "order.referralColMarginGross")}</th>
               <th className="px-2 py-2 text-right font-medium text-gray-700">{t(lang, "order.referralColProfitNet")}</th>
               <th className="px-2 py-2 text-right font-medium text-gray-700">{t(lang, "order.referralColVat")}</th>
@@ -263,9 +287,15 @@ export default function OrderReferralServicesPanel({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {rows.map((r) => {
-              const est = estimatedReferralAmount(r, draftPct, draftFixed);
-              return (
+            {(() => {
+              const totalMargin = rows.reduce((s, r) => s + Math.max(r.marginGross, 0), 0);
+              return rows.map((r) => {
+                const feeShare = totalMargin > 0 && totalProcessingFees > 0
+                  ? Math.round(totalProcessingFees * (Math.max(r.marginGross, 0) / totalMargin) * 100) / 100
+                  : 0;
+                const adjustedMargin = r.marginGross - feeShare;
+                const est = estimatedReferralAmount(r, draftPct, draftFixed);
+                return (
               <tr key={r.id} className="hover:bg-gray-50/80">
                 <td className="px-2 py-1.5 text-gray-700">{r.category}</td>
                 <td className="px-2 py-1.5 font-medium text-gray-900 max-w-[220px] truncate" title={r.serviceName}>
@@ -276,7 +306,8 @@ export default function OrderReferralServicesPanel({
                 <td className="px-2 py-1.5 text-gray-700 max-w-[120px] truncate">{r.supplierName}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(r.clientPrice)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(r.servicePrice)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-gray-800">{formatMoney(r.marginGross)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-red-600">{feeShare > 0 ? formatMoney(feeShare) : "—"}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-800">{formatMoney(adjustedMargin)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums font-medium text-gray-900">{formatMoney(r.profitNet)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{formatMoney(r.vatOnMargin)}</td>
                 <td className="px-2 py-1.5 text-center">
@@ -341,7 +372,8 @@ export default function OrderReferralServicesPanel({
                 </td>
               </tr>
             );
-            })}
+            });
+            })()}
           </tbody>
         </table>
       </div>

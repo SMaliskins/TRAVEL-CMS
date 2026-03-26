@@ -1779,6 +1779,7 @@ export default function OrderPage({
                   </label>
                   <OrderReferralServicesPanel
                     orderCode={effectiveOrderCode}
+                    orderId={order.id}
                     referralPartyId={order.referral_party_id ?? null}
                     lang={lang}
                   />
