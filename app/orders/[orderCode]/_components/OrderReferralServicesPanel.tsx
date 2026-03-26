@@ -294,6 +294,9 @@ export default function OrderReferralServicesPanel({
                   ? Math.round(totalProcessingFees * (Math.max(r.marginGross, 0) / totalMargin) * 100) / 100
                   : 0;
                 const adjustedMargin = r.marginGross - feeShare;
+                const ratio = r.marginGross > 0 ? adjustedMargin / r.marginGross : 1;
+                const adjustedVat = Math.round(r.vatOnMargin * ratio * 100) / 100;
+                const adjustedProfitNet = Math.round((adjustedMargin - adjustedVat) * 100) / 100;
                 const est = estimatedReferralAmount(r, draftPct, draftFixed);
                 return (
               <tr key={r.id} className="hover:bg-gray-50/80">
@@ -308,8 +311,8 @@ export default function OrderReferralServicesPanel({
                 <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(r.servicePrice)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-red-600">{feeShare > 0 ? formatMoney(feeShare) : "—"}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-gray-800">{formatMoney(adjustedMargin)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums font-medium text-gray-900">{formatMoney(r.profitNet)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{formatMoney(r.vatOnMargin)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums font-medium text-gray-900">{formatMoney(adjustedProfitNet)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{formatMoney(adjustedVat)}</td>
                 <td className="px-2 py-1.5 text-center">
                   <input
                     type="checkbox"
