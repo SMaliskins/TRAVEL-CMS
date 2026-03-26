@@ -181,7 +181,7 @@ export default function TouristsMap({
                           {t.dateFrom ? formatDateDDMMYYYY(t.dateFrom).slice(0, 5) : "—"}
                         </span>
                         <a
-                          href={`/orders/${t.orderCode}`}
+                          href={`/orders/${encodeURIComponent(t.orderCode || "")}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-gray-900 font-medium truncate hover:text-blue-600"
