@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { sendEmail } from "@/lib/email/sendEmail";
+import { normalizeEmailToField, sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -36,7 +36,8 @@ export async function POST(
     const body = await request.json();
     const { to, subject, message } = body;
 
-    if (!to?.trim()) {
+    const toNormalized = normalizeEmailToField(to || "");
+    if (!toNormalized) {
       return NextResponse.json({ error: "Email address is required" }, { status: 400 });
     }
 
@@ -74,7 +75,7 @@ export async function POST(
     const finalEmailHtml = await replaceBase64Images(rawEmailHtml);
 
     const result = await sendEmail(
-      to.trim(),
+      toNormalized,
       subject || "Hotel reservation",
       finalEmailHtml,
       message,
@@ -86,7 +87,7 @@ export async function POST(
       order_id: order.id,
       service_id: serviceId,
       type: "hotel_confirmation",
-      recipient_email: to.trim(),
+      recipient_email: toNormalized,
       subject: subject || "Hotel reservation",
       body: message,
       sent_at: new Date().toISOString(),

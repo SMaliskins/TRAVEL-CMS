@@ -28,9 +28,27 @@ import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
+import OrderClientsDataTab from "./_components/OrderClientsDataTab";
 
-type TabType = "client" | "finances" | "referral" | "finance" | "documents" | "communication" | "log";
-const TAB_VALUES: TabType[] = ["client", "finance", "finances", "documents", "communication", "log", "referral"];
+type TabType =
+  | "client"
+  | "clientsData"
+  | "finances"
+  | "referral"
+  | "finance"
+  | "documents"
+  | "communication"
+  | "log";
+const TAB_VALUES: TabType[] = [
+  "client",
+  "clientsData",
+  "finance",
+  "finances",
+  "documents",
+  "communication",
+  "log",
+  "referral",
+];
 function isValidTab(value: string | null): value is TabType {
   return value !== null && TAB_VALUES.includes(value as TabType);
 }
@@ -1620,7 +1638,16 @@ export default function OrderPage({
           {/* B) Tabs + Action Buttons */}
           <nav className="-mb-px flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-200/60 mt-1 pt-2">
             <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 min-w-0">
-              {(["client", "finance", "finances", "documents", "communication", "log", "referral"] as const)
+              {([
+                "client",
+                "clientsData",
+                "finance",
+                "finances",
+                "documents",
+                "communication",
+                "log",
+                "referral",
+              ] as const)
                 .filter((tab) => tab !== "referral" || currentRole !== "subagent")
                 .map((tab) => {
                 const isActive = activeTab === tab;
@@ -1660,6 +1687,13 @@ export default function OrderPage({
 
         {/* Tab Content */}
         <div className="mb-6 -mx-3 px-3 sm:mx-0 sm:px-0">
+          {activeTab === "clientsData" && effectiveOrderCode && (
+            <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">{t(lang, "order.tab.clientsData")}</h2>
+              <OrderClientsDataTab orderCode={effectiveOrderCode} lang={lang} />
+            </div>
+          )}
+
           {activeTab === "client" && (
             <div className="space-y-6">
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}

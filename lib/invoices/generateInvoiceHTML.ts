@@ -46,7 +46,7 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     fullPayment: "Full Payment",
     by: "by",
     electronicDisclaimer: "This invoice was prepared electronically and is valid without signature and stamp.",
-    summa: "Summa",
+    summa: "Subtotal",
     nonTaxableAmount: "Amount not subject to VAT",
     taxable0: "Amount taxable at 0% VAT",
     taxable21: "Amount taxable at 21% VAT",

@@ -2244,7 +2244,7 @@ export default function InvoiceCreator({
                       </div>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">{(previewLabels as Record<string, string>).summa ?? "Summa"}:</span>
+                      <span className="text-gray-600">{(previewLabels as Record<string, string>).summa ?? "Subtotal"}:</span>
                       <span className="text-gray-900 font-semibold">{formatCurrency(subtotal)} {currencyCode}</span>
                     </div>
                     <div className="flex justify-between text-xs">

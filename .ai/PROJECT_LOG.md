@@ -5,6 +5,45 @@
 
 ---
 
+## [2026-03-28] CW — Invoice EN labels: summa → Subtotal
+
+**Task:** English UI showed "Summa" on invoice preview (Latvia company block).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `INVOICE_LABELS.en.summa` → "Subtotal"; `InvoiceCreator` fallback aligned.
+
+**Next Step:** —
+
+---
+
+## [2026-03-28] CW — Order: Clients Data tab (directory snapshot)
+
+**Task:** New order tab with all clients & payers from directory; full card fields except referral/subagent UI.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `GET /api/orders/[orderCode]/related-parties` — lead client, order_travellers, payer_party_id from non-cancelled services + name-only payers; `OrderClientsDataTab` + `OrderDirectoryRecordReadonly` (contact, person/passport/prefs, company, banking, accounts, audit); hide referral/subagent role badges and no referral/subagent/supplier extras blocks; i18n `order.tab.clientsData` + `order.clientsData.*` (en/ru/lv); tab after Client & Services in `page.tsx`.
+
+**Next Step:** QA: multi-payer order, name-only payer, archived party.
+
+---
+
+## [2026-03-28] CW — Send to Hotel: normalize `<email>` for Resend
+
+**Task:** 422 from Resend when `to` is `<addr@host>` without display name (directory paste).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `lib/email/sendEmail.ts` — `normalizeSingleToAddress` unwraps bracket-only addresses; `normalizeEmailToField` for comma-separated; `parseToAddresses` uses normalization (all `sendEmail` callers). `send-to-hotel/route.ts` — normalize before send + `order_communications.recipient_email`.
+
+**Next Step:** QA: Send to Hotel with `<email@domain>` and `Name <email@domain>`.
+
+---
+
 ## [2026-03-27] CW — Order Finances: Recharts Tooltip formatter types
 
 **Task:** Vercel/build: Tooltip `formatter` incompatible with `number | undefined` / `ValueType`.

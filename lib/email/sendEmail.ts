@@ -56,14 +56,47 @@ export async function resolveEmailConfig(
   return { apiKey: process.env.RESEND_API_KEY || null, from: overrideFrom?.trim() || defaultFrom };
 }
 
+/**
+ * Unwrap `<addr@host>` to `addr@host`. Resend rejects a `to` value that is only
+ * angle brackets around an address; `Name <addr@host>` is left unchanged.
+ */
+function normalizeSingleToAddress(raw: string): string {
+  let s = raw.trim();
+  if (!s) return "";
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+    if (!s) return "";
+  }
+  const bracketOnly = s.match(/^<\s*([^\s<>]+@[^\s<>]+)\s*>$/);
+  if (bracketOnly) return bracketOnly[1].trim();
+  return s;
+}
+
+/** Comma-separated recipients; each segment normalized for API compatibility. */
+export function normalizeEmailToField(value: string): string {
+  return String(value)
+    .split(",")
+    .map((part) => normalizeSingleToAddress(part))
+    .filter(Boolean)
+    .join(", ");
+}
+
 /** Parse "a@x.com, b@y.com" into ["a@x.com", "b@y.com"]. */
 function parseToAddresses(to: string | string[]): string[] {
   if (Array.isArray(to)) {
-    return to.flatMap((s) => s.split(",").map((e) => e.trim()).filter(Boolean));
+    return to.flatMap((s) =>
+      String(s)
+        .split(",")
+        .map((e) => normalizeSingleToAddress(e))
+        .filter(Boolean)
+    );
   }
   return String(to)
     .split(",")
-    .map((e) => e.trim())
+    .map((e) => normalizeSingleToAddress(e))
     .filter(Boolean);
 }
 
