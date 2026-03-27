@@ -63,6 +63,63 @@ function fmt(n: number, currency: string) {
   return `${currency} ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function pctOfRevenue(value: number, revenue: number): string {
+  if (revenue <= 0) return "—";
+  return `${((Math.abs(value) / revenue) * 100).toFixed(1)}%`;
+}
+
+function pctOfGrossMargin(value: number, margin: number): string {
+  if (margin <= 0) return "—";
+  return `${((value / margin) * 100).toFixed(1)}%`;
+}
+
+/** High-contrast % + label (KPI, P&L, payments) */
+function PctShareBlock({
+  pct,
+  label,
+  align = "start",
+}: {
+  pct: string;
+  label: string;
+  align?: "start" | "end";
+}) {
+  const row = align === "end" ? "justify-end" : "justify-start";
+  if (pct === "—") {
+    return (
+      <div className={`mt-1 flex flex-col gap-0.5 ${align === "end" ? "items-end" : "items-start"}`}>
+        <span className="text-base font-extrabold text-gray-400">—</span>
+        {label ? <span className="text-xs font-semibold text-gray-700">{label}</span> : null}
+      </div>
+    );
+  }
+  return (
+    <div className={`mt-1.5 flex flex-wrap items-center gap-2 ${row}`}>
+      <span className="inline-flex shrink-0 rounded-lg border-2 border-gray-300 bg-white px-2.5 py-1 text-base font-extrabold tabular-nums tracking-tight text-gray-950 shadow-sm">
+        {pct}
+      </span>
+      {label ? (
+        <span className="max-w-[10rem] text-left text-xs font-semibold leading-snug text-gray-800">{label}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function MoneyWithShare({ value, currency, revenue }: { value: number; currency: string; revenue: number }) {
+  const p = pctOfRevenue(value, revenue);
+  return (
+    <div className="leading-tight">
+      <div>{fmt(value, currency)}</div>
+      <div className="mt-1 flex justify-end">
+        <span
+          className={`inline-block rounded-md border-2 border-gray-300 bg-white px-2 py-0.5 text-sm font-extrabold tabular-nums tracking-tight text-gray-950 shadow-sm ${p === "—" ? "border-gray-200 text-gray-400" : ""}`}
+        >
+          {p}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const METHOD_COLORS: Record<string, string> = {
   bank_transfer: "#3b82f6",
   card: "#8b5cf6",
@@ -149,8 +206,8 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
     }
 
     const totalRevenue = active.reduce((s, r) => s + r.econ.clientSigned, 0);
-    const totalCost = active.reduce((s, r) => s + r.econ.serviceSigned, 0);
     const totalMarginGross = active.reduce((s, r) => s + r.econ.marginGross, 0);
+    const totalCost = totalRevenue - totalMarginGross;
     const totalVat = active.reduce((s, r) => s + r.econ.vatOnMargin, 0);
     const totalProcessingFees = activePayments.reduce((s, p) => s + p.processing_fee, 0);
 
@@ -192,7 +249,11 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
       row.netProfit = adjMargin - adjVat - row.referralAmount;
     }
 
-    const netProfit = totalMarginGross - totalVat - totalProcessingFees - totalReferral;
+    const adjustedMargin = totalMarginGross - totalProcessingFees;
+    const feeRatio = totalMarginGross > 0 ? adjustedMargin / totalMarginGross : 1;
+    const adjustedVat = Math.round(totalVat * feeRatio * 100) / 100;
+    const profitAfterFeesAndVat = adjustedMargin - adjustedVat;
+    const netProfit = profitAfterFeesAndVat - totalReferral;
     const totalPaid = activePayments.reduce((s, p) => s + p.amount, 0);
     const totalPaidNet = totalPaid - totalProcessingFees;
 
@@ -229,6 +290,7 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
       totalVat,
       totalProcessingFees,
       totalReferral,
+      adjustedVat,
       netProfit,
       totalPaid,
       totalPaidNet,
@@ -236,25 +298,28 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
     };
   }, [services, activePayments, hasReferral]);
 
-  const stackedSegments = useMemo(() => {
-    const { totalRevenue, totalCost, totalVat, totalProcessingFees, totalReferral, netProfit } = computed;
+  const plRows = useMemo(() => {
+    const { totalRevenue, totalCost, totalMarginGross, totalVat, totalProcessingFees, totalReferral, adjustedVat: adjVat, netProfit } = computed;
     if (totalRevenue <= 0) return [];
-    const segments: { label: string; value: number; pct: number; color: string }[] = [
-      { label: t(lang, "order.finances.cost"), value: totalCost, pct: 0, color: "#6b7280" },
-      { label: t(lang, "order.finances.vat"), value: totalVat, pct: 0, color: "#f59e0b" },
-    ];
+    const vatDisplay = totalProcessingFees > 0 ? adjVat : totalVat;
+    const rows: { label: string; value: number; running: number; sign: "+" | "−"; color: string; bold?: boolean }[] = [];
+    let running = totalRevenue;
+    rows.push({ label: t(lang, "order.finances.revenue"), value: totalRevenue, running, sign: "+", color: "#3b82f6", bold: true });
+    running -= totalCost;
+    rows.push({ label: `− ${t(lang, "order.finances.cost")}`, value: totalCost, running, sign: "−", color: "#6b7280" });
+    rows.push({ label: t(lang, "order.finances.grossMargin"), value: totalMarginGross, running, sign: "+", color: "#10b981", bold: true });
+    running -= vatDisplay;
+    rows.push({ label: `− ${t(lang, "order.finances.vat")}`, value: vatDisplay, running, sign: "−", color: "#f59e0b" });
     if (totalProcessingFees > 0) {
-      segments.push({ label: t(lang, "order.finances.processingFees"), value: totalProcessingFees, pct: 0, color: "#ef4444" });
+      running -= totalProcessingFees;
+      rows.push({ label: `− ${t(lang, "order.finances.processingFees")}`, value: totalProcessingFees, running, sign: "−", color: "#ef4444" });
     }
     if (hasReferral && totalReferral > 0) {
-      segments.push({ label: t(lang, "order.finances.referralCommission"), value: totalReferral, pct: 0, color: "#8b5cf6" });
+      running -= totalReferral;
+      rows.push({ label: `− ${t(lang, "order.finances.referralCommission")}`, value: totalReferral, running, sign: "−", color: "#8b5cf6" });
     }
-    segments.push({ label: t(lang, "order.finances.netProfit"), value: Math.max(netProfit, 0), pct: 0, color: "#059669" });
-    const total = segments.reduce((s, seg) => s + Math.max(seg.value, 0), 0);
-    for (const seg of segments) {
-      seg.pct = total > 0 ? (Math.max(seg.value, 0) / total) * 100 : 0;
-    }
-    return segments;
+    rows.push({ label: t(lang, "order.finances.netProfit"), value: netProfit, running: netProfit, sign: "+", color: netProfit >= 0 ? "#059669" : "#dc2626", bold: true });
+    return rows;
   }, [computed, lang, hasReferral]);
 
   const pieData = useMemo(() => {
@@ -281,67 +346,89 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
     );
   }
 
-  const { active, cancelled, totalRevenue, totalCost, totalMarginGross, totalVat, totalProcessingFees, totalReferral, netProfit, totalPaidNet, paidLines } = computed;
+  const { active, cancelled, totalRevenue, totalCost, totalMarginGross, totalVat, totalProcessingFees, totalReferral, adjustedVat, netProfit, totalPaidNet, paidLines } = computed;
   const outstanding = totalRevenue - totalPaidNet;
 
-  const kpis = [
-    { label: t(lang, "order.finances.revenue"), value: totalRevenue, color: "text-blue-700", bg: "bg-blue-50 border-blue-100" },
-    { label: t(lang, "order.finances.cost"), value: totalCost, color: "text-gray-700", bg: "bg-gray-50 border-gray-200" },
-    { label: t(lang, "order.finances.grossMargin"), value: totalMarginGross, color: totalMarginGross >= 0 ? "text-emerald-700" : "text-red-700", bg: totalMarginGross >= 0 ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100" },
-    { label: t(lang, "order.finances.vat"), value: totalVat, color: "text-amber-700", bg: "bg-amber-50 border-amber-100" },
+  const kpis: { id: string; label: string; value: number; color: string; bg: string }[] = [
+    { id: "revenue", label: t(lang, "order.finances.revenue"), value: totalRevenue, color: "text-blue-700", bg: "bg-blue-50 border-blue-100" },
+    { id: "cost", label: t(lang, "order.finances.cost"), value: totalCost, color: "text-gray-700", bg: "bg-gray-50 border-gray-200" },
+    { id: "margin", label: t(lang, "order.finances.grossMargin"), value: totalMarginGross, color: totalMarginGross >= 0 ? "text-emerald-700" : "text-red-700", bg: totalMarginGross >= 0 ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100" },
+    { id: "vat", label: t(lang, "order.finances.vat"), value: totalProcessingFees > 0 ? adjustedVat : totalVat, color: "text-amber-700", bg: "bg-amber-50 border-amber-100" },
     ...(totalProcessingFees > 0
-      ? [{ label: t(lang, "order.finances.processingFees"), value: totalProcessingFees, color: "text-red-600", bg: "bg-red-50 border-red-100" }]
+      ? [{ id: "fees", label: t(lang, "order.finances.processingFees"), value: totalProcessingFees, color: "text-red-600", bg: "bg-red-50 border-red-100" }]
       : []),
     ...(hasReferral && totalReferral > 0
-      ? [{ label: t(lang, "order.finances.referralCommission"), value: totalReferral, color: "text-purple-700", bg: "bg-purple-50 border-purple-100" }]
+      ? [{ id: "referral", label: t(lang, "order.finances.referralCommission"), value: totalReferral, color: "text-purple-700", bg: "bg-purple-50 border-purple-100" }]
       : []),
-    { label: t(lang, "order.finances.netProfit"), value: netProfit, color: netProfit >= 0 ? "text-emerald-800" : "text-red-800", bg: netProfit >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200" },
+    { id: "net", label: t(lang, "order.finances.netProfit"), value: netProfit, color: netProfit >= 0 ? "text-emerald-800" : "text-red-800", bg: netProfit >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200" },
   ];
 
   return (
     <div className="space-y-4">
       {/* KPI Cards */}
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
-        {kpis.map((k) => (
-          <div key={k.label} className={`shrink-0 rounded-xl border px-4 py-3 min-w-[140px] ${k.bg}`}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{k.label}</div>
-            <div className={`text-lg font-bold tabular-nums ${k.color}`}>{fmt(k.value, currency)}</div>
-          </div>
-        ))}
+        {kpis.map((k) => {
+          const useMarginPct = ["vat", "fees", "referral", "net"].includes(k.id) && totalMarginGross > 0;
+          const pct =
+            totalRevenue <= 0
+              ? "—"
+              : k.id === "revenue"
+                ? "100.0%"
+                : useMarginPct
+                  ? pctOfGrossMargin(k.value, totalMarginGross)
+                  : pctOfRevenue(k.value, totalRevenue);
+          const pctLabel = useMarginPct ? t(lang, "order.finances.pctOfGrossMargin") : t(lang, "order.finances.pctOfRevenue");
+          return (
+            <div key={k.id} className={`shrink-0 rounded-xl border px-4 py-3 min-w-[140px] ${k.bg}`}>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{k.label}</div>
+              <div className={`text-lg font-bold tabular-nums ${k.color}`}>{fmt(k.value, currency)}</div>
+              <PctShareBlock pct={pct} label={pctLabel} align="start" />
+            </div>
+          );
+        })}
       </div>
 
-      {/* Revenue Breakdown — stacked bar */}
-      {stackedSegments.length > 0 && (
+      {/* P&L Waterfall */}
+      {plRows.length > 0 && (
         <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">{t(lang, "order.finances.marginFlow")}</h3>
-          <div className="w-full h-10 rounded-lg overflow-hidden flex" title={`${t(lang, "order.finances.revenue")}: ${fmt(totalRevenue, currency)}`}>
-            {stackedSegments.map((seg) => (
-              seg.pct > 0 ? (
-                <div
-                  key={seg.label}
-                  className="h-full relative group transition-all"
-                  style={{ width: `${seg.pct}%`, backgroundColor: seg.color, minWidth: seg.pct > 0 ? 4 : 0 }}
-                >
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
-                    <div className="bg-gray-900 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
-                      <div className="font-medium">{seg.label}</div>
-                      <div className="tabular-nums">{fmt(seg.value, currency)} ({seg.pct.toFixed(1)}%)</div>
+          <div className="space-y-1.5">
+            {plRows.map((row, idx) => {
+              const barPct = totalRevenue > 0 ? (Math.abs(row.value) / totalRevenue) * 100 : 0;
+              const sharePct =
+                totalRevenue <= 0
+                  ? "—"
+                  : idx === 0
+                    ? "100.0%"
+                    : idx <= 2
+                      ? pctOfRevenue(row.value, totalRevenue)
+                      : pctOfGrossMargin(row.value, totalMarginGross);
+              const shareLabel =
+                totalRevenue <= 0
+                  ? ""
+                  : idx <= 2
+                    ? t(lang, "order.finances.pctOfRevenue")
+                    : t(lang, "order.finances.pctOfGrossMargin");
+              return (
+                <div key={row.label} className={`flex items-center gap-3 ${row.bold ? "py-1" : "py-0.5"}`}>
+                  <div className={`w-[160px] shrink-0 text-xs ${row.bold ? "font-bold text-gray-900" : "text-gray-500"} truncate`}>
+                    {row.label}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="w-full bg-gray-50 rounded-full h-4 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(barPct, 100)}%`, backgroundColor: row.color, opacity: row.bold ? 1 : 0.7 }}
+                      />
                     </div>
                   </div>
+                  <div className={`min-w-[168px] max-w-[220px] shrink-0 text-right tabular-nums text-xs ${row.bold ? "font-bold text-gray-900" : "text-gray-600"}`}>
+                    <div>{fmt(row.value, currency)}</div>
+                    <PctShareBlock pct={sharePct} label={shareLabel} align="end" />
+                  </div>
                 </div>
-              ) : null
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
-            {stackedSegments.map((seg) => (
-              seg.pct > 0 ? (
-                <div key={seg.label} className="flex items-center gap-1.5 text-xs text-gray-600">
-                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: seg.color }} />
-                  <span>{seg.label}</span>
-                  <span className="tabular-nums font-medium text-gray-900">{seg.pct.toFixed(0)}%</span>
-                </div>
-              ) : null
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -356,17 +443,38 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                 <th className="text-left px-2 py-2 font-semibold">#</th>
                 <th className="text-left px-2 py-2 font-semibold">{t(lang, "order.finances.service")}</th>
                 <th className="text-left px-2 py-2 font-semibold">{t(lang, "order.finances.category")}</th>
-                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.clientPrice")}</th>
-                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.cost")}</th>
-                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.grossMargin")}</th>
-                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.vat")}</th>
+                <th className="text-right px-2 py-2 font-semibold">
+                  <div>{t(lang, "order.finances.clientPrice")}</div>
+                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                </th>
+                <th className="text-right px-2 py-2 font-semibold">
+                  <div>{t(lang, "order.finances.cost")}</div>
+                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                </th>
+                <th className="text-right px-2 py-2 font-semibold">
+                  <div>{t(lang, "order.finances.grossMargin")}</div>
+                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                </th>
+                <th className="text-right px-2 py-2 font-semibold">
+                  <div>{t(lang, "order.finances.vat")}</div>
+                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                </th>
                 {totalProcessingFees > 0 && (
-                  <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.fees")}</th>
+                  <th className="text-right px-2 py-2 font-semibold">
+                    <div>{t(lang, "order.finances.fees")}</div>
+                    <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                  </th>
                 )}
                 {hasReferral && (
-                  <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.refCom")}</th>
+                  <th className="text-right px-2 py-2 font-semibold">
+                    <div>{t(lang, "order.finances.refCom")}</div>
+                    <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                  </th>
                 )}
-                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.netProfit")}</th>
+                <th className="text-right px-2 py-2 font-semibold">
+                  <div>{t(lang, "order.finances.netProfit")}</div>
+                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -375,44 +483,68 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                   <td className="px-2 py-2 text-gray-400">{idx + 1}</td>
                   <td className="px-2 py-2 font-medium text-gray-800 max-w-[200px] truncate">{row.serviceName}</td>
                   <td className="px-2 py-2 text-gray-500">{row.category}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-gray-800">{fmt(row.econ.clientSigned, currency)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">{fmt(row.econ.serviceSigned, currency)}</td>
-                  <td className={`px-2 py-2 text-right tabular-nums font-medium ${row.econ.marginGross >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                    {fmt(row.econ.marginGross, currency)}
+                  <td className="px-2 py-2 text-right tabular-nums text-gray-800">
+                    <MoneyWithShare value={row.econ.clientSigned} currency={currency} revenue={totalRevenue} />
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums text-amber-700">{fmt(row.econ.vatOnMargin, currency)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">
+                    <MoneyWithShare value={row.econ.clientSigned - row.econ.marginGross} currency={currency} revenue={totalRevenue} />
+                  </td>
+                  <td className={`px-2 py-2 text-right tabular-nums font-medium ${row.econ.marginGross >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    <MoneyWithShare value={row.econ.marginGross} currency={currency} revenue={totalRevenue} />
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-amber-700">
+                    <MoneyWithShare value={row.econ.vatOnMargin} currency={currency} revenue={totalRevenue} />
+                  </td>
                   {totalProcessingFees > 0 && (
                     <td className="px-2 py-2 text-right tabular-nums text-red-600">
-                      {row.feeShare > 0 ? fmt(row.feeShare, currency) : "—"}
+                      {row.feeShare > 0 ? (
+                        <MoneyWithShare value={row.feeShare} currency={currency} revenue={totalRevenue} />
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   )}
                   {hasReferral && (
                     <td className="px-2 py-2 text-right tabular-nums text-purple-700">
-                      {row.referralAmount > 0 ? fmt(row.referralAmount, currency) : "—"}
+                      {row.referralAmount > 0 ? (
+                        <MoneyWithShare value={row.referralAmount} currency={currency} revenue={totalRevenue} />
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   )}
                   <td className={`px-2 py-2 text-right tabular-nums font-bold ${row.netProfit >= 0 ? "text-emerald-800" : "text-red-700"}`}>
-                    {fmt(row.netProfit, currency)}
+                    <MoneyWithShare value={row.netProfit} currency={currency} revenue={totalRevenue} />
                   </td>
                 </tr>
               ))}
               {/* Totals */}
               <tr className="border-t-2 border-gray-300 font-bold text-gray-900">
                 <td className="px-2 py-2" colSpan={3}>{t(lang, "order.finances.total")}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{fmt(totalRevenue, currency)}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{fmt(totalCost, currency)}</td>
-                <td className={`px-2 py-2 text-right tabular-nums ${totalMarginGross >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                  {fmt(totalMarginGross, currency)}
+                <td className="px-2 py-2 text-right tabular-nums">
+                  <MoneyWithShare value={totalRevenue} currency={currency} revenue={totalRevenue} />
                 </td>
-                <td className="px-2 py-2 text-right tabular-nums text-amber-700">{fmt(totalVat, currency)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">
+                  <MoneyWithShare value={totalCost} currency={currency} revenue={totalRevenue} />
+                </td>
+                <td className={`px-2 py-2 text-right tabular-nums ${totalMarginGross >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                  <MoneyWithShare value={totalMarginGross} currency={currency} revenue={totalRevenue} />
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums text-amber-700">
+                  <MoneyWithShare value={totalProcessingFees > 0 ? adjustedVat : totalVat} currency={currency} revenue={totalRevenue} />
+                </td>
                 {totalProcessingFees > 0 && (
-                  <td className="px-2 py-2 text-right tabular-nums text-red-600">{fmt(totalProcessingFees, currency)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-red-600">
+                    <MoneyWithShare value={totalProcessingFees} currency={currency} revenue={totalRevenue} />
+                  </td>
                 )}
                 {hasReferral && (
-                  <td className="px-2 py-2 text-right tabular-nums text-purple-700">{fmt(totalReferral, currency)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-purple-700">
+                    <MoneyWithShare value={totalReferral} currency={currency} revenue={totalRevenue} />
+                  </td>
                 )}
                 <td className={`px-2 py-2 text-right tabular-nums ${netProfit >= 0 ? "text-emerald-800" : "text-red-700"}`}>
-                  {fmt(netProfit, currency)}
+                  <MoneyWithShare value={netProfit} currency={currency} revenue={totalRevenue} />
                 </td>
               </tr>
             </tbody>
@@ -430,13 +562,23 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                     <td className="px-2 py-1.5 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1.5 text-gray-500 max-w-[200px] truncate">{row.serviceName}</td>
                     <td className="px-2 py-1.5 text-gray-400">{row.category}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.clientSigned, currency)}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.serviceSigned, currency)}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.marginGross, currency)}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.vatOnMargin, currency)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      <MoneyWithShare value={row.econ.clientSigned} currency={currency} revenue={totalRevenue} />
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      <MoneyWithShare value={row.econ.clientSigned - row.econ.marginGross} currency={currency} revenue={totalRevenue} />
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      <MoneyWithShare value={row.econ.marginGross} currency={currency} revenue={totalRevenue} />
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      <MoneyWithShare value={row.econ.vatOnMargin} currency={currency} revenue={totalRevenue} />
+                    </td>
                     {totalProcessingFees > 0 && <td className="px-2 py-1.5 text-right">—</td>}
                     {hasReferral && <td className="px-2 py-1.5 text-right">—</td>}
-                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.profitNetOfVat, currency)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      <MoneyWithShare value={row.econ.profitNetOfVat} currency={currency} revenue={totalRevenue} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -452,29 +594,41 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Left: summary */}
             <div className="space-y-2.5">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t(lang, "order.finances.billed")}</span>
-                <span className="text-sm font-bold tabular-nums text-gray-900">{fmt(totalRevenue, currency)}</span>
+              <div className="flex justify-between items-start gap-3">
+                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">{t(lang, "order.finances.billed")}</span>
+                <div className="text-right">
+                  <div className="text-sm font-bold tabular-nums text-gray-900">{fmt(totalRevenue, currency)}</div>
+                  <PctShareBlock pct="100.0%" label={t(lang, "order.finances.pctOfRevenue")} align="end" />
+                </div>
               </div>
               {paidLines.map((pl) => (
-                <div key={pl.method} className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">
+                <div key={pl.method} className="flex justify-between items-start gap-3">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">
                     {t(lang, "order.finances.paid")} by {pl.label}
                   </span>
-                  <span className="text-sm font-bold tabular-nums text-emerald-700">{fmt(pl.net, currency)}</span>
+                  <div className="text-right">
+                    <div className="text-sm font-bold tabular-nums text-emerald-700">{fmt(pl.net, currency)}</div>
+                    <PctShareBlock pct={pctOfRevenue(pl.net, totalRevenue)} label={t(lang, "order.finances.pctOfRevenue")} align="end" />
+                  </div>
                 </div>
               ))}
               {totalProcessingFees > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t(lang, "order.finances.processingFees")}</span>
-                  <span className="text-sm font-bold tabular-nums text-red-600">{fmt(totalProcessingFees, currency)}</span>
+                <div className="flex justify-between items-start gap-3">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">{t(lang, "order.finances.processingFees")}</span>
+                  <div className="text-right">
+                    <div className="text-sm font-bold tabular-nums text-red-600">{fmt(totalProcessingFees, currency)}</div>
+                    <PctShareBlock pct={pctOfRevenue(totalProcessingFees, totalRevenue)} label={t(lang, "order.finances.pctOfRevenue")} align="end" />
+                  </div>
                 </div>
               )}
-              <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
-                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t(lang, "order.finances.outstanding")}</span>
-                <span className={`text-sm font-bold tabular-nums ${outstanding > 0 ? "text-red-600" : outstanding < 0 ? "text-blue-600" : "text-gray-500"}`}>
-                  {fmt(outstanding, currency)}
-                </span>
+              <div className="border-t border-gray-200 pt-2 flex justify-between items-start gap-3">
+                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">{t(lang, "order.finances.outstanding")}</span>
+                <div className="text-right">
+                  <div className={`text-sm font-bold tabular-nums ${outstanding > 0 ? "text-red-600" : outstanding < 0 ? "text-blue-600" : "text-gray-500"}`}>
+                    {fmt(outstanding, currency)}
+                  </div>
+                  <PctShareBlock pct={pctOfRevenue(outstanding, totalRevenue)} label={t(lang, "order.finances.pctOfRevenue")} align="end" />
+                </div>
               </div>
             </div>
 
