@@ -73,49 +73,12 @@ function pctOfGrossMargin(value: number, margin: number): string {
   return `${((value / margin) * 100).toFixed(1)}%`;
 }
 
-/** High-contrast % + label (KPI, P&L, payments) */
-function PctShareBlock({
-  pct,
-  label,
-  align = "start",
-}: {
-  pct: string;
-  label: string;
-  align?: "start" | "end";
-}) {
-  const row = align === "end" ? "justify-end" : "justify-start";
-  if (pct === "—") {
-    return (
-      <div className={`mt-1 flex flex-col gap-0.5 ${align === "end" ? "items-end" : "items-start"}`}>
-        <span className="text-base font-extrabold text-gray-400">—</span>
-        {label ? <span className="text-xs font-semibold text-gray-700">{label}</span> : null}
-      </div>
-    );
-  }
+/** One subtle line under amounts (KPI + Margin Flow only) */
+function PctSubline({ pct, label, align = "start" }: { pct: string; label: string; align?: "start" | "end" }) {
+  const cls = align === "end" ? "text-right" : "text-left";
   return (
-    <div className={`mt-1.5 flex flex-wrap items-center gap-2 ${row}`}>
-      <span className="inline-flex shrink-0 rounded-lg border-2 border-gray-300 bg-white px-2.5 py-1 text-base font-extrabold tabular-nums tracking-tight text-gray-950 shadow-sm">
-        {pct}
-      </span>
-      {label ? (
-        <span className="max-w-[10rem] text-left text-xs font-semibold leading-snug text-gray-800">{label}</span>
-      ) : null}
-    </div>
-  );
-}
-
-function MoneyWithShare({ value, currency, revenue }: { value: number; currency: string; revenue: number }) {
-  const p = pctOfRevenue(value, revenue);
-  return (
-    <div className="leading-tight">
-      <div>{fmt(value, currency)}</div>
-      <div className="mt-1 flex justify-end">
-        <span
-          className={`inline-block rounded-md border-2 border-gray-300 bg-white px-2 py-0.5 text-sm font-extrabold tabular-nums tracking-tight text-gray-950 shadow-sm ${p === "—" ? "border-gray-200 text-gray-400" : ""}`}
-        >
-          {p}
-        </span>
-      </div>
+    <div className={`mt-0.5 text-[11px] tabular-nums text-gray-500 ${cls}`}>
+      {pct === "—" ? "—" : `${pct} ${label}`}
     </div>
   );
 }
@@ -382,7 +345,7 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
             <div key={k.id} className={`shrink-0 rounded-xl border px-4 py-3 min-w-[140px] ${k.bg}`}>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{k.label}</div>
               <div className={`text-lg font-bold tabular-nums ${k.color}`}>{fmt(k.value, currency)}</div>
-              <PctShareBlock pct={pct} label={pctLabel} align="start" />
+              <PctSubline pct={pct} label={pctLabel} align="start" />
             </div>
           );
         })}
@@ -422,9 +385,9 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                       />
                     </div>
                   </div>
-                  <div className={`min-w-[168px] max-w-[220px] shrink-0 text-right tabular-nums text-xs ${row.bold ? "font-bold text-gray-900" : "text-gray-600"}`}>
+                  <div className={`w-[148px] shrink-0 text-right tabular-nums text-xs ${row.bold ? "font-bold text-gray-900" : "text-gray-600"}`}>
                     <div>{fmt(row.value, currency)}</div>
-                    <PctShareBlock pct={sharePct} label={shareLabel} align="end" />
+                    <PctSubline pct={sharePct} label={shareLabel} align="end" />
                   </div>
                 </div>
               );
@@ -443,38 +406,17 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                 <th className="text-left px-2 py-2 font-semibold">#</th>
                 <th className="text-left px-2 py-2 font-semibold">{t(lang, "order.finances.service")}</th>
                 <th className="text-left px-2 py-2 font-semibold">{t(lang, "order.finances.category")}</th>
-                <th className="text-right px-2 py-2 font-semibold">
-                  <div>{t(lang, "order.finances.clientPrice")}</div>
-                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                </th>
-                <th className="text-right px-2 py-2 font-semibold">
-                  <div>{t(lang, "order.finances.cost")}</div>
-                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                </th>
-                <th className="text-right px-2 py-2 font-semibold">
-                  <div>{t(lang, "order.finances.grossMargin")}</div>
-                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                </th>
-                <th className="text-right px-2 py-2 font-semibold">
-                  <div>{t(lang, "order.finances.vat")}</div>
-                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                </th>
+                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.clientPrice")}</th>
+                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.cost")}</th>
+                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.grossMargin")}</th>
+                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.vat")}</th>
                 {totalProcessingFees > 0 && (
-                  <th className="text-right px-2 py-2 font-semibold">
-                    <div>{t(lang, "order.finances.fees")}</div>
-                    <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                  </th>
+                  <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.fees")}</th>
                 )}
                 {hasReferral && (
-                  <th className="text-right px-2 py-2 font-semibold">
-                    <div>{t(lang, "order.finances.refCom")}</div>
-                    <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                  </th>
+                  <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.refCom")}</th>
                 )}
-                <th className="text-right px-2 py-2 font-semibold">
-                  <div>{t(lang, "order.finances.netProfit")}</div>
-                  <div className="text-[10px] font-semibold normal-case text-gray-600">{t(lang, "order.finances.pctOfRevenue")}</div>
-                </th>
+                <th className="text-right px-2 py-2 font-semibold">{t(lang, "order.finances.netProfit")}</th>
               </tr>
             </thead>
             <tbody>
@@ -483,68 +425,46 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                   <td className="px-2 py-2 text-gray-400">{idx + 1}</td>
                   <td className="px-2 py-2 font-medium text-gray-800 max-w-[200px] truncate">{row.serviceName}</td>
                   <td className="px-2 py-2 text-gray-500">{row.category}</td>
-                  <td className="px-2 py-2 text-right tabular-nums text-gray-800">
-                    <MoneyWithShare value={row.econ.clientSigned} currency={currency} revenue={totalRevenue} />
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">
-                    <MoneyWithShare value={row.econ.clientSigned - row.econ.marginGross} currency={currency} revenue={totalRevenue} />
-                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-gray-800">{fmt(row.econ.clientSigned, currency)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-gray-600">{fmt(row.econ.clientSigned - row.econ.marginGross, currency)}</td>
                   <td className={`px-2 py-2 text-right tabular-nums font-medium ${row.econ.marginGross >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                    <MoneyWithShare value={row.econ.marginGross} currency={currency} revenue={totalRevenue} />
+                    {fmt(row.econ.marginGross, currency)}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums text-amber-700">
-                    <MoneyWithShare value={row.econ.vatOnMargin} currency={currency} revenue={totalRevenue} />
-                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-amber-700">{fmt(row.econ.vatOnMargin, currency)}</td>
                   {totalProcessingFees > 0 && (
                     <td className="px-2 py-2 text-right tabular-nums text-red-600">
-                      {row.feeShare > 0 ? (
-                        <MoneyWithShare value={row.feeShare} currency={currency} revenue={totalRevenue} />
-                      ) : (
-                        "—"
-                      )}
+                      {row.feeShare > 0 ? fmt(row.feeShare, currency) : "—"}
                     </td>
                   )}
                   {hasReferral && (
                     <td className="px-2 py-2 text-right tabular-nums text-purple-700">
-                      {row.referralAmount > 0 ? (
-                        <MoneyWithShare value={row.referralAmount} currency={currency} revenue={totalRevenue} />
-                      ) : (
-                        "—"
-                      )}
+                      {row.referralAmount > 0 ? fmt(row.referralAmount, currency) : "—"}
                     </td>
                   )}
                   <td className={`px-2 py-2 text-right tabular-nums font-bold ${row.netProfit >= 0 ? "text-emerald-800" : "text-red-700"}`}>
-                    <MoneyWithShare value={row.netProfit} currency={currency} revenue={totalRevenue} />
+                    {fmt(row.netProfit, currency)}
                   </td>
                 </tr>
               ))}
               {/* Totals */}
               <tr className="border-t-2 border-gray-300 font-bold text-gray-900">
                 <td className="px-2 py-2" colSpan={3}>{t(lang, "order.finances.total")}</td>
-                <td className="px-2 py-2 text-right tabular-nums">
-                  <MoneyWithShare value={totalRevenue} currency={currency} revenue={totalRevenue} />
-                </td>
-                <td className="px-2 py-2 text-right tabular-nums">
-                  <MoneyWithShare value={totalCost} currency={currency} revenue={totalRevenue} />
-                </td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmt(totalRevenue, currency)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmt(totalCost, currency)}</td>
                 <td className={`px-2 py-2 text-right tabular-nums ${totalMarginGross >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                  <MoneyWithShare value={totalMarginGross} currency={currency} revenue={totalRevenue} />
+                  {fmt(totalMarginGross, currency)}
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums text-amber-700">
-                  <MoneyWithShare value={totalProcessingFees > 0 ? adjustedVat : totalVat} currency={currency} revenue={totalRevenue} />
+                  {fmt(totalProcessingFees > 0 ? adjustedVat : totalVat, currency)}
                 </td>
                 {totalProcessingFees > 0 && (
-                  <td className="px-2 py-2 text-right tabular-nums text-red-600">
-                    <MoneyWithShare value={totalProcessingFees} currency={currency} revenue={totalRevenue} />
-                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-red-600">{fmt(totalProcessingFees, currency)}</td>
                 )}
                 {hasReferral && (
-                  <td className="px-2 py-2 text-right tabular-nums text-purple-700">
-                    <MoneyWithShare value={totalReferral} currency={currency} revenue={totalRevenue} />
-                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-purple-700">{fmt(totalReferral, currency)}</td>
                 )}
                 <td className={`px-2 py-2 text-right tabular-nums ${netProfit >= 0 ? "text-emerald-800" : "text-red-700"}`}>
-                  <MoneyWithShare value={netProfit} currency={currency} revenue={totalRevenue} />
+                  {fmt(netProfit, currency)}
                 </td>
               </tr>
             </tbody>
@@ -562,23 +482,13 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                     <td className="px-2 py-1.5 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1.5 text-gray-500 max-w-[200px] truncate">{row.serviceName}</td>
                     <td className="px-2 py-1.5 text-gray-400">{row.category}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">
-                      <MoneyWithShare value={row.econ.clientSigned} currency={currency} revenue={totalRevenue} />
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">
-                      <MoneyWithShare value={row.econ.clientSigned - row.econ.marginGross} currency={currency} revenue={totalRevenue} />
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">
-                      <MoneyWithShare value={row.econ.marginGross} currency={currency} revenue={totalRevenue} />
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">
-                      <MoneyWithShare value={row.econ.vatOnMargin} currency={currency} revenue={totalRevenue} />
-                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.clientSigned, currency)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.clientSigned - row.econ.marginGross, currency)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.marginGross, currency)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.vatOnMargin, currency)}</td>
                     {totalProcessingFees > 0 && <td className="px-2 py-1.5 text-right">—</td>}
                     {hasReferral && <td className="px-2 py-1.5 text-right">—</td>}
-                    <td className="px-2 py-1.5 text-right tabular-nums">
-                      <MoneyWithShare value={row.econ.profitNetOfVat} currency={currency} revenue={totalRevenue} />
-                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmt(row.econ.profitNetOfVat, currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -594,41 +504,29 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Left: summary */}
             <div className="space-y-2.5">
-              <div className="flex justify-between items-start gap-3">
-                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">{t(lang, "order.finances.billed")}</span>
-                <div className="text-right">
-                  <div className="text-sm font-bold tabular-nums text-gray-900">{fmt(totalRevenue, currency)}</div>
-                  <PctShareBlock pct="100.0%" label={t(lang, "order.finances.pctOfRevenue")} align="end" />
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t(lang, "order.finances.billed")}</span>
+                <span className="text-sm font-bold tabular-nums text-gray-900">{fmt(totalRevenue, currency)}</span>
               </div>
               {paidLines.map((pl) => (
-                <div key={pl.method} className="flex justify-between items-start gap-3">
-                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">
+                <div key={pl.method} className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">
                     {t(lang, "order.finances.paid")} by {pl.label}
                   </span>
-                  <div className="text-right">
-                    <div className="text-sm font-bold tabular-nums text-emerald-700">{fmt(pl.net, currency)}</div>
-                    <PctShareBlock pct={pctOfRevenue(pl.net, totalRevenue)} label={t(lang, "order.finances.pctOfRevenue")} align="end" />
-                  </div>
+                  <span className="text-sm font-bold tabular-nums text-emerald-700">{fmt(pl.net, currency)}</span>
                 </div>
               ))}
               {totalProcessingFees > 0 && (
-                <div className="flex justify-between items-start gap-3">
-                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">{t(lang, "order.finances.processingFees")}</span>
-                  <div className="text-right">
-                    <div className="text-sm font-bold tabular-nums text-red-600">{fmt(totalProcessingFees, currency)}</div>
-                    <PctShareBlock pct={pctOfRevenue(totalProcessingFees, totalRevenue)} label={t(lang, "order.finances.pctOfRevenue")} align="end" />
-                  </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t(lang, "order.finances.processingFees")}</span>
+                  <span className="text-sm font-bold tabular-nums text-red-600">{fmt(totalProcessingFees, currency)}</span>
                 </div>
               )}
-              <div className="border-t border-gray-200 pt-2 flex justify-between items-start gap-3">
-                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold shrink-0 pt-0.5">{t(lang, "order.finances.outstanding")}</span>
-                <div className="text-right">
-                  <div className={`text-sm font-bold tabular-nums ${outstanding > 0 ? "text-red-600" : outstanding < 0 ? "text-blue-600" : "text-gray-500"}`}>
-                    {fmt(outstanding, currency)}
-                  </div>
-                  <PctShareBlock pct={pctOfRevenue(outstanding, totalRevenue)} label={t(lang, "order.finances.pctOfRevenue")} align="end" />
-                </div>
+              <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
+                <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t(lang, "order.finances.outstanding")}</span>
+                <span className={`text-sm font-bold tabular-nums ${outstanding > 0 ? "text-red-600" : outstanding < 0 ? "text-blue-600" : "text-gray-500"}`}>
+                  {fmt(outstanding, currency)}
+                </span>
               </div>
             </div>
 

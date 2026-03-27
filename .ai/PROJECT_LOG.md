@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-03-27] CW — Order Finances: dial back % in payment overview
+
+**Task:** User feedback: too much % emphasis in finances tab.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderFinanceOverview.tsx` — payment block (billed, paid by method, processing fees, outstanding): single-line amounts only; removed per-line `% of revenue` sublines. KPIs / P&L still use quiet `PctSubline` from prior step; repo has no `PctShareBlock` / `MoneyWithShare` left.
+
+**Next Step:** QA visual pass on Order → Finances tab.
+
+---
+
 ## [2026-03-25] CW — Passport AI: Responses output + incomplete + PDF text fallback
 
 **Task:** "AI parsing failed" — OpenAI Responses `incomplete`/new output shapes left empty text; images with bad MIME.
