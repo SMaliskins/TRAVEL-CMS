@@ -553,7 +553,10 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: number) => [fmt(value, currency), ""]}
+                        formatter={(value) => {
+                          const n = Number(value);
+                          return [fmt(Number.isFinite(n) ? n : 0, currency), ""];
+                        }}
                         contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
                       />
                     </PieChart>

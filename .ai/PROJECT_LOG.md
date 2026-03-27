@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-03-27] CW — Order Finances: Recharts Tooltip formatter types
+
+**Task:** Vercel/build: Tooltip `formatter` incompatible with `number | undefined` / `ValueType`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderFinanceOverview.tsx` — normalize tooltip value with `Number(value)` + `Number.isFinite` before `fmt`.
+
+**Next Step:** —
+
+---
+
 ## [2026-03-27] CW — Order Finances: dial back % in payment overview
 
 **Task:** User feedback: too much % emphasis in finances tab.
