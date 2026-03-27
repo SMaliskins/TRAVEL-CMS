@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-03-28] CW — Order Clients Data: single summary table
+
+**Task:** One table for all linked parties — DOB, personal code / reg, passport, issued, expires, contact; remove card layout.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderClientsDataTab` — responsive table + sticky name column; removed `OrderDirectoryRecordReadonly.tsx`; i18n column headers + archived/alien hint.
+
+**Next Step:** QA horizontal scroll on mobile.
+
+---
+
 ## [2026-03-28] CW — Invoice EN labels: summa → Subtotal
 
 **Task:** English UI showed "Summa" on invoice preview (Latvia company block).
