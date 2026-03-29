@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -105,22 +105,9 @@ function makeDayIcon(day: number, color: string): L.DivIcon {
   });
 }
 
-// --- Legend data ---
-
-const ITINERARY = [
-  { day: 1, label: "Apr 3 — Arrival in Lisbon", desc: "Evening walk: Baixa, Chiado" },
-  { day: 2, label: "Apr 4 — Belem & Alfama", desc: "Torre de Belem, Jeronimos, Tram 28, Fado" },
-  { day: 3, label: "Apr 5 — Sintra & Cascais", desc: "Pena Palace, Regaleira, beach town" },
-  { day: 4, label: "Apr 6 — Transfer to Algarve", desc: "Time Out Market, drive south (~3h)" },
-  { day: 5, label: "Apr 7-9 — Algarve", desc: "Lagos, Ponta da Piedade, Marinha, Benagil" },
-  { day: 8, label: "Apr 10 — Return & Departure", desc: "Drive to Lisbon, flight 16:15" },
-];
-
 // --- Component ---
 
 export default function PortugalMapLeaflet() {
-  const [legendOpen, setLegendOpen] = useState(true);
-
   return (
     <div style={{ height: "100%", width: "100%", position: "relative" }}>
       <MapContainer
@@ -176,82 +163,6 @@ export default function PortugalMapLeaflet() {
           );
         })}
       </MapContainer>
-
-      {/* Floating legend */}
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          left: 12,
-          zIndex: 1000,
-          background: "rgba(255,255,255,0.95)",
-          borderRadius: 12,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-          maxWidth: 320,
-          fontSize: 13,
-          overflow: "hidden",
-        }}
-      >
-        <button
-          onClick={() => setLegendOpen(!legendOpen)}
-          style={{
-            width: "100%",
-            padding: "10px 14px",
-            fontWeight: 700,
-            fontSize: 15,
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            textAlign: "left",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>Portugal Apr 3-10</span>
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>{legendOpen ? "Hide" : "Show"}</span>
-        </button>
-
-        {legendOpen && (
-          <div style={{ padding: "0 14px 12px" }}>
-            {ITINERARY.map((item) => (
-              <div
-                key={item.day}
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "flex-start",
-                  padding: "5px 0",
-                  borderTop: "1px solid #f3f4f6",
-                }}
-              >
-                <div
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: "50%",
-                    background: DAY_COLORS[item.day],
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: 700,
-                    fontSize: 11,
-                    flexShrink: 0,
-                    marginTop: 1,
-                  }}
-                >
-                  {item.day <= 4 ? item.day : item.day <= 7 ? "5+" : "8"}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{item.label}</div>
-                  <div style={{ color: "#6b7280", fontSize: 12 }}>{item.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
