@@ -9,7 +9,7 @@ import TabBar from "./TabBar";
 
 function isExternalApp(pathname: string | null): boolean {
   if (!pathname) return false;
-  return pathname.startsWith("/superadmin");
+  return pathname.startsWith("/superadmin") || pathname.startsWith("/map");
 }
 
 function isPublicPath(pathname: string | null): boolean {
