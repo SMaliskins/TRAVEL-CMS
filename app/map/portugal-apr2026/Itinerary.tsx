@@ -1,6 +1,35 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+
+// --- Types ---
+
+interface Place {
+  name: string;
+  images: string[];
+  activities: string[];
+  mapsUrl: string;
+}
+
+interface Restaurant {
+  name: string;
+  type: string;
+  price: string;
+  mapsUrl: string;
+}
+
+interface Museum {
+  name: string;
+  note: string;
+  mapsUrl: string;
+}
+
+interface Hotel {
+  name: string;
+  note: string;
+  price: string;
+  mapsUrl: string;
+}
 
 interface ItineraryDay {
   day: number;
@@ -8,12 +37,97 @@ interface ItineraryDay {
   date: string;
   color: string;
   description: string;
-  places: {
-    name: string;
-    image: string;
-    activities: string[];
-  }[];
+  places: Place[];
+  restaurants?: Restaurant[];
+  museums?: Museum[];
 }
+
+// --- Gallery Component ---
+
+function ImageGallery({ images, alt }: { images: string[]; alt: string }) {
+  const [idx, setIdx] = useState(0);
+  const hasMultiple = images.length > 1;
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: 200, overflow: "hidden" }}>
+      <img
+        src={images[idx]}
+        alt={`${alt} ${idx + 1}`}
+        loading="lazy"
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+      />
+      {hasMultiple && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + images.length) % images.length); }}
+            style={{
+              position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)",
+              width: 28, height: 28, borderRadius: "50%", border: "none",
+              background: "rgba(0,0,0,0.45)", color: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+            }}
+            aria-label="Previous"
+          >
+            &#8249;
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % images.length); }}
+            style={{
+              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+              width: 28, height: 28, borderRadius: "50%", border: "none",
+              background: "rgba(0,0,0,0.45)", color: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+            }}
+            aria-label="Next"
+          >
+            &#8250;
+          </button>
+          <div style={{
+            position: "absolute", bottom: 6, right: 8,
+            background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 11,
+            padding: "1px 7px", borderRadius: 10,
+          }}>
+            {idx + 1}/{images.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// --- Link icon ---
+
+function MapLink({ url, label }: { url: string; label?: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ fontSize: 11, color: "#3b82f6", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
+    >
+      <span style={{ fontSize: 13 }}>&#x1F4CD;</span> {label || "Maps"}
+    </a>
+  );
+}
+
+// --- Data ---
+
+const U = "https://images.unsplash.com/photo-";
+
+const LISBON_HOTELS: Hotel[] = [
+  { name: "Four Seasons Ritz Lisbon", note: "Legendary luxury, art collection, Michelin CURA restaurant, Parque Eduardo VII views", price: "~900-1300 EUR/night", mapsUrl: "https://maps.google.com/?q=Four+Seasons+Hotel+Ritz+Lisbon" },
+  { name: "Pestana Palace Lisboa", note: "19th-century palace, rococo ceilings, 2 pools, gardens — National Monument. Belem area", price: "~250-400 EUR/night", mapsUrl: "https://maps.google.com/?q=Pestana+Palace+Lisboa" },
+  { name: "Olissippo Lapa Palace", note: "Hilltop palace overlooking Tagus, subtropical gardens, indoor+outdoor pools", price: "~300-500 EUR/night", mapsUrl: "https://maps.google.com/?q=Olissippo+Lapa+Palace+Lisbon" },
+  { name: "Bairro Alto Hotel", note: "Boutique 5*, rooftop BAHR bar, Chiado location, Tagus views", price: "~350-500 EUR/night", mapsUrl: "https://maps.google.com/?q=Bairro+Alto+Hotel+Lisbon" },
+  { name: "Valverde Lisboa", note: "Relais & Chateaux on Av. da Liberdade, intimate garden courtyard", price: "~300-450 EUR/night", mapsUrl: "https://maps.google.com/?q=Valverde+Hotel+Lisbon" },
+];
+
+const ALGARVE_HOTELS: Hotel[] = [
+  { name: "Cascade Wellness Resort", note: "Clifftop near Ponta da Piedade, spa, 3 restaurants, ocean pool", price: "~150-320 EUR/night", mapsUrl: "https://maps.google.com/?q=Cascade+Wellness+Resort+Lagos" },
+  { name: "Palmares Beach House Hotel", note: "Adults-only boutique, 20 rooms, 180° Atlantic views, golf", price: "~200-350 EUR/night", mapsUrl: "https://maps.google.com/?q=Palmares+Beach+House+Hotel+Lagos" },
+  { name: "Casa Mae Lagos", note: "Restored 19th-c manor in Old Town, farm-to-table restaurant, rooftop pool", price: "~200-350 EUR/night", mapsUrl: "https://maps.google.com/?q=Casa+Mae+Lagos+Portugal" },
+  { name: "Iberostar Selection Lagos", note: "Beachfront Meia Praia, 4 pools, panoramic spa, suites with private pools", price: "~180-300 EUR/night", mapsUrl: "https://maps.google.com/?q=Iberostar+Selection+Lagos+Algarve" },
+];
 
 const ITINERARY: ItineraryDay[] = [
   {
@@ -25,14 +139,32 @@ const ITINERARY: ItineraryDay[] = [
     places: [
       {
         name: "Baixa & Chiado",
-        image: "https://images.unsplash.com/photo-1524928872228-9b284de342b3?w=600&q=80",
+        images: [
+          `${U}1524928872228-9b284de342b3?w=600&q=80`,
+          `${U}1558369981-f9ca78462e61?w=600&q=80`,
+          `${U}1548707309-dcebeab9ea9b?w=600&q=80`,
+        ],
         activities: ["Rua Augusta", "Praca do Comercio", "Elevador de Santa Justa"],
+        mapsUrl: "https://maps.google.com/?q=Praca+do+Comercio+Lisbon",
       },
       {
         name: "MAAT — Museum of Art & Technology",
-        image: "https://images.unsplash.com/photo-1574958269340-fa927503f3dd?w=600&q=80",
+        images: [
+          `${U}1574958269340-fa927503f3dd?w=600&q=80`,
+          `${U}1599930113854-d6d7fd521f10?w=600&q=80`,
+        ],
         activities: ["Contemporary art", "Architecture by AL_A", "Free rooftop walk"],
+        mapsUrl: "https://maps.google.com/?q=MAAT+Museum+Lisbon",
       },
+    ],
+    restaurants: [
+      { name: "Taberna da Rua das Flores", type: "Tapas tasca, chalkboard menu", price: "€", mapsUrl: "https://maps.google.com/?q=Taberna+da+Rua+das+Flores+103+Lisbon" },
+      { name: "O Velho Eurico", type: "Neo-tasca, elevated Portuguese", price: "€€", mapsUrl: "https://maps.google.com/?q=O+Velho+Eurico+Lisbon" },
+      { name: "Belcanto", type: "2 Michelin stars, Chef Jose Avillez", price: "€€€", mapsUrl: "https://maps.google.com/?q=Belcanto+Lisbon" },
+    ],
+    museums: [
+      { name: "MUDE — Museu do Design e da Moda", note: "500+ design/fashion pieces, Dior to Philippe Starck", mapsUrl: "https://maps.google.com/?q=MUDE+Museu+do+Design+e+da+Moda+Lisbon" },
+      { name: "MNAC — Museu Nacional de Arte Contemporanea", note: "Portuguese Romanticism & Modernism, Chiado", mapsUrl: "https://maps.google.com/?q=MNAC+Museu+Nacional+Arte+Contemporanea+Chiado+Lisbon" },
     ],
   },
   {
@@ -40,28 +172,38 @@ const ITINERARY: ItineraryDay[] = [
     title: "Belem & Alfama",
     date: "Fri, Apr 4",
     color: "#3b82f6",
-    description: "Утро в Белене — главные достопримечательности Лиссабона. Вечер в Алфаме — старейший район, фаду и смотровые площадки. Опционально: музеи искусства.",
+    description: "Утро в Белене — главные достопримечательности Лиссабона. Вечер в Алфаме — старейший район, фаду и смотровые площадки.",
     places: [
       {
-        name: "Torre de Belem",
-        image: "https://images.unsplash.com/photo-1578742738196-23802b351ae7?w=600&q=80",
+        name: "Torre de Belem & Jeronimos",
+        images: [
+          `${U}1578742738196-23802b351ae7?w=600&q=80`,
+          `${U}1555881400-74d7acaacd6b?w=600&q=80`,
+          `${U}1588859573510-c4e3e3bbb3e1?w=600&q=80`,
+        ],
         activities: ["UNESCO tower", "Mosteiro dos Jeronimos", "Pasteis de Belem"],
+        mapsUrl: "https://maps.google.com/?q=Torre+de+Belem+Lisbon",
       },
       {
         name: "Alfama & Tram 28",
-        image: "https://images.unsplash.com/photo-1521194341482-ac6075ae5f7c?w=600&q=80",
+        images: [
+          `${U}1521194341482-ac6075ae5f7c?w=600&q=80`,
+          `${U}1569959220744-ff553533f492?w=600&q=80`,
+        ],
         activities: ["Tram 28 ride", "Miradouros", "Fado restaurant"],
+        mapsUrl: "https://maps.google.com/?q=Alfama+Lisbon",
       },
-      {
-        name: "Museu Nacional de Arte Antiga",
-        image: "https://images.unsplash.com/photo-1578301978693-85fa9fd0c499?w=600&q=80",
-        activities: ["Old Masters collection", "Bosch triptych", "Japanese screens", "Garden cafe"],
-      },
-      {
-        name: "Museu Berardo (Belem)",
-        image: "https://images.unsplash.com/photo-1564399263809-d2e6f6f06b76?w=600&q=80",
-        activities: ["Warhol, Picasso, Dali", "Modern & contemporary art", "Free entry"],
-      },
+    ],
+    restaurants: [
+      { name: "Cervejaria Ramiro", type: "Legendary seafood hall since 1950s, tiger prawns", price: "€€", mapsUrl: "https://maps.google.com/?q=Cervejaria+Ramiro+Lisbon" },
+      { name: "Alma (Henrique Sa Pessoa)", type: "2 Michelin stars, Portuguese-Asian fusion", price: "€€€", mapsUrl: "https://maps.google.com/?q=Alma+restaurant+Lisbon+Chiado" },
+      { name: "Frade dos Mares", type: "Stylish seafood, generous portions", price: "€€", mapsUrl: "https://maps.google.com/?q=Frade+dos+Mares+Lisbon" },
+    ],
+    museums: [
+      { name: "Museu Nacional de Arte Antiga", note: "Old Masters, Bosch triptych, Japanese screens", mapsUrl: "https://maps.google.com/?q=Museu+Nacional+de+Arte+Antiga+Lisbon" },
+      { name: "Museu Berardo (Belem)", note: "Warhol, Picasso, Dali — free entry!", mapsUrl: "https://maps.google.com/?q=Museu+Berardo+Belem+Lisbon" },
+      { name: "MACAM — Museu de Arte Contemporanea", note: "Museum-hotel, 600+ works, Abramovic & Eliasson", mapsUrl: "https://maps.google.com/?q=MACAM+Rua+da+Junqueira+66+Lisbon" },
+      { name: "Atelier-Museu Julio Pomar", note: "Intimate museum designed by Alvaro Siza Vieira", mapsUrl: "https://maps.google.com/?q=Atelier+Museu+Julio+Pomar+Lisbon" },
     ],
   },
   {
@@ -73,13 +215,22 @@ const ITINERARY: ItineraryDay[] = [
     places: [
       {
         name: "Palacio da Pena",
-        image: "https://images.unsplash.com/photo-1562195168-c82fea0f0953?w=600&q=80",
+        images: [
+          `${U}1562195168-c82fea0f0953?w=600&q=80`,
+          `${U}1600859258289-4e6ba4e1cdd8?w=600&q=80`,
+          `${U}1592838064575-70ed626d3a0e?w=600&q=80`,
+        ],
         activities: ["Pena Palace", "Castelo dos Mouros", "Quinta da Regaleira"],
+        mapsUrl: "https://maps.google.com/?q=Palacio+da+Pena+Sintra",
       },
       {
         name: "Cascais",
-        image: "https://images.unsplash.com/photo-1615672337780-6e19a28a5b39?w=600&q=80",
+        images: [
+          `${U}1615672337780-6e19a28a5b39?w=600&q=80`,
+          `${U}1558369981-f9ca78462e61?w=600&q=80`,
+        ],
         activities: ["Beach promenade", "Boca do Inferno", "Seafood dinner"],
+        mapsUrl: "https://maps.google.com/?q=Cascais+Portugal",
       },
     ],
   },
@@ -88,18 +239,25 @@ const ITINERARY: ItineraryDay[] = [
     title: "Transfer to Algarve",
     date: "Sun, Apr 6",
     color: "#06b6d4",
-    description: "Утро — Time Out Market и последний взгляд на Лиссабон. Опция: Museu Nacional do Azulejo (плитка!). После обеда — переезд на юг в Алгарве (~3 часа на машине).",
+    description: "Утро — Time Out Market и музеи. После обеда — переезд на юг в Алгарве (~3 часа на машине).",
     places: [
       {
-        name: "Lisbon → Algarve",
-        image: "https://images.unsplash.com/photo-1524928872228-9b284de342b3?w=600&q=80",
+        name: "Lisbon last morning",
+        images: [
+          `${U}1524928872228-9b284de342b3?w=600&q=80`,
+        ],
         activities: ["Time Out Market", "Drive south via A2", "Check into Lagos"],
+        mapsUrl: "https://maps.google.com/?q=Time+Out+Market+Lisbon",
       },
-      {
-        name: "Museu Nacional do Azulejo",
-        image: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&q=80",
-        activities: ["Portuguese tile art", "16th century monastery", "Unique in Europe"],
-      },
+    ],
+    restaurants: [
+      { name: "SEM", type: "Nordic-inspired, zero-waste 7-course tasting", price: "€€", mapsUrl: "https://maps.google.com/?q=SEM+restaurant+Lisbon" },
+      { name: "Arkhe", type: "Fine-dining vegetarian, seasonal tasting menus", price: "€€", mapsUrl: "https://maps.google.com/?q=Arkhe+restaurant+Lisbon" },
+    ],
+    museums: [
+      { name: "Museu Nacional do Azulejo", note: "Portuguese tile art, 16th-c monastery — unique in Europe", mapsUrl: "https://maps.google.com/?q=Museu+Nacional+do+Azulejo+Lisbon" },
+      { name: "Gulbenkian — Great Works exhibition", note: "200 masterpieces (April-Sep 2026), modern art center", mapsUrl: "https://maps.google.com/?q=Museu+Calouste+Gulbenkian+Lisbon" },
+      { name: "Culturgest", note: "1,800 works: painting, sculpture, photography, video — less touristy", mapsUrl: "https://maps.google.com/?q=Culturgest+Lisbon" },
     ],
   },
   {
@@ -111,14 +269,29 @@ const ITINERARY: ItineraryDay[] = [
     places: [
       {
         name: "Lagos",
-        image: "https://images.unsplash.com/photo-1608649944716-228404a0a8bb?w=600&q=80",
-        activities: ["Praia do Camilo", "Old town", "Seafood restaurants"],
+        images: [
+          `${U}1608649944716-228404a0a8bb?w=600&q=80`,
+          `${U}1555881400-74d7acaacd6b?w=600&q=80`,
+        ],
+        activities: ["Praia do Camilo", "Old town", "Meia Praia beach"],
+        mapsUrl: "https://maps.google.com/?q=Lagos+Portugal",
       },
       {
         name: "Ponta da Piedade",
-        image: "https://images.unsplash.com/photo-1608649944716-228404a0a8bb?w=600&q=80",
+        images: [
+          `${U}1608649944716-228404a0a8bb?w=600&q=80`,
+          `${U}1591264786838-6acdff391890?w=600&q=80`,
+        ],
         activities: ["Cliff formations", "Boat tour", "Sunset views"],
+        mapsUrl: "https://maps.google.com/?q=Ponta+da+Piedade+Lagos",
       },
+    ],
+    restaurants: [
+      { name: "Al Sud", type: "1 Michelin star, 10-course tasting, Lagos Bay views", price: "€€€", mapsUrl: "https://maps.google.com/?q=Al+Sud+Palmares+Lagos+Portugal" },
+      { name: "Restaurante dos Artistas", type: "Fine dining in 250-year-old building", price: "€€€", mapsUrl: "https://maps.google.com/?q=Restaurante+dos+Artistas+Lagos" },
+      { name: "Don Sebastiao", type: "Traditional Portuguese since 1979, grilled fish", price: "€€", mapsUrl: "https://maps.google.com/?q=Don+Sebastiao+Lagos" },
+      { name: "Casinha do Petisco", type: "Legendary cataplana (seafood stew), family-run", price: "€€", mapsUrl: "https://maps.google.com/?q=Casinha+do+Petisco+Lagos" },
+      { name: "A Petisqueira", type: "Wine bar, gourmet tapas, smoked codfish", price: "€", mapsUrl: "https://maps.google.com/?q=A+Petisqueira+Lagos" },
     ],
   },
   {
@@ -130,13 +303,21 @@ const ITINERARY: ItineraryDay[] = [
     places: [
       {
         name: "Praia da Marinha",
-        image: "https://images.unsplash.com/photo-1591264786838-6acdff391890?w=600&q=80",
+        images: [
+          `${U}1591264786838-6acdff391890?w=600&q=80`,
+          `${U}1555881400-74d7acaacd6b?w=600&q=80`,
+        ],
         activities: ["Beach day", "Seven Hanging Valleys trail", "Cliff views"],
+        mapsUrl: "https://maps.google.com/?q=Praia+da+Marinha+Algarve",
       },
       {
         name: "Benagil Cave",
-        image: "https://images.unsplash.com/photo-1676637184625-340d3c11c4f0?w=600&q=80",
+        images: [
+          `${U}1676637184625-340d3c11c4f0?w=600&q=80`,
+          `${U}1591264786838-6acdff391890?w=600&q=80`,
+        ],
         activities: ["Boat tour to sea cave", "Kayak option", "Beach swim"],
+        mapsUrl: "https://maps.google.com/?q=Benagil+Cave+Algarve",
       },
     ],
   },
@@ -149,12 +330,96 @@ const ITINERARY: ItineraryDay[] = [
     places: [
       {
         name: "Drive to Lisbon",
-        image: "https://images.unsplash.com/photo-1524928872228-9b284de342b3?w=600&q=80",
+        images: [`${U}1524928872228-9b284de342b3?w=600&q=80`],
         activities: ["Check out", "Drive via A2", "Flight BT 676 at 16:15"],
+        mapsUrl: "https://maps.google.com/?q=Lisbon+Airport",
       },
     ],
   },
 ];
+
+// --- Component ---
+
+function PlaceCard({ place }: { place: Place }) {
+  return (
+    <div style={{ borderRadius: 12, overflow: "hidden", background: "#f9fafb", border: "1px solid #e5e7eb" }}>
+      <ImageGallery images={place.images} alt={place.name} />
+      <div style={{ padding: "10px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>{place.name}</div>
+          <MapLink url={place.mapsUrl} />
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {place.activities.map((a) => (
+            <span key={a} style={{ fontSize: 11, background: "#f3f4f6", color: "#6b7280", padding: "2px 8px", borderRadius: 99, whiteSpace: "nowrap" }}>
+              {a}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RestaurantList({ restaurants }: { restaurants: Restaurant[] }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Restaurants</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {restaurants.map((r) => (
+          <div key={r.name} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 600 }}>{r.name}</span>
+            <span style={{ color: "#6b7280" }}>{r.type}</span>
+            <span style={{ color: "#f59e0b", fontWeight: 600, whiteSpace: "nowrap" }}>{r.price}</span>
+            <MapLink url={r.mapsUrl} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MuseumList({ museums }: { museums: Museum[] }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Art museums</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {museums.map((m) => (
+          <div key={m.name} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 600 }}>{m.name}</span>
+            <span style={{ color: "#6b7280" }}>{m.note}</span>
+            <MapLink url={m.mapsUrl} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HotelSection({ title, hotels }: { title: string; hotels: Hotel[] }) {
+  return (
+    <div style={{ marginBottom: 32, paddingLeft: 20, borderLeft: "4px solid #10b981" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#10b981", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 16 }}>
+          &#9733;
+        </div>
+        <div style={{ fontWeight: 700, fontSize: 18 }}>{title}</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+        {hotels.map((h) => (
+          <div key={h.name} style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", fontSize: 13 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>{h.name}</span>
+              <span style={{ color: "#059669", fontWeight: 600, whiteSpace: "nowrap" }}>{h.price}</span>
+            </div>
+            <div style={{ color: "#6b7280", marginTop: 2 }}>{h.note}</div>
+            <MapLink url={h.mapsUrl} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Itinerary() {
   return (
@@ -163,35 +428,21 @@ export default function Itinerary() {
         Portugal — Apr 3-10, 2026
       </h1>
       <p style={{ color: "#6b7280", fontSize: 14, marginBottom: 32 }}>
-        RIX → LIS &middot; BT 675/676 &middot; 4 pax &middot; 7 nights
+        RIX &rarr; LIS &middot; BT 675/676 &middot; 4 pax &middot; 7 nights
       </p>
 
+      {/* Hotels — Lisbon */}
+      <HotelSection title="5* Hotels — Lisbon" hotels={LISBON_HOTELS} />
+
+      {/* Itinerary days */}
       {ITINERARY.map((day) => (
-        <div
-          key={day.day}
-          style={{
-            marginBottom: 32,
-            borderLeft: `4px solid ${day.color}`,
-            paddingLeft: 20,
-          }}
-        >
+        <div key={day.day} style={{ marginBottom: 32, borderLeft: `4px solid ${day.color}`, paddingLeft: 20 }}>
           {/* Day header */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: day.color,
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 700,
-                fontSize: 14,
-                flexShrink: 0,
-              }}
-            >
+            <div style={{
+              width: 32, height: 32, borderRadius: "50%", background: day.color, color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, flexShrink: 0,
+            }}>
               {day.day <= 4 ? day.day : day.day <= 7 ? "5+" : "8"}
             </div>
             <div>
@@ -205,60 +456,23 @@ export default function Itinerary() {
             {day.description}
           </p>
 
-          {/* Photo cards grid */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: day.places.length === 1 ? "1fr" : "1fr 1fr",
-              gap: 12,
-            }}
-          >
-            {day.places.map((place) => (
-              <div
-                key={place.name}
-                style={{
-                  borderRadius: 12,
-                  overflow: "hidden",
-                  background: "#f9fafb",
-                  border: "1px solid #e5e7eb",
-                }}
-              >
-                <img
-                  src={place.image}
-                  alt={place.name}
-                  loading="lazy"
-                  style={{
-                    width: "100%",
-                    height: 200,
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-                <div style={{ padding: "10px 14px" }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
-                    {place.name}
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {place.activities.map((a) => (
-                      <span
-                        key={a}
-                        style={{
-                          fontSize: 11,
-                          background: "#f3f4f6",
-                          color: "#6b7280",
-                          padding: "2px 8px",
-                          borderRadius: 99,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {a}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
+          {/* Place cards with gallery */}
+          <div style={{ display: "grid", gridTemplateColumns: day.places.length === 1 ? "1fr" : "1fr 1fr", gap: 12 }}>
+            {day.places.map((place) => <PlaceCard key={place.name} place={place} />)}
           </div>
+
+          {/* Museums */}
+          {day.museums && day.museums.length > 0 && <MuseumList museums={day.museums} />}
+
+          {/* Restaurants */}
+          {day.restaurants && day.restaurants.length > 0 && <RestaurantList restaurants={day.restaurants} />}
+
+          {/* Hotels hint after Day 4 for Algarve */}
+          {day.day === 5 && (
+            <div style={{ marginTop: 16 }}>
+              <HotelSection title="5* Hotels — Lagos / Algarve" hotels={ALGARVE_HOTELS} />
+            </div>
+          )}
         </div>
       ))}
     </div>
