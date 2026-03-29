@@ -28,6 +28,11 @@ const ITINERARY: ItineraryDay[] = [
         image: "https://images.unsplash.com/photo-1524928872228-9b284de342b3?w=600&q=80",
         activities: ["Rua Augusta", "Praca do Comercio", "Elevador de Santa Justa"],
       },
+      {
+        name: "MAAT — Museum of Art & Technology",
+        image: "https://images.unsplash.com/photo-1574958269340-fa927503f3dd?w=600&q=80",
+        activities: ["Contemporary art", "Architecture by AL_A", "Free rooftop walk"],
+      },
     ],
   },
   {
@@ -35,7 +40,7 @@ const ITINERARY: ItineraryDay[] = [
     title: "Belem & Alfama",
     date: "Fri, Apr 4",
     color: "#3b82f6",
-    description: "Утро в Белене — главные достопримечательности Лиссабона. Вечер в Алфаме — старейший район, фаду и смотровые площадки.",
+    description: "Утро в Белене — главные достопримечательности Лиссабона. Вечер в Алфаме — старейший район, фаду и смотровые площадки. Опционально: музеи искусства.",
     places: [
       {
         name: "Torre de Belem",
@@ -46,6 +51,16 @@ const ITINERARY: ItineraryDay[] = [
         name: "Alfama & Tram 28",
         image: "https://images.unsplash.com/photo-1521194341482-ac6075ae5f7c?w=600&q=80",
         activities: ["Tram 28 ride", "Miradouros", "Fado restaurant"],
+      },
+      {
+        name: "Museu Nacional de Arte Antiga",
+        image: "https://images.unsplash.com/photo-1578301978693-85fa9fd0c499?w=600&q=80",
+        activities: ["Old Masters collection", "Bosch triptych", "Japanese screens", "Garden cafe"],
+      },
+      {
+        name: "Museu Berardo (Belem)",
+        image: "https://images.unsplash.com/photo-1564399263809-d2e6f6f06b76?w=600&q=80",
+        activities: ["Warhol, Picasso, Dali", "Modern & contemporary art", "Free entry"],
       },
     ],
   },
@@ -73,12 +88,17 @@ const ITINERARY: ItineraryDay[] = [
     title: "Transfer to Algarve",
     date: "Sun, Apr 6",
     color: "#06b6d4",
-    description: "Утро — Time Out Market и последний взгляд на Лиссабон. После обеда — переезд на юг в Алгарве (~3 часа на машине).",
+    description: "Утро — Time Out Market и последний взгляд на Лиссабон. Опция: Museu Nacional do Azulejo (плитка!). После обеда — переезд на юг в Алгарве (~3 часа на машине).",
     places: [
       {
         name: "Lisbon → Algarve",
         image: "https://images.unsplash.com/photo-1524928872228-9b284de342b3?w=600&q=80",
         activities: ["Time Out Market", "Drive south via A2", "Check into Lagos"],
+      },
+      {
+        name: "Museu Nacional do Azulejo",
+        image: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&q=80",
+        activities: ["Portuguese tile art", "16th century monastery", "Unique in Europe"],
       },
     ],
   },
