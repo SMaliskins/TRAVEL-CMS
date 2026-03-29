@@ -112,7 +112,10 @@ function MapLink({ url, label }: { url: string; label?: string }) {
 
 // --- Data ---
 
-const U = "https://images.unsplash.com/photo-";
+// Unsplash source API — always returns a relevant photo by keyword
+function img(query: string, idx = 0): string {
+  return `https://source.unsplash.com/800x500/?${encodeURIComponent(query)}&sig=${idx}`;
+}
 
 const LISBON_HOTELS: Hotel[] = [
   { name: "Four Seasons Ritz Lisbon", note: "Legendary luxury, art collection, Michelin CURA restaurant, Parque Eduardo VII views", price: "~900-1300 EUR/night", mapsUrl: "https://maps.google.com/?q=Four+Seasons+Hotel+Ritz+Lisbon" },
@@ -140,9 +143,9 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Baixa & Chiado",
         images: [
-          `${U}1524928872228-9b284de342b3?w=600&q=80`,
-          `${U}1558369981-f9ca78462e61?w=600&q=80`,
-          `${U}1548707309-dcebeab9ea9b?w=600&q=80`,
+          img("lisbon baixa praca comercio", 1),
+          img("lisbon chiado street", 2),
+          img("lisbon rua augusta arch", 3),
         ],
         activities: ["Rua Augusta", "Praca do Comercio", "Elevador de Santa Justa"],
         mapsUrl: "https://maps.google.com/?q=Praca+do+Comercio+Lisbon",
@@ -150,8 +153,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "MAAT — Museum of Art & Technology",
         images: [
-          `${U}1574958269340-fa927503f3dd?w=600&q=80`,
-          `${U}1599930113854-d6d7fd521f10?w=600&q=80`,
+          img("MAAT museum lisbon", 1),
+          img("MAAT lisbon architecture", 2),
         ],
         activities: ["Contemporary art", "Architecture by AL_A", "Free rooftop walk"],
         mapsUrl: "https://maps.google.com/?q=MAAT+Museum+Lisbon",
@@ -177,9 +180,9 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Torre de Belem & Jeronimos",
         images: [
-          `${U}1578742738196-23802b351ae7?w=600&q=80`,
-          `${U}1555881400-74d7acaacd6b?w=600&q=80`,
-          `${U}1588859573510-c4e3e3bbb3e1?w=600&q=80`,
+          img("torre belem lisbon", 1),
+          img("jeronimos monastery lisbon", 2),
+          img("pasteis belem lisbon", 3),
         ],
         activities: ["UNESCO tower", "Mosteiro dos Jeronimos", "Pasteis de Belem"],
         mapsUrl: "https://maps.google.com/?q=Torre+de+Belem+Lisbon",
@@ -187,8 +190,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Alfama & Tram 28",
         images: [
-          `${U}1521194341482-ac6075ae5f7c?w=600&q=80`,
-          `${U}1569959220744-ff553533f492?w=600&q=80`,
+          img("lisbon tram 28 alfama", 1),
+          img("alfama lisbon rooftops", 2),
         ],
         activities: ["Tram 28 ride", "Miradouros", "Fado restaurant"],
         mapsUrl: "https://maps.google.com/?q=Alfama+Lisbon",
@@ -216,9 +219,9 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Palacio da Pena",
         images: [
-          `${U}1562195168-c82fea0f0953?w=600&q=80`,
-          `${U}1600859258289-4e6ba4e1cdd8?w=600&q=80`,
-          `${U}1592838064575-70ed626d3a0e?w=600&q=80`,
+          img("pena palace sintra", 1),
+          img("sintra palace colorful", 2),
+          img("quinta regaleira sintra", 3),
         ],
         activities: ["Pena Palace", "Castelo dos Mouros", "Quinta da Regaleira"],
         mapsUrl: "https://maps.google.com/?q=Palacio+da+Pena+Sintra",
@@ -226,8 +229,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Cascais",
         images: [
-          `${U}1615672337780-6e19a28a5b39?w=600&q=80`,
-          `${U}1558369981-f9ca78462e61?w=600&q=80`,
+          img("cascais portugal beach", 1),
+          img("cascais harbor portugal", 2),
         ],
         activities: ["Beach promenade", "Boca do Inferno", "Seafood dinner"],
         mapsUrl: "https://maps.google.com/?q=Cascais+Portugal",
@@ -244,7 +247,7 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Lisbon last morning",
         images: [
-          `${U}1524928872228-9b284de342b3?w=600&q=80`,
+          img("time out market lisbon", 1),
         ],
         activities: ["Time Out Market", "Drive south via A2", "Check into Lagos"],
         mapsUrl: "https://maps.google.com/?q=Time+Out+Market+Lisbon",
@@ -270,8 +273,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Lagos",
         images: [
-          `${U}1608649944716-228404a0a8bb?w=600&q=80`,
-          `${U}1555881400-74d7acaacd6b?w=600&q=80`,
+          img("lagos portugal beach", 1),
+          img("lagos algarve old town", 2),
         ],
         activities: ["Praia do Camilo", "Old town", "Meia Praia beach"],
         mapsUrl: "https://maps.google.com/?q=Lagos+Portugal",
@@ -279,8 +282,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Ponta da Piedade",
         images: [
-          `${U}1608649944716-228404a0a8bb?w=600&q=80`,
-          `${U}1591264786838-6acdff391890?w=600&q=80`,
+          img("ponta da piedade cliffs", 1),
+          img("ponta piedade lagos boat", 2),
         ],
         activities: ["Cliff formations", "Boat tour", "Sunset views"],
         mapsUrl: "https://maps.google.com/?q=Ponta+da+Piedade+Lagos",
@@ -304,8 +307,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Praia da Marinha",
         images: [
-          `${U}1591264786838-6acdff391890?w=600&q=80`,
-          `${U}1555881400-74d7acaacd6b?w=600&q=80`,
+          img("praia da marinha algarve", 1),
+          img("marinha beach cliffs portugal", 2),
         ],
         activities: ["Beach day", "Seven Hanging Valleys trail", "Cliff views"],
         mapsUrl: "https://maps.google.com/?q=Praia+da+Marinha+Algarve",
@@ -313,8 +316,8 @@ const ITINERARY: ItineraryDay[] = [
       {
         name: "Benagil Cave",
         images: [
-          `${U}1676637184625-340d3c11c4f0?w=600&q=80`,
-          `${U}1591264786838-6acdff391890?w=600&q=80`,
+          img("benagil cave algarve", 1),
+          img("benagil sea cave portugal", 2),
         ],
         activities: ["Boat tour to sea cave", "Kayak option", "Beach swim"],
         mapsUrl: "https://maps.google.com/?q=Benagil+Cave+Algarve",
@@ -330,7 +333,7 @@ const ITINERARY: ItineraryDay[] = [
     places: [
       {
         name: "Drive to Lisbon",
-        images: [`${U}1524928872228-9b284de342b3?w=600&q=80`],
+        images: [img("lisbon airport departure", 1)],
         activities: ["Check out", "Drive via A2", "Flight BT 676 at 16:15"],
         mapsUrl: "https://maps.google.com/?q=Lisbon+Airport",
       },
