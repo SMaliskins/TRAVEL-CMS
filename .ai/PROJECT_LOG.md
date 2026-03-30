@@ -18,6 +18,45 @@
 
 ---
 
+## [2026-03-28] CW — Add accompanying persons: create client in directory
+
+**Task:** When directory search has no match, allow creating a client like PartySelect (`/api/directory/create`, duplicates / create anyway).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `components/DirectoryCreateClientModal.tsx` (reuse PartySelect client flow); `AddAccompanyingModal.tsx` — кнопка "+ Create new client" при поиске ≥2 символов, nested modal z-index 100001.
+
+**Next Step:** QA create person/company from Edit Hotel → Add accompanying; optional: refactor PartySelect to use shared modal.
+
+---
+
+## [2026-03-28] CW — Transfer pricing: supplier currency like Hotel
+
+**Task:** Add Service / Edit Service — Transfer commission pricing: supplier currency selector, foreign amount, rate/Fetch → cost in company currency; persist service_currency / service_price_foreign / exchange_rate.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `AddServiceModal.tsx`, `EditServiceModalNew.tsx` — amber block + read-only Cost/Service Price in company currency when foreign; payload для transfer.
+
+**Next Step:** QA Transfer with USD cost + company EUR (or other).
+
+---
+
+## [2026-03-28] CW — Party-tab services: confirmation ref in Basic Info
+
+**Task:** Insurance (and other party-tab types) lacked booking/confirmation ref in Basic Info; only Package Tour had it.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `AddServiceModal.tsx`, `EditServiceModalNew.tsx` — поле `ref_nr` показывается для всех `CATEGORIES_WITH_PARTIES_TAB` (tour, insurance, visa, transfer, rent_a_car, cruise, other); лейбл/placeholder уточнены; Edit — `markCorrected`/`correctedFields` для refNr.
+
+**Next Step:** QA Add/Edit Insurance и visa/transfer.
+
+---
+
 ## [2026-03-28] CW — Clients Data tab: batch API (one round-trip vs N directory GETs)
 
 **Task:** Replace related-parties + N× GET /api/directory/[id] with GET .../clients-data-parties; share buildDirectoryRecord with directory route.

@@ -1984,6 +1984,14 @@ export default function AddServiceModal({
 
       // Add transfer-specific fields
       if (showTransferFields) {
+        payload.serviceCurrency = serviceCurrency || companyCurrencyCode || "EUR";
+        if (serviceCurrency && serviceCurrency !== (companyCurrencyCode || "EUR")) {
+          if (servicePriceForeign != null && servicePriceForeign !== "") payload.servicePriceForeign = parseFloat(servicePriceForeign) || null;
+          if (exchangeRate != null && exchangeRate !== "") payload.exchangeRate = parseFloat(exchangeRate) || null;
+        } else {
+          payload.servicePriceForeign = null;
+          payload.exchangeRate = null;
+        }
         payload.pickupLocation = pickupLocation;
         payload.dropoffLocation = dropoffLocation;
         payload.pickupTime = pickupTime;
@@ -3198,16 +3206,16 @@ export default function AddServiceModal({
                   </>
                 )}
                 
-                {/* Ref Nr (booking ref) — for Tour, above Status in BASIC INFO */}
+                {/* Confirmation / booking ref — party-tab categories (insurance, visa, transfer, …), above Status */}
                 <>
-                {categoryType === "tour" && (
+                {CATEGORIES_WITH_PARTIES_TAB.includes(categoryType) && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Ref Nr (booking ref)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Confirmation ref (booking ref)</label>
                     <input
                       type="text"
                       value={refNr}
                       onChange={(e) => setRefNr(e.target.value)}
-                      placeholder="Booking ref"
+                      placeholder="Policy / confirmation / booking ref"
                       className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
@@ -3739,22 +3747,137 @@ export default function AddServiceModal({
                 {/* Tour / commission-style: Cost | Commission; Agent discount | Sale; Line items; Marge | VAT (no Units) */}
                 {usesCommissionPricing ? (
                   <div className="space-y-3">
+                    {/* Transfer: supplier currency + FX → cost in company currency (same pattern as Hotel) */}
+                    {categoryType === "transfer" && (
+                      <div className="rounded-lg bg-amber-50/60 border border-amber-200/60 p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-slate-600 shrink-0">Supplier&apos;s Service currency</span>
+                          <select
+                            value={serviceCurrency}
+                            onChange={(e) => {
+                              const c = e.target.value;
+                              setServiceCurrency(c);
+                              setExchangeRate("");
+                              if (c === (companyCurrencyCode || "EUR")) {
+                                const f = parseFloat(servicePriceForeign) || 0;
+                                const r = parseFloat(exchangeRate) || 0;
+                                if (f > 0 && r > 0) setServicePrice(String(Math.round(f * r * 100) / 100));
+                              }
+                            }}
+                            className="cursor-pointer text-blue-600 hover:text-blue-700 hover:underline bg-transparent border-0 border-b border-dashed border-slate-400 py-0.5 px-0 text-sm font-medium focus:ring-0 focus:outline-none min-w-0"
+                            aria-label="Supplier's Service currency (click to open)"
+                          >
+                            <option value="EUR">{getCurrencySymbol("EUR")} (EUR)</option>
+                            <option value="CHF">{getCurrencySymbol("CHF")} (CHF)</option>
+                            <option value="USD">{getCurrencySymbol("USD")} (USD)</option>
+                            <option value="GBP">{getCurrencySymbol("GBP")} (GBP)</option>
+                          </select>
+                        </div>
+                        {serviceCurrency !== (companyCurrencyCode || "EUR") && (
+                          <>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm text-slate-600 shrink-0">Service price</span>
+                              <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500">
+                                <span className="pl-2 text-slate-600 shrink-0">{getCurrencySymbol(serviceCurrency)}</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={servicePriceForeign}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setServicePriceForeign(v);
+                                    const f = parseFloat(v) || 0;
+                                    const r = parseFloat(exchangeRate) || 0;
+                                    pricingLastEditedRef.current = "cost";
+                                    if (r > 0) setServicePrice(String(Math.round(f * r * 100) / 100));
+                                  }}
+                                  placeholder="0.00"
+                                  className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent focus:ring-0 focus:outline-none modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm text-slate-500">1 {serviceCurrency} =</span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={rateFetching}
+                                  onClick={async () => {
+                                    setRateFetching(true);
+                                    try {
+                                      const url = `${typeof window !== "undefined" ? window.location.origin : ""}/api/currency-rate?from=${encodeURIComponent(serviceCurrency)}&to=${encodeURIComponent(companyCurrencyCode || "EUR")}`;
+                                      const r = await fetch(url);
+                                      const data = await r.json();
+                                      const rateVal = data.rate != null ? Number(data.rate) : NaN;
+                                      if (Number.isFinite(rateVal) && rateVal > 0) {
+                                        setExchangeRate(String(rateVal));
+                                        const f = parseFloat(servicePriceForeign) || 0;
+                                        pricingLastEditedRef.current = "cost";
+                                        if (f > 0) setServicePrice(String(Math.round(f * rateVal * 100) / 100));
+                                      }
+                                    } catch (_) {}
+                                    setRateFetching(false);
+                                  }}
+                                  className="text-sm text-blue-600 hover:underline disabled:opacity-50"
+                                >
+                                  {rateFetching ? "…" : "Fetch"}
+                                </button>
+                                <div className="inline-flex items-center rounded border border-slate-300 overflow-hidden focus-within:border-sky-500">
+                                  <span className="pl-2 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
+                                  <input
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                    max="10"
+                                    value={exchangeRate}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setExchangeRate(v);
+                                      const f = parseFloat(servicePriceForeign) || 0;
+                                      const r = parseFloat(v) || 0;
+                                      pricingLastEditedRef.current = "cost";
+                                      if (r > 0) setServicePrice(String(Math.round(f * r * 100) / 100));
+                                    }}
+                                    placeholder="—"
+                                    title="Rate to company currency"
+                                    className="w-20 py-1 pl-1 pr-2 text-right text-sm tabular-nums border-0 bg-transparent modal-input focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Cost ({currencySymbol})</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={servicePrice}
-                          onChange={(e) => {
-                            pricingLastEditedRef.current = "cost";
-                            const v = parseFloat(e.target.value) || 0;
-                            setServicePrice(String(Math.round(v * 100) / 100));
-                          }}
-                          placeholder="0.00"
-                          className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                        />
+                        {categoryType === "transfer" && serviceCurrency !== (companyCurrencyCode || "EUR") ? (
+                          <div
+                            className={`w-full rounded-lg border px-2.5 py-1.5 text-sm text-right tabular-nums bg-gray-50 text-gray-800 ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : "border-gray-200"}`}
+                            title="Converted from supplier currency; edit amount and rate above"
+                          >
+                            {(() => {
+                              const sp = parseFloat(servicePrice) || 0;
+                              return sp > 0 ? `${currencySymbol}${sp.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+                            })()}
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={servicePrice}
+                            onChange={(e) => {
+                              pricingLastEditedRef.current = "cost";
+                              const v = parseFloat(e.target.value) || 0;
+                              setServicePrice(String(Math.round(v * 100) / 100));
+                            }}
+                            placeholder="0.00"
+                            className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Commission</label>

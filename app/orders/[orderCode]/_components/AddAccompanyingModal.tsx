@@ -5,6 +5,7 @@ import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
+import DirectoryCreateClientModal from "@/components/DirectoryCreateClientModal";
 
 interface OrderTraveller {
   id: string;
@@ -35,6 +36,7 @@ export default function AddAccompanyingModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; phone?: string; email?: string; avatarUrl?: string | null }>>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showCreateClientModal, setShowCreateClientModal] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEscapeKey(onClose);
@@ -128,7 +130,17 @@ export default function AddAccompanyingModal({
     setSearchResults([]);
   };
 
+  const handleDirectoryClientCreated = (partyId: string, displayName: string) => {
+    if (existingSet.has(partyId)) return;
+    onAddClients([{ id: partyId, name: displayName }]);
+    setShowCreateClientModal(false);
+    setShowAddSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
   return (
+    <>
     <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/50 p-4">
       <div
         ref={trapRef}
@@ -275,7 +287,17 @@ export default function AddAccompanyingModal({
                   </ul>
                 )}
                 {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
-                  <p className="mt-2 text-sm text-gray-500">No results</p>
+                  <p className="mt-2 text-sm text-gray-500">No results in directory.</p>
+                )}
+                {searchQuery.trim().length >= 2 && !isSearching && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateClientModal(true)}
+                    className="mt-3 w-full rounded-lg border border-blue-300 bg-blue-50 px-3 py-2.5 text-left text-sm font-medium text-blue-800 hover:bg-blue-100"
+                  >
+                    + Create new client
+                    {searchQuery.trim() ? ` — "${searchQuery.trim()}"` : ""}
+                  </button>
                 )}
               </div>
             )}
@@ -283,5 +305,12 @@ export default function AddAccompanyingModal({
         </div>
       </div>
     </div>
+    <DirectoryCreateClientModal
+      isOpen={showCreateClientModal}
+      onClose={() => setShowCreateClientModal(false)}
+      onCreated={handleDirectoryClientCreated}
+      initialNameQuery={searchQuery}
+    />
+    </>
   );
 }
