@@ -47,6 +47,29 @@ export {
   type AICompletionOptions,
 } from "./client";
 
+// Unified Parse Pipeline
+export {
+  parseDocument as parseDocumentAI,
+  parseFromRequest,
+  type ParseResult,
+  type ParseOptions,
+} from "./parseWithAI";
+
+export {
+  PARSE_SCHEMAS,
+  type DocumentType,
+} from "./parseSchemas";
+
+export {
+  buildSystemPrompt,
+} from "./parsePrompts";
+
+export {
+  processRequest as processParseRequest,
+  processFile as processParseFile,
+  type IntakeResult,
+} from "./documentIntake";
+
 // Tasks
 export {
   parseFlightItinerary,
