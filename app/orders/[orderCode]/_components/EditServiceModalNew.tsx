@@ -123,7 +123,7 @@ interface Service {
   hotelRoomsNextTo?: string;
   hotelParking?: boolean;
   hotelPreferencesFreeText?: string;
-  supplierBookingType?: "gds" | "direct";
+  supplierBookingType?: "gds" | "direct" | "partner";
   // Transfer-specific (legacy flat)
   pickupLocation?: string;
   dropoffLocation?: string;
@@ -549,9 +549,12 @@ export default function EditServiceModalNew({
     parking: service.hotelParking || false,
     freeText: service.hotelPreferencesFreeText || "",
   });
-  const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct">(
-    (service.supplierBookingType as any) || "gds"
-  );
+  const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct" | "partner">(() => {
+    const v = String((service.supplierBookingType as string) || "gds").toLowerCase();
+    if (v === "direct") return "direct";
+    if (v === "partner") return "partner";
+    return "gds";
+  });
   const hotelOptionsFetchedForRef = useRef<string | null>(null);
   const [roomListOpen, setRoomListOpen] = useState(false);
   const [boardListOpen, setBoardListOpen] = useState(false);
@@ -3390,7 +3393,7 @@ export default function EditServiceModalNew({
                         <select
                           value={supplierBookingType}
                           onChange={(e) => {
-                            const newType = e.target.value as "gds" | "direct";
+                            const newType = e.target.value as "gds" | "direct" | "partner";
                             setSupplierBookingType(newType);
                             if (newType === "direct" && hotelName.trim()) setSupplierName(hotelName.trim());
                           }}
@@ -3398,6 +3401,7 @@ export default function EditServiceModalNew({
                         >
                           <option value="gds">GDS</option>
                           <option value="direct">Direct booking</option>
+                          <option value="partner">Partner</option>
                         </select>
                       </div>
                       <div className="flex-1 min-w-0">

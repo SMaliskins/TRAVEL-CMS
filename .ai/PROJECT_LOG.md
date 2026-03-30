@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-03-28] CW — Supplier type: add Partner (GDS / Direct / Partner)
+
+**Task:** Extend order service supplier booking type with `partner` in Add/Edit modals; DB CHECK must allow `partner`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `AddServiceModal.tsx`, `EditServiceModalNew.tsx` — union + option + edit init normalization; `migrations/add_supplier_booking_type_partner.sql` — replace CHECK on `order_services.supplier_booking_type`. Миграция применена к проекту Supabase через MCP (`apply_migration` `add_supplier_booking_type_partner`).
+
+**Next Step:** QA save service with Partner.
+
+---
+
 ## [2026-03-28] CW — Clients Data tab: batch API (one round-trip vs N directory GETs)
 
 **Task:** Replace related-parties + N× GET /api/directory/[id] with GET .../clients-data-parties; share buildDirectoryRecord with directory route.

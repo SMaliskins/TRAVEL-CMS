@@ -396,7 +396,7 @@ export default function AddServiceModal({
     parking: false,
     freeText: "",
   });
-  const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct">("gds");
+  const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct" | "partner">("gds");
   
   // Transfer-specific fields (legacy)
   const [pickupLocation, setPickupLocation] = useState("");
@@ -2692,7 +2692,7 @@ export default function AddServiceModal({
                         <select
                           value={supplierBookingType}
                           onChange={(e) => {
-                            const newType = e.target.value as "gds" | "direct";
+                            const newType = e.target.value as "gds" | "direct" | "partner";
                             setSupplierBookingType(newType);
                             if (newType === "direct" && hotelName.trim()) setSupplierName(hotelName.trim());
                           }}
@@ -2700,6 +2700,7 @@ export default function AddServiceModal({
                         >
                           <option value="gds">GDS</option>
                           <option value="direct">Direct booking</option>
+                          <option value="partner">Partner</option>
                         </select>
                       </div>
                       <div className="flex-1 min-w-0">
