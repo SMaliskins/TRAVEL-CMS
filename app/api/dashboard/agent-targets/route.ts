@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,38 +32,21 @@ export async function GET(request: NextRequest) {
 
     const agentProfit: Record<string, number> = {};
 
-    const signed = (svc: { service_type?: string; client_price?: unknown; service_price?: unknown }, field: 'client_price' | 'service_price') => {
-      const v = parseFloat(String(svc[field] ?? 0)) || 0;
-      return svc.service_type === 'cancellation' ? -Math.abs(v) : v;
-    };
     for (const svc of servicesData || []) {
       const orderRaw = svc.orders as unknown;
       const order = Array.isArray(orderRaw) ? orderRaw[0] : orderRaw as { owner_user_id?: string; manager_user_id?: string } | null;
       const agentId = order?.owner_user_id || order?.manager_user_id;
       if (!agentId) continue;
 
-      const cp = signed(svc, 'client_price');
-      const sp = signed(svc, 'service_price');
-      const cat = ((svc.category as string) || "").toLowerCase();
-      const isTour = cat.includes("tour") || cat.includes("package");
-      const dbRate = Number(svc.vat_rate) || 0;
-      const vatRate = dbRate > 0 ? dbRate : (cat.includes("flight") ? 0 : 21);
-
-      let margin = 0;
-      if (isTour && svc.commission_amount != null) {
-        const commission = svc.service_type === 'cancellation'
-          ? -Math.abs(Number(svc.commission_amount) || 0) : Number(svc.commission_amount) || 0;
-        margin = cp - (sp - commission);
-      } else {
-        margin = cp - sp;
-      }
-
-      const vatAmount = vatRate > 0 && margin >= 0
-        ? Math.round(margin * vatRate / (100 + vatRate) * 100) / 100
-        : 0;
-
-      const netProfit = margin - vatAmount;
-      agentProfit[agentId] = (agentProfit[agentId] || 0) + netProfit;
+      const econ = computeServiceLineEconomics({
+        client_price: svc.client_price,
+        service_price: svc.service_price,
+        service_type: svc.service_type,
+        category: svc.category,
+        commission_amount: svc.commission_amount,
+        vat_rate: svc.vat_rate,
+      });
+      agentProfit[agentId] = (agentProfit[agentId] || 0) + econ.profitNetOfVat;
     }
 
     const agentRoles = ["agent", "manager", "supervisor", "admin", "director"];

@@ -18,6 +18,21 @@
 
 ---
 
+## [2026-03-28] CW — Referral / economics: respect VAT 0% on air tickets
+
+**Task:** Air ticket service shows 0% VAT in Edit but Referral lines used 21% on margin.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Причина:** `computeServiceLineEconomics` трактовал `vat_rate === 0` как «не задан» и брал fallback; категория «Air Ticket» не содержит `flight` → подставлялось 21%.
+
+**Действия:** `lib/orders/serviceEconomics.ts` — `resolveVatRatePercent`; fallback добавлен `air ticket`. `app/api/dashboard/statistics/route.ts`, `agent-targets/route.ts` — расчёт через `computeServiceLineEconomics`.
+
+**Next Step:** QA Referral tab + orders list for flight with vat_rate 0.
+
+---
+
 ## [2026-03-28] CW — Add accompanying persons: create client in directory
 
 **Task:** When directory search has no match, allow creating a client like PartySelect (`/api/directory/create`, duplicates / create anyway).
