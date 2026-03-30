@@ -180,6 +180,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Query failed" }, { status: 500 });
     }
 
+    const orderList = orders || [];
+    const orderIds = orderList.map((o) => o.id as string).filter(Boolean);
+    const travellerCountByOrder = new Map<string, number>();
+    if (orderIds.length > 0) {
+      const chunkSize = 150;
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data: otRows, error: otErr } = await supabaseAdmin
+          .from("order_travellers")
+          .select("order_id")
+          .eq("company_id", companyId)
+          .in("order_id", chunk);
+        if (otErr) {
+          console.error("order_travellers map count error:", otErr);
+        } else {
+          for (const row of otRows || []) {
+            const oid = (row as { order_id: string }).order_id;
+            travellerCountByOrder.set(oid, (travellerCountByOrder.get(oid) || 0) + 1);
+          }
+        }
+      }
+    }
+
     interface MapLocation {
       id: string;
       name: string;
@@ -190,11 +213,13 @@ export async function GET(request: NextRequest) {
       dateTo?: string;
       completedAt?: string;
       destination?: string;
+      /** People on the order (from order_travellers); defaults to 1 if none linked yet */
+      travellerCount: number;
     }
 
     const locations: MapLocation[] = [];
 
-    for (const order of orders || []) {
+    for (const order of orderList) {
       const raw = (order.countries_cities as string) || "";
       if (!raw) continue;
 
@@ -218,6 +243,9 @@ export async function GET(request: NextRequest) {
 
       const label = country ? `${city}, ${country}` : city;
 
+      const ot = travellerCountByOrder.get(order.id as string) ?? 0;
+      const travellerCount = ot > 0 ? ot : 1;
+
       locations.push({
         id: order.id,
         name: order.client_display_name || "Client",
@@ -228,6 +256,7 @@ export async function GET(request: NextRequest) {
         dateTo: to || undefined,
         completedAt: status === "completed" ? to : undefined,
         destination: label,
+        travellerCount,
       });
     }
 

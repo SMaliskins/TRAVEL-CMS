@@ -54,7 +54,7 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 
-interface Traveller {
+export interface Traveller {
   id: string;
   firstName: string;
   lastName: string;
@@ -200,6 +200,70 @@ const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_ra
   { id: "fallback-cruise", name: "Cruise", type: "cruise", vat_rate: 21 },
   { id: "fallback-other", name: "Other", type: "other", vat_rate: 21 },
 ];
+
+type LoadedServiceCategory = { id: string; name: string; type: string; vat_rate?: number };
+
+let travelServiceCategoriesCache: LoadedServiceCategory[] | null = null;
+let travelServiceCategoriesInflight: Promise<LoadedServiceCategory[]> | null = null;
+
+function mapFallbackCategories(): LoadedServiceCategory[] {
+  return CHOOSE_CATEGORY_FALLBACK.map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: typeof c.type === "string" ? c.type.toLowerCase() : "other",
+    vat_rate: typeof c.vat_rate === "number" ? c.vat_rate : 21,
+  }));
+}
+
+/** One fetch per browser session (shared across order pages); avoids repeat /api/travel-service-categories on tab remounts. */
+async function loadTravelServiceCategoriesOnce(): Promise<LoadedServiceCategory[]> {
+  if (travelServiceCategoriesCache && travelServiceCategoriesCache.length > 0) {
+    return travelServiceCategoriesCache;
+  }
+  if (travelServiceCategoriesInflight) return travelServiceCategoriesInflight;
+
+  travelServiceCategoriesInflight = (async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        const fb = mapFallbackCategories();
+        travelServiceCategoriesCache = fb;
+        return fb;
+      }
+      const res = await fetch("/api/travel-service-categories", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list = (data.categories || []).filter((c: { is_active?: boolean }) => c.is_active !== false);
+        if (list.length > 0) {
+          const mapped = list.map((c: { id: string; name: string; type?: string; vat_rate?: number }) => ({
+            id: c.id,
+            name: c.name,
+            type: typeof c.type === "string" ? c.type.toLowerCase() : "other",
+            vat_rate: typeof c.vat_rate === "number" ? c.vat_rate : 21,
+          }));
+          travelServiceCategoriesCache = mapped;
+          return mapped;
+        }
+      }
+      const fb = mapFallbackCategories();
+      travelServiceCategoriesCache = fb;
+      return fb;
+    } catch {
+      const fb = mapFallbackCategories();
+      travelServiceCategoriesCache = fb;
+      return fb;
+    } finally {
+      travelServiceCategoriesInflight = null;
+    }
+  })();
+
+  return travelServiceCategoriesInflight;
+}
 
 function ChooseServiceTypeModal({
   lang,
@@ -439,6 +503,10 @@ interface OrderServicesBlockProps {
   userRole?: string | null;
   /** Open draggable directory card popup (order page) */
   onOpenDirectoryParty?: (partyId: string) => void;
+  /**
+   * When set, travellers list is owned by the parent (single GET .../travellers for header + services block).
+   */
+  travellersState?: readonly [Traveller[], React.Dispatch<React.SetStateAction<Traveller[]>>];
 }
 
 const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlockProps>(function OrderServicesBlock({ 
@@ -457,12 +525,16 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   stickyTopOffset = 0,
   userRole,
   onOpenDirectoryParty,
+  travellersState,
 }, ref) {
   const servicesTableColSpan = 11;
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const router = useRouter();
-  const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
+  const [localTravellers, setLocalTravellers] = useState<Traveller[]>([]);
+  const orderTravellers = travellersState ? travellersState[0] : localTravellers;
+  const setOrderTravellers = travellersState ? travellersState[1] : setLocalTravellers;
+  const skipTravellersFetch = !!travellersState;
   const [services, setServices] = useState<Service[]>([]);
   const [modalServiceId, setModalServiceId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -1560,8 +1632,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
   useEffect(() => {
     fetchServices();
-    fetchTravellers();
-  }, [fetchServices, fetchTravellers]);
+    if (!skipTravellersFetch) fetchTravellers();
+  }, [fetchServices, fetchTravellers, skipTravellersFetch]);
 
   // Recalculate totals whenever services change
   // Include: active services + cancelled with penalty/credit (formal annulment: original + cancellation child)
@@ -1794,42 +1866,16 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     })();
   }, [services, onDestinationsFromServices]);
 
-  // Load categories for "What service?" chooser
+  // Load categories for "What service?" chooser (module cache: one network fetch per session)
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-          return;
-        }
-        const res = await fetch("/api/travel-service-categories", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          credentials: "include",
-        });
-        if (cancelled) return;
-        if (res.ok) {
-          const data = await res.json();
-          const list = (data.categories || []).filter((c: { is_active?: boolean }) => c.is_active !== false);
-          if (list.length > 0) {
-            setServiceCategories(list.map((c: { id: string; name: string; type?: string; vat_rate?: number }) => ({
-              id: c.id,
-              name: c.name,
-              type: typeof c.type === "string" ? c.type.toLowerCase() : "other",
-              vat_rate: typeof c.vat_rate === "number" ? c.vat_rate : 21,
-            })));
-          } else {
-            setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-          }
-        } else {
-          setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-        }
-      } catch {
-        if (!cancelled) setServiceCategories(CHOOSE_CATEGORY_FALLBACK);
-      }
+      const list = await loadTravelServiceCategoriesOnce();
+      if (!cancelled) setServiceCategories(list);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // When categories load and user had clicked Add Service, open chooser

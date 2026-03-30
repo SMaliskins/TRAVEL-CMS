@@ -5,6 +5,97 @@
 
 ---
 
+## [2026-03-28] CW — Clients Data tab: batch API (one round-trip vs N directory GETs)
+
+**Task:** Replace related-parties + N× GET /api/directory/[id] with GET .../clients-data-parties; share buildDirectoryRecord with directory route.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `lib/directory/buildDirectoryRecord.ts` + `resolveAuditDisplayNamesBatch`; `loadDirectoryRecordsForPartyIds`; `lib/orders/relatedPartiesForOrder.ts`; route `clients-data-parties`; `related-parties` uses shared helper; `OrderClientsDataTab` single fetch; directory GET imports shared builder.
+
+**Next Step:** QA Clients Data tab + directory edit.
+
+---
+
+## [2026-03-28] CW — Order page: dedupe travellers fetch + cache service categories
+
+**Task:** Apply perf recommendations: one GET .../travellers for header + services block; avoid repeat travel-service-categories fetch per session.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `page.tsx` — full `Traveller[]` state, pass `travellersState` to `OrderServicesBlock`; block skips duplicate fetch when tuple provided. Module cache + inflight dedupe for `/api/travel-service-categories`.
+
+**Next Step:** QA order client tab; optional later: batch directory for Clients Data tab.
+
+---
+
+## [2026-03-28] CW — Order Clients Data: subdued Remove action (not primary)
+
+**Task:** Tone down “Remove from order” so it does not read as the main focus in the name column.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** Short label + `title` full phrase; gray `text-[11px]`, hover red/underline; separator dot; i18n `removeFromOrderShort` (en/ru/lv).
+
+**Next Step:** QA visual pass.
+
+---
+
+## [2026-03-28] CW — Order Clients Data: remove traveller from order (UI + leadPartyId)
+
+**Task:** Let users remove mistaken travellers from Clients Data tab; API already had DELETE travellers.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `related-parties` returns `leadPartyId`; `OrderClientsDataTab` — Remove from order + i18n.
+
+**Next Step:** QA if traveller on services.
+
+---
+
+## [2026-03-28] CW — Dashboard map: traveler counts from order_travellers (not booking count)
+
+**Task:** Marker/popup showed number of orders; show sum of people per order from `order_travellers`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/api/dashboard/map/route.ts` — `travellerCount` per order; `TouristsMap` — sum for icon/cluster/popup + filter legend; optional `· N bookings` in popup.
+
+**Next Step:** QA with multi-traveller orders.
+
+---
+
+## [2026-03-28] CW — Order Clients Data: expand row, edit loyalty & prefs (no Open link)
+
+**Task:** Remove Open column; click row to expand inline editor; save loyalty + seat/meal/languages/notes to Directory via PUT.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `OrderClientsDataTab.tsx` + i18n `order.clientsData.edit.*`; companies: loyalty + languages only.
+
+**Next Step:** QA save + permissions.
+
+---
+
+## [2026-03-28] CW — Dashboard Travelers map: filters (status + upcoming window)
+
+**Task:** Filter by In progress / Upcoming; upcoming limited to next 7 or 14 days by `dateFrom`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `TouristsMap.tsx` — checkboxes, select (Any / Next 7 / Next 14 days), empty-filter message.
+
+**Next Step:** QA
+
+---
+
 ## [2026-03-28] CW — Order Clients Data: single summary table
 
 **Task:** One table for all linked parties — DOB, personal code / reg, passport, issued, expires, contact; remove card layout.

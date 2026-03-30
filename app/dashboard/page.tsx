@@ -63,6 +63,7 @@ interface TouristLocation {
   status?: "upcoming" | "in-progress" | "completed";
   completedAt?: string;
   destination?: string;
+  travellerCount?: number;
 }
 
 interface CalendarEvent {

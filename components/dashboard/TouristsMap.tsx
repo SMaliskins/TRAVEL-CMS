@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
@@ -39,6 +39,8 @@ export interface TouristLocation {
   dateTo?: string;
   completedAt?: string;
   destination?: string;
+  /** People on this order (from order_travellers); omit or use 1 when unknown */
+  travellerCount?: number;
 }
 
 interface TouristsMapProps {
@@ -144,6 +146,17 @@ function splitDestination(dest: string): { city: string; country: string } {
   return { city: parts[0] || "", country: "" };
 }
 
+/** Headcount for one map row (one order); at least 1 for display when data missing */
+function travellerHeadcount(loc: TouristLocation): number {
+  const n = loc.travellerCount;
+  if (typeof n === "number" && n >= 1) return n;
+  return 1;
+}
+
+function sumHeadcounts(locs: TouristLocation[]): number {
+  return locs.reduce((s, loc) => s + travellerHeadcount(loc), 0);
+}
+
 function circleSvg(color: string, count: number, ring?: string): string {
   const size = count < 10 ? 36 : count < 100 ? 42 : 48;
   const r = size / 2;
@@ -160,7 +173,7 @@ function createCityIcon(group: CityGroup) {
   const L = require("leaflet");
   const color = group.allInProgress ? "#10b981" : "#3b82f6";
   const ring = group.hasInProgress && !group.allInProgress ? "#10b981" : undefined;
-  const count = group.travelers.length;
+  const count = sumHeadcounts(group.travelers);
   const size = count < 10 ? 36 : count < 100 ? 42 : 48;
   return L.divIcon({
     html: circleSvg(color, count, ring),
@@ -169,6 +182,39 @@ function createCityIcon(group: CityGroup) {
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
   });
+}
+
+/** ISO date YYYY-MM-DD, local calendar day */
+function todayIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const [y, mo, da] = iso.split("-").map(Number);
+  const d = new Date(y, mo - 1, da);
+  d.setDate(d.getDate() + days);
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+export type UpcomingDatePreset = "all" | "next7" | "next14";
+
+function upcomingMatchesDatePreset(
+  dateFrom: string | undefined,
+  preset: UpcomingDatePreset
+): boolean {
+  if (preset === "all") return true;
+  if (!dateFrom || !/^\d{4}-\d{2}-\d{2}/.test(dateFrom.trim())) return false;
+  const start = dateFrom.trim().slice(0, 10);
+  const today = todayIsoLocal();
+  const lastInclusive = addDaysIso(today, preset === "next7" ? 6 : 13);
+  return start >= today && start <= lastInclusive;
 }
 
 function createClusterIcon(cluster: { getChildCount: () => number; getAllChildMarkers: () => { options: { alt?: string } }[] }) {
@@ -223,9 +269,24 @@ export default function TouristsMap({
     (loc) => loc.status === "upcoming" || loc.status === "in-progress"
   );
 
+  const [showUpcoming, setShowUpcoming] = useState(true);
+  const [showInProgress, setShowInProgress] = useState(true);
+  const [upcomingPreset, setUpcomingPreset] = useState<UpcomingDatePreset>("all");
+
+  const visibleLocations = useMemo(() => {
+    return activeLocations.filter((loc) => {
+      if (loc.status === "in-progress") return showInProgress;
+      if (loc.status === "upcoming") {
+        if (!showUpcoming) return false;
+        return upcomingMatchesDatePreset(loc.dateFrom, upcomingPreset);
+      }
+      return false;
+    });
+  }, [activeLocations, showUpcoming, showInProgress, upcomingPreset]);
+
   const cityGroups = useMemo(() => {
     const map = new Map<string, CityGroup>();
-    for (const loc of activeLocations) {
+    for (const loc of visibleLocations) {
       const key = `${loc.location[0].toFixed(2)},${loc.location[1].toFixed(2)}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -246,7 +307,7 @@ export default function TouristsMap({
       g.travelers.sort((a, b) => (a.dateFrom || "").localeCompare(b.dateFrom || ""));
     }
     return Array.from(map.values());
-  }, [activeLocations]);
+  }, [visibleLocations]);
 
   const icons = useMemo(() => {
     if (typeof window === "undefined") return new Map<string, unknown>();
@@ -257,116 +318,178 @@ export default function TouristsMap({
     return m;
   }, [cityGroups]);
 
-  if (!activeLocations || activeLocations.length === 0) {
+  const noDataAtAll = !activeLocations || activeLocations.length === 0;
+
+  const boundsArr = cityGroups.map((g) => g.location);
+  const avgLat =
+    boundsArr.length > 0
+      ? boundsArr.reduce((s, l) => s + l[0], 0) / boundsArr.length
+      : 50;
+  const avgLng =
+    boundsArr.length > 0
+      ? boundsArr.reduce((s, l) => s + l[1], 0) / boundsArr.length
+      : 10;
+
+  const upcomingCount = sumHeadcounts(visibleLocations.filter((l) => l.status === "upcoming"));
+  const inProgressCount = sumHeadcounts(visibleLocations.filter((l) => l.status === "in-progress"));
+
+  if (noDataAtAll) {
     return (
-      <div className={`booking-glass-panel !p-6 ${className}`}>
-        <h3 className="mb-6 text-xl font-bold text-gray-900 tracking-tight">
+      <div className={`booking-glass-panel !p-4 ${className}`}>
+        <h3 className="mb-3 text-xl font-bold text-gray-900 tracking-tight">
           {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
         </h3>
-        <div className="flex h-96 items-center justify-center text-gray-500">
+        <div className="flex h-96 items-center justify-center text-base text-gray-500">
           No active travelers currently
         </div>
       </div>
     );
   }
 
-  const boundsArr = cityGroups.map((g) => g.location);
-  const avgLat = boundsArr.reduce((s, l) => s + l[0], 0) / boundsArr.length;
-  const avgLng = boundsArr.reduce((s, l) => s + l[1], 0) / boundsArr.length;
-
-  const upcomingCount = activeLocations.filter(l => l.status === "upcoming").length;
-  const inProgressCount = activeLocations.filter(l => l.status === "in-progress").length;
+  const filteredEmpty = visibleLocations.length === 0;
 
   return (
-    <div className={`booking-glass-panel !p-6 ${className}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-        <h3 className="text-xl font-bold text-gray-900 tracking-tight">
+    <div className={`booking-glass-panel !p-4 ${className}`}>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
+        <h3 className="shrink-0 text-xl font-bold leading-tight text-gray-900 tracking-tight">
           {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
         </h3>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded-full bg-blue-500" />
-            <span className="text-xs text-gray-600">Upcoming ({upcomingCount})</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-800">
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showUpcoming}
+              onChange={(e) => setShowUpcoming(e.target.checked)}
+              className="h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-blue-500" />
+              Upcoming ({upcomingCount})
+            </span>
+          </label>
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showInProgress}
+              onChange={(e) => setShowInProgress(e.target.checked)}
+              className="h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-emerald-500" />
+              In progress ({inProgressCount})
+            </span>
+          </label>
+          <span className="hidden h-5 w-px bg-gray-200 sm:block" aria-hidden />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-600">Upcoming trips start:</span>
+            <select
+              value={upcomingPreset}
+              onChange={(e) => setUpcomingPreset(e.target.value as UpcomingDatePreset)}
+              disabled={!showUpcoming}
+              className="min-h-[2.25rem] rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Upcoming date range"
+            >
+              <option value="all">Any date</option>
+              <option value="next7">Next 7 days</option>
+              <option value="next14">Next 14 days</option>
+            </select>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded-full bg-emerald-500" />
-            <span className="text-xs text-gray-600">In Progress ({inProgressCount})</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded-full bg-blue-500 ring-2 ring-emerald-500 ring-offset-1" />
-            <span className="text-xs text-gray-600">Mixed</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-4 w-4 rounded-full bg-blue-500/80 flex items-center justify-center">
-              <span className="text-[8px] font-bold text-white leading-none">3</span>
+          <span className="hidden h-5 w-px bg-gray-200 sm:block" aria-hidden />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex items-center gap-2">
+              <div className="h-3.5 w-3.5 shrink-0 rounded-full bg-blue-500 ring-2 ring-emerald-500 ring-offset-1" />
+              <span className="text-sm text-gray-700">Mixed</span>
             </div>
-            <span className="text-xs text-gray-600">Grouped cities</span>
+            <div className="flex items-center gap-2">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/80">
+                <span className="text-[10px] font-bold leading-none text-white">3</span>
+              </div>
+              <span className="text-sm text-gray-700">Grouped cities</span>
+            </div>
           </div>
         </div>
       </div>
-      <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner">
-        <MapContainer center={[avgLat, avgLng]} zoom={4} style={{ height: "100%", width: "100%" }} attributionControl={false}>
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <MapFitBounds bounds={boundsArr} />
-          <MarkerClusterGroup
-            chunkedLoading
-            maxClusterRadius={50}
-            spiderfyOnMaxZoom={false}
-            showCoverageOnHover={false}
-            iconCreateFunction={createClusterIcon}
+      <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner relative">
+        {filteredEmpty ? (
+          <div className="flex h-full items-center justify-center bg-gray-50/80 px-4 text-center text-sm text-gray-600">
+            No travelers match the current filters. Turn on a status or widen the upcoming date range.
+          </div>
+        ) : (
+          <MapContainer
+            center={[avgLat, avgLng]}
+            zoom={4}
+            style={{ height: "100%", width: "100%" }}
+            attributionControl={false}
           >
-            {cityGroups.map((group) => {
-              const altTag = `${group.travelers.length}|${group.allInProgress ? "g" : group.hasInProgress ? "m" : "b"}`;
-              return (
-                <Marker
-                  key={group.key}
-                  position={group.location}
-                  icon={icons.get(group.key) as never}
-                  alt={altTag}
-                >
-                  <Popup maxWidth={320} minWidth={200}>
-                    <div className="text-sm">
-                      {(() => {
-                        const { city, country } = splitDestination(group.city);
-                        const flag = countryFlag(country);
-                        return (
-                          <p className="font-bold text-gray-900 text-sm mb-2">
-                            {flag && <span className="mr-1">{flag}</span>}
-                            {country && <span className="text-gray-500 font-normal">{country}, </span>}
-                            {city}
-                            <span className="ml-2 text-xs font-normal text-gray-500">
-                              {group.travelers.length} {group.travelers.length === 1 ? "traveler" : "travelers"}
-                            </span>
-                          </p>
-                        );
-                      })()}
-                      <div className="max-h-[200px] overflow-y-auto space-y-0.5">
-                        {group.travelers.map((t) => (
-                          <div key={t.id} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              t.status === "in-progress" ? "bg-emerald-500" : "bg-blue-500"
-                            }`} />
-                            <span className="text-xs text-gray-500 shrink-0 w-[60px]">
-                              {t.dateFrom ? formatDateDDMMYYYY(t.dateFrom).slice(0, 5) : "—"}
-                            </span>
-                            <a
-                              href={`/orders/${(t.orderCode || "").replace("/", "-").toLowerCase()}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-gray-900 font-medium truncate hover:text-blue-600"
-                            >
-                              {t.name}
-                            </a>
-                          </div>
-                        ))}
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <MapFitBounds bounds={boundsArr} />
+            <MarkerClusterGroup
+              chunkedLoading
+              maxClusterRadius={50}
+              spiderfyOnMaxZoom={false}
+              showCoverageOnHover={false}
+              iconCreateFunction={createClusterIcon}
+            >
+              {cityGroups.map((group) => {
+                const totalTravelers = sumHeadcounts(group.travelers);
+                const bookingCount = group.travelers.length;
+                const altTag = `${totalTravelers}|${group.allInProgress ? "g" : group.hasInProgress ? "m" : "b"}`;
+                return (
+                  <Marker
+                    key={group.key}
+                    position={group.location}
+                    icon={icons.get(group.key) as never}
+                    alt={altTag}
+                  >
+                    <Popup maxWidth={320} minWidth={200}>
+                      <div className="text-sm">
+                        {(() => {
+                          const { city, country } = splitDestination(group.city);
+                          const flag = countryFlag(country);
+                          return (
+                            <p className="font-bold text-gray-900 text-sm mb-2">
+                              {flag && <span className="mr-1">{flag}</span>}
+                              {country && <span className="text-gray-500 font-normal">{country}, </span>}
+                              {city}
+                              <span className="ml-2 text-xs font-normal text-gray-500">
+                                {totalTravelers} {totalTravelers === 1 ? "traveler" : "travelers"}
+                                {bookingCount > 1 ? (
+                                  <span className="text-gray-400"> · {bookingCount} bookings</span>
+                                ) : null}
+                              </span>
+                            </p>
+                          );
+                        })()}
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                          {group.travelers.map((t) => (
+                            <div key={t.id} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                  t.status === "in-progress" ? "bg-emerald-500" : "bg-blue-500"
+                                }`}
+                              />
+                              <span className="text-xs text-gray-500 shrink-0 w-[60px]">
+                                {t.dateFrom ? formatDateDDMMYYYY(t.dateFrom).slice(0, 5) : "—"}
+                              </span>
+                              <a
+                                href={`/orders/${(t.orderCode || "").replace("/", "-").toLowerCase()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-gray-900 font-medium truncate hover:text-blue-600"
+                              >
+                                {t.name}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
-          </MarkerClusterGroup>
-        </MapContainer>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MarkerClusterGroup>
+          </MapContainer>
+        )}
       </div>
     </div>
   );

@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { fetchRelatedPartiesPayload } from "@/lib/orders/relatedPartiesForOrder";
+import { loadDirectoryRecordsForPartyIds } from "@/lib/directory/loadDirectoryRecordsBatch";
+import type { RelatedPartyTag } from "@/lib/types/orderRelatedParties";
+import type { DirectoryRecord } from "@/lib/types/directory";
 
-/** Party IDs linked to the order as lead client, travellers, or service payers (deduped). */
+/**
+ * One round-trip for Order > Clients Data tab: related parties + full directory records (batch DB reads).
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ orderCode: string }> }
@@ -30,14 +35,26 @@ export async function GET(
     const leadId = order.client_party_id as string | null;
 
     const payload = await fetchRelatedPartiesPayload(orderId, leadId);
+    const partyIds = payload.parties.map((p) => p.partyId);
+
+    const recordByPartyId =
+      partyIds.length > 0 ? await loadDirectoryRecordsForPartyIds(partyIds, user.companyId) : new Map<string, DirectoryRecord>();
+
+    const partyRows: { partyId: string; tags: RelatedPartyTag[]; record: DirectoryRecord | null }[] =
+      payload.parties.map(({ partyId, tags }) => ({
+        partyId,
+        tags,
+        record: recordByPartyId.get(partyId) ?? null,
+      }));
 
     return NextResponse.json({
       parties: payload.parties,
       leadPartyId: leadId,
       nameOnlyPayers: payload.nameOnlyPayers,
+      partyRows,
     });
   } catch (e) {
-    console.error("[related-parties]", e);
+    console.error("[clients-data-parties]", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

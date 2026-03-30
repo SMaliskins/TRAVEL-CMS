@@ -7,7 +7,7 @@ import { slugToOrderCode } from "@/lib/orders/orderCode";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
-import OrderServicesBlock, { OrderServicesBlockHandle } from "./_components/OrderServicesBlock";
+import OrderServicesBlock, { OrderServicesBlockHandle, type Traveller } from "./_components/OrderServicesBlock";
 import OrderReferralServicesPanel from "./_components/OrderReferralServicesPanel";
 import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
@@ -57,14 +57,6 @@ type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 interface PaymentDateItem {
   type: string;
   date: string;
-}
-
-/** Same shape as GET /api/orders/.../travellers — used to mirror Travellers avatars in header PartySelect */
-interface OrderTravellerPickerRow {
-  id: string;
-  firstName: string;
-  lastName: string;
-  avatarUrl: string | null;
 }
 
 interface OrderData {
@@ -196,18 +188,18 @@ export default function OrderPage({
   const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
   const autoDestSavedRef = useRef(false);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
-  const [orderTravellersForPicker, setOrderTravellersForPicker] = useState<OrderTravellerPickerRow[]>([]);
+  const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
 
   const clientPickerPrioritizedParties = useMemo(
     () =>
-      orderTravellersForPicker.map((t) => ({
+      orderTravellers.map((t) => ({
         id: t.id,
         display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id,
         firstName: t.firstName,
         lastName: t.lastName,
-        avatarUrl: t.avatarUrl,
+        avatarUrl: t.avatarUrl ?? null,
       })),
-    [orderTravellersForPicker]
+    [orderTravellers]
   );
 
   // Avatar: image from /api/orders/.../travellers (party_person.avatar_url), or initials.
@@ -225,12 +217,12 @@ export default function OrderPage({
     if (!order?.client_party_id) {
       return { imageUrl: null as string | null, initials: safeInitials };
     }
-    const list = Array.isArray(orderTravellersForPicker) ? orderTravellersForPicker : [];
+    const list = Array.isArray(orderTravellers) ? orderTravellers : [];
     const row = list.find((x) => x.id === order.client_party_id);
     const raw = row?.avatarUrl?.trim() || null;
     const imageUrl = raw ? resolvePublicMediaUrl(raw, "avatars") || raw : null;
     return { imageUrl, initials: safeInitials };
-  }, [order?.client_party_id, order?.client_display_name, orderTravellersForPicker]);
+  }, [order?.client_party_id, order?.client_display_name, orderTravellers]);
 
   const [leadPassengerAvatarFailed, setLeadPassengerAvatarFailed] = useState(false);
   useEffect(() => {
@@ -544,14 +536,7 @@ export default function OrderPage({
           });
           if (tr.ok) {
             const td = await tr.json();
-            setOrderTravellersForPicker(
-              (td.travellers || []).map((t: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }) => ({
-                id: t.id,
-                firstName: t.firstName || "",
-                lastName: t.lastName || "",
-                avatarUrl: t.avatarUrl ?? null,
-              }))
-            );
+            setOrderTravellers((td.travellers || []) as Traveller[]);
           }
         } catch {
           /* ignore picker refresh errors */
@@ -835,17 +820,9 @@ export default function OrderPage({
         });
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        const list: OrderTravellerPickerRow[] = (data.travellers || []).map(
-          (t: { id: string; firstName?: string; lastName?: string; avatarUrl?: string | null }) => ({
-            id: t.id,
-            firstName: t.firstName || "",
-            lastName: t.lastName || "",
-            avatarUrl: t.avatarUrl ?? null,
-          })
-        );
-        if (!cancelled) setOrderTravellersForPicker(list);
+        if (!cancelled) setOrderTravellers((data.travellers || []) as Traveller[]);
       } catch {
-        if (!cancelled) setOrderTravellersForPicker([]);
+        if (!cancelled) setOrderTravellers([]);
       }
     })();
     return () => {
@@ -1700,6 +1677,7 @@ export default function OrderPage({
               <OrderServicesBlock
                 ref={servicesBlockRef}
                 orderCode={effectiveOrderCode}
+                travellersState={[orderTravellers, setOrderTravellers]}
                 defaultClientId={order?.client_party_id}
                 defaultClientName={order?.client_display_name || undefined}
                 orderDateFrom={order?.date_from}
