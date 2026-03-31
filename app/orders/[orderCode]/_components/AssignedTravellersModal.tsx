@@ -6,6 +6,7 @@ import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { supabase } from "@/lib/supabaseClient";
+import DirectoryCreateClientModal from "@/components/DirectoryCreateClientModal";
 
 interface Traveller {
   id: string;
@@ -84,6 +85,7 @@ export default function AssignedTravellersModal({
   const [selectedSearchIds, setSelectedSearchIds] = useState<Set<string>>(new Set());
   const [isAddingSelected, setIsAddingSelected] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [showCreateClientModal, setShowCreateClientModal] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ESC key handler
@@ -501,6 +503,44 @@ export default function AssignedTravellersModal({
     setIsAddingSelected(false);
   };
 
+  const handleDirectoryClientCreated = async (partyId: string, displayName: string) => {
+    if (orderTravellers.some((t) => t.id === partyId)) {
+      setShowCreateClientModal(false);
+      return;
+    }
+    setShowCreateClientModal(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/directory/${encodeURIComponent(partyId)}`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const record = data.data || data;
+        const newTraveller: Traveller = {
+          id: partyId,
+          firstName: record.firstName || displayName.split(" ")[0] || "",
+          lastName: record.lastName || displayName.split(" ").slice(1).join(" ") || "",
+          title: record.title || "Mr",
+          dob: record.dob || undefined,
+          personalCode: record.personalCode || undefined,
+          contactNumber: record.phone || undefined,
+          avatarUrl: record.avatarUrl || null,
+        };
+        setOrderTravellers((prev) => [...prev, newTraveller]);
+        await addTravellerToOrder(partyId);
+        setToastMessage(`Added ${displayName} to order`);
+      }
+    } catch (err) {
+      console.error("Load new traveller after create:", err);
+    }
+    setShowAddSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedSearchIds(new Set());
+  };
+
   const travellerExists = (firstName: string, lastName: string): boolean => {
     return orderTravellers.some(
       (t) => t.firstName === firstName && t.lastName === lastName
@@ -670,6 +710,7 @@ export default function AssignedTravellersModal({
   );
 
   return (
+    <>
     <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div ref={trapRef} className="w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col">
         {/* Header */}
@@ -862,8 +903,18 @@ export default function AssignedTravellersModal({
                     )}
                   </div>
                 )}
-                {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
+                {searchQuery.trim().length >= 2 && !isSearching && searchResults.length === 0 && (
                   <p className="mt-2 text-sm text-gray-500">No results found</p>
+                )}
+                {searchQuery.trim().length >= 2 && !isSearching && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateClientModal(true)}
+                    className="mt-3 w-full rounded-lg border border-blue-300 bg-blue-50 px-3 py-2.5 text-left text-sm font-medium text-blue-800 hover:bg-blue-100"
+                  >
+                    + Create new client
+                    {searchQuery.trim() ? ` — "${searchQuery.trim()}"` : ""}
+                  </button>
                 )}
               </div>
             )}
@@ -1073,5 +1124,12 @@ export default function AssignedTravellersModal({
         </div>
       </div>
     </div>
+    <DirectoryCreateClientModal
+      isOpen={showCreateClientModal}
+      onClose={() => setShowCreateClientModal(false)}
+      onCreated={handleDirectoryClientCreated}
+      initialNameQuery={searchQuery}
+    />
+    </>
   );
 }

@@ -1119,13 +1119,23 @@ export default function EditServiceModalNew({
       pricingLastEditedRef.current = null;
       return;
     }
+    if (pricingLastEditedRef.current === "marge") {
+      const margeVal = Math.round((parseFloat(marge) || 0) * 100) / 100;
+      const saleVal = Math.round((netCost + margeVal) * 100) / 100;
+      const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
+      setAgentDiscountType("€");
+      setAgentDiscountValue(discount.toFixed(2));
+      setClientPrice(saleVal.toFixed(2));
+      pricingLastEditedRef.current = null;
+      return;
+    }
     // User edited cost or agent discount → recalc Sale and Margin
     const discountAmount = getAgentDiscountAmount(cost);
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
     setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
-  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
+  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice, marge]);
 
   // Non-commission-style: when Sale (Client price) changes, recalculate Marge = Sale - Cost.
   useEffect(() => {
@@ -1708,7 +1718,7 @@ export default function EditServiceModalNew({
     if (!lastParsedFileRef.current && !lastParsedTextRef.current) {
       setReparseChatHistory(prev => [...prev,
         { role: "user", text: feedback },
-        { role: "parser", text: "Нет исходного документа для перепарсинга. Загрузите документ заново." },
+        { role: "parser", text: "No source document to re-parse. Upload the document again." },
       ]);
       setReparseMessage("");
       return;
@@ -1751,7 +1761,7 @@ export default function EditServiceModalNew({
       const data = await res.json();
       if (!res.ok || !data.parsed) {
         setReparseChatHistory(prev => [...prev,
-          { role: "parser", text: `Ошибка: ${data.error || "не удалось перепарсить"}` },
+          { role: "parser", text: `Error: ${data.error || "could not re-parse"}` },
         ]);
         return;
       }
@@ -1769,12 +1779,12 @@ export default function EditServiceModalNew({
         return v !== null && v !== undefined && v !== "";
       });
       setReparseChatHistory(prev => [...prev,
-        { role: "parser", text: `Перепарсил с учётом ваших указаний. Заполнено полей: ${filledKeys.length}. Проверьте результат.` },
+        { role: "parser", text: `Re-parsed using your instructions. Fields filled: ${filledKeys.length}. Please review the result.` },
       ]);
     } catch (err) {
       console.error("Reparse error:", err);
       setReparseChatHistory(prev => [...prev,
-        { role: "parser", text: "Ошибка при перепарсинге. Попробуйте ещё раз." },
+        { role: "parser", text: "Re-parse failed. Please try again." },
       ]);
     } finally {
       setIsReparsing(false);
@@ -2932,22 +2942,22 @@ export default function EditServiceModalNew({
           {showAIParsedBanner && (
             <div className="mb-3 space-y-2">
               <div className="flex items-center justify-between gap-2 rounded-lg border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-800">
-                <span>📋 Данные распознаны из документа. {correctedFields.size > 0 ? `Исправлено полей: ${correctedFields.size}` : "Измените поле — оно станет оранжевым."}</span>
+                <span>📋 Data was recognized from the document. {correctedFields.size > 0 ? `Fields corrected: ${correctedFields.size}` : "Edit a field — it will highlight in orange."}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   <button type="button" onClick={() => setShowReparseChat(prev => !prev)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700">
-                    {showReparseChat ? "Скрыть чат" : "💬 Чат с парсером"}
+                    {showReparseChat ? "Hide chat" : "💬 Chat with parser"}
                   </button>
                   <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
                 </div>
               </div>
               {showReparseChat && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
-                  <p className="text-xs text-blue-800 font-medium">💬 Напишите парсеру что не так — он перепарсит документ с вашими указаниями:</p>
+                  <p className="text-xs text-blue-800 font-medium">💬 Tell the parser what is wrong — it will re-parse the document using your instructions:</p>
                   {reparseChatHistory.length > 0 && (
                     <div className="space-y-1 max-h-32 overflow-y-auto">
                       {reparseChatHistory.map((msg, i) => (
                         <div key={i} className={`text-xs px-2 py-1 rounded ${msg.role === "user" ? "bg-white border border-gray-200 text-gray-800" : "bg-blue-100 text-blue-800"}`}>
-                          <span className="font-medium">{msg.role === "user" ? "Вы:" : "Парсер:"}</span> {msg.text}
+                          <span className="font-medium">{msg.role === "user" ? "You:" : "Parser:"}</span> {msg.text}
                         </div>
                       ))}
                     </div>
@@ -2958,7 +2968,7 @@ export default function EditServiceModalNew({
                       value={reparseMessage}
                       onChange={(e) => setReparseMessage(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && !isReparsing && reparseMessage.trim() && handleReparseWithFeedback()}
-                      placeholder="Напр: 'Нет авиабилетов — добавь рейсы' или 'Direction должен быть Латвия-Турция'"
+                      placeholder='e.g. "No flight tickets — add flights" or "Direction should be Latvia–Turkey"'
                       className="flex-1 text-sm border border-blue-300 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
                       disabled={isReparsing}
                     />
@@ -2968,7 +2978,7 @@ export default function EditServiceModalNew({
                       disabled={isReparsing || !reparseMessage.trim()}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      {isReparsing ? "⏳ Парсю..." : "🔄 Перепарсить"}
+                      {isReparsing ? "⏳ Parsing..." : "🔄 Re-parse"}
                     </button>
                   </div>
                 </div>
@@ -4787,20 +4797,32 @@ export default function EditServiceModalNew({
                         </div>
                       )}
                     </div>
-                    {/* Service Price Net: always shown for tour, highlighted when commission is active */}
+                    {/* Service Price Net + Client price summary (same layout; client row uses a calmer color so it stays visible next to net) */}
                     {(() => {
                       const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
                       const hasComm = comm && comm.rate != null && comm.rate > 0;
                       const commAmount = hasComm ? getCommissionAmount(commissionableCost) : 0;
                       const netPrice = Math.round((effectiveServicePrice - commAmount) * 100) / 100;
+                      const clientTotal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
                       return (
-                        <div className={`mt-1 rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-                          <div className="flex items-center justify-between">
-                            <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
-                            <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                        <div className="mt-1 space-y-2">
+                          <div className={`rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
+                              <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                            </div>
+                            <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
+                              {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
                           </div>
-                          <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
-                            {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div className="rounded-lg px-3 py-2 bg-sky-50 border border-sky-200">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-sky-800">Client price</span>
+                              <span className="text-xs text-sky-600">total to client</span>
+                            </div>
+                            <div className="mt-1 text-right text-lg font-bold text-sky-900">
+                              {currencySymbol}{clientTotal.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
                           </div>
                         </div>
                       );
@@ -4861,14 +4883,21 @@ export default function EditServiceModalNew({
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Margin</label>
-                        <div className="inline-flex w-full rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+                        <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                           <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
                           <input
-                            type="text"
-                            readOnly
+                            type="number"
+                            step="0.01"
                             value={marge}
-                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right text-gray-700 bg-transparent border-0"
-                            aria-readonly
+                            onChange={(e) => {
+                              if (service.invoice_id) return;
+                              pricingLastEditedRef.current = "marge";
+                              setMarge(sanitizeNumber(e.target.value));
+                            }}
+                            placeholder="0.00"
+                            disabled={!!service.invoice_id}
+                            title={service.invoice_id ? "Amount is locked: service is on an invoice" : "Edit margin — Total Client price updates; or edit client price to set margin"}
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           />
                         </div>
                       </div>

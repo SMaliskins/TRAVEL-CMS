@@ -280,9 +280,14 @@ function SegmentEditForm({
   const updateField = (field: keyof FlightSegment, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
-  
+
+  /** Full width + min-w-0 so grid cells don’t clip; time pickers need room to render fully */
+  const inp =
+    "w-full min-w-0 rounded border border-gray-300 px-2 py-1.5 text-sm bg-white";
+  const inpTime = `${inp} min-w-[9.5rem] tabular-nums`;
+
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+    <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4 min-w-0 overflow-x-auto">
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-gray-900">Edit Flight Segment</h4>
         <div className="flex gap-2">
@@ -303,29 +308,29 @@ function SegmentEditForm({
         </div>
       </div>
       
-      {/* Flight info */}
-      <div className="grid grid-cols-4 gap-3">
-        <div>
+      {/* Flight info — max 4 columns on wide screens so fields stay readable */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 min-w-0">
+        <div className="min-w-0">
           <label className="block text-xs text-gray-500 mb-1">Airline</label>
           <input
             type="text"
             value={form.airline || ""}
             onChange={(e) => updateField("airline", e.target.value)}
             placeholder="SWISS"
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className={inp}
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs text-gray-500 mb-1">Flight #</label>
           <input
             type="text"
             value={form.flightNumber}
             onChange={(e) => updateField("flightNumber", e.target.value)}
             placeholder="LX348"
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className={inp}
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs text-gray-500 mb-1">Date</label>
           <input
             type="date"
@@ -334,17 +339,17 @@ function SegmentEditForm({
               updateField("departureDate", e.target.value);
               if (!form.arrivalDate) updateField("arrivalDate", e.target.value);
             }}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className={inp}
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs text-gray-500 mb-1">Duration</label>
           <input
             type="text"
             value={form.duration || ""}
             onChange={(e) => updateField("duration", e.target.value)}
             placeholder="1h 45m"
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className={inp}
           />
         </div>
       </div>
@@ -352,8 +357,8 @@ function SegmentEditForm({
       {/* Departure */}
       <div>
         <div className="text-xs font-medium text-gray-700 mb-2">DEPARTURE</div>
-        <div className="grid grid-cols-6 gap-3">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0">
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Airport</label>
             <input
               type="text"
@@ -361,43 +366,43 @@ function SegmentEditForm({
               onChange={(e) => updateField("departure", e.target.value.toUpperCase())}
               placeholder="GVA"
               maxLength={3}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+              className={`${inp} uppercase max-w-full`}
             />
           </div>
-          <div>
+          <div className="min-w-0 sm:col-span-2 lg:col-span-1">
             <label className="block text-xs text-gray-500 mb-1">City</label>
             <input
               type="text"
               value={form.departureCity || ""}
               onChange={(e) => updateField("departureCity", e.target.value)}
               placeholder="Geneva"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Scheduled</label>
             <input
               type="time"
               value={form.departureTimeScheduled}
               onChange={(e) => updateField("departureTimeScheduled", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inpTime}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Actual</label>
             <input
               type="time"
               value={form.departureTimeActual || ""}
               onChange={(e) => updateField("departureTimeActual", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inpTime}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Status</label>
             <select
               value={form.departureStatus}
               onChange={(e) => updateField("departureStatus", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             >
               <option value="scheduled">Scheduled</option>
               <option value="on_time">On Time</option>
@@ -405,14 +410,14 @@ function SegmentEditForm({
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Terminal</label>
             <input
               type="text"
               value={form.departureTerminal || ""}
               onChange={(e) => updateField("departureTerminal", e.target.value)}
               placeholder="1"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             />
           </div>
         </div>
@@ -421,8 +426,8 @@ function SegmentEditForm({
       {/* Arrival */}
       <div>
         <div className="text-xs font-medium text-gray-700 mb-2">ARRIVAL</div>
-        <div className="grid grid-cols-6 gap-3">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0">
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Airport</label>
             <input
               type="text"
@@ -430,43 +435,43 @@ function SegmentEditForm({
               onChange={(e) => updateField("arrival", e.target.value.toUpperCase())}
               placeholder="LHR"
               maxLength={3}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+              className={`${inp} uppercase max-w-full`}
             />
           </div>
-          <div>
+          <div className="min-w-0 sm:col-span-2 lg:col-span-1">
             <label className="block text-xs text-gray-500 mb-1">City</label>
             <input
               type="text"
               value={form.arrivalCity || ""}
               onChange={(e) => updateField("arrivalCity", e.target.value)}
               placeholder="London Heathrow"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Scheduled</label>
             <input
               type="time"
               value={form.arrivalTimeScheduled}
               onChange={(e) => updateField("arrivalTimeScheduled", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inpTime}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Actual</label>
             <input
               type="time"
               value={form.arrivalTimeActual || ""}
               onChange={(e) => updateField("arrivalTimeActual", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inpTime}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Status</label>
             <select
               value={form.arrivalStatus}
               onChange={(e) => updateField("arrivalStatus", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             >
               <option value="scheduled">Scheduled</option>
               <option value="on_time">On Time</option>
@@ -475,14 +480,14 @@ function SegmentEditForm({
               <option value="landed">Landed</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Terminal</label>
             <input
               type="text"
               value={form.arrivalTerminal || ""}
               onChange={(e) => updateField("arrivalTerminal", e.target.value)}
               placeholder="2"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             />
           </div>
         </div>
@@ -491,13 +496,13 @@ function SegmentEditForm({
       {/* Booking Details */}
       <div>
         <div className="text-xs font-medium text-gray-700 mb-2">BOOKING DETAILS</div>
-        <div className="grid grid-cols-6 gap-3">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0">
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Cabin Class</label>
             <select
               value={form.cabinClass || ""}
               onChange={(e) => updateField("cabinClass", e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             >
               <option value="">-</option>
               <option value="economy">Economy</option>
@@ -506,7 +511,7 @@ function SegmentEditForm({
               <option value="first">First</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Fare Class</label>
             <input
               type="text"
@@ -514,47 +519,47 @@ function SegmentEditForm({
               onChange={(e) => updateField("bookingClass", e.target.value.toUpperCase())}
               placeholder="Z"
               maxLength={2}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+              className={`${inp} uppercase`}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Booking Ref</label>
             <input
               type="text"
               value={form.bookingRef || ""}
               onChange={(e) => updateField("bookingRef", e.target.value.toUpperCase())}
               placeholder="ZBBVXE"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+              className={`${inp} uppercase`}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Seat</label>
             <input
               type="text"
               value={form.seat || ""}
               onChange={(e) => updateField("seat", e.target.value.toUpperCase())}
               placeholder="07A"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase"
+              className={`${inp} uppercase`}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs text-gray-500 mb-1">Baggage</label>
             <input
               type="text"
               value={form.baggage || ""}
               onChange={(e) => updateField("baggage", e.target.value)}
               placeholder="2PC"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             />
           </div>
-          <div>
+          <div className="min-w-0 sm:col-span-2 lg:col-span-3">
             <label className="block text-xs text-gray-500 mb-1">Passenger</label>
             <input
               type="text"
               value={form.passengerName || ""}
               onChange={(e) => updateField("passengerName", e.target.value)}
               placeholder="SMITH/JOHN MR"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className={inp}
             />
           </div>
         </div>

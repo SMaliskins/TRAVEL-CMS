@@ -5,6 +5,69 @@
 
 ---
 
+## [2026-03-28] CW — Commission pricing: Client price summary row (sky)
+
+**Task:** Service Price Net is very prominent; add a matching summary row for client total in another color.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `EditServiceModalNew.tsx`, `AddServiceModal.tsx` — below Service Price Net, second card same layout: title **Client price**, subtitle **total to client**, amount from `clientPrice`; styles `bg-sky-50` / `border-sky-200`.
+
+---
+
+## [2026-03-28] CW — Commission pricing: editable Margin ↔ Total Client price
+
+**Task:** Insurance (tour/commission-style): Total Client price editable; user wants bidirectional edit — client price → margin, or margin → client price.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `EditServiceModalNew.tsx`, `AddServiceModal.tsx` — commission `useEffect`: branch `pricingLastEditedRef === "marge"` → `sale = netCost + margin`, agent discount = `cost - sale`; deps +`marge`. Margin input: editable (invoice lock unchanged on Edit). Add: Sale/Marge labels unchanged.
+
+**Next Step:** QA insurance/tour: edit client price vs margin; save payload.
+
+---
+
+## [2026-03-28] CW — Flight segment edit form: readable inputs
+
+**Task:** Edit Flight Segment fields showed truncated text (narrow grid in modal).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `components/FlightItineraryInput.tsx` — `SegmentEditForm`: responsive grids (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` / `xl:grid-cols-4` for top row), shared `inp` / `inpTime` with `min-w-0`, `min-w-[9.5rem]` for time inputs, City wider on `sm`, Passenger full row; form `overflow-x-auto`.
+
+**Next Step:** QA Edit Service flight segment on narrow and wide layout.
+
+---
+
+## [2026-03-28] CW — Edit Service: parser banner / reparse UI English
+
+**Task:** AI-parse banner and reparse chat showed Russian while modal title was English.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `EditServiceModalNew.tsx` — banner, chat labels, placeholders, parser messages → English. `ParseFeedbackPanel.tsx` — user-visible strings → English.
+
+**Next Step:** QA Edit Service after document parse (flight/tour).
+
+---
+
+## [2026-03-28] CW — Travellers modal: create client when directory search empty
+
+**Task:** `AssignedTravellersModal` Search Directory showed "No results found" with no path to add a new directory client (unlike Add accompanying).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `AssignedTravellersModal.tsx` — `DirectoryCreateClientModal`, state `showCreateClientModal`, `+ Create new client` when query ≥2 chars and not searching; `handleDirectoryClientCreated` fetches `/api/directory/:id`, appends to `orderTravellers`, `POST /api/orders/.../travellers`, toast, closes search panel.
+
+**Next Step:** QA: + Add traveller → search unknown name → create client → appears in order pool.
+
+---
+
 ## [2026-03-28] CW — Supplier type: add Partner (GDS / Direct / Partner)
 
 **Task:** Extend order service supplier booking type with `partner` in Add/Edit modals; DB CHECK must allow `partner`.

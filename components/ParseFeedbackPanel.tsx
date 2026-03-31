@@ -17,7 +17,7 @@ import { MessageSquareWarning, Send, Check, X } from 'lucide-react';
  *     documentType="package_tour"
  *     detectedOperator="Novatours"
  *     corrections={[{ field: "mealPlan", oldValue: "Half Board", newValue: "HB" }]}
- *     onSubmit={() => toast("Спасибо за обратную связь!")}
+ *     onSubmit={() => toast("Thanks for the feedback!")}
  *   />
  */
 
@@ -111,7 +111,7 @@ export default function ParseFeedbackPanel({
     return (
       <div className={`flex items-center gap-2 text-sm text-green-600 py-2 ${className || ''}`}>
         <Check size={16} />
-        <span>Спасибо! Коррекция сохранена и будет учтена при следующем парсинге.</span>
+        <span>Thanks! Your correction was saved and will be used to improve future parsing.</span>
       </div>
     );
   }
@@ -124,7 +124,7 @@ export default function ParseFeedbackPanel({
         className={`flex items-center gap-1.5 text-xs text-slate-500 hover:text-amber-600 transition-colors py-1 ${className || ''}`}
       >
         <MessageSquareWarning size={14} />
-        <span>{hasCorrections ? `Отправить ${corrections.length} исправлений` : 'Сообщить об ошибке парсинга'}</span>
+        <span>{hasCorrections ? `Submit ${corrections.length} correction${corrections.length === 1 ? "" : "s"}` : "Report a parse error"}</span>
       </button>
     );
   }
@@ -134,7 +134,7 @@ export default function ParseFeedbackPanel({
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
           <MessageSquareWarning size={16} />
-          Обратная связь по парсингу
+          Parse feedback
         </span>
         <button
           type="button"
@@ -168,7 +168,7 @@ export default function ParseFeedbackPanel({
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          placeholder="Что не так? (необязательно)"
+          placeholder="What went wrong? (optional)"
           className="flex-1 text-sm border border-amber-300 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
           disabled={sending}
         />
@@ -179,7 +179,7 @@ export default function ParseFeedbackPanel({
           className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <Send size={14} />
-          {sending ? '...' : 'Отправить'}
+          {sending ? "..." : "Send"}
         </button>
       </div>
 

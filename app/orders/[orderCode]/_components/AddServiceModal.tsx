@@ -922,13 +922,23 @@ export default function AddServiceModal({
       pricingLastEditedRef.current = null;
       return;
     }
+    if (pricingLastEditedRef.current === "marge") {
+      const margeVal = Math.round((parseFloat(marge) || 0) * 100) / 100;
+      const saleVal = Math.round((netCost + margeVal) * 100) / 100;
+      const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
+      setAgentDiscountType("€");
+      setAgentDiscountValue(discount.toFixed(2));
+      setClientPrice(saleVal.toFixed(2));
+      pricingLastEditedRef.current = null;
+      return;
+    }
     // User edited cost or agent discount → recalc Sale and Margin
     const discountAmount = getAgentDiscountAmount(cost);
     const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
     setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
     setClientPrice(saleCalculated.toFixed(2));
     pricingLastEditedRef.current = null;
-  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice]);
+  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice, marge]);
 
   // Non-commission-style: when Sale (Client price) changes, recalculate Marge = Sale - Cost.
   useEffect(() => {
@@ -3969,20 +3979,32 @@ export default function AddServiceModal({
                         </div>
                       )}
                     </div>
-                    {/* Service Price Net: always shown for tour, highlighted when commission is active */}
+                    {/* Service Price Net + Client price summary (same layout; client row in sky tones) */}
                     {(() => {
                       const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
                       const hasComm = comm && comm.rate != null && comm.rate > 0;
                       const commAmount = hasComm ? getCommissionAmount(commissionableCost) : 0;
                       const netPrice = Math.round((effectiveServicePrice - commAmount) * 100) / 100;
+                      const clientTotal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
                       return (
-                        <div className={`mt-1 rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-                          <div className="flex items-center justify-between">
-                            <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
-                            <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                        <div className="mt-1 space-y-2">
+                          <div className={`rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
+                              <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                            </div>
+                            <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
+                              {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
                           </div>
-                          <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
-                            {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div className="rounded-lg px-3 py-2 bg-sky-50 border border-sky-200">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-sky-800">Client price</span>
+                              <span className="text-xs text-sky-600">total to client</span>
+                            </div>
+                            <div className="mt-1 text-right text-lg font-bold text-sky-900">
+                              {currencySymbol}{clientTotal.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
                           </div>
                         </div>
                       );
@@ -4038,11 +4060,16 @@ export default function AddServiceModal({
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Marge ({currencySymbol})</label>
                         <input
-                          type="text"
-                          readOnly
+                          type="number"
+                          step="0.01"
                           value={marge}
-                          className="w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm text-gray-700"
-                          aria-readonly
+                          onChange={(e) => {
+                            pricingLastEditedRef.current = "marge";
+                            setMarge(sanitizeNumber(e.target.value));
+                          }}
+                          placeholder="0.00"
+                          title="Edit margin — sale updates; or edit sale to set margin"
+                          className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
                       <div>
