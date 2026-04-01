@@ -262,8 +262,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [showReferralInApp, setShowReferralInApp] = useState(() => record?.showReferralInApp === true);
 
     // Person fields
-    const [firstName, setFirstName] = useState(record?.firstName || "");
-    const [lastName, setLastName] = useState(record?.lastName || "");
+    const [firstName, setFirstName] = useState(() => formatNameForDb(record?.firstName || ""));
+    const [lastName, setLastName] = useState(() => formatNameForDb(record?.lastName || ""));
     const [gender, setGender] = useState(record?.gender || "");
     const [personalCode, setPersonalCode] = useState(record?.personalCode || "");
     const [dob, setDob] = useState(() => {
@@ -506,8 +506,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Sync fields from record when record changes (after save)
     useEffect(() => {
       if (record) {
-        setFirstName(record.firstName || "");
-        setLastName(record.lastName || "");
+        setFirstName(formatNameForDb(record.firstName || ""));
+        setLastName(formatNameForDb(record.lastName || ""));
         setGender(record.gender || "");
         setPhone(record.phone ? formatPhoneForDisplay(record.phone) || record.phone : "");
         setEmail(record.email || "");
@@ -671,8 +671,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       if (
         currentType !== initialValues.type ||
         currentRolesStr !== initialRolesStr ||
-        firstName.trim() !== (initialValues.firstName || "").trim() ||
-        lastName.trim() !== (initialValues.lastName || "").trim() ||
+        firstName.trim() !== formatNameForDb(initialValues.firstName || "").trim() ||
+        lastName.trim() !== formatNameForDb(initialValues.lastName || "").trim() ||
         gender !== (initialValues.gender || "") ||
         companyName.trim() !== (initialValues.companyName || "").trim() ||
         personalCode.trim() !== (initialValues.personalCode || "").trim() ||
