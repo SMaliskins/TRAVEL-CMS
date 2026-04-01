@@ -1,0 +1,660 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
+import { useUser } from "@/contexts/UserContext";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
+import RoleBadge from "@/components/users/RoleBadge";
+import dynamic from "next/dynamic";
+
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), { ssr: false });
+
+interface Profile {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  email_signature: string | null;
+  created_at: string;
+  role: {
+    id: string;
+    name: string;
+    display_name: string;
+    level: number;
+    color: string;
+  } | null;
+  company: {
+    id: string;
+    name: string;
+    trading_name?: string;
+    legal_name?: string;
+  } | null;
+}
+
+const LANGUAGE_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: "en", labelKey: "lang.en" },
+  { value: "lv", labelKey: "lang.lv" },
+  { value: "ru", labelKey: "lang.ru" },
+];
+
+export default function ProfilePage() {
+  const router = useRouter();
+  const { updateAvatar } = useUser();
+  const { prefs, updatePrefs, isMounted: prefsMounted } = useUserPreferences();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Profile form
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+
+  // Password form
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  // Email signature
+  const [emailSignature, setEmailSignature] = useState("");
+  const [isSavingSignature, setIsSavingSignature] = useState(false);
+  const [signatureSuccess, setSignatureSuccess] = useState(false);
+
+  // Avatar upload
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/profile", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error("Failed to fetch profile");
+      }
+
+      const data = await response.json();
+      setProfile(data);
+      setFirstName(data.first_name || "");
+      setLastName(data.last_name || "");
+      setPhone(data.phone || "");
+      setAvatarUrl(data.avatar_url || null);
+      setEmailSignature(data.email_signature || "");
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      setError(err instanceof Error ? err.message : "Failed to load profile");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image must be less than 2MB");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      // Upload to Supabase Storage
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${profile?.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Update profile with avatar URL
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ avatar_url: publicUrl }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update avatar");
+      }
+
+      setAvatarUrl(publicUrl);
+      updateAvatar(publicUrl); // Update TopBar immediately
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+    } catch (err) {
+      console.error("Avatar upload error:", err);
+      setError(err instanceof Error ? err.message : "Failed to upload avatar");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    setProfileSuccess(false);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          phone: phone || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update profile");
+      }
+
+      const data = await response.json();
+      setProfile(data);
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveSignature = async () => {
+    setIsSavingSignature(true);
+    setSignatureSuccess(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email_signature: emailSignature }),
+      });
+      if (!response.ok) throw new Error("Failed to save signature");
+      setSignatureSuccess(true);
+      setTimeout(() => setSignatureSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save signature");
+    } finally {
+      setIsSavingSignature(false);
+    }
+  };
+
+  const handleSignatureImageUpload = async (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async (ev) => {
+        const file = (ev.target as HTMLInputElement).files?.[0];
+        if (!file) { resolve(null); return; }
+        if (file.size > 2 * 1024 * 1024) { setError("Image must be less than 2MB"); resolve(null); return; }
+        try {
+          const fileExt = file.name.split(".").pop();
+          const fileName = `signature-logo-${profile?.id}-${Date.now()}.${fileExt}`;
+          const filePath = `signatures/${fileName}`;
+          const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, file, { upsert: true });
+          if (uploadError) throw new Error(uploadError.message);
+          const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(filePath);
+          resolve(publicUrl);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to upload image");
+          resolve(null);
+        }
+      };
+      input.click();
+    });
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(false);
+
+    // Validate
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+
+    setIsSavingPassword(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/profile/password", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to change password");
+      }
+
+      // Clear form
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordSuccess(true);
+      setTimeout(() => setPasswordSuccess(false), 3000);
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-lg text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="rounded-lg bg-white p-8 shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold text-red-600">Error</h2>
+          <p className="text-gray-600">{error || "Profile not found"}</p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-50 p-6">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 rounded-t-lg px-6 py-4 shadow-sm flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">{t(prefs.language, "profile.title")}</h1>
+            <p className="text-sm text-gray-500 mt-1">{t(prefs.language, "profile.subtitle")}</p>
+          </div>
+          <Link
+            href="/settings"
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            ← {t(prefs.language, "profile.backToSettings")}
+          </Link>
+        </div>
+
+        {/* 3-column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Column 1: Profile Info Card */}
+          <div className="rounded-lg bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t(prefs.language, "profile.profile")}</h2>
+            <div className="flex flex-col items-center text-center">
+              {/* Avatar with upload */}
+              <div className="relative mb-4">
+                <div
+                  className="flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-gray-200 text-2xl font-medium text-gray-700 hover:ring-2 hover:ring-blue-400"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Click to change avatar"
+                >
+                  {isUploadingAvatar ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                  ) : avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      {firstName?.[0]?.toUpperCase() || ""}
+                      {lastName?.[0]?.toUpperCase() || ""}
+                    </>
+                  )}
+                </div>
+                {/* Edit icon overlay */}
+                <div
+                  className="absolute bottom-0 right-0 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Info */}
+              <h3 className="text-lg font-semibold text-gray-900">
+                {firstName} {lastName}
+              </h3>
+              <p className="text-sm text-gray-500">{profile.email}</p>
+              <div className="mt-3 flex items-center gap-2">
+                {profile.role && <RoleBadge role={profile.role.name} size="sm" />}
+              </div>
+              {profile.company && (
+                <p className="mt-2 text-sm text-gray-500">{profile.company.trading_name || profile.company.legal_name || profile.company.name}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Column 2: Personal Information Form */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">{t(prefs.language, "profile.personalInfo")}</h2>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="p-6">
+              {error && (
+                <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              {profileSuccess && (
+                <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                  {t(prefs.language, "profile.updated")}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.email")}
+                  </label>
+                  <input
+                    type="email"
+                    value={profile.email}
+                    disabled
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.firstName")}
+                  </label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.lastName")}
+                  </label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.phone")}
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+371 12345678"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingProfile ? t(prefs.language, "profile.saving") : t(prefs.language, "profile.saveChanges")}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Language */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">{t(prefs.language, "profile.language")}</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{t(prefs.language, "profile.languageHint")}</p>
+            </div>
+            <div className="p-6">
+              {prefsMounted ? (
+                <select
+                  value={prefs.language}
+                  onChange={(e) => updatePrefs({ language: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {t(prefs.language, opt.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
+              )}
+            </div>
+          </div>
+
+          {/* Column 3: Change Password Form */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">{t(prefs.language, "profile.changePassword")}</h2>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="p-6">
+              {passwordError && (
+                <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {passwordError}
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                  {t(prefs.language, "profile.passwordChanged")}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.currentPassword")}
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.newPassword")}
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">{t(prefs.language, "profile.minChars")}</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {t(prefs.language, "profile.confirmPassword")}
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="submit"
+                  disabled={isSavingPassword || !currentPassword || !newPassword || !confirmPassword}
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingPassword ? t(prefs.language, "profile.changing") : t(prefs.language, "profile.changePasswordBtn")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {/* Email Signature — full width */}
+        <div className="rounded-lg bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-6 py-4">
+            <h2 className="text-lg font-semibold text-gray-900">Email Signature</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Your signature is appended to outgoing emails. Use the toolbar to format text and insert images.</p>
+          </div>
+          <div className="p-6">
+            {signatureSuccess && (
+              <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">Signature saved successfully.</div>
+            )}
+
+            <RichTextEditor
+              content={emailSignature}
+              onChange={setEmailSignature}
+              placeholder="Type your signature here..."
+              onImageUpload={handleSignatureImageUpload}
+            />
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSaveSignature}
+                disabled={isSavingSignature}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSavingSignature ? "Saving..." : "Save Signature"}
+              </button>
+              {emailSignature && (
+                <button
+                  type="button"
+                  onClick={() => { if (confirm("Clear your email signature?")) setEmailSignature(""); }}
+                  className="text-sm text-red-600 hover:text-red-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

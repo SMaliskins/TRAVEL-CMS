@@ -195,6 +195,98 @@ function getDiacriticQueryVariants(s: string, maxVariants: number = 5): string[]
   return Array.from(out);
 }
 
+/**
+ * Cyrillic letters that look like Latin (passport / copy-paste). Without folding,
+ * "gilch" (Latin) does not match "gilсh" (Cyrillic с) — short prefixes like "gil" still match.
+ */
+const CYRILLIC_LOOKALIKE_TO_LATIN: Record<string, string> = {
+  "\u0430": "a", "\u0410": "a",
+  "\u0432": "v", "\u0412": "v",
+  "\u0435": "e", "\u0415": "e",
+  "\u043E": "o", "\u041E": "o",
+  "\u0440": "p", "\u0420": "p",
+  "\u0441": "c", "\u0421": "c",
+  "\u0443": "y", "\u0423": "y",
+  "\u0445": "x", "\u0425": "x",
+  "\u0456": "i", "\u0406": "i",
+  "\u0458": "j", "\u0408": "j",
+};
+
+/** Lowercase, strip diacritics, fold Cyrillic→Latin confusables for substring / fuzzy match */
+export function foldForSearchMatch(s: string): string {
+  const base = normalizeForSearch(s);
+  let out = "";
+  for (const ch of base) {
+    out += CYRILLIC_LOOKALIKE_TO_LATIN[ch] ?? ch;
+  }
+  return out;
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+/**
+ * True if some slice of haystack is within maxDist edits of needle (typos, one adjacent swap costs ≤2 in Levenshtein).
+ */
+function fuzzySubstringMatch(haystack: string, needle: string, maxDist: number): boolean {
+  if (needle.length === 0) return true;
+  if (needle.length > haystack.length) {
+    return levenshtein(haystack, needle) <= maxDist;
+  }
+  const n = needle.length;
+  const minLen = Math.max(1, n - maxDist);
+  const maxLen = Math.min(haystack.length, n + maxDist);
+  for (let len = minLen; len <= maxLen; len++) {
+    for (let i = 0; i + len <= haystack.length; i++) {
+      const slice = haystack.slice(i, i + len);
+      if (levenshtein(slice, needle) <= maxDist) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Plain-text query match: folded substring + optional fuzzy tolerance (for list / filter UIs).
+ */
+export function matchesLooseTextQuery(
+  text: string | null | undefined,
+  query: string,
+  options?: { fuzzy?: boolean; maxDist?: number; minFuzzyLen?: number }
+): boolean {
+  if (!text || typeof text !== "string") return false;
+  const trimmed = query.trim();
+  if (!trimmed) return true;
+  const t = foldForSearchMatch(text);
+  const q = foldForSearchMatch(trimmed);
+  if (!q) return true;
+  if (t.includes(q)) return true;
+  const fuzzy = options?.fuzzy !== false;
+  const maxDist = options?.maxDist ?? 2;
+  const minLen = options?.minFuzzyLen ?? 4;
+  if (fuzzy && q.length >= minLen) {
+    return fuzzySubstringMatch(t, q, maxDist);
+  }
+  return false;
+}
+
 /** Remove diacritics for search matching */
 export function normalizeForSearch(s: string): string {
   if (!s || typeof s !== "string") return "";
@@ -323,12 +415,12 @@ export function normalizeQueryForSemantic(query: string): string {
 /** Check if text matches any of the search patterns (for in-memory filtering) */
 export function matchesSearch(text: string | null | undefined, patterns: string[]): boolean {
   if (!text) return false;
-  const textNorm = normalizeForSearch(text);
-  const textLower = text.toLowerCase();
+  const textFold = foldForSearchMatch(text);
   for (const p of patterns) {
-    const pNorm = normalizeForSearch(p);
-    const pLower = p.toLowerCase();
-    if (textLower.includes(pLower) || textNorm.includes(pNorm)) return true;
+    const pFold = foldForSearchMatch(p);
+    if (!pFold) continue;
+    if (textFold.includes(pFold)) return true;
+    if (pFold.length >= 4 && fuzzySubstringMatch(textFold, pFold, 2)) return true;
   }
   return false;
 }

@@ -1,0 +1,47 @@
+---
+description: Flight service name generation — IATA codes must be resolved to city names
+globs: 
+  - app/orders/**/*.tsx
+  - lib/flights/**/*.ts
+  - lib/services/**/*.ts
+---
+
+# Flight Service Name: IATA → City Name Resolution
+
+**MANDATORY RULE — DO NOT BREAK**
+
+## What this rule covers
+
+When flight segments are used to auto-generate a service name (the "Name" column), **IATA airport codes (RIX, IST, LHR, etc.) MUST be converted to human-readable city names (Riga, Istanbul, London, etc.)**.
+
+## How it works
+
+1. `getCityByIATA(code)` from `@/lib/data/cities` resolves any 3-letter IATA code to a city name using a comprehensive database of 7,698+ airports.
+2. `getServiceDisplayName()` from `@/lib/services/serviceDisplayName` is the display-layer fallback that also resolves codes.
+
+## Service name generation (Add/Edit modals)
+
+In `AddServiceModal.tsx` and `EditServiceModalNew.tsx`, the `useEffect` that generates the service name from `flightSegments` MUST use this resolution pattern:
+
+```typescript
+const resolveCity = (code: string, cityName?: string): string => {
+  if (cityName?.trim()) return cityName.trim();
+  if (!code) return "";
+  return getCityByIATA(code)?.name || code;
+};
+```
+
+Then use `resolveCity(seg.departure, seg.departureCity)` instead of `seg.departureCity || seg.departure`.
+
+## FORBIDDEN
+
+- ❌ Using raw `seg.departure` or `seg.arrival` (IATA codes) as city names in service name
+- ❌ Falling back to IATA codes when `departureCity`/`arrivalCity` is empty — always resolve via `getCityByIATA`
+- ❌ Removing or rewriting the service name generation logic without explicit user request
+- ❌ Changing any existing working function without explicit user request
+
+## REQUIRED
+
+- ✅ Always import `getCityByIATA` from `@/lib/data/cities` in files that generate flight service names
+- ✅ Always resolve IATA → city before building the service name string
+- ✅ Use existing utility functions — do not create new ones for the same purpose

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
@@ -29,6 +29,10 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 import OrderClientsDataTab from "./_components/OrderClientsDataTab";
+import { OrderPageHeaderE, type OrderHeaderEOrder } from "./_components/OrderPageHeaderE";
+
+/** Set to `true` to restore the previous multi-column sticky order header. */
+const USE_LEGACY_ORDER_PAGE_HEADER = false;
 
 type TabType =
   | "client"
@@ -907,6 +911,7 @@ export default function OrderPage({
       <div className="mx-auto max-w-7xl px-3 py-4 sm:p-4">
         {/* A) Order Header - Order Code left, Client+Itinerary+Amount right */}
         <div ref={stickyHeaderRef} className={`mb-0 ${showInvoiceCreator ? "" : "sticky top-0 z-20"} bg-gray-50 pt-1.5 pb-1 border-b border-gray-200 shadow-[0_4px_8px_-3px_rgba(0,0,0,0.06)] -mx-3 px-3 sm:mx-0 sm:px-0`}>
+          {USE_LEGACY_ORDER_PAGE_HEADER ? (
           <div className="flex flex-col sm:flex-row sm:items-stretch sm:flex-wrap lg:flex-nowrap gap-3 sm:gap-0">
             {/* Block 1: Order Code + Status + Type/Source */}
             <div className="shrink-0 pr-2 flex flex-col justify-center">
@@ -1611,6 +1616,206 @@ export default function OrderPage({
               </div>
             </>)}
           </div>
+          ) : (
+          <div className="space-y-2">
+            <OrderPageHeaderE
+              lang={lang}
+              order={order}
+              orderLoading={orderLoading}
+              effectiveOrderCode={effectiveOrderCode}
+              effectiveStatus={effectiveStatus}
+              orderCode={orderCode}
+              companyCurrencyCode={companyCurrencyCode}
+              linkedToInvoices={linkedToInvoices}
+              showOrderSource={showOrderSource}
+              showPaymentPlan={showPaymentPlan}
+              setShowPaymentPlan={setShowPaymentPlan}
+              currentRole={currentRole}
+              isSaving={isSaving}
+              onStatusChange={handleStatusChange}
+              onDeleteOpen={() => {
+                setShowDeleteModal(true);
+                setDeletePassword("");
+                setDeleteError("");
+              }}
+              isCtrlPressed={isCtrlPressed}
+              leadPassengerHeaderAvatar={leadPassengerHeaderAvatar}
+              leadPassengerAvatarFailed={leadPassengerAvatarFailed}
+              setLeadPassengerAvatarFailed={setLeadPassengerAvatarFailed}
+              parsedItinerary={parsedItinerary}
+              autoDestinations={autoDestinations}
+              startEditingClient={startEditingClient}
+              startEditingItinerary={startEditingItinerary}
+              startEditingDates={startEditingDates}
+              setOrder={setOrder as Dispatch<SetStateAction<OrderHeaderEOrder | null>>}
+              onOpenDirectoryParty={(partyId) => setDirectoryPopupPartyId(partyId)}
+              row2Replacement={
+                order && editingHeaderField === "client" ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <div className="w-full min-w-0 sm:w-64">
+                      <PartySelect
+                        value={editClientId}
+                        onChange={(partyId, displayName) => {
+                          if (partyId && displayName) {
+                            saveClient(partyId, displayName);
+                          }
+                        }}
+                        roleFilter="client"
+                        directoryMatchTravellersApi
+                        prioritizedParties={clientPickerPrioritizedParties}
+                        initialDisplayName={order.client_display_name || ""}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingHeaderField(null)}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      {t(lang, "order.cancel")}
+                    </button>
+                    <span className="text-xs text-gray-400">({t(lang, "order.selectNewOrCancel")})</span>
+                  </div>
+                ) : undefined
+              }
+            />
+            {order && editingHeaderField === "itinerary" && (
+              <div className="mt-2 rounded-lg border bg-gray-50 p-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-700">From</label>
+                    <CityMultiSelect
+                      selectedCities={editOrigin ? [editOrigin] : []}
+                      onChange={(cities) => setEditOrigin(cities[0] || null)}
+                      placeholder="Origin city..."
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-700">To (drag to reorder)</label>
+                    {editDestinations.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {editDestinations.map((city, idx) => (
+                          <div
+                            key={`${city.city}-${idx}`}
+                            draggable
+                            onDragStart={() => setDraggedDestIdx(idx)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => {
+                              if (draggedDestIdx !== null && draggedDestIdx !== idx) {
+                                const newDests = [...editDestinations];
+                                const [dragged] = newDests.splice(draggedDestIdx, 1);
+                                newDests.splice(idx, 0, dragged);
+                                setEditDestinations(newDests);
+                              }
+                              setDraggedDestIdx(null);
+                            }}
+                            onDragEnd={() => setDraggedDestIdx(null)}
+                            className={`inline-flex cursor-move items-center gap-1 rounded px-2 py-1 text-xs transition-all ${
+                              draggedDestIdx === idx
+                                ? "bg-blue-200 text-blue-800 opacity-50"
+                                : "bg-green-100 text-green-800 hover:bg-green-200"
+                            }`}
+                          >
+                            {city.countryCode && <span className="mr-1">{countryCodeToFlag(city.countryCode)}</span>}
+                            {city.city}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditDestinations((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="ml-0.5 text-green-600 hover:text-green-800"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <CityMultiSelect
+                      selectedCities={[]}
+                      onChange={(cities) => {
+                        if (cities.length > 0) {
+                          setEditDestinations((prev) => [...prev, ...cities]);
+                        }
+                      }}
+                      placeholder="Add destination..."
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={editReturnToOrigin}
+                      onChange={(e) => {
+                        setEditReturnToOrigin(e.target.checked);
+                        if (e.target.checked) setEditReturnCity(null);
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Return to origin</span>
+                  </label>
+                  {!editReturnToOrigin && (
+                    <div className="max-w-48 flex-1">
+                      <CityMultiSelect
+                        selectedCities={editReturnCity ? [editReturnCity] : []}
+                        onChange={(cities) => setEditReturnCity(cities[0] || null)}
+                        placeholder="Return city..."
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={saveItinerary}
+                    disabled={isSavingField}
+                    className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isSavingField ? "..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingHeaderField(null)}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {order && editingHeaderField === "dates" && (
+              <div className="mt-2 flex flex-col flex-wrap gap-2 sm:flex-row sm:items-center">
+                <div className="w-full min-w-0 sm:w-80">
+                  <DateRangePicker
+                    label=""
+                    from={editDateFrom || undefined}
+                    to={editDateTo || undefined}
+                    onChange={(from, to) => {
+                      setEditDateFrom(from || "");
+                      setEditDateTo(to || "");
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={saveDates}
+                  disabled={isSavingField}
+                  className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isSavingField ? "..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingHeaderField(null)}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  {t(lang, "order.cancel")}
+                </button>
+              </div>
+            )}
+          </div>
+          )}
 
           {/* B) Tabs + Action Buttons */}
           <nav className="-mb-px flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-200/60 mt-1 pt-2">

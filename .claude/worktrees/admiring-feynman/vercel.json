@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/storage-usage",
+      "schedule": "0 3 * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "bugs.(?<domain>.*)"
+        }
+      ],
+      "destination": "/devlog"
+    }
+  ]
+}

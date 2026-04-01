@@ -1,0 +1,16 @@
+# Add Missing Cities to Database
+
+When you encounter a **city name** or **IATA airport code** that is used in the app (Map, flight itinerary, itinerary parsing, etc.) but is **not found** in `lib/data/cities.ts`:
+
+1. **Add the city** to the `CITIES` array in `lib/data/cities.ts`.
+2. Insert it in the correct **country section** (create a section if needed).
+3. Use accurate coordinates (lat/lng) for the city or its main airport.
+4. Include `iataCode` if it's an airport city (e.g. BOJ for Burgas).
+5. Use ISO 3166-1 alpha-2 `countryCode` (e.g. BG, LV, TR).
+
+**Format:**
+```ts
+{ name: "CityName", country: "Country", countryCode: "XX", lat: 42.xx, lng: 27.xx, iataCode: "XXX" },
+```
+
+**Example:** Missing Burgas (BOJ) → add under Bulgaria section, with coordinates for Burgas Airport.

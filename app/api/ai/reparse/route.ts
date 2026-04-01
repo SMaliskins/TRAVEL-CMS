@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
-import { parseFromRequest } from "@/lib/ai/parseWithAI";
+import { parseFromRequest, type ParseResult } from "@/lib/ai/parseWithAI";
 import type { DocumentType } from "@/lib/ai/parseSchemas";
+
+function jsonFromParseResult<T>(result: ParseResult<T>) {
+  const parsed = result.data ?? null;
+  const base = {
+    parsed,
+    detectedOperator: (parsed as Record<string, unknown> | null)?.detectedOperator ?? null,
+    feedback_applied: true as const,
+  };
+  if (!parsed) {
+    return NextResponse.json(
+      {
+        ...base,
+        error: result.error || "AI did not return valid structured data for this document.",
+      },
+      { status: 422 }
+    );
+  }
+  return NextResponse.json(base);
+}
 
 /**
  * Reparse API — re-parse a document with user feedback/instructions.
@@ -42,15 +61,15 @@ export async function POST(request: NextRequest) {
       documentType = (formData.get("documentType") as string as DocumentType) || "package_tour";
       feedback = (formData.get("feedback") as string) || "";
 
-      // Rebuild the request with the feedback injected
-      // We'll pass feedback as a header so parseFromRequest can use it
       const newFormData = new FormData();
       const file = formData.get("file") as File | null;
       if (file) newFormData.append("file", file);
 
-      const newHeaders = new Headers(request.headers);
-      newHeaders.set("x-parse-feedback", feedback);
-      newHeaders.set("content-type", contentType);
+      const newHeaders = new Headers();
+      const auth = request.headers.get("authorization");
+      if (auth) newHeaders.set("authorization", auth);
+      const cookie = request.headers.get("cookie");
+      if (cookie) newHeaders.set("cookie", cookie);
 
       const newRequest = new NextRequest(request.url, {
         method: "POST",
@@ -66,11 +85,7 @@ export async function POST(request: NextRequest) {
         feedback
       );
 
-      return NextResponse.json({
-        parsed: result.data || null,
-        detectedOperator: (result.data as Record<string, unknown>)?.detectedOperator || null,
-        feedback_applied: true,
-      });
+      return jsonFromParseResult(result);
     } else {
       // JSON body
       const body = await request.json();
@@ -103,11 +118,7 @@ export async function POST(request: NextRequest) {
         feedback
       );
 
-      return NextResponse.json({
-        parsed: result.data || null,
-        detectedOperator: (result.data as Record<string, unknown>)?.detectedOperator || null,
-        feedback_applied: true,
-      });
+      return jsonFromParseResult(result);
     }
   } catch (err) {
     console.error("Reparse error:", err);

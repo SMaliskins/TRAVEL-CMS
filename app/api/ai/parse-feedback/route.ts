@@ -12,7 +12,7 @@ import { getApiUser } from "@/lib/auth/getApiUser";
  * 1. User sees parsing result with errors
  * 2. User corrects fields → frontend sends corrections here
  * 3. Backend saves to parse_feedback
- * 4. Admin can later promote frequent corrections to parse_rules
+ * 4. Repeated corrections on the same field auto-create parse_rules (first correction onward for that field)
  */
 
 export async function POST(request: NextRequest) {
@@ -91,8 +91,9 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * If the same field correction appears 3+ times for the same document_type,
+ * If the same field correction appears at least once (per company / document type),
  * auto-create a parse_rule so future parsing gets it right.
+ * Internal/meta fields (names starting with _) are skipped.
  */
 async function maybeAutoCreateRule(
   companyId: string,
@@ -100,7 +101,7 @@ async function maybeAutoCreateRule(
   fieldName: string | undefined,
   operator: string | undefined
 ): Promise<void> {
-  if (!fieldName) return;
+  if (!fieldName || fieldName.startsWith("_")) return;
 
   try {
     // Count similar corrections
@@ -118,9 +119,8 @@ async function maybeAutoCreateRule(
 
     const { count } = await query;
 
-    if ((count || 0) < 3) return;
+    if ((count || 0) < 1) return;
 
-    // Get the most common new_value
     const { data: corrections } = await supabaseAdmin
       .from("parse_feedback")
       .select("new_value, old_value")
@@ -131,7 +131,7 @@ async function maybeAutoCreateRule(
       .order("created_at", { ascending: false })
       .limit(5);
 
-    if (!corrections || corrections.length < 3) return;
+    if (!corrections || corrections.length < 1) return;
 
     // Check if a rule already exists for this field
     const { data: existing } = await supabaseAdmin
@@ -147,7 +147,7 @@ async function maybeAutoCreateRule(
 
     // Create auto-rule
     const latest = corrections[0];
-    const ruleText = `For field "${fieldName}": users repeatedly corrected "${latest.old_value || "(empty)"}" to "${latest.new_value}". Always use "${latest.new_value}" for this pattern.`;
+    const ruleText = `For field "${fieldName}": user corrected "${latest.old_value || "(empty)"}" to "${latest.new_value}". Always use "${latest.new_value}" for this pattern.`;
 
     await supabaseAdmin.from("parse_rules").insert({
       company_id: companyId,
@@ -158,7 +158,7 @@ async function maybeAutoCreateRule(
       rule_text: ruleText,
       example_before: latest.old_value || null,
       example_after: latest.new_value || null,
-      source_feedback_count: count || 3,
+      source_feedback_count: count || 1,
     });
 
     // Mark corrections as resolved

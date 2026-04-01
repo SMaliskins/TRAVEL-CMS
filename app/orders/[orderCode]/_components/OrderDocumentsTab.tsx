@@ -49,6 +49,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const [parsingIds, setParsingIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<OrderDocument>>({});
+  const [docDropActive, setDocDropActive] = useState(false);
 
   const loadDocuments = useCallback(async () => {
     if (!orderCode) return;
@@ -209,46 +210,78 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
     });
   }, []);
 
+  const uploadFile = useCallback(
+    async (rawFile: File) => {
+      if (!orderCode) return;
+      setUploading(true);
+      setError(null);
+      try {
+        const file = await compressImage(rawFile);
+        const { data: { session } } = await supabase.auth.getSession();
+        const formData = new FormData();
+        formData.set("file", file);
+        formData.set("document_type", "invoice");
+        const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/documents`, {
+          method: "POST",
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          body: formData,
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const newDoc = json.document;
+          setDocuments((prev) => [newDoc, ...prev]);
+          const mime = (newDoc.mime_type || newDoc.file_name || "").toLowerCase();
+          const isPdf = mime.includes("pdf");
+          const isImage = /\.(png|jpg|jpeg|webp)$/i.test(newDoc.file_name || "") ||
+            /^image\/(png|jpeg|jpg|webp)$/.test(mime);
+          if (isPdf || isImage) parseDocument(newDoc);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          let msg = err.error || "Upload failed";
+          if (res.status === 503 || /connection failed|fetch failed|TypeError/i.test(msg)) {
+            msg = "Database connection failed. Please try again later.";
+          }
+          setError(msg);
+        }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : "Upload failed";
+        setError(/fetch failed|TypeError|connection/i.test(errMsg) ? "Database connection failed. Please try again later." : "Upload failed");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [orderCode, compressImage, parseDocument]
+  );
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawFile = e.target.files?.[0];
-    if (!rawFile || !orderCode) return;
-    setUploading(true);
-    setError(null);
-    try {
-      const file = await compressImage(rawFile);
-      const { data: { session } } = await supabase.auth.getSession();
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("document_type", "invoice");
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/documents`, {
-        method: "POST",
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        body: formData,
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const newDoc = json.document;
-        setDocuments((prev) => [newDoc, ...prev]);
-        const mime = (newDoc.mime_type || newDoc.file_name || "").toLowerCase();
-        const isPdf = mime.includes("pdf");
-        const isImage = /\.(png|jpg|jpeg|webp)$/i.test(newDoc.file_name || "") ||
-          /^image\/(png|jpeg|jpg|webp)$/.test(mime);
-        if (isPdf || isImage) parseDocument(newDoc);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        let msg = err.error || "Upload failed";
-        if (res.status === 503 || /connection failed|fetch failed|TypeError/i.test(msg)) {
-          msg = "Database connection failed. Please try again later.";
-        }
-        setError(msg);
-      }
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : "Upload failed";
-      setError(/fetch failed|TypeError|connection/i.test(errMsg) ? "Database connection failed. Please try again later." : "Upload failed");
-    } finally {
-      setUploading(false);
-      e.target.value = "";
+    if (!rawFile) return;
+    await uploadFile(rawFile);
+    e.target.value = "";
+  };
+
+  const handleDocDropZoneDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes("Files")) setDocDropActive(true);
+  };
+
+  const handleDocDropZoneDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    const r = el.getBoundingClientRect();
+    if (e.clientX <= r.left || e.clientX >= r.right || e.clientY <= r.top || e.clientY >= r.bottom) {
+      setDocDropActive(false);
     }
+  };
+
+  const handleDocDropZoneDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDocDropActive(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void uploadFile(f);
   };
 
   const handleDelete = async (docId: string) => {
@@ -319,10 +352,18 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
       {loading ? (
         <div className="py-8 text-center text-gray-500">{t(lang, "order.loadingDocuments")}</div>
       ) : documents.length === 0 ? (
-        <div className="rounded-lg border-2 border-dashed border-gray-200 py-12 text-center text-gray-500">
+        <div
+          className={`rounded-lg border-2 border-dashed py-12 text-center text-gray-500 transition-colors ${
+            docDropActive ? "border-blue-400 bg-blue-50/60 ring-2 ring-blue-200" : "border-gray-200"
+          }`}
+          onDragLeave={handleDocDropZoneDragLeave}
+          onDragOver={handleDocDropZoneDragOver}
+          onDrop={handleDocDropZoneDrop}
+        >
           {t(lang, "order.noDocumentsYet")}
         </div>
       ) : (
+        <>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-600">
@@ -475,6 +516,17 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
             })}
           </tbody>
         </table>
+        <div
+          className={`mt-4 rounded-lg border-2 border-dashed py-6 text-center text-sm transition-colors ${
+            docDropActive ? "border-blue-400 bg-blue-50/60 ring-2 ring-blue-200" : "border-gray-200 text-gray-400"
+          }`}
+          onDragLeave={handleDocDropZoneDragLeave}
+          onDragOver={handleDocDropZoneDragOver}
+          onDrop={handleDocDropZoneDrop}
+        >
+          {uploading ? t(lang, "order.uploading") : t(lang, "order.dropFilesHere")}
+        </div>
+        </>
       )}
 
       <ContentModal

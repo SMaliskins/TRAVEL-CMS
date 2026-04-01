@@ -2,6 +2,9 @@
  * Service-line margin / VAT / profit — aligned with app/api/orders/route.ts (orders list).
  * "Profit" in the list = margin minus VAT portion of margin (profit net of VAT).
  * Stored vat_rate applies when set (including 0); only null/empty falls back to category (air ticket / flight → 0%, else 21%).
+ *
+ * Commission-adjusted net cost (margin = client − (service_price − commission)) must match
+ * `COMMISSION_PRICING_CATEGORIES` + airport-services rule in EditServiceModalNew.tsx — not only tour/package.
  */
 
 export type ServiceEconomicsInput = {
@@ -17,6 +20,22 @@ function signed(s: ServiceEconomicsInput, field: "client_price" | "service_price
   const raw = field === "client_price" ? s.client_price : s.service_price;
   const v = Number(raw) || 0;
   return s.service_type === "cancellation" ? -Math.abs(v) : v;
+}
+
+/**
+ * Categories where service_price is gross supplier cost and commission_amount reduces net cost
+ * (same intent as EditServiceModalNew `COMMISSION_PRICING_CATEGORIES` + isAirportServicesCategory).
+ */
+export function categoryUsesCommissionAdjustedNetCost(category: string | null | undefined): boolean {
+  const c = (category || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (c.includes("tour") || c.includes("package")) return true;
+  if (c.includes("insurance") || c.includes("страхов")) return true;
+  if (c.includes("ancillary")) return true;
+  if (c.includes("cruise")) return true;
+  if (c.includes("rent a car") || c.includes("rent_a_car") || c.includes("car rental")) return true;
+  if (c.includes("transfer")) return true;
+  if (c.includes("airport") && c.includes("service")) return true;
+  return false;
 }
 
 /**
@@ -46,12 +65,12 @@ export function computeServiceLineEconomics(s: ServiceEconomicsInput): {
 } {
   const clientPrice = signed(s, "client_price");
   const servicePrice = signed(s, "service_price");
-  const cat = (s.category || "").toLowerCase();
-  const isTour = cat.includes("tour") || cat.includes("package");
+  const cat = s.category;
+  const useCommissionNetCost = categoryUsesCommissionAdjustedNetCost(cat);
   const vatRate = resolveVatRatePercent(s);
 
   let margin = 0;
-  if (isTour && s.commission_amount != null) {
+  if (useCommissionNetCost) {
     const commission =
       s.service_type === "cancellation"
         ? -Math.abs(Number(s.commission_amount) || 0)

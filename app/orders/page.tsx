@@ -44,7 +44,7 @@ interface OrderRow {
   totalInvoices?: number;
   allInvoicesPaid?: boolean;
   payers?: string[];
-  /** Names on service lines — search matches even when not lead passenger */
+  /** Service clients + travellers (API) — search; payers use `payers` */
   serviceClients?: string[];
   /** Order has a referral partner (profit in list is after referral commission) */
   hasReferral?: boolean;

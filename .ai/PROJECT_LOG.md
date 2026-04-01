@@ -5,6 +5,208 @@
 
 ---
 
+## [2026-03-31] CW — Header E scoreboard: year under month in cell
+
+**Task:** User asked where to show year in date blocks.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `ScoreboardDateCell` — third line `getFullYear()`, subtle slate-6; dash vertical tweak.
+
+---
+
+## [2026-03-31] CW — Header E scoreboard: slightly smaller day numerals
+
+**Task:** User: "чуть меньше" for date cells.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `ScoreboardDateCell` — reduced day/month sizes and cell width/padding.
+
+---
+
+## [2026-03-31] CW — Header E destination: same compact style as variant D
+
+**Task:** User prefers D-style flag + gray-7 + Bangkok → Samui for E.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `DEMO.destinationCompact`; E row2 matches D classes; `title` keeps full `destinationLine` on hover; D uses `destinationCompact`.
+
+---
+
+## [2026-03-31] CW — Header variant E: scoreboard dates lighter + smaller + zero-pad day
+
+**Task:** User: smaller digits, not black bg, days 01–09 with leading zero.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderHeaderVariantDemos.tsx` — `ScoreboardDateCell` sky/slate light panel, reduced type size, `padStart(2,"0")`.
+
+**Next Step:** Product review `?variant=e`.
+
+---
+
+## [2026-03-31] CW — Flight primary parse: pass parser-chat hint to AI (skip regex)
+
+**Task:** User: Paste/PDF auto-parse ignored chat comment; only Re-parse did.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `parse-flight-itinerary/route.ts` — JSON/multipart: optional `feedback` → `parseFromRequest`; `EditServiceModalNew` — `reparseMessageRef`, hint skips regex, AI body `{ text, feedback }`; UI copy under drop zone + chat blurb.
+
+**Next Step:** Optional always-visible hint before first parse (banner currently gates chat).
+
+---
+
+## [2026-03-31] CW — Parser chat → immediate parse_rules + auto-rule threshold 1
+
+**Task:** User wants parser chat to train the system from the first message, not 3× same correction; align product with persistent rules.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `POST /api/ai/parse-rules/user-instruction` — сохраняет текст чата в `parse_rules` (priority 5) + audit в `parse_feedback` (`_parser_chat`); `EditServiceModalNew` вызывает перед re-parse; копирайт чата обновлён; `parse-feedback` `maybeAutoCreateRule` порог 3→1, пропуск `field_name` с `_`; комментарии в `ParseFeedbackPanel`.
+
+**Next Step:** QA flight+tour; при необходимости дедуп правил или UI списка правил для компании.
+
+---
+
+## [2026-03-28] CW — Reparse API: return 422 + error when parsed is null
+
+**Task:** User saw generic "Error: could not re-parse" with no underlying reason.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `app/api/ai/reparse/route.ts` — `jsonFromParseResult`: 422 + `error` from `ParseResult` when `data` missing; client already shows `data.error`.
+
+**Next Step:** QA flight re-parse; clarify UX that chat line is hints, not document replacement.
+
+---
+
+## [2026-03-28] CW — Header variant E: scoreboard dates + stacked tag blocks
+
+**Task:** Variant E — move dates to row 1 after delete; large airport-style day + 3-letter month; leisure vs TA/TO/CORP/NON tags in two vertical rows.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderHeaderVariantDemos.tsx` — `ScoreboardDateCell`, `VariantETagChip`, `DEMO.dateFromIso`/`dateToIso`, `tagsLeisure`/`tagsSource`; `header-layout-demo/page.tsx` variant E blurb.
+
+**Next Step:** Product review `?variant=e`.
+
+---
+
+## [2026-03-28] CW — Order Documents tab: drag-and-drop on empty state
+
+**Task:** User could not drop PDF/images on dashed area; UI looked like a drop zone but had no handlers.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderDocumentsTab.tsx` — `uploadFile` shared by file input + `onDrop` on empty-state zone; highlight on drag-over; `lib/i18n.ts` — `order.noDocumentsYet` mentions drag (EN/RU/LV).
+
+**Next Step:** QA drop PDF/JPG/WEBP; GIF still rejected by API (`ALLOWED_TYPES`).
+
+---
+
+## [2026-03-28] CW — Flight parser chat: re-parse source + apply flight data
+
+**Task:** “Chat with parser” said no document for air tickets; re-parse applied tour data; flight paste/PDF did not set lastParsed refs.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `EditServiceModalNew.tsx` — sync `lastParsedTextRef`/`lastParsedFileRef` with PDF/TXT/paste parse; re-parse uses `parseSourceTextRef` fallback + `mapFlightTicketParsedToSegments` + `applyParsedFlightData` for flight; clearer error when no source.
+
+**Next Step:** QA re-parse after PDF and after paste+Parse on Edit Air Ticket.
+
+---
+
+## [2026-03-28] CW — Order header demo: variants E–G (max 2 rows)
+
+**Task:** Extra header layout tabs E/F/G focused on two-row density.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `header-layout-demo` — `HeaderVariantE/F/G`, `?variant=e|f|g`.
+
+**Next Step:** Product picks variant for real order page.
+
+---
+
+## [2026-03-28] CW — Service economics: commission for insurance + commission categories
+
+**Task:** Profit/margin ignored commission for Insurance (and same bug for ancillary, cruise, transfer, rent a car, airport services); align with EditServiceModal commission pricing.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `lib/orders/serviceEconomics.ts` — `categoryUsesCommissionAdjustedNetCost`, margin = client − (service − commission) for those categories; `app/api/dashboard/chart/route.ts` — use `computeServiceLineEconomics`; `CancelServiceModal` + `EditServiceModalNew` — marge uses same economics + live commission from form.
+
+**Next Step:** QA Finances tab Service Breakdown + dashboard chart vs manual totals.
+
+---
+
+## [2026-03-28] CW — Order header layout demo (tabs A–D)
+
+**Task:** Demo page with bookmarkable tabs for compact header variants (static mock order).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `app/orders/header-layout-demo/page.tsx` + `_components/OrderHeaderVariantDemos.tsx`; `?variant=a|b|c|d`.
+
+**Next Step:** Product picks variant for real `OrderPage` header.
+
+---
+
+## [2026-03-28] CW — Orders search: Cyrillic/Latin homoglyph fold + fuzzy match
+
+**Task:** "Gil" finds Gilchenko but "Gilch" does not — confusable letters; add typo tolerance for list filters.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `lib/directory/searchNormalize.ts` — `foldForSearchMatch` (кириллица, похожая на латиницу, → латиница), `matchesLooseTextQuery`, `fuzzySubstringMatch` + Levenshtein ≤2; `matchesSearch` uses fold + fuzzy fallback. `lib/stores/filterOrders.ts` — поле query text через `matchesLooseTextQuery` (order id без fuzzy).
+
+**Next Step:** Optional: усилить семантический поиск по заказам (embeddings) отдельной задачей.
+
+---
+
+## [2026-03-28] CW — Orders list search: payers + travellers + API `?search=`
+
+**Task:** Orders list text search must match payers and any service user (order_travellers + order_service_travellers), not only lead client / service `client_name`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/api/orders/route.ts` — `collectTravellerSearchLabelsByOrder`, merge into list `serviceClients` and into in-memory `?search=` filter; search prefetch includes `payer_name` from `order_services`; `order_services` select includes `id`, `client_name`. `lib/stores/filterOrders.ts` — `queryText` also matches `payers`.
+
+**Next Step:** QA orders search (surname in box + optional `?search=`).
+
+---
+
+## [2026-03-28] CW — Order services table: no duplicate supplier when BSP = airline name
+
+**Task:** Supplier column showed "Turkish Airlines / Turkish Airlines" for airline channel when supplier_name matched airline_channel_supplier_name.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderServicesBlock.tsx` — `formatServiceSupplierDisplay()`: second segment only when names differ (case-insensitive). `EditServiceModalNew` — `onServiceUpdated` passes `supplierNameRaw` for merged state.
+
+**Next Step:** QA BSP flight row + save.
+
+---
+
 ## [2026-03-28] CW — Commission pricing: Client price summary row (sky)
 
 **Task:** Service Price Net is very prominent; add a matching summary row for client total in another color.

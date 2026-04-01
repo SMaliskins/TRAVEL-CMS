@@ -39,12 +39,12 @@ export default function ItineraryTabs({
   const totalServices = Object.values(serviceCountByTraveller).reduce((sum, count) => sum + count, 0);
 
   return (
-    <div className="border-b border-gray-200 mb-3">
-      <div className="flex items-center gap-1 overflow-x-auto pb-px">
+    <div className="border-b border-gray-200 mb-2">
+      <div className="flex items-center gap-0.5 overflow-x-auto pb-px">
         {/* "All" tab */}
         <button
           onClick={() => onSelectTraveller(null)}
-          className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
             selectedTravellerId === null
               ? "border-blue-600 text-blue-600 bg-blue-50"
               : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
@@ -67,7 +67,7 @@ export default function ItineraryTabs({
             <button
               key={traveller.id}
               onClick={() => onSelectTraveller(traveller.id)}
-              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
                 isSelected
                   ? "border-blue-600 text-blue-600 bg-blue-50"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"

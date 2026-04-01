@@ -1,0 +1,194 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
+import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
+import { sendEmail } from "@/lib/email/sendEmail";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+async function getUser(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (!error && data?.user) return data.user;
+  }
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Cookie: cookieHeader } },
+    });
+    const { data, error } = await authClient.auth.getUser();
+    if (!error && data?.user) return data.user;
+  }
+  return null;
+}
+
+// POST /api/orders/[orderCode]/invoices/[invoiceId]/email - Send invoice via email (Resend)
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string; invoiceId: string }> }
+) {
+  try {
+    const { invoiceId } = await params;
+    const body = await request.json();
+    const { to, subject, message } = body;
+
+    const user = await getUser(request);
+
+    if (!to || !to.trim()) {
+      return NextResponse.json(
+        { error: "Email address is required" },
+        { status: 400 }
+      );
+    }
+
+    // Get invoice with items and company logo
+    const { data: invoice, error: invoiceError } = await supabaseAdmin
+      .from("invoices")
+      .select(`
+        *,
+        orders(id, order_code, company_id),
+        invoice_items (
+          id,
+          service_name,
+          service_client,
+          service_category,
+          service_date_from,
+          service_date_to,
+          service_dates_text,
+          quantity,
+          unit_price,
+          line_total
+        )
+      `)
+      .eq("id", invoiceId)
+      .single();
+
+    if (invoiceError || !invoice) {
+      return NextResponse.json(
+        { error: "Invoice not found" },
+        { status: 404 }
+      );
+    }
+
+    const orderRow = Array.isArray(invoice?.orders) ? invoice.orders[0] : invoice?.orders;
+    const companyId = orderRow?.company_id ?? null;
+
+    let companyLogoUrl: string | null = null;
+    let companyInfo: InvoiceCompanyInfo | null = null;
+    let emailFrom: string | null = null;
+    let invoiceTemplateId: string | undefined;
+    let invoiceAccentColor: string | undefined;
+    if (companyId) {
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("*")
+        .eq("id", companyId)
+        .single();
+      if (company) {
+        companyLogoUrl = (company as { logo_url?: string | null }).logo_url ?? null;
+        const rawName = (company as { name?: string }).name ?? "";
+        const legalName = (company as { legal_name?: string }).legal_name ?? "";
+        const tradingName = (company as { trading_name?: string }).trading_name ?? "";
+        const displayName = legalName || (rawName.trim() !== "Default Company" ? rawName : "") || tradingName || rawName || "";
+        const companyEmailFrom = (company as { invoice_email_from?: string | null }).invoice_email_from?.trim() || null;
+        const envFrom = process.env.EMAIL_FROM || "";
+        const extractEmail = (s: string) => { const m = s.match(/<([^>]+)>/); return m ? m[1].trim() : s.trim(); };
+        const fallbackEmail = envFrom ? extractEmail(envFrom) : "noreply@travel-cms.com";
+        emailFrom = `${displayName} <${companyEmailFrom || fallbackEmail}>`;
+        const { data: bankAccounts } = await supabaseAdmin
+          .from("company_bank_accounts")
+          .select("account_name, bank_name, iban, swift, currency")
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .eq("use_in_invoices", true)
+          .order("is_default", { ascending: false })
+          .order("account_name");
+        const defaultBank = bankAccounts?.[0];
+
+        companyInfo = {
+          name: displayName,
+          address: (company as { address?: string; legal_address?: string; operating_address?: string }).address || (company as { legal_address?: string }).legal_address || (company as { operating_address?: string }).operating_address || null,
+          regNr: (company as { registration_number?: string; reg_nr?: string }).registration_number ?? (company as { reg_nr?: string }).reg_nr ?? null,
+          vatNr: (company as { vat_number?: string; vat_nr?: string }).vat_number ?? (company as { vat_nr?: string }).vat_nr ?? null,
+          bankName: defaultBank?.bank_name || (company as { bank_name?: string }).bank_name || null,
+          bankAccount: defaultBank?.iban || (company as { bank_account?: string }).bank_account || null,
+          bankSwift: defaultBank?.swift || (company as { swift_code?: string; bank_swift?: string }).swift_code || (company as { bank_swift?: string }).bank_swift || null,
+          bankAccounts: bankAccounts ?? [],
+          country: (company as { country?: string }).country ?? null,
+        };
+        invoiceTemplateId = (company as { invoice_template?: string }).invoice_template ?? undefined;
+        invoiceAccentColor = (company as { invoice_accent_color?: string }).invoice_accent_color ?? undefined;
+      }
+    }
+
+    const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo, invoiceTemplateId, invoiceAccentColor);
+    const emailSubject = subject?.trim() || `Invoice ${invoice.invoice_number}`;
+    const emailHtml =
+      (message?.trim()
+        ? `<p>${message.replace(/\n/g, "<br>")}</p><hr style="margin:16px 0">${htmlBody}`
+        : `<p>Please find attached invoice ${invoice.invoice_number}.</p><hr style="margin:16px 0">${htmlBody}`);
+
+    const attachments: { filename: string; content: Buffer }[] = [];
+    const pdfBuffer = await generatePDFFromHTML(htmlBody);
+    if (pdfBuffer && pdfBuffer.length > 0) {
+      attachments.push({
+        filename: `${(invoice.invoice_number as string).replace(/\s+/g, "-")}.pdf`,
+        content: pdfBuffer,
+      });
+    }
+
+    const result = await sendEmail(
+      to.trim(),
+      emailSubject,
+      emailHtml,
+      undefined,
+      attachments.length ? attachments : undefined,
+      { from: emailFrom || undefined, companyId: companyId || undefined }
+    );
+
+    if (!result.success) {
+      const msg =
+        result.reason === "no_api_key"
+          ? "Email is not configured (RESEND_API_KEY missing)."
+          : result.error || "Failed to send email.";
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+
+    const orderId = orderRow?.id ?? null;
+    if (orderId && companyId) {
+      await supabaseAdmin.from("order_communications").insert({
+        company_id: companyId,
+        order_id: orderId,
+        invoice_id: invoiceId,
+        type: "to_client",
+        recipient_email: to.trim(),
+        subject: emailSubject,
+        body: message?.trim() || `Invoice ${invoice.invoice_number}`,
+        sent_by: user?.id ?? null,
+        email_sent: true,
+        resend_email_id: result.id ?? null,
+        delivery_status: "sent",
+      }).then(({ error: commError }) => {
+        if (commError) console.error("Failed to log communication:", commError);
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Invoice email sent successfully",
+      id: result.id,
+    });
+  } catch (error: unknown) {
+    console.error("Error sending invoice email:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

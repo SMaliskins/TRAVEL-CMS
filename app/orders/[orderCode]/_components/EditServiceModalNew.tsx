@@ -262,6 +262,44 @@ function getCurrencySymbol(code: string): string {
   }
 }
 
+/** Unified `flight_ticket` AI output → segments for applyParsedFlightData (initial parse + reparse). */
+function mapFlightTicketParsedToSegments(
+  parsed: Record<string, unknown>
+): { segments: FlightSegment[]; booking: Record<string, unknown> } {
+  const raw = (parsed.segments as Array<Record<string, unknown>> | undefined) || [];
+  const segments: FlightSegment[] = raw.map((seg) => ({
+    id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `seg-${Math.random().toString(36).slice(2, 11)}`,
+    flightNumber: String(seg.flightNumber ?? ""),
+    airline: typeof seg.airline === "string" ? seg.airline : undefined,
+    departure: String(seg.departure ?? "").toUpperCase().slice(0, 4),
+    departureCity: typeof seg.departureCity === "string" ? seg.departureCity : undefined,
+    departureCountry: typeof seg.departureCountry === "string" ? seg.departureCountry : undefined,
+    arrival: String(seg.arrival ?? "").toUpperCase().slice(0, 4),
+    arrivalCity: typeof seg.arrivalCity === "string" ? seg.arrivalCity : undefined,
+    arrivalCountry: typeof seg.arrivalCountry === "string" ? seg.arrivalCountry : undefined,
+    departureDate: String(seg.departureDate ?? ""),
+    departureTimeScheduled: String(seg.departureTimeScheduled ?? ""),
+    arrivalDate: String(seg.arrivalDate ?? seg.departureDate ?? ""),
+    arrivalTimeScheduled: String(seg.arrivalTimeScheduled ?? ""),
+    departureTerminal: typeof seg.departureTerminal === "string" ? seg.departureTerminal : undefined,
+    arrivalTerminal: typeof seg.arrivalTerminal === "string" ? seg.arrivalTerminal : undefined,
+    duration: typeof seg.duration === "string" ? seg.duration : undefined,
+    cabinClass: seg.cabinClass as FlightSegment["cabinClass"] | undefined,
+    baggage: typeof seg.baggage === "string" ? seg.baggage : undefined,
+    bookingRef: typeof seg.bookingRef === "string" ? seg.bookingRef : undefined,
+    ticketNumber: typeof seg.ticketNumber === "string" ? seg.ticketNumber : undefined,
+    passengerName: typeof seg.passengerName === "string" ? seg.passengerName : undefined,
+    departureStatus: "scheduled",
+    arrivalStatus: "scheduled",
+  }));
+  const bookingRaw = parsed.booking;
+  const booking =
+    bookingRaw && typeof bookingRaw === "object" && !Array.isArray(bookingRaw)
+      ? (bookingRaw as Record<string, unknown>)
+      : {};
+  return { segments, booking };
+}
+
 export default function EditServiceModalNew({
   service,
   orderCode,
@@ -834,6 +872,10 @@ export default function EditServiceModalNew({
   const [reparseMessage, setReparseMessage] = useState("");
   const [isReparsing, setIsReparsing] = useState(false);
   const [reparseChatHistory, setReparseChatHistory] = useState<{ role: "user" | "parser"; text: string }[]>([]);
+  const reparseMessageRef = useRef(reparseMessage);
+  useEffect(() => {
+    reparseMessageRef.current = reparseMessage;
+  }, [reparseMessage]);
   const lastParsedFileRef = useRef<File | null>(null);
   const lastParsedTextRef = useRef<string>("");
   const [replacingClientIdx, setReplacingClientIdx] = useState<number | null>(null);
@@ -1715,10 +1757,15 @@ export default function EditServiceModalNew({
   const handleReparseWithFeedback = useCallback(async () => {
     const feedback = reparseMessage.trim();
     if (!feedback) return;
-    if (!lastParsedFileRef.current && !lastParsedTextRef.current) {
+    const flightTextFallback =
+      categoryType === "flight" ? (parseSourceTextRef.current || "").trim() : "";
+    if (!lastParsedFileRef.current && !lastParsedTextRef.current && !flightTextFallback) {
       setReparseChatHistory(prev => [...prev,
         { role: "user", text: feedback },
-        { role: "parser", text: "No source document to re-parse. Upload the document again." },
+        {
+          role: "parser",
+          text: "No source text or file is stored for re-parse. Use “Paste & Parse” (drop PDF/TXT or Ctrl+V), wait until the route fills, then open Chat with parser again.",
+        },
       ]);
       setReparseMessage("");
       return;
@@ -1735,6 +1782,17 @@ export default function EditServiceModalNew({
       const headers: Record<string, string> = {};
       if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
 
+      const persistRes = await fetch("/api/ai/parse-rules/user-instruction", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ documentType: docType, instruction: feedback }),
+      });
+      const instructionRuleSaved = persistRes.ok;
+      if (!persistRes.ok) {
+        const errText = await persistRes.text().catch(() => "");
+        console.error("[reparse] Failed to persist parser instruction:", persistRes.status, errText);
+      }
+
       let res: Response;
       if (lastParsedFileRef.current) {
         const formData = new FormData();
@@ -1747,11 +1805,12 @@ export default function EditServiceModalNew({
           body: formData,
         });
       } else {
+        const textBody = lastParsedTextRef.current || flightTextFallback;
         res = await fetch("/api/ai/reparse", {
           method: "POST",
           headers: { ...headers, "Content-Type": "application/json" },
           body: JSON.stringify({
-            text: lastParsedTextRef.current,
+            text: textBody,
             documentType: docType,
             feedback,
           }),
@@ -1760,26 +1819,45 @@ export default function EditServiceModalNew({
 
       const data = await res.json();
       if (!res.ok || !data.parsed) {
+        const suffix = instructionRuleSaved
+          ? " Your message was saved as a company parsing rule and will apply to the next parse of this document type."
+          : " Saving your instruction as a company rule failed — check your connection or try again.";
         setReparseChatHistory(prev => [...prev,
-          { role: "parser", text: `Error: ${data.error || "could not re-parse"}` },
+          { role: "parser", text: `Error: ${data.error || "could not re-parse"}.${suffix}` },
         ]);
         return;
       }
 
-      // Apply new parsed data
       setCorrectedFields(new Set());
       setParsedFields(new Set());
       setParseAttemptedButEmpty(new Set());
-      await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
 
-      // Count what was parsed
+      if (categoryType === "flight") {
+        const { segments, booking } = mapFlightTicketParsedToSegments(data.parsed as Record<string, unknown>);
+        if (segments.length === 0) {
+          setReparseChatHistory(prev => [...prev,
+            { role: "parser", text: "Re-parse returned no flight segments. Try clearer instructions or paste the full booking text again." },
+          ]);
+          return;
+        }
+        applyParsedFlightData(segments, booking);
+      } else {
+        await applyParsedTourData({ ...data.parsed, detectedOperator: data.detectedOperator ?? (data.parsed as Record<string, unknown>)?.detectedOperator });
+      }
+
       const parsed = data.parsed as Record<string, unknown>;
       const filledKeys = Object.keys(parsed).filter(k => {
         const v = parsed[k];
         return v !== null && v !== undefined && v !== "";
       });
+      const okSuffix = instructionRuleSaved
+        ? " Your note is saved as a company rule for future documents of this type."
+        : " (Could not save your note as a company rule — only this re-parse used it.)";
       setReparseChatHistory(prev => [...prev,
-        { role: "parser", text: `Re-parsed using your instructions. Fields filled: ${filledKeys.length}. Please review the result.` },
+        {
+          role: "parser",
+          text: `Re-parsed with your instructions.${okSuffix} Fields filled: ${filledKeys.length}. Please review the result.`,
+        },
       ]);
     } catch (err) {
       console.error("Reparse error:", err);
@@ -2064,10 +2142,12 @@ export default function EditServiceModalNew({
           return;
         }
         parseSourceTextRef.current = extractedText;
+        lastParsedTextRef.current = extractedText;
+        lastParsedFileRef.current = file;
 
-        // Try auto-parsing the extracted text
+        const pdfHint = reparseMessageRef.current.trim();
         const result = parseFlightBooking(extractedText);
-        if (result && result.segments.length > 0) {
+        if (!pdfHint && result && result.segments.length > 0) {
           const segments: FlightSegment[] = result.segments.map(seg => ({
             id: seg.id, flightNumber: seg.flightNumber, airline: seg.airline,
             departure: seg.departure, departureCity: seg.departureCity,
@@ -2089,7 +2169,6 @@ export default function EditServiceModalNew({
           setShowPasteInput(false);
           setPasteText('');
         } else {
-          // Regex failed — auto-trigger AI parsing
           setIsParsingFlight(true);
           try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -2099,7 +2178,10 @@ export default function EditServiceModalNew({
                 "Content-Type": "application/json",
                 ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
               },
-              body: JSON.stringify({ text: extractedText }),
+              body: JSON.stringify({
+                text: extractedText,
+                ...(pdfHint ? { feedback: pdfHint } : {}),
+              }),
             });
             const aiData = await res.json();
             if (res.ok && aiData.segments?.length > 0) {
@@ -2130,8 +2212,11 @@ export default function EditServiceModalNew({
         const text = (event.target?.result as string || '').trim();
         if (!text) return;
         parseSourceTextRef.current = text;
+        lastParsedTextRef.current = text;
+        lastParsedFileRef.current = null;
+        const txtHint = reparseMessageRef.current.trim();
         const regexResult = parseFlightBooking(text);
-        if (regexResult && regexResult.segments.length > 0) {
+        if (!txtHint && regexResult && regexResult.segments.length > 0) {
           const segments: FlightSegment[] = regexResult.segments.map(seg => ({
             id: seg.id, flightNumber: seg.flightNumber, airline: seg.airline,
             departure: seg.departure, departureCity: seg.departureCity,
@@ -2157,7 +2242,7 @@ export default function EditServiceModalNew({
             const res = await fetch("/api/ai/parse-flight-itinerary", {
               method: "POST",
               headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-              body: JSON.stringify({ text }),
+              body: JSON.stringify({ text, ...(txtHint ? { feedback: txtHint } : {}) }),
             });
             const aiData = await res.json();
             if (res.ok && aiData.segments?.length > 0) {
@@ -2298,10 +2383,13 @@ export default function EditServiceModalNew({
     setParseError(null);
     const text = pasteText.trim();
     parseSourceTextRef.current = text;
+    lastParsedTextRef.current = text;
+    lastParsedFileRef.current = null;
 
-    // Try regex first — instant, free, deterministic
+    const parseHint = reparseMessage.trim();
     const result = parseFlightBooking(text);
-    if (result && result.segments.length > 0) {
+    // Regex only when there is no operator hint — hints go to AI with feedback injection
+    if (!parseHint && result && result.segments.length > 0) {
       const segments: FlightSegment[] = result.segments.map(seg => ({
         id: seg.id,
         flightNumber: seg.flightNumber,
@@ -2338,7 +2426,7 @@ export default function EditServiceModalNew({
       return;
     }
 
-    // Fallback: AI parsing for formats regex can't handle
+    // AI parsing (required if hint present, or regex missed)
     setIsParsingFlight(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -2348,7 +2436,7 @@ export default function EditServiceModalNew({
           "Content-Type": "application/json",
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, ...(parseHint ? { feedback: parseHint } : {}) }),
       });
       const data = await res.json();
       
@@ -2667,6 +2755,7 @@ export default function EditServiceModalNew({
           name: serviceName,
           category,
           supplier: supplierName || "-",
+          supplierNameRaw: supplierName || "",
           client: primaryClient?.name || "-",
           payer: payerName || "-",
           supplierPartyId,
@@ -2952,7 +3041,9 @@ export default function EditServiceModalNew({
               </div>
               {showReparseChat && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
-                  <p className="text-xs text-blue-800 font-medium">💬 Tell the parser what is wrong — it will re-parse the document using your instructions:</p>
+                  <p className="text-xs text-blue-800 font-medium">
+                    💬 Describe what is wrong or how fields should read. Your message is saved as a <strong>company parsing rule</strong> (applies from the next parse onward), then this document is re-parsed with your note. The same text is also used if you <strong>Paste &amp; Parse</strong> or <strong>drop PDF/TXT</strong> while this field is filled (AI parse; regex is skipped).
+                  </p>
                   {reparseChatHistory.length > 0 && (
                     <div className="space-y-1 max-h-32 overflow-y-auto">
                       {reparseChatHistory.map((msg, i) => (
@@ -3066,7 +3157,9 @@ export default function EditServiceModalNew({
                             </svg>
                             📋 Paste & Parse (replace flight)
                           </div>
-                          <span className="text-xs text-gray-400">or drop PDF / TXT file, Ctrl+V to paste</span>
+                          <span className="text-xs text-gray-400">
+                            or drop PDF / TXT file, Ctrl+V to paste — if the parser chat field has text, it is sent to AI parse (regex skipped)
+                          </span>
                         </>
                       )}
                     </div>
@@ -4867,15 +4960,12 @@ export default function EditServiceModalNew({
                             min="0"
                             value={clientPrice}
                             onChange={(e) => {
-                              if (service.invoice_id) return;
                               pricingLastEditedRef.current = "sale";
                               const v = parseFloat(e.target.value) || 0;
                               setClientPrice(String(Math.round(v * 100) / 100));
                             }}
                             placeholder="0.00"
-                            disabled={!!service.invoice_id}
-                            title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
-                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           />
                         </div>
                       </div>
@@ -4890,14 +4980,12 @@ export default function EditServiceModalNew({
                             step="0.01"
                             value={marge}
                             onChange={(e) => {
-                              if (service.invoice_id) return;
                               pricingLastEditedRef.current = "marge";
                               setMarge(sanitizeNumber(e.target.value));
                             }}
                             placeholder="0.00"
-                            disabled={!!service.invoice_id}
-                            title={service.invoice_id ? "Amount is locked: service is on an invoice" : "Edit margin — Total Client price updates; or edit client price to set margin"}
-                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            title="Edit margin — Total Client price updates; or edit client price to set margin"
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           />
                         </div>
                       </div>
@@ -5247,8 +5335,8 @@ export default function EditServiceModalNew({
                           </div>
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
                             <span className="text-slate-600 shrink-0">Client price</span>
-                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500 disabled:opacity-70"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={!!service.invoice_id} value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { if (service.invoice_id) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
-                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500 disabled:opacity-70"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={!!service.invoice_id} value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { if (service.invoice_id) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
                           </div>
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center pt-1.5 mt-0.5 border-t border-sky-200/80">
                             <span className="text-slate-700 font-medium shrink-0">Total Client price</span>
@@ -5278,7 +5366,7 @@ export default function EditServiceModalNew({
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-sm text-slate-600 shrink-0">Total Client price</span>
-                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500 disabled:opacity-70"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { if (service.invoice_id) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" disabled={!!service.invoice_id} className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                           </div>
                         </div>
                       )}
@@ -6036,6 +6124,16 @@ export default function EditServiceModalNew({
             servicePrice: parseFloat(servicePrice) || 0,
             clientPrice: parseFloat(clientPrice) || 0,
             resStatus: resStatus,
+            serviceType: service.serviceType,
+            commissionAmount: usesCommissionPricing
+              ? (() => {
+                  const c = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
+                  return c?.rate != null && c.rate > 0
+                    ? Math.round((commissionableCost * c.rate / 100) * 100) / 100
+                    : 0;
+                })()
+              : service.commissionAmount ?? null,
+            vatRate: vatRate ?? null,
             refNr: refNr,
             dateFrom: dateFrom,
             dateTo: dateTo,

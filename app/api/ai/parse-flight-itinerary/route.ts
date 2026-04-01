@@ -44,6 +44,20 @@ interface FlightSegment {
   arrivalStatus: string;
 }
 
+function cloneJsonIntakeRequest(source: NextRequest, payload: Record<string, unknown>): NextRequest {
+  const h = new Headers();
+  h.set("Content-Type", "application/json");
+  const auth = source.headers.get("authorization");
+  if (auth) h.set("authorization", auth);
+  const cookie = source.headers.get("cookie");
+  if (cookie) h.set("cookie", cookie);
+  return new NextRequest(source.url, {
+    method: "POST",
+    headers: h,
+    body: JSON.stringify(payload),
+  });
+}
+
 /** Fix AI year bias: if model returns 2024 but current year is later, fix it */
 function fixYear(d: string): string {
   if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -88,11 +102,56 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const contentType = request.headers.get("content-type") || "";
+    let intakeRequest: NextRequest = request;
+    let userFeedback: string | undefined;
+
+    if (contentType.includes("application/json")) {
+      const body = (await request.json()) as {
+        text?: string;
+        image?: string;
+        mimeType?: string;
+        feedback?: string;
+      };
+      const fb = typeof body.feedback === "string" ? body.feedback.trim() : "";
+      userFeedback = fb || undefined;
+
+      if (body.text) {
+        intakeRequest = cloneJsonIntakeRequest(request, { text: body.text });
+      } else if (body.image) {
+        intakeRequest = cloneJsonIntakeRequest(request, {
+          image: body.image,
+          mimeType: body.mimeType || "image/png",
+        });
+      } else {
+        return NextResponse.json(
+          { error: "JSON body must include \"text\" or \"image\"", segments: [], booking: null },
+          { status: 400 }
+        );
+      }
+    } else if (contentType.includes("multipart/form-data")) {
+      const fd = await request.formData();
+      const rawFb = fd.get("feedback");
+      const fb = typeof rawFb === "string" ? rawFb.trim() : "";
+      userFeedback = fb || undefined;
+      const file = fd.get("file");
+      if (!file || !(file instanceof File)) {
+        return NextResponse.json(
+          { error: "Multipart request requires file field", segments: [], booking: null },
+          { status: 400 }
+        );
+      }
+      const newFd = new FormData();
+      newFd.append("file", file);
+      intakeRequest = new NextRequest(request.url, { method: "POST", body: newFd });
+    }
+
     const result = await parseFromRequest<FlightTicketData>(
-      request,
+      intakeRequest,
       "flight_ticket",
       authInfo.companyId,
-      authInfo.userId
+      authInfo.userId,
+      userFeedback
     );
 
     if (!result.success || !result.data) {

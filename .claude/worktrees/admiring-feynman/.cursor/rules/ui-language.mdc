@@ -1,0 +1,22 @@
+# UI language — user preference (My Profile)
+
+**Interface language is set by the user in My Profile (Settings > Profile > Language).** It is not a company setting (unlike currency or date format).
+
+## How it works
+
+- Language is stored per user in **localStorage** via `useUserPreferences()` (`prefs.language`).
+- Supported values: `en`, `ru`, `lv`.
+- When the user selects "Русский", the interface must show Russian where translations exist.
+
+## When building anything new
+
+1. **Always respect the user's language** for all UI strings (labels, buttons, messages, headings).
+2. Use **`useUserPreferences()`** to get the current language: `const { prefs } = useUserPreferences();` then pass `prefs.language` to your translation helper.
+3. Use **`@/lib/i18n`** for shared UI strings: `import { t } from "@/lib/i18n";` and `t(prefs.language, "some.key")`. Add new keys and translations for `en`, `ru`, and `lv` in `lib/i18n.ts`.
+4. For **role names and role-related labels**, use **`getRoleDisplayName(role, prefs.language)`** from `@/lib/auth/roles` (already has en/ru/lv).
+5. For **dates/numbers** use existing patterns: `Intl.DateTimeFormat(prefs.language, ...)`, `Intl.NumberFormat(prefs.language, ...)` where appropriate.
+
+## Do not
+
+- Add a "system language" or "company language" in Company/Regional Settings for the UI. Company settings are for things like currency, date format, timezone — not the language in which the user sees the app.
+- Hardcode English (or any single language) in new components without supporting the user's chosen language.

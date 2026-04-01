@@ -1,0 +1,988 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import AssignedTravellersModal from "./AssignedTravellersModal";
+import SplitServiceModal from "./SplitServiceModal";
+import AddServiceModal, { ServiceData } from "./AddServiceModal";
+import DateRangePicker from "@/components/DateRangePicker";
+import PartyCombobox from "./PartyCombobox";
+
+interface Traveller {
+  id: string;
+  firstName: string;
+  lastName: string;
+  title: "Mr" | "Mrs" | "Chd";
+  dob?: string;
+  personalCode?: string;
+  contactNumber?: string;
+}
+
+interface Service {
+  id: string;
+  dateFrom: string;
+  dateTo: string;
+  category: string;
+  name: string;
+  supplier: string;
+  client: string;
+  payer: string;
+  payerPartyId?: string;
+  clientPartyId?: string;
+  servicePrice: number;
+  clientPrice: number;
+  resStatus: "booked" | "confirmed" | "changed" | "rejected" | "cancelled";
+  refNr?: string;
+  ticketNr?: string;
+  assignedTravellerIds: string[];
+  invoice_id?: string | null; // NEW: Invoice lock
+  splitGroupId?: string | null; // NEW: Split group identifier
+}
+
+interface OrderServicesBlockProps {
+  orderCode: string;
+  // Default client from order for auto-fill in AddServiceModal
+  defaultClientId?: string | null;
+  defaultClientName?: string;
+  onIssueInvoice?: (services: any[]) => void;
+}
+
+export default function OrderServicesBlock({ 
+  orderCode,
+  defaultClientId,
+  defaultClientName,
+  onIssueInvoice,
+}: OrderServicesBlockProps) {
+  const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [modalServiceId, setModalServiceId] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editServiceId, setEditServiceId] = useState<string | null>(null);
+  const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+
+  // Fetch services from API
+  const fetchServices = useCallback(async () => {
+    if (!orderCode) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, {
+        headers: {
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Map API response to Service interface
+        const mappedServices: Service[] = (data.services || []).map((s: ServiceData) => ({
+          id: s.id,
+          dateFrom: s.dateFrom || "",
+          dateTo: s.dateTo || s.dateFrom || "",
+          category: s.category || "Other",
+          name: s.serviceName,
+          supplier: s.supplierName || "-",
+          client: s.clientName || "-",
+          payer: s.payerName || "-",
+          servicePrice: s.servicePrice || 0,
+          clientPrice: s.clientPrice || 0,
+          resStatus: s.resStatus || "booked",
+          refNr: s.refNr || "",
+          ticketNr: s.ticketNr || "",
+          assignedTravellerIds: s.travellerIds || [],
+          invoice_id: s.invoice_id || null,
+          payerPartyId: s.payerPartyId,
+          clientPartyId: s.clientPartyId,
+          splitGroupId: s.splitGroupId || null,
+        }));
+        setServices(mappedServices);
+      }
+    } catch (err) {
+      console.error("Fetch services error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orderCode]);
+
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
+
+  // Handle new service added
+  const handleServiceAdded = (service: ServiceData) => {
+    const newService: Service = {
+      id: service.id,
+      dateFrom: service.dateFrom || "",
+      dateTo: service.dateTo || service.dateFrom || "",
+      category: service.category || "Other",
+      name: service.serviceName,
+      supplier: service.supplierName || "-",
+      client: service.clientName || "-",
+      payer: service.payerName || "-",
+      invoice_id: null,
+      servicePrice: service.servicePrice || 0,
+      clientPrice: service.clientPrice || 0,
+      resStatus: service.resStatus || "booked",
+      refNr: service.refNr || "",
+      ticketNr: service.ticketNr || "",
+      assignedTravellerIds: service.travellerIds || [],
+    };
+    setServices(prev => [...prev, newService]);
+  };
+
+  const selectedService = services.find((s) => s.id === modalServiceId);
+
+  const getTravellerInitials = (travellerId: string) => {
+    const traveller = orderTravellers.find((t) => t.id === travellerId);
+    if (!traveller) return "??";
+    return (
+      traveller.firstName.charAt(0) + traveller.lastName.charAt(0)
+    ).toUpperCase();
+  };
+
+  const getResStatusColor = (status: Service["resStatus"]) => {
+    switch (status) {
+      case "confirmed":
+        return "bg-green-100 text-green-800";
+      case "booked":
+        return "bg-blue-100 text-blue-800";
+      case "changed":
+        return "bg-yellow-100 text-yellow-800";
+      case "rejected":
+        return "bg-red-100 text-red-800";
+      case "cancelled":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  const formatDateDDMMYYYY = (dateString: string) => {
+    try {
+      const date = new Date(dateString + "T00:00:00");
+      if (isNaN(date.getTime())) return "-";
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}.${month}.${year}`;
+    } catch {
+      return "-";
+    }
+  };
+
+  const getDateRangeKey = (service: Service) => {
+    const startDate = formatDateDDMMYYYY(service.dateFrom);
+    const endDate = service.dateTo
+      ? formatDateDDMMYYYY(service.dateTo)
+      : formatDateDDMMYYYY(service.dateFrom);
+    return `${startDate} - ${endDate}`;
+  };
+
+  // Group services by dateRangeKey
+  const groupedServices = services.reduce(
+    (acc, service) => {
+      const key = getDateRangeKey(service);
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(service);
+      return acc;
+    },
+    {} as Record<string, Service[]>
+  );
+
+  // Sort groups by startDate ASC
+  const sortedGroupKeys = Object.keys(groupedServices).sort((a, b) => {
+    const aStartDate = a.split(" - ")[0];
+    const bStartDate = b.split(" - ")[0];
+    // Compare DD.MM.YYYY format
+    const [aDay, aMonth, aYear] = aStartDate.split(".").map(Number);
+    const [bDay, bMonth, bYear] = bStartDate.split(".").map(Number);
+    const aDate = new Date(aYear, aMonth - 1, aDay);
+    const bDate = new Date(bYear, bMonth - 1, bDay);
+    return aDate.getTime() - bDate.getTime();
+  });
+
+  // Initialize expandedGroups - all groups expanded by default
+  useEffect(() => {
+    const initialExpanded: Record<string, boolean> = {};
+    sortedGroupKeys.forEach((key) => {
+      initialExpanded[key] = true;
+    });
+    setExpandedGroups(initialExpanded);
+  }, [services.length]); // Re-initialize if services change
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `€${amount.toLocaleString()}`;
+  };
+
+  const handleOpenModal = (serviceId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setModalServiceId(serviceId);
+  };
+
+  const handleCloseModal = () => {
+    setModalServiceId(null);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg bg-white shadow-sm p-6">
+        <div className="text-center text-gray-500">Loading services...</div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="rounded-lg bg-white shadow-sm">
+        <div className="border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📋</span>
+            <h2 className="text-base font-semibold text-gray-900">Services</h2>
+            <span className="text-xs text-gray-500">({services.length})</span>
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-black rounded hover:bg-gray-800"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Service
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="w-20 px-2 py-1.5 text-center text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Invoice
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Category
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Name
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Supplier
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Client
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Payer
+                </th>
+                <th className="px-2 py-1.5 text-right text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Service Price
+                </th>
+                <th className="px-2 py-1.5 text-right text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Client Price
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Res Status
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Ref Nr
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Ticket Nr
+                </th>
+                <th className="px-2 py-1.5 text-left text-sm font-medium uppercase tracking-wider leading-tight text-gray-700">
+                  Travellers
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {sortedGroupKeys.map((groupKey) => {
+                const groupServices = groupedServices[groupKey].sort((a, b) => {
+                  // Sort within group: category, then name
+                  const categoryCompare = a.category.localeCompare(b.category);
+                  if (categoryCompare !== 0) return categoryCompare;
+                  return a.name.localeCompare(b.name);
+                });
+                const isExpanded = expandedGroups[groupKey] ?? true;
+
+                return (
+                  <React.Fragment key={`group-${groupKey}`}>
+                    {/* Group header row */}
+                    <tr
+                      className="cursor-pointer bg-gray-100 hover:bg-gray-200"
+                      onClick={() => toggleGroup(groupKey)}
+                    >
+                      <td className="px-3 py-1.5" colSpan={12}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">
+                              {isExpanded ? "▼" : "▶"}
+                            </span>
+                            <span className="text-xs font-medium text-gray-900">
+                              {groupKey}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {groupServices.length}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Services in group */}
+                    {isExpanded &&
+                      groupServices.map((service) => {
+                        const assignedIds = service.assignedTravellerIds;
+                        const visibleIds = assignedIds.slice(0, 3);
+                        const remainingCount = assignedIds.length - 3;
+
+                        // Calculate split group info
+                        let splitInfo = null;
+                        if (service.splitGroupId) {
+                          const splitGroupServices = services.filter(s => s.splitGroupId === service.splitGroupId);
+                          const splitIndex = splitGroupServices.findIndex(s => s.id === service.id) + 1;
+                          splitInfo = { index: splitIndex, total: splitGroupServices.length };
+                        }
+
+                        return (
+                          <React.Fragment key={service.id}>
+                          <tr
+                            className="group border-b border-gray-100 hover:bg-gray-50 leading-tight transition-colors cursor-pointer"
+                            onClick={() => setExpandedServiceId(expandedServiceId === service.id ? null : service.id)}
+                          >
+                            <td className="w-20 px-2 py-1 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {service.invoice_id ? (
+                                  <div className="flex items-center justify-center">
+                                    {/* Clickable Invoice Icon */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.location.href = `/orders/${orderCode}?tab=finance&invoice=${service.invoice_id}`;
+                                      }}
+                                      className="flex items-center justify-center text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
+                                      title="View invoice"
+                                    >
+                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedServiceIds.includes(service.id)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      if (e.target.checked) {
+                                        setSelectedServiceIds(prev => [...prev, service.id]);
+                                      } else {
+                                        setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    aria-label={`Select ${service.name} for invoice`}
+                                    title="Select for invoice"
+                                  />
+                                )}
+                              </div>
+                            </td>
+                            <td 
+                              className="px-2 py-1 text-sm text-gray-700 leading-tight cursor-pointer"
+                              onDoubleClick={() => setEditServiceId(service.id)}
+                              title="Double-click to edit"
+                            >
+                              {service.category}
+                            </td>
+                            <td className="px-2 py-1 text-sm font-medium text-gray-900 leading-tight">
+                              <div className="flex items-center gap-2">
+                                {splitInfo && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-800">
+                                    🔗 {splitInfo.index}/{splitInfo.total}
+                                  </span>
+                                )}
+                                <span>{service.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                              {service.supplier}
+                            </td>
+                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                              {service.client}
+                            </td>
+                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                              {service.payer}
+                            </td>
+                            <td className="whitespace-nowrap px-2 py-1 text-right text-sm text-gray-700 leading-tight">
+                              {formatCurrency(service.servicePrice)}
+                            </td>
+                            <td className="whitespace-nowrap px-2 py-1 text-right text-sm font-medium text-gray-900 leading-tight">
+                              {formatCurrency(service.clientPrice)}
+                            </td>
+                            <td className="px-2 py-1 text-sm leading-tight">
+                              <span
+                                className={`inline-flex rounded-full px-1.5 py-0.5 text-xs font-medium ${getResStatusColor(
+                                  service.resStatus
+                                )}`}
+                              >
+                                {service.resStatus}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                              {service.refNr || "-"}
+                            </td>
+                            <td className="px-2 py-1 text-sm text-gray-700 leading-tight">
+                              {service.ticketNr || "-"}
+                            </td>
+                            <td className="px-2 py-1 leading-tight">
+                              <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-0.5">
+                                  {visibleIds.map((travellerId) => (
+                                    <div
+                                      key={travellerId}
+                                      className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-800"
+                                      title={
+                                        orderTravellers.find(
+                                          (t) => t.id === travellerId
+                                        )?.firstName +
+                                        " " +
+                                        orderTravellers.find(
+                                          (t) => t.id === travellerId
+                                        )?.lastName
+                                      }
+                                    >
+                                      {getTravellerInitials(travellerId)}
+                                    </div>
+                                  ))}
+                                  {remainingCount > 0 && (
+                                    <span className="text-xs text-gray-500">
+                                      +{remainingCount}
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={(e) =>
+                                    handleOpenModal(service.id, e)
+                                  }
+                                  className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-600 transition-colors hover:bg-gray-50"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+
+                          </tr>
+                          
+                          {/* Expanded Details Row */}
+                          {(expandedServiceId === service.id) && (
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <td colSpan={13} className="px-6 py-4">
+                                <div className="flex items-start justify-between gap-6">
+                                  {/* Left: Service Details */}
+                                  <div className="flex-1 grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <span className="font-medium text-gray-700">Category:</span>
+                                      <span className="ml-2 text-gray-900">{service.category}</span>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-700">Supplier:</span>
+                                      <span className="ml-2 text-gray-900">{service.supplier || '-'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-700">Ref Nr:</span>
+                                      <span className="ml-2 text-gray-900">{service.refNr || '-'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-700">Ticket Nr:</span>
+                                      <span className="ml-2 text-gray-900">{service.ticketNr || '-'}</span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Right: Action Buttons */}
+                                  <div className="flex items-center gap-2 border-l border-gray-300 pl-6">
+                                    {/* Edit Button */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditServiceId(service.id);
+                                        setExpandedServiceId(null);
+                                      }}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-blue-600 hover:border-blue-400 transition-all shadow-sm"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                      Edit
+                                    </button>
+                                    
+                                    {/* Split Button (only if not invoiced) */}
+                                    {!service.invoice_id && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSplitServiceId(service.id);
+                                        }}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-blue-600 hover:border-blue-400 transition-all shadow-sm"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                        Split
+                                      </button>
+                                    )}
+                                    
+                                    {/* Delete Button */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`Delete service: ${service.name}?`)) {
+                                          alert('Delete functionality coming soon');
+                                        }
+                                      }}
+                                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-300 rounded-lg hover:bg-red-50 hover:border-red-400 transition-all shadow-sm"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
+                        );
+                      })}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedService && (
+        <AssignedTravellersModal
+          service={selectedService}
+          orderTravellers={orderTravellers}
+          setOrderTravellers={setOrderTravellers}
+          services={services}
+          setServices={setServices}
+          mainClientId={defaultClientId || ""}
+          onClose={handleCloseModal}
+        />
+      )}
+
+      {showAddModal && (
+        <AddServiceModal
+          orderCode={orderCode}
+          defaultClientId={defaultClientId}
+          defaultClientName={defaultClientName}
+          onClose={() => setShowAddModal(false)}
+          onServiceAdded={handleServiceAdded}
+        />
+      )}
+
+      {/* Edit Service Modal - simple inline editor */}
+      {editServiceId && (
+        <EditServiceModal
+          service={services.find(s => s.id === editServiceId)!}
+          orderCode={orderCode}
+          onClose={() => setEditServiceId(null)}
+          onServiceUpdated={(updated) => {
+            setServices(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
+            setEditServiceId(null);
+          }}
+        />
+      )}
+
+      {/* Split Service Modal */}
+      {splitServiceId && (
+        <SplitServiceModal
+          service={services.find(s => s.id === splitServiceId)!}
+          orderCode={orderCode}
+          onClose={() => setSplitServiceId(null)}
+          onSuccess={() => {
+            fetchServices();
+            setSplitServiceId(null);
+            setExpandedServiceId(null);
+          }}
+        />
+      )}
+
+      {/* Floating Action Bar */}
+      {selectedServiceIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.2s_ease-out]">
+          <div className="bg-black text-white rounded-lg shadow-2xl px-6 py-3 flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span className="font-medium">
+                {selectedServiceIds.length} {selectedServiceIds.length === 1 ? 'service' : 'services'} selected
+              </span>
+            </div>
+            <div className="h-6 w-px bg-gray-600" />
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-bold text-green-400">
+                €{services
+                  .filter(s => selectedServiceIds.includes(s.id))
+                  .reduce((sum, s) => sum + s.clientPrice, 0)
+                  .toLocaleString()}
+              </span>
+            </div>
+            <div className="h-6 w-px bg-gray-600" />
+            <button
+              onClick={() => {
+                if (onIssueInvoice) {
+                  const selectedServicesData = services
+                    .filter(s => selectedServiceIds.includes(s.id))
+                    .map(s => ({
+                      id: s.id,
+                      name: s.name,
+                      clientPrice: s.clientPrice,
+                      category: s.category,
+                      dateFrom: s.dateFrom,
+                      dateTo: s.dateTo,
+                    }));
+                  onIssueInvoice(selectedServicesData);
+                  setSelectedServiceIds([]); // Clear selection
+                }
+              }}
+              className="px-4 py-2 bg-white text-black font-medium rounded hover:bg-gray-100 transition-colors"
+            >
+              Issue Invoice
+            </button>
+            <button
+              onClick={() => setSelectedServiceIds([])}
+              className="ml-2 text-gray-400 hover:text-white transition-colors"
+              aria-label="Clear selection"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Simple Edit Service Modal
+function EditServiceModal({
+  service,
+  orderCode,
+  onClose,
+  onServiceUpdated,
+}: {
+  service: Service;
+  orderCode: string;
+  onClose: () => void;
+  onServiceUpdated: (updated: Partial<Service> & { id: string }) => void;
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [name, setName] = useState(service.name);
+  const [category, setCategory] = useState(service.category);
+  const [servicePrice, setServicePrice] = useState(service.servicePrice.toString());
+  const [clientPrice, setClientPrice] = useState(service.clientPrice.toString());
+  const [resStatus, setResStatus] = useState(service.resStatus);
+  const [refNr, setRefNr] = useState(service.refNr || "");
+  const [ticketNr, setTicketNr] = useState(service.ticketNr || "");
+  const [dateFrom, setDateFrom] = useState(service.dateFrom || "");
+  const [dateTo, setDateTo] = useState(service.dateTo || "");
+  const [supplier, setSupplier] = useState(service.supplier || "");
+  const [client, setClient] = useState(service.client || "");
+  const [payer, setPayer] = useState(service.payer || "");
+  const [parties, setParties] = useState<Array<{ id: string; display_name: string }>>([]);
+  const [supplierPartyId, setSupplierPartyId] = useState<string>("");
+  const [clientPartyId, setClientPartyId] = useState<string>("");
+  const [payerPartyId, setPayerPartyId] = useState<string>("");
+
+  // Fetch parties
+  useEffect(() => {
+    const fetchParties = async () => {
+      try {
+        const response = await fetch("/api/party");
+        if (response.ok) {
+          const data = await response.json();
+          setParties(data.parties || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch parties:", err);
+      }
+    };
+    fetchParties();
+  }, []);
+
+  // Initialize party IDs from service
+  useEffect(() => {
+    if (parties.length > 0) {
+      // Find party IDs by name
+      if (supplier) {
+        const supplierParty = parties.find(p => p.display_name === supplier);
+        if (supplierParty) setSupplierPartyId(supplierParty.id);
+      }
+      if (client) {
+        const clientParty = parties.find(p => p.display_name === client);
+        if (clientParty) setClientPartyId(clientParty.id);
+      }
+      if (payer) {
+        const payerParty = parties.find(p => p.display_name === payer);
+        if (payerParty) setPayerPartyId(payerParty.id);
+      }
+    }
+  }, [parties, supplier, client, payer]);
+
+  const handleSave = async () => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          service_name: name,
+          category,
+          service_price: parseFloat(servicePrice) || 0,
+          client_price: parseFloat(clientPrice) || 0,
+          res_status: resStatus,
+          ref_nr: refNr,
+          service_date_from: dateFrom || null,
+          service_date_to: dateTo || null,
+          ticket_nr: ticketNr,
+          supplier_name: supplier || null,
+          supplier_party_id: supplierPartyId || null,
+          client_name: client || null,
+          client_party_id: clientPartyId || null,
+          payer_name: payer || null,
+          payer_party_id: payerPartyId || null,
+        }),
+      });
+
+      if (response.ok) {
+        onServiceUpdated({
+          id: service.id,
+          name,
+          category,
+          servicePrice: parseFloat(servicePrice) || 0,
+          clientPrice: parseFloat(clientPrice) || 0,
+          resStatus,
+          refNr,
+          ticketNr,
+          dateFrom,
+          dateTo,
+          supplier,
+          client,
+          payer,
+        });
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setError(errData.error || "Failed to update service");
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      setError("Network error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">Edit Service</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              >
+                {["Flight", "Hotel", "Transfer", "Tour", "Insurance", "Visa", "Rent a Car", "Cruise", "Other"].map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={resStatus}
+                onChange={(e) => setResStatus(e.target.value as Service["resStatus"])}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="booked">Booked</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="changed">Changed</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Service Price (€)</label>
+              <input
+                type="number"
+                value={servicePrice}
+                onChange={(e) => setServicePrice(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Price (€)</label>
+              <input
+                type="number"
+                value={clientPrice}
+                onChange={(e) => setClientPrice(e.target.value)}
+                disabled={!!service.invoice_id}
+                readOnly={!!service.invoice_id}
+                className={`w-full rounded border border-gray-300 px-3 py-2 text-sm${service.invoice_id ? " bg-gray-100 cursor-not-allowed" : ""}`}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ref Nr</label>
+              <input
+                type="text"
+                value={refNr}
+                onChange={(e) => setRefNr(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ticket Nr</label>
+              <input
+                type="text"
+                value={ticketNr}
+                onChange={(e) => setTicketNr(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+          {/* Supplier */}
+
+          {/* Dates */}
+          <div>
+            <DateRangePicker
+              label="Service Dates"
+              from={dateFrom}
+              to={dateTo}
+              onChange={(from, to) => {
+                setDateFrom(from || "");
+                setDateTo(to || "");
+              }}
+            />
+
+
+          {/* Supplier */}
+          <PartyCombobox
+            parties={parties}
+            value={supplierPartyId}
+            onChange={(id, name) => {
+              setSupplierPartyId(id);
+              setSupplier(name);
+            }}
+            label="Supplier"
+            placeholder="Search or select supplier..."
+          />
+
+          {/* Client */}
+          <PartyCombobox
+            parties={parties}
+            value={clientPartyId}
+            onChange={(id, name) => {
+              setClientPartyId(id);
+              setClient(name);
+            }}
+            label="Client"
+            placeholder="Search or select client..."
+          />
+
+          {/* Payer */}
+          <PartyCombobox
+            parties={parties}
+            value={payerPartyId}
+            onChange={(id, name) => {
+              setPayerPartyId(id);
+              setPayer(name);
+            }}
+            label="Payer"
+            placeholder="Search or select payer..."
+          />
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm font-medium text-white bg-black rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            {isSubmitting ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

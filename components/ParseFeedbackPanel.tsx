@@ -10,7 +10,7 @@ import { MessageSquareWarning, Send, Check, X } from 'lucide-react';
  * 1. See which fields were parsed (green) vs missing (red) vs corrected (amber)
  * 2. Write what's wrong in a text field
  * 3. Submit corrections → saved to parse_feedback table
- * 4. After 3+ similar corrections → auto-creates a parse_rule
+ * 4. After a correction on a field → auto-creates a parse_rule when patterns match (see parse-feedback API)
  *
  * Usage:
  *   <ParseFeedbackPanel

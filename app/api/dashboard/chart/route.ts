@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,9 @@ export async function GET(request: NextRequest) {
 
     let servicesQ = supabaseAdmin
       .from("order_services")
-      .select("client_price, service_price, res_status, orders!inner(id, company_id, created_at, owner_user_id, manager_user_id)")
+      .select(
+        "client_price, service_price, res_status, service_type, category, commission_amount, vat_rate, orders!inner(id, company_id, created_at, owner_user_id, manager_user_id)"
+      )
       .eq("orders.company_id", companyId)
       .gte("orders.created_at", periodStart)
       .lte("orders.created_at", periodEnd + "T23:59:59");
@@ -41,9 +44,15 @@ export async function GET(request: NextRequest) {
       if (!day) continue;
 
       if (!dayMap[day]) dayMap[day] = { profit: 0, orderIds: new Set() };
-      const cp = parseFloat(svc.client_price?.toString() || "0");
-      const sp = parseFloat(svc.service_price?.toString() || "0");
-      dayMap[day].profit += cp - sp;
+      const econ = computeServiceLineEconomics({
+        client_price: svc.client_price,
+        service_price: svc.service_price,
+        service_type: (svc as { service_type?: string }).service_type,
+        category: (svc as { category?: string }).category,
+        commission_amount: (svc as { commission_amount?: unknown }).commission_amount,
+        vat_rate: (svc as { vat_rate?: unknown }).vat_rate,
+      });
+      dayMap[day].profit += econ.profitNetOfVat;
       dayMap[day].orderIds.add(order.id);
     }
 

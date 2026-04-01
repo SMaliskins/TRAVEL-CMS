@@ -8,6 +8,7 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 import { sanitizeNumber } from '@/utils/sanitizeNumber';
+import { computeServiceLineEconomics } from '@/lib/orders/serviceEconomics';
 
 export type CancellationRefundType = 'fully_refunded' | 'partial_refunded' | 'non_refunded';
 
@@ -18,6 +19,10 @@ interface Service {
   servicePrice: number;
   clientPrice: number;
   resStatus: string | null;
+  /** original | change | cancellation | ancillary — affects signed amounts in economics */
+  serviceType?: string | null;
+  commissionAmount?: number | null;
+  vatRate?: number | null;
   refNr?: string | null;
   dateFrom?: string | null;
   dateTo?: string | null;
@@ -135,7 +140,15 @@ export default function CancelServiceModal({
 
   const refundNum = parseFloat(refundAmount) || 0;
   const ourReturnNum = parseFloat(cancellationFee) || 0;
-  const marge = Math.max(0, service.clientPrice - service.servicePrice);
+  const econ = computeServiceLineEconomics({
+    client_price: service.clientPrice,
+    service_price: service.servicePrice,
+    service_type: service.serviceType ?? 'original',
+    category: service.category,
+    commission_amount: service.commissionAmount,
+    vat_rate: service.vatRate,
+  });
+  const marge = Math.max(0, econ.marginGross);
   const supplierRetention = service.servicePrice - refundNum;
   const clientCreditRaw = refundNum + ourReturnNum;
   const clientCredit = roundToWhole ? Math.round(clientCreditRaw) : clientCreditRaw;

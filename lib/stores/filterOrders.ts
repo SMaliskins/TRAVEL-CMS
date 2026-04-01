@@ -1,5 +1,5 @@
 import { OrdersSearchState } from "./ordersSearchStore";
-import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
+import { getSearchPatterns, matchesLooseTextQuery, matchesSearch } from "@/lib/directory/searchNormalize";
 
 // Types matching orders/page.tsx
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -29,7 +29,7 @@ export interface OrderRow {
   invoiceCount?: number;
   dueDate?: string;
   payers?: string[];
-  /** Client names on service lines (not only lead passenger) — from order_services.client_name */
+  /** Names for list search: service line client_name + travellers (order / service-linked) */
   serviceClients?: string[];
 }
 
@@ -58,14 +58,21 @@ export function filterOrders(
     // Query text search (case-insensitive, searches in orderId, client name, refNr if exists)
     // When semanticOrderCodes provided, also include orders whose orderId is in that set
     if (searchState.queryText) {
-      const query = searchState.queryText.toLowerCase();
-      const matchesOrderId = order.orderId.toLowerCase().includes(query);
-      const matchesClient = order.client.toLowerCase().includes(query);
+      const query = searchState.queryText.trim();
+      const matchesOrderId = matchesLooseTextQuery(order.orderId, query, { fuzzy: false });
+      const matchesClient = matchesLooseTextQuery(order.client, query);
       const matchesServiceClient = (order.serviceClients || []).some((c) =>
-        c.toLowerCase().includes(query)
+        matchesLooseTextQuery(c, query)
       );
+      const matchesPayer = (order.payers || []).some((p) => matchesLooseTextQuery(p, query));
       const matchesSemantic = semanticSet.size > 0 && semanticSet.has(order.orderId);
-      if (!matchesOrderId && !matchesClient && !matchesServiceClient && !matchesSemantic) {
+      if (
+        !matchesOrderId &&
+        !matchesClient &&
+        !matchesServiceClient &&
+        !matchesPayer &&
+        !matchesSemantic
+      ) {
         return false;
       }
     }

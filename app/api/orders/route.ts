@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
@@ -14,6 +14,137 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
+
+type PartySearchShape = {
+  display_name?: string | null;
+  status?: string | null;
+  party_person?:
+    | { first_name?: string | null; last_name?: string | null }
+    | { first_name?: string | null; last_name?: string | null }[]
+    | null;
+};
+
+function buildPartySearchLabel(party: PartySearchShape | null | undefined): string {
+  if (!party) return "";
+  const dn = String(party.display_name || "").trim();
+  if (dn) return dn;
+  const pr = party.party_person;
+  const person = Array.isArray(pr) ? pr[0] : pr;
+  const parts = [person?.first_name, person?.last_name].filter(Boolean) as string[];
+  return parts.join(" ").trim();
+}
+
+function pushUniqueOrderName(map: Map<string, string[]>, orderId: string, name: string) {
+  const n = name.trim();
+  if (!n) return;
+  const arr = map.get(orderId) || [];
+  if (!arr.includes(n)) arr.push(n);
+  map.set(orderId, arr);
+}
+
+function mergeOrderNameMaps(target: Map<string, string[]>, source: Map<string, string[]>) {
+  for (const [orderId, names] of source) {
+    for (const n of names) {
+      pushUniqueOrderName(target, orderId, n);
+    }
+  }
+}
+
+/**
+ * Display names for order_travellers + parties linked via order_service_travellers (service users).
+ * Used for Orders list text / surname search.
+ */
+async function collectTravellerSearchLabelsByOrder(
+  supabase: SupabaseClient,
+  companyId: string,
+  orderIds: string[],
+  serviceRows: { id: string; order_id: string }[] | null
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (orderIds.length === 0) return out;
+  const chunkSize = 400;
+
+  for (let i = 0; i < orderIds.length; i += chunkSize) {
+    const chunk = orderIds.slice(i, i + chunkSize);
+    const { data: otRows } = await supabase
+      .from("order_travellers")
+      .select(
+        `order_id,
+         party:party_id (
+           display_name,
+           status,
+           party_person ( first_name, last_name )
+         )`
+      )
+      .eq("company_id", companyId)
+      .in("order_id", chunk);
+
+    for (const row of otRows || []) {
+      const rec = row as { order_id: string; party: unknown };
+      const partyRaw = rec.party;
+      const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw;
+      const p = party as PartySearchShape | null;
+      if (!p || (p.status && p.status !== "active")) continue;
+      const label = buildPartySearchLabel(p);
+      if (!label) continue;
+      pushUniqueOrderName(out, rec.order_id, label);
+    }
+  }
+
+  let svcRows = serviceRows;
+  if (!svcRows || svcRows.length === 0) {
+    svcRows = [];
+    for (let j = 0; j < orderIds.length; j += chunkSize) {
+      const { data: svcMini } = await supabase
+        .from("order_services")
+        .select("id, order_id")
+        .eq("company_id", companyId)
+        .in("order_id", orderIds.slice(j, j + chunkSize));
+      svcRows.push(...((svcMini || []) as { id: string; order_id: string }[]));
+    }
+  }
+
+  const serviceIdToOrderId = new Map<string, string>();
+  for (const r of svcRows) {
+    if (r.id) serviceIdToOrderId.set(r.id, r.order_id);
+  }
+  const serviceIds = [...serviceIdToOrderId.keys()];
+  const allOst: { traveller_id: string; service_id: string }[] = [];
+  for (let j = 0; j < serviceIds.length; j += chunkSize) {
+    const { data: ost } = await supabase
+      .from("order_service_travellers")
+      .select("traveller_id, service_id")
+      .eq("company_id", companyId)
+      .in("service_id", serviceIds.slice(j, j + chunkSize));
+    allOst.push(...((ost || []) as { traveller_id: string; service_id: string }[]));
+  }
+
+  const partyIds = [...new Set(allOst.map((r) => r.traveller_id).filter(Boolean))];
+  const partyLabelById = new Map<string, string>();
+  for (let j = 0; j < partyIds.length; j += chunkSize) {
+    const chunk = partyIds.slice(j, j + chunkSize);
+    const { data: parties } = await supabase
+      .from("party")
+      .select("id, display_name, status, party_person(first_name, last_name)")
+      .in("id", chunk);
+    for (const p of parties || []) {
+      const row = p as { id: string; status?: string | null } & PartySearchShape;
+      if (row.status && row.status !== "active") continue;
+      const label = buildPartySearchLabel(row);
+      if (label) partyLabelById.set(row.id, label);
+    }
+  }
+
+  for (const row of allOst) {
+    const orderId = serviceIdToOrderId.get(row.service_id);
+    if (!orderId) continue;
+    const label = partyLabelById.get(row.traveller_id);
+    if (!label) continue;
+    pushUniqueOrderName(out, orderId, label);
+  }
+
+  return out;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,35 +205,42 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // In-memory search: order code, lead client (client_display_name), and any service line client_name
+    // In-memory search: order code, lead client, service line client_name / payer_name, travellers
     let orders = allOrders || [];
     if (search) {
       const patterns = getSearchPatterns(search);
       const preOrders = allOrders || [];
       const allOrderIds = preOrders.map((o: any) => o.id as string);
-      const serviceClientNamesByOrder = new Map<string, string[]>();
+      const searchNamesByOrder = new Map<string, string[]>();
       const nameChunk = 400;
       for (let i = 0; i < allOrderIds.length; i += nameChunk) {
         const chunk = allOrderIds.slice(i, i + nameChunk);
         const { data: nameRows } = await supabaseAdmin
           .from("order_services")
-          .select("order_id, client_name")
+          .select("order_id, client_name, payer_name")
           .eq("company_id", companyId)
           .in("order_id", chunk);
         for (const row of nameRows || []) {
-          const r = row as { order_id: string; client_name?: string | null };
-          const name = String(r.client_name || "").trim();
-          if (!name) continue;
-          const arr = serviceClientNamesByOrder.get(r.order_id) || [];
-          if (!arr.includes(name)) arr.push(name);
-          serviceClientNamesByOrder.set(r.order_id, arr);
+          const r = row as { order_id: string; client_name?: string | null; payer_name?: string | null };
+          for (const field of ["client_name", "payer_name"] as const) {
+            const name = String(r[field] || "").trim();
+            if (!name) continue;
+            pushUniqueOrderName(searchNamesByOrder, r.order_id, name);
+          }
         }
       }
+      const travellerNames = await collectTravellerSearchLabelsByOrder(
+        supabaseAdmin,
+        companyId,
+        allOrderIds,
+        null
+      );
+      mergeOrderNameMaps(searchNamesByOrder, travellerNames);
       orders = preOrders.filter(
         (o: any) =>
           matchesSearch(o.order_code, patterns) ||
           matchesSearch(o.client_display_name, patterns) ||
-          (serviceClientNamesByOrder.get(o.id) || []).some((c) => matchesSearch(c, patterns))
+          (searchNamesByOrder.get(o.id) || []).some((c) => matchesSearch(c, patterns))
       );
     }
 
@@ -115,7 +253,7 @@ export async function GET(request: NextRequest) {
     const [servicesResult, ownerProfilesResult, invoicesResult] = await Promise.all([
       supabaseAdmin
         .from("order_services")
-        .select("order_id, invoice_id, res_status, service_type, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount")
+        .select("id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount")
         .eq("company_id", companyId)
         .in("order_id", orderIds),
       ownerIds.length > 0
@@ -283,6 +421,18 @@ export async function GET(request: NextRequest) {
       if (!list.includes(name)) list.push(name);
       serviceClientNamesMap.set(s.order_id, list);
     });
+
+    const travellerLabelsForList = await collectTravellerSearchLabelsByOrder(
+      supabaseAdmin,
+      companyId,
+      orderIds,
+      servicesData.length > 0
+        ? (servicesData as { id: string; order_id: string }[])
+            .map((s) => ({ id: s.id, order_id: s.order_id }))
+            .filter((r) => r.id)
+        : null
+    );
+    mergeOrderNameMaps(serviceClientNamesMap, travellerLabelsForList);
 
     // Derive order dates from services when missing: date_from = min(service_date_from), date_to = max(service_date_to)
     const derivedDates = new Map<string, { dateFrom: string; dateTo: string }>();

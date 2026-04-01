@@ -1,0 +1,33 @@
+# Ignore large log files that consume tokens
+.ai/PROJECT_LOG_ARCHIVE_*.md
+
+# Ignore node_modules
+node_modules/
+
+# Ignore build outputs
+.next/
+out/
+build/
+dist/
+
+# Ignore large data files
+*.db
+*.sqlite
+*.sqlite3
+
+# Ignore uploaded files
+public/uploads/
+public/boarding-passes/
+
+# Ignore temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Ignore large test data
+**/test-data/
+**/fixtures/
+
+# Ignore agent transcripts (can be large)
+agent-transcripts/

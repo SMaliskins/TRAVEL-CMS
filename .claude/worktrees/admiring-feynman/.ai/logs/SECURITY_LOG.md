@@ -1,0 +1,28 @@
+# 🔒 SECURITY LOG
+
+Лог агента Security — аудит безопасности, RLS, права доступа.
+
+---
+
+### 📅 2026-01-06 | 10:00
+**Задача:** RLS Policies Verification
+**Статус:** ✅ SUCCESS
+**Действия:**
+- Проверены RLS политики для party, orders, order_services
+- Tenant isolation (company_id) работает корректно
+- Нет уязвимостей в API endpoints
+
+**Файлы:**
+- `.ai/logs/RLS_POLICIES_VERIFICATION.md`
+
+---
+
+### 📅 2026-01-05 | 15:00
+**Задача:** API Security Audit
+**Статус:** ✅ SUCCESS
+**Действия:**
+- Все API endpoints требуют аутентификацию
+- company_id фильтрация на всех запросах
+- Нет SQL injection уязвимостей
+
+---

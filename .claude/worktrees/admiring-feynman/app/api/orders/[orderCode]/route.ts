@@ -1,0 +1,533 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { sendPushToClient } from "@/lib/client-push/sendPush";
+import { getApiUser } from "@/lib/auth/getApiUser";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key";
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false }
+});
+
+async function getCompanyId(userId: string): Promise<string | null> {
+  const { data: profileData, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!profileError && profileData?.company_id) {
+    return profileData.company_id as string;
+  }
+
+  const { data: userProfileData, error: userProfileError } = await supabaseAdmin
+    .from("user_profiles")
+    .select("company_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (userProfileError || !userProfileData?.company_id) {
+    return null;
+  }
+  return userProfileData.company_id as string;
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string }> }
+) {
+  try {
+    const { orderCode } = await params;
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    }
+
+    // Get authenticated user
+    let user = null;
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const authClient = createClient(supabaseUrl, supabaseAnonKey);
+      const { data, error } = await authClient.auth.getUser(token);
+      if (!error && data?.user) {
+        user = data.user;
+      }
+    }
+
+    if (!user) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      if (cookieHeader) {
+        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false },
+          global: { headers: { Cookie: cookieHeader } },
+        });
+        const { data, error } = await authClient.auth.getUser();
+        if (!error && data?.user) {
+          user = data.user;
+        }
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const companyId = await getCompanyId(user.id);
+    if (!companyId) {
+      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
+    }
+
+    // Fetch order by order_code
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("order_code", orderCode)
+      .single();
+
+    if (error || !order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Sum of active (non-cancelled) services → amount_total for header
+    const { data: services } = await supabaseAdmin
+      .from("order_services")
+      .select("res_status, client_price")
+      .eq("order_id", order.id)
+      .eq("company_id", companyId);
+
+    const activeServices = (services || []).filter((s: { res_status?: string }) => s.res_status !== "cancelled");
+    const amountTotalFromServices = activeServices.reduce(
+      (sum: number, s: { client_price?: string | number }) => sum + (Number(s.client_price) || 0),
+      0
+    );
+
+    // Recalculate amount_paid from actual non-cancelled payments
+    const { data: orderPayments } = await supabaseAdmin
+      .from("payments")
+      .select("amount, status")
+      .eq("order_id", order.id);
+
+    const amountPaid = (orderPayments ?? []).reduce(
+      (sum: number, p: { amount: number; status?: string }) =>
+        p.status === "cancelled" ? sum : sum + Number(p.amount),
+      0
+    );
+    const amountDebt = Math.max(0, amountTotalFromServices - amountPaid);
+
+    // Sync stale amount_paid if needed
+    const storedPaid = Number(order.amount_paid) || 0;
+    if (Math.abs(storedPaid - amountPaid) > 0.01) {
+      await supabaseAdmin
+        .from("orders")
+        .update({ amount_paid: amountPaid, amount_debt: amountDebt })
+        .eq("id", order.id);
+    }
+
+    // Payment dates and overdue from invoices (non-cancelled)
+    const { data: invoices } = await supabaseAdmin
+      .from("invoices")
+      .select("deposit_date, final_payment_date, status")
+      .eq("order_id", order.id)
+      .eq("company_id", companyId)
+      .neq("status", "cancelled");
+
+    const paymentDates: { type: string; date: string }[] = [];
+    let overdueDays: number | null = null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    (invoices || []).forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null; status?: string }) => {
+      if (inv.deposit_date) paymentDates.push({ type: "deposit", date: inv.deposit_date });
+      if (inv.final_payment_date) paymentDates.push({ type: "final", date: inv.final_payment_date });
+    });
+
+    // Only count overdue for invoices that are not paid (paid/processed = no overdue)
+    const unpaidInvoices = (invoices || []).filter(
+      (inv: { status?: string }) => inv.status !== "paid" && inv.status !== "processed"
+    );
+    const dueDatesToCheck: string[] = [];
+    unpaidInvoices.forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null }) => {
+      if (inv.deposit_date) dueDatesToCheck.push(inv.deposit_date);
+      if (inv.final_payment_date) dueDatesToCheck.push(inv.final_payment_date);
+    });
+    dueDatesToCheck.forEach((dateStr) => {
+      const d = new Date(dateStr);
+      d.setHours(0, 0, 0, 0);
+      if (d < today) {
+        const days = Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
+        if (overdueDays === null || days > overdueDays) overdueDays = days;
+      }
+    });
+
+    // Get owner name from user_profiles or profiles if owner_user_id exists
+    let ownerName = null;
+    if (order.owner_user_id) {
+      // Try user_profiles first (id = auth.users.id)
+      const { data: profile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", order.owner_user_id)
+        .single();
+      
+      if (profile) {
+        ownerName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || null;
+      }
+      
+      // Fallback to profiles table
+      if (!ownerName) {
+        const { data: oldProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("display_name, initials")
+          .eq("user_id", order.owner_user_id)
+          .single();
+        
+        if (oldProfile) {
+          ownerName = oldProfile.display_name || null;
+        }
+      }
+    }
+    
+    // Fallback: try manager_user_id if owner_user_id not set
+    if (!ownerName && order.manager_user_id) {
+      const { data: managerProfile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", order.manager_user_id)
+        .single();
+      
+      if (managerProfile) {
+        ownerName = [managerProfile.first_name, managerProfile.last_name].filter(Boolean).join(" ") || null;
+      }
+    }
+    
+    // Fallback: try created_by if still no owner
+    if (!ownerName && order.created_by) {
+      const { data: creatorProfile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", order.created_by)
+        .single();
+      
+      if (creatorProfile) {
+        ownerName = [creatorProfile.first_name, creatorProfile.last_name].filter(Boolean).join(" ") || null;
+      }
+      
+      // Also try profiles table for created_by
+      if (!ownerName) {
+        const { data: creatorOldProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("display_name, initials")
+          .eq("user_id", order.created_by)
+          .single();
+        
+        if (creatorOldProfile) {
+          ownerName = creatorOldProfile.display_name || null;
+        }
+      }
+    }
+    
+    // Last fallback: try to get name from auth.users metadata
+    if (!ownerName && order.created_by) {
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(order.created_by);
+      if (authUser?.user) {
+        const meta = authUser.user.user_metadata;
+        ownerName = meta?.full_name || meta?.name || 
+                    [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
+                    authUser.user.email?.split("@")[0] || null;
+      }
+    }
+    
+    // Ultimate fallback: use current user's name or email
+    if (!ownerName && user) {
+      const meta = user.user_metadata;
+      ownerName = meta?.full_name || meta?.name || 
+                  [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
+                  user.email?.split("@")[0] || null;
+    }
+
+    // If order dates were not set, derive from active services: date_from = first service start, date_to = last service end
+    let effectiveDateFrom = order.date_from;
+    let effectiveDateTo = order.date_to;
+    if (!effectiveDateFrom || !effectiveDateTo) {
+      const { data: dateServices } = await supabaseAdmin
+        .from("order_services")
+        .select("service_date_from, service_date_to")
+        .eq("order_id", order.id)
+        .eq("company_id", companyId)
+        .neq("res_status", "cancelled");
+      const withDates = (dateServices || []).filter(
+        (s: { service_date_from?: string | null; service_date_to?: string | null }) =>
+          s.service_date_from != null || s.service_date_to != null
+      );
+      if (withDates.length > 0) {
+        const froms = withDates.map((s: { service_date_from?: string | null }) => s.service_date_from).filter(Boolean) as string[];
+        const tos = withDates.map((s: { service_date_to?: string | null }) => s.service_date_to).filter(Boolean) as string[];
+        if (froms.length > 0 && !effectiveDateFrom) effectiveDateFrom = froms.sort()[0];
+        if (tos.length > 0 && !effectiveDateTo) effectiveDateTo = tos.sort().reverse()[0];
+      }
+    }
+
+    return NextResponse.json({ 
+      order: {
+        ...order,
+        date_from: effectiveDateFrom ?? order.date_from,
+        date_to: effectiveDateTo ?? order.date_to,
+        owner_name: ownerName,
+        amount_total: amountTotalFromServices,
+        amount_paid: amountPaid,
+        amount_debt: amountDebt,
+        payment_dates: paymentDates,
+        overdue_days: overdueDays,
+      }
+    });
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Order GET error:", errorMsg);
+    return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string }> }
+) {
+  try {
+    const { orderCode } = await params;
+    const body = await request.json();
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    }
+
+    // Get authenticated user
+    let user = null;
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const authClient = createClient(supabaseUrl, supabaseAnonKey);
+      const { data, error } = await authClient.auth.getUser(token);
+      if (!error && data?.user) {
+        user = data.user;
+      }
+    }
+
+    if (!user) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      if (cookieHeader) {
+        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false },
+          global: { headers: { Cookie: cookieHeader } },
+        });
+        const { data, error } = await authClient.auth.getUser();
+        if (!error && data?.user) {
+          user = data.user;
+        }
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const companyId = await getCompanyId(user.id);
+    if (!companyId) {
+      return NextResponse.json({ error: "User has no company assigned" }, { status: 400 });
+    }
+
+    // Build update payload - only allow certain fields
+    const allowedFields = [
+      "status", 
+      "client_display_name",
+      "client_party_id",
+      "countries_cities", 
+      "date_from", 
+      "date_to",
+      "order_type",
+      "order_source"
+    ];
+    
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
+      }
+    }
+
+    // Validate status if provided
+    if (updateData.status) {
+      const validStatuses = ["Draft", "Active", "Cancelled", "Completed", "On hold"];
+      if (!validStatuses.includes(updateData.status as string)) {
+        return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+      }
+    }
+
+    // Auto-sync client_display_name when client_party_id changes
+    if (updateData.client_party_id && !updateData.client_display_name) {
+      const { data: partyData } = await supabaseAdmin
+        .from("party")
+        .select("display_name")
+        .eq("id", updateData.client_party_id)
+        .single();
+      
+      if (partyData?.display_name) {
+        updateData.client_display_name = partyData.display_name;
+        console.log("[Order PATCH] Auto-synced client_display_name:", partyData.display_name);
+      }
+    }
+
+    // Fetch old order before update (for notification diff)
+    const { data: oldOrder } = await supabaseAdmin
+      .from("orders")
+      .select("id, client_party_id, status, date_from, date_to, countries_cities")
+      .eq("company_id", companyId)
+      .eq("order_code", orderCode)
+      .single();
+
+    // Update order
+    console.log("Updating order:", orderCode, "with data:", updateData);
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .update(updateData)
+      .eq("company_id", companyId)
+      .eq("order_code", orderCode)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Order update error:", error.message, error.details, error.hint);
+      return NextResponse.json({ error: `Failed to update order: ${error.message}` }, { status: 500 });
+    }
+
+    if (!order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const pushFields = ["status", "date_from", "date_to", "countries_cities"];
+    const changedFields = pushFields.filter((f) => body[f] !== undefined);
+
+    if (changedFields.length > 0 && order.client_party_id && oldOrder) {
+      const fmtD = (d: string | null) => {
+        if (!d) return "—";
+        const dt = new Date(d);
+        return `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()}`;
+      };
+
+      const dest = order.countries_cities
+        ? order.countries_cities.split("|").find((p: string) => !p.startsWith("origin:") && !p.startsWith("return:"))?.split(",")[1]?.trim() || "Your trip"
+        : "Your trip";
+
+      const blocks: string[] = [];
+
+      const datesChanged =
+        (body.date_from && body.date_from !== oldOrder.date_from) ||
+        (body.date_to && body.date_to !== oldOrder.date_to);
+      if (datesChanged) {
+        const oldFrom = fmtD(oldOrder.date_from);
+        const oldTo = fmtD(oldOrder.date_to);
+        const newFrom = fmtD(body.date_from ?? oldOrder.date_from);
+        const newTo = fmtD(body.date_to ?? oldOrder.date_to);
+        blocks.push(`It was: ${oldFrom} — ${oldTo}\nNow: ${newFrom} — ${newTo}`);
+      }
+
+      if (body.status && body.status !== oldOrder.status) {
+        blocks.push(`It was: ${oldOrder.status || "—"}\nNow: ${body.status}`);
+      }
+
+      if (body.countries_cities && body.countries_cities !== oldOrder.countries_cities) {
+        blocks.push("Destination has been changed");
+      }
+
+      if (blocks.length === 0) blocks.push("Details updated");
+
+      const bodyText = `${dest}\n${blocks.join("\n")}`;
+
+      console.log("[Push] Notification for", orderCode, ":", bodyText);
+
+      sendPushToClient(order.client_party_id, {
+        title: "Trip updated",
+        body: bodyText,
+        type: "order_update",
+        refId: order.id,
+      }).catch((e: unknown) => console.error("[Push] fire-and-forget error:", e));
+    }
+
+    return NextResponse.json({ order });
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Order PATCH error:", errorMsg);
+    return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
+  }
+}
+
+const DELETE_PASSWORD = "admin";
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string }> }
+) {
+  try {
+    const { orderCode } = await params;
+    const body = await request.json();
+
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (apiUser.role !== "supervisor" && apiUser.role !== "director") {
+      return NextResponse.json({ error: "Only Supervisor can delete orders" }, { status: 403 });
+    }
+
+    if (body.password !== DELETE_PASSWORD) {
+      return NextResponse.json({ error: "Incorrect password" }, { status: 403 });
+    }
+
+    const { data: order, error: findErr } = await supabaseAdmin
+      .from("orders")
+      .select("id, order_code")
+      .eq("company_id", apiUser.companyId)
+      .eq("order_code", orderCode)
+      .single();
+
+    if (findErr || !order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // 1. Delete invoices first (CASCADE removes invoice_items, freeing order_services FK)
+    const { error: invErr } = await supabaseAdmin
+      .from("invoices")
+      .delete()
+      .eq("order_id", order.id);
+
+    if (invErr) {
+      console.error("Delete invoices error:", invErr);
+      return NextResponse.json({ error: `Failed to delete invoices: ${invErr.message}` }, { status: 500 });
+    }
+
+    // 2. Delete the order (CASCADE: order_services, order_access, payments, travellers, documents, invoice_reservations)
+    const { error: delErr } = await supabaseAdmin
+      .from("orders")
+      .delete()
+      .eq("id", order.id);
+
+    if (delErr) {
+      console.error("Delete order error:", delErr);
+      return NextResponse.json({ error: `Failed to delete order: ${delErr.message}` }, { status: 500 });
+    }
+
+    console.log(`[Order DELETE] Order ${orderCode} (${order.id}) deleted by user ${apiUser.userId}`);
+
+    return NextResponse.json({ success: true, orderCode });
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Order DELETE error:", errorMsg);
+    return NextResponse.json({ error: `Server error: ${errorMsg}` }, { status: 500 });
+  }
+}

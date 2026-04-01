@@ -53,6 +53,101 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
+import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
+
+// ---------------------------------------------------------------------------
+// Column config — drag-reorder + resize + localStorage persistence
+// ---------------------------------------------------------------------------
+
+type ColumnKey =
+  | "invoice" | "category" | "name" | "client" | "payer"
+  | "clientPrice" | "servicePrice" | "grossMargin" | "vat" | "netProfit"
+  | "supplier" | "travellers" | "status" | "terms";
+
+interface ColumnDef {
+  key: ColumnKey;
+  i18nKey: string;
+  defaultWidth: number;
+  minWidth: number;
+  align?: "left" | "center" | "right";
+}
+
+const DEFAULT_COLUMNS: ColumnDef[] = [
+  { key: "invoice",      i18nKey: "order.servInvoice",      defaultWidth: 80,  minWidth: 50,  align: "center" },
+  { key: "category",     i18nKey: "order.servCategory",     defaultWidth: 100, minWidth: 60 },
+  { key: "name",         i18nKey: "order.servName",         defaultWidth: 140, minWidth: 80 },
+  { key: "client",       i18nKey: "order.servClient",       defaultWidth: 120, minWidth: 60 },
+  { key: "payer",        i18nKey: "order.servPayer",        defaultWidth: 120, minWidth: 60 },
+  { key: "clientPrice",  i18nKey: "order.servClientPrice",  defaultWidth: 80,  minWidth: 60 },
+  { key: "servicePrice", i18nKey: "order.servServicePrice", defaultWidth: 80,  minWidth: 60 },
+  { key: "grossMargin",  i18nKey: "order.servGrossMargin",  defaultWidth: 80,  minWidth: 50 },
+  { key: "vat",          i18nKey: "order.servVat",          defaultWidth: 60,  minWidth: 40 },
+  { key: "netProfit",    i18nKey: "order.servNetProfit",    defaultWidth: 80,  minWidth: 50 },
+  { key: "supplier",     i18nKey: "order.servSupplier",     defaultWidth: 120, minWidth: 60 },
+  { key: "travellers",   i18nKey: "order.servTravellers",   defaultWidth: 160, minWidth: 100 },
+  { key: "status",       i18nKey: "order.servStatus",       defaultWidth: 80,  minWidth: 50 },
+  { key: "terms",        i18nKey: "order.servTerms",        defaultWidth: 80,  minWidth: 50 },
+];
+
+const LS_KEY = "travelcms:services-table-columns";
+
+type ColumnsConfig = { order: ColumnKey[]; widths: Record<string, number> };
+
+function loadColumnsConfig(): ColumnsConfig {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return defaultColumnsConfig();
+    const parsed = JSON.parse(raw) as Partial<ColumnsConfig>;
+    const allKeys = DEFAULT_COLUMNS.map((c) => c.key);
+    let order = Array.isArray(parsed.order) ? (parsed.order as ColumnKey[]).filter((k) => allKeys.includes(k)) : [];
+    for (const k of allKeys) {
+      if (!order.includes(k)) order.push(k);
+    }
+    const widths: Record<string, number> = {};
+    for (const col of DEFAULT_COLUMNS) {
+      widths[col.key] = (parsed.widths && typeof parsed.widths[col.key] === "number") ? parsed.widths[col.key] : col.defaultWidth;
+    }
+    return { order, widths };
+  } catch {
+    return defaultColumnsConfig();
+  }
+}
+
+function defaultColumnsConfig(): ColumnsConfig {
+  return {
+    order: DEFAULT_COLUMNS.map((c) => c.key),
+    widths: Object.fromEntries(DEFAULT_COLUMNS.map((c) => [c.key, c.defaultWidth])),
+  };
+}
+
+function saveColumnsConfig(cfg: ColumnsConfig) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch { /* quota */ }
+}
+
+function getColumnDef(key: ColumnKey): ColumnDef {
+  return DEFAULT_COLUMNS.find((c) => c.key === key) || DEFAULT_COLUMNS[0];
+}
+
+/**
+ * BSP + airline channel: show "Agency / Airline" only when the two names differ.
+ * Prevents "Turkish Airlines / Turkish Airlines" when supplier_name equals airline_channel_supplier_name.
+ */
+function formatServiceSupplierDisplay(
+  supplierName: string | null | undefined,
+  airlineChannel: boolean,
+  airlineChannelSupplierName: string | null | undefined
+): string {
+  const base = String(supplierName ?? "").trim();
+  const air = String(airlineChannelSupplierName ?? "").trim();
+  if (!airlineChannel || !air) {
+    return base || "-";
+  }
+  if (base && air && base.toLowerCase() === air.toLowerCase()) {
+    return base;
+  }
+  const left = !base || base === "-" ? "BSP" : base;
+  return `${left}/${air}`;
+}
 
 export interface Traveller {
   id: string;
@@ -527,10 +622,30 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   onOpenDirectoryParty,
   travellersState,
 }, ref) {
-  const servicesTableColSpan = 11;
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const router = useRouter();
+
+  // --- Column order + widths (persisted per-user in localStorage) ---
+  const [colCfg, setColCfg] = useState<ColumnsConfig>(defaultColumnsConfig);
+  useEffect(() => { setColCfg(loadColumnsConfig()); }, []);
+  const orderedColumns = colCfg.order;
+  const colWidths = colCfg.widths;
+  const servicesTableColSpan = orderedColumns.length;
+
+  const updateColumnOrder = useCallback((newOrder: ColumnKey[]) => {
+    setColCfg((prev) => { const next = { ...prev, order: newOrder }; saveColumnsConfig(next); return next; });
+  }, []);
+  const updateColumnWidth = useCallback((key: ColumnKey, w: number) => {
+    setColCfg((prev) => { const next = { ...prev, widths: { ...prev.widths, [key]: w } }; saveColumnsConfig(next); return next; });
+  }, []);
+
+  // Drag state for column reorder
+  const [dragCol, setDragCol] = useState<ColumnKey | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<ColumnKey | null>(null);
+
+  // Resize state
+  const resizeRef = React.useRef<{ key: ColumnKey; startX: number; startW: number } | null>(null);
   const [localTravellers, setLocalTravellers] = useState<Traveller[]>([]);
   const orderTravellers = travellersState ? travellersState[0] : localTravellers;
   const setOrderTravellers = travellersState ? travellersState[1] : setLocalTravellers;
@@ -1490,13 +1605,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           vatRate: (s.vatRate ?? s.vat_rate) as number | null,
           name: String(s.serviceName ?? s.service_name ?? ""),
           supplierNameRaw: String(s.supplierName ?? s.supplier_name ?? ""),
-          supplier: (() => {
-            const base = String(s.supplierName ?? s.supplier_name ?? "-");
-            const airlineChannel = !!(s.airlineChannel ?? s.airline_channel);
-            const airlineName = String(s.airlineChannelSupplierName ?? s.airline_channel_supplier_name ?? "").trim();
-            if (airlineChannel && airlineName) return `${base === "-" ? "BSP" : base}/${airlineName}`;
-            return base;
-          })(),
+          supplier: formatServiceSupplierDisplay(
+            s.supplierName ?? s.supplier_name,
+            !!(s.airlineChannel ?? s.airline_channel),
+            s.airlineChannelSupplierName ?? s.airline_channel_supplier_name
+          ),
           client: String(s.clientName ?? s.client_name ?? "-"),
           payer: String(s.payerName ?? s.payer_name ?? "-"),
           supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
@@ -1899,13 +2012,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       vatRate: ((raw.vatRate ?? raw.vat_rate) ?? null) as number | null,
       name: service.serviceName,
       supplierNameRaw: service.supplierName || "",
-      supplier: (() => {
-        const base = service.supplierName || "-";
-        const airlineChannel = !!(service.airlineChannel ?? raw.airlineChannel);
-        const airlineName = String(service.airlineChannelSupplierName ?? raw.airlineChannelSupplierName ?? "").trim();
-        if (airlineChannel && airlineName) return `${base === "-" ? "BSP" : base}/${airlineName}`;
-        return base;
-      })(),
+      supplier: formatServiceSupplierDisplay(
+        service.supplierName,
+        !!(service.airlineChannel ?? raw.airlineChannel),
+        (service.airlineChannelSupplierName ?? raw.airlineChannelSupplierName) as string | null | undefined
+      ),
       client: service.clientName || "-",
       payer: service.payerName || "-",
       supplierPartyId: service.supplierPartyId || undefined,
@@ -2224,23 +2335,23 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="w-20 px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="w-20 px-1 py-1.5" /><th className="min-w-[180px] px-2 py-1.5" /><th className="px-2 py-1.5" /><th className="px-2 py-1.5" />
+              {orderedColumns.map((k) => <th key={k} className="px-2 py-1" />)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {[1, 2, 3, 4, 5].map((i) => (
               <tr key={i} className="border-b border-gray-100">
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell mx-auto w-4" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-32" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-24" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-14" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-20" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-16" /></td>
-                <td className="px-2 py-2"><div className="h-4 rounded services-skeleton-cell w-12" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell mx-auto w-4" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-16" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-32" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-24" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-14" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-14" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-20" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-16" /></td>
+                <td className="px-2 py-1"><div className="h-3.5 rounded services-skeleton-cell w-12" /></td>
               </tr>
             ))}
           </tbody>
@@ -2349,7 +2460,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
         </div>
 
         {/* Itinerary Tabs - filter by traveller */}
-        <div className="px-3">
+        <div className="px-2 pb-0">
           <ItineraryTabs
             travellers={orderTravellers}
             selectedTravellerId={selectedTravellerId}
@@ -2362,52 +2473,78 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           <table className="w-full border-collapse min-w-[680px]">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-20 px-2 py-1.5 text-center text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  <div className="flex items-center justify-center gap-2">
-                    {visibleServicesWithoutInvoice.length > 0 && (
-                      <input
-                        type="checkbox"
-                        checked={allVisibleWithoutInvoiceSelected}
-                        onChange={(e) => handleSelectAllVisible(e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        title="Select all non-invoiced services"
-                        aria-label="Select all non-invoiced services"
-                        onClick={(e) => e.stopPropagation()}
+                {orderedColumns.map((colKey) => {
+                  const def = getColumnDef(colKey);
+                  const w = colWidths[colKey] ?? def.defaultWidth;
+                  const isInvoice = colKey === "invoice";
+                  return (
+                    <th
+                      key={colKey}
+                      draggable
+                      onDragStart={() => setDragCol(colKey)}
+                      onDragEnd={() => { setDragCol(null); setDragOverCol(null); }}
+                      onDragOver={(e) => { e.preventDefault(); if (dragCol && dragCol !== colKey) setDragOverCol(colKey); }}
+                      onDragLeave={() => { if (dragOverCol === colKey) setDragOverCol(null); }}
+                      onDrop={() => {
+                        if (!dragCol || dragCol === colKey) return;
+                        const newOrder = [...orderedColumns];
+                        const fromIdx = newOrder.indexOf(dragCol);
+                        const toIdx = newOrder.indexOf(colKey);
+                        newOrder.splice(fromIdx, 1);
+                        newOrder.splice(toIdx, 0, dragCol);
+                        updateColumnOrder(newOrder);
+                        setDragCol(null);
+                        setDragOverCol(null);
+                      }}
+                      style={{ width: w, minWidth: def.minWidth }}
+                      className={`relative select-none px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-gray-700 cursor-grab ${
+                        def.align === "center" ? "text-center" : "text-left"
+                      } ${dragOverCol === colKey ? "border-l-2 border-blue-400" : ""}`}
+                    >
+                      {isInvoice ? (
+                        <div className="flex items-center justify-center gap-2">
+                          {visibleServicesWithoutInvoice.length > 0 && (
+                            <input
+                              type="checkbox"
+                              checked={allVisibleWithoutInvoiceSelected}
+                              onChange={(e) => handleSelectAllVisible(e.target.checked)}
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              title="Select all non-invoiced services"
+                              aria-label="Select all non-invoiced services"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                          <span>{t(lang, def.i18nKey)}</span>
+                        </div>
+                      ) : (
+                        t(lang, def.i18nKey)
+                      )}
+                      {/* Resize handle */}
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-300 active:bg-blue-400"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          resizeRef.current = { key: colKey, startX: e.clientX, startW: w };
+                          const onMove = (ev: MouseEvent) => {
+                            if (!resizeRef.current) return;
+                            const delta = ev.clientX - resizeRef.current.startX;
+                            const newW = Math.max(def.minWidth, resizeRef.current.startW + delta);
+                            updateColumnWidth(colKey, newW);
+                          };
+                          const onUp = () => {
+                            resizeRef.current = null;
+                            document.removeEventListener("mousemove", onMove);
+                            document.removeEventListener("mouseup", onUp);
+                          };
+                          document.addEventListener("mousemove", onMove);
+                          document.addEventListener("mouseup", onUp);
+                        }}
+                        draggable={false}
                       />
-                    )}
-                    <span>{t(lang, "order.servInvoice")}</span>
-                  </div>
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servCategory")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servName")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servClient")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servPayer")}
-                </th>
-                <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servClientPrice")}
-                </th>
-                <th className="w-20 px-1 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servServicePrice")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servSupplier")}
-                </th>
-                <th className="min-w-[180px] px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servTravellers")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servStatus")}
-                </th>
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-gray-700">
-                  {t(lang, "order.servTerms")}
-                </th>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -2442,17 +2579,17 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                       className="cursor-pointer bg-gray-100 hover:bg-gray-200"
                       onClick={() => toggleGroup(groupKey)}
                     >
-                      <td className="px-3 py-2" colSpan={servicesTableColSpan}>
+                      <td className="px-2 py-1" colSpan={servicesTableColSpan}>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-600 tabular-nums">
                               {isExpanded ? "▼" : "▶"}
                             </span>
-                            <span className="text-sm font-medium text-gray-900">
+                            <span className="text-xs font-semibold text-gray-900 leading-tight">
                               {groupKey}
                             </span>
                           </div>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-xs text-gray-500 tabular-nums">
                             {groupServices.length}
                           </span>
                         </div>
@@ -2481,6 +2618,15 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                         const displayClientPartyId = service.clientPartyId;
                         const isAncillary = service.serviceType === "ancillary";
 
+                        const econ = computeServiceLineEconomics({
+                          client_price: service.clientPrice,
+                          service_price: service.servicePrice,
+                          service_type: service.serviceType,
+                          category: service.category,
+                          commission_amount: service.commissionAmount,
+                          vat_rate: service.vatRate,
+                        });
+
                         const rowDelay = serviceRowIndex++ * 40;
                         return (
                           <React.Fragment key={service.id}>
@@ -2495,8 +2641,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             }}
                             title={service.invoice_id ? "Double-click to edit (Supplier only)" : "Double-click to edit"}
                           >
-                            <td className="w-20 px-2 py-1 text-center relative">
-                              {/* Connector icon between split group rows */}
+                            {orderedColumns.map((colKey) => {
+                              switch (colKey) {
+                                case "invoice":
+                                  return (
+                            <td key={colKey} className="w-20 px-1.5 py-0.5 text-center relative">
                               {splitInfo && splitInfo.index > 1 && splitGroupColor && (
                                 <div className="absolute -left-3 -top-3 z-20">
                                   <div className="flex items-center justify-center w-5 h-5 bg-white rounded-full shadow-md border-2" style={{ borderColor: splitGroupColor.border.includes('green') ? '#22c55e' : splitGroupColor.border.includes('blue') ? '#3b82f6' : splitGroupColor.border.includes('purple') ? '#a855f7' : splitGroupColor.border.includes('pink') ? '#ec4899' : splitGroupColor.border.includes('orange') ? '#f97316' : splitGroupColor.border.includes('teal') ? '#14b8a6' : splitGroupColor.border.includes('indigo') ? '#6366f1' : '#f43f5e' }}>
@@ -2515,7 +2664,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                       className="p-0.5 text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
                                       title="View invoice · Double-click row to edit (Supplier only)"
                                     >
-                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                       </svg>
                                     </button>
@@ -2532,7 +2681,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                         setSelectedServiceIds(prev => prev.filter(id => id !== service.id));
                                       }
                                     }}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                     aria-label={`Select ${service.name}`}
                                     title={
                                       service.resStatus === "cancelled"
@@ -2544,27 +2693,36 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 )}
                               </div>
                             </td>
-                            <td className="px-2 py-1 text-sm text-gray-700">
+                                  );
+                                case "category":
+                                  return (
+                            <td key={colKey} className="px-1.5 py-0.5 text-xs text-gray-700 leading-tight">
                               {isAncillary ? (
                                 <span className="inline-flex items-center gap-1">
                                   <span className="text-gray-400">└</span>
-                                  <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700">
+                                  <span className="inline-flex items-center rounded px-1 py-0 text-[10px] font-medium bg-blue-100 text-blue-700">
                                     {service.ancillaryType === "extra_baggage" ? "Baggage" : service.ancillaryType === "seat_selection" ? "Seat" : service.ancillaryType === "meal" ? "Meal" : "Add-on"}
                                   </span>
                                 </span>
                               ) : service.category}
                             </td>
-                            <td className="px-2 py-1 text-sm font-medium text-gray-900">
-                              <div className="flex items-center gap-2">
+                                  );
+                                case "name":
+                                  return (
+                            <td key={colKey} className="px-1.5 py-0.5 text-xs font-medium text-gray-900 leading-snug">
+                              <div className="flex items-start gap-1.5 min-w-0">
                                 {splitInfo && (
-                                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium shrink-0 ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
+                                  <span className={`inline-flex items-center gap-1 rounded px-1 py-0 text-[10px] font-medium shrink-0 mt-0.5 ${splitGroupColor?.bg} ${splitGroupColor?.text}`}>
                                   </span>
                                 )}
-                                <span>{getServiceDisplayName(service, service.name)}</span>
+                                <span className="break-words">{getServiceDisplayName(service, service.name)}</span>
                               </div>
                             </td>
-                            <td 
-                              className={`px-2 py-1 text-sm text-gray-700 ${(() => {
+                                  );
+                                case "client":
+                                  return (
+                            <td key={colKey}
+                              className={`px-1.5 py-0.5 text-xs text-gray-700 leading-tight ${(() => {
                                 const pid = displayClientPartyId ?? service.clientPartyId;
                                 if (!pid) return "";
                                 if (isCtrlPressed && hoveredPartyId === `client-${service.id}`) {
@@ -2590,8 +2748,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {displayClientName}
                             </td>
-                            <td 
-                              className={`px-2 py-1 text-sm ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                                  );
+                                case "payer":
+                                  return (
+                            <td key={colKey}
+                              className={`px-1.5 py-0.5 text-xs leading-tight ${service.payerPartyId && isCtrlPressed && hoveredPartyId === `payer-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.payerPartyId) {
                                   e.preventDefault();
@@ -2603,20 +2764,47 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.payer}
                             </td>
-                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm font-medium ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}>
+                                  );
+                                case "clientPrice":
+                                  return (
+                            <td key={colKey} className={`w-20 whitespace-nowrap px-1 py-0.5 text-left text-xs font-medium tabular-nums ${service.serviceType === "cancellation" ? "text-red-600" : "text-gray-900"}`}>
                               {service.serviceType === "cancellation"
                                 ? formatCurrency(-Math.abs(service.clientPrice))
                                 : formatCurrency(service.clientPrice)}
                             </td>
-                            <td className={`w-20 whitespace-nowrap px-1 py-1 text-left text-sm ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
+                                  );
+                                case "servicePrice":
+                                  return (
+                            <td key={colKey} className={`w-20 whitespace-nowrap px-1 py-0.5 text-left text-xs tabular-nums ${(service.serviceType === "cancellation" && (service.servicePrice ?? 0) < 0) ? "text-red-600 font-medium" : "text-gray-700"}`} title={service.categoryType === "tour" && service.commissionAmount ? `Gross: ${formatCurrency(service.servicePrice)} | Commission: ${formatCurrency(service.commissionAmount)}` : undefined}>
                               {formatCurrency(
                                 service.categoryType === "tour" && service.commissionAmount
                                   ? Math.round((service.servicePrice - service.commissionAmount) * 100) / 100
                                   : service.servicePrice
                               )}
                             </td>
-                            <td 
-                              className={`px-2 py-1 text-sm ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
+                                  );
+                                case "grossMargin":
+                                  return (
+                            <td key={colKey} className={`whitespace-nowrap px-1 py-0.5 text-left text-xs tabular-nums ${econ.marginGross < 0 ? "text-red-600 font-medium" : "text-gray-700"}`}>
+                              {formatCurrency(econ.marginGross)}
+                            </td>
+                                  );
+                                case "vat":
+                                  return (
+                            <td key={colKey} className="whitespace-nowrap px-1 py-0.5 text-left text-xs tabular-nums text-gray-500">
+                              {econ.vatOnMargin > 0 ? formatCurrency(econ.vatOnMargin) : "—"}
+                            </td>
+                                  );
+                                case "netProfit":
+                                  return (
+                            <td key={colKey} className={`whitespace-nowrap px-1 py-0.5 text-left text-xs font-medium tabular-nums ${econ.profitNetOfVat < 0 ? "text-red-600" : econ.profitNetOfVat > 0 ? "text-green-700" : "text-gray-500"}`}>
+                              {formatCurrency(econ.profitNetOfVat)}
+                            </td>
+                                  );
+                                case "supplier":
+                                  return (
+                            <td key={colKey}
+                              className={`px-1.5 py-0.5 text-xs leading-tight ${service.supplierPartyId && isCtrlPressed && hoveredPartyId === `supplier-${service.id}` ? 'cursor-pointer text-blue-600 underline' : 'text-gray-700'}`}
                               onClick={(e) => {
                                 if ((e.ctrlKey || e.metaKey) && service.supplierPartyId) {
                                   e.preventDefault();
@@ -2628,8 +2816,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                             >
                               {service.supplier}
                             </td>
-                            <td 
-                              className="min-w-[180px] px-2 py-1 cursor-pointer hover:bg-blue-50 transition-colors"
+                                  );
+                                case "travellers":
+                                  return (
+                            <td key={colKey}
+                              className="min-w-[160px] px-1.5 py-0.5 cursor-pointer hover:bg-blue-50 transition-colors"
                               onClick={(e) => handleOpenModal(service.id, e)}
                               title="Click to manage travellers"
                             >
@@ -2649,7 +2840,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                         onClick={openCard}
                                         disabled={!onOpenDirectoryParty}
                                         title={onOpenDirectoryParty ? `${fullName} — open card` : fullName}
-                                        className={`h-5 w-5 rounded-full border border-blue-200 p-0 overflow-hidden shrink-0 ${onOpenDirectoryParty ? "cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500" : "cursor-default"}`}
+                                        className={`h-4 w-4 rounded-full border border-blue-200 p-0 overflow-hidden shrink-0 ${onOpenDirectoryParty ? "cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500" : "cursor-default"}`}
                                       >
                                         <img
                                           src={trav.avatarUrl}
@@ -2664,27 +2855,29 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                         onClick={openCard}
                                         disabled={!onOpenDirectoryParty}
                                         title={onOpenDirectoryParty ? `${fullName} — open card` : fullName}
-                                        className={`flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-medium text-blue-800 shrink-0 ${onOpenDirectoryParty ? "cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500" : ""}`}
+                                        className={`flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[10px] font-medium text-blue-800 shrink-0 ${onOpenDirectoryParty ? "cursor-pointer hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500" : ""}`}
                                       >
                                         {getTravellerInitials(travellerId)}
                                       </button>
                                     );
                                   })}
                                   {remainingCount > 0 && (
-                                    <span className="text-sm text-gray-500">
+                                    <span className="text-[10px] text-gray-500 tabular-nums">
                                       +{remainingCount}
                                     </span>
                                   )}
                                 </div>
-                                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs text-gray-600">
+                                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded border border-gray-300 bg-white text-[10px] text-gray-600 leading-none">
                                   +
                                 </span>
                               </div>
                             </td>
-                            {/* Status */}
-                            <td className="px-2 py-1 text-sm">
+                                  );
+                                case "status":
+                                  return (
+                            <td key={colKey} className="px-1.5 py-0.5 align-middle">
                               <span
-                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getResStatusColor(
+                                className={`inline-flex rounded-full px-1.5 py-0 text-[10px] font-medium capitalize leading-tight ${getResStatusColor(
                                   service.resStatus,
                                   service.invoice_id
                                 )}`}
@@ -2692,22 +2885,21 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 {service.resStatus}
                               </span>
                             </td>
-                            {/* Terms */}
-                            <td className="px-2 py-1 text-sm">
+                                  );
+                                case "terms":
+                                  return (
+                            <td key={colKey} className="px-1.5 py-0.5 align-middle text-xs">
                               {(() => {
                                 const policy = service.refundPolicy || "non_ref";
                                 const freeCancelDate = service.freeCancellationUntil || null;
                                 const badge = getRefundPolicyBadge(policy as "non_ref" | "refundable" | "fully_ref", freeCancelDate);
                                 const urgency = getDeadlineUrgency(freeCancelDate);
-                                
-                                // Badge colors based on policy and urgency
                                 let badgeClass = "";
                                 if (policy === "non_ref") {
                                   badgeClass = "bg-red-100 text-red-700 border border-red-200";
                                 } else if (policy === "fully_ref") {
                                   badgeClass = "bg-green-100 text-green-700 border border-green-200";
                                 } else {
-                                  // Refundable - color by urgency
                                   if (urgency === "overdue") {
                                     badgeClass = "bg-red-100 text-red-700 border border-red-200";
                                   } else if (urgency === "urgent") {
@@ -2718,8 +2910,6 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                     badgeClass = "bg-green-100 text-green-700 border border-green-200";
                                   }
                                 }
-                                
-                                // Build tooltip content
                                 const tooltipParts: string[] = [];
                                 tooltipParts.push(`Refund: ${getRefundPolicyLabel(policy as "non_ref" | "refundable" | "fully_ref")}`);
                                 if (service.categoryType === "tour" && service.priceType) {
@@ -2740,10 +2930,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 if (service.cancellationPenaltyPercent) {
                                   tooltipParts.push(`Penalty: ${service.cancellationPenaltyPercent}%`);
                                 }
-                                
                                 return badge ? (
                                   <span
-                                    className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium cursor-help ${badgeClass}`}
+                                    className={`inline-flex rounded px-1 py-0 text-[10px] font-medium cursor-help leading-tight ${badgeClass}`}
                                     title={tooltipParts.join("\n")}
                                   >
                                     {badge}
@@ -2751,6 +2940,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                 ) : null;
                               })()}
                             </td>
+                                  );
+                                default:
+                                  return <td key={colKey} />;
+                              }
+                            })}
                           </tr>
                           {/* Smart hints after this service */}
                           {getHintsAfterService(service.id).map(hint => (

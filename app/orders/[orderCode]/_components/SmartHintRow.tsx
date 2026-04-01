@@ -27,7 +27,7 @@ export default function SmartHintRow({ hint, onAction, onDismiss, tableColSpan =
   return (
     <tr>
       <td colSpan={tableColSpan} className="px-0 py-0">
-        <div className={`mx-2 my-1 px-3 py-2 rounded-lg border flex items-center justify-between ${colorClass}`}>
+        <div className={`mx-2 my-0.5 px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${colorClass}`}>
           <div className="flex items-center gap-2">
             <span className="text-lg">{icon}</span>
             <span className="text-sm font-medium">{message}</span>

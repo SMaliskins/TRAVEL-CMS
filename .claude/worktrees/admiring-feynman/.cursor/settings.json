@@ -1,0 +1,25 @@
+{
+  "plugins": {
+    "superpowers": {
+      "enabled": true
+    },
+    "deploy-on-aws": {
+      "enabled": true
+    },
+    "stripe": {
+      "enabled": true
+    },
+    "supabase": {
+      "enabled": true
+    },
+    "langfuse": {
+      "enabled": true
+    },
+    "runlayer": {
+      "enabled": true
+    },
+    "vercel": {
+      "enabled": true
+    }
+  }
+}
