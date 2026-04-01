@@ -30,6 +30,7 @@ import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 import OrderClientsDataTab from "./_components/OrderClientsDataTab";
 import { OrderPageHeaderE, type OrderHeaderEOrder } from "./_components/OrderPageHeaderE";
+import RadialContextMenu from "./_components/RadialContextMenu";
 
 /** Set to `true` to restore the previous multi-column sticky order header. */
 const USE_LEGACY_ORDER_PAGE_HEADER = false;
@@ -2110,6 +2111,38 @@ export default function OrderPage({
           onCancel={() => setShowDeleteModal(false)}
         />
       )}
+
+      <RadialContextMenu
+        items={[
+          {
+            label: "+Service",
+            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+            onClick: () => {
+              if (activeTab === "client" && servicesBlockRef.current) {
+                servicesBlockRef.current.triggerAddService();
+              } else {
+                setPendingAction("service");
+                setActiveTab("client");
+              }
+            },
+          },
+          {
+            label: "+Payment",
+            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+            onClick: () => setActiveTab("finance"),
+          },
+          {
+            label: "Documents",
+            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+            onClick: () => setActiveTab("documents"),
+          },
+          {
+            label: "Finance",
+            icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>,
+            onClick: () => setActiveTab("finances"),
+          },
+        ]}
+      />
 
     </div>
   );
