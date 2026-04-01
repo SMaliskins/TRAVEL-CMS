@@ -12,9 +12,9 @@ interface RadialContextMenuProps {
   items: [RadialMenuItem, RadialMenuItem, RadialMenuItem, RadialMenuItem];
 }
 
-const RADIUS = 76;
-const INNER = 28;
-const GAP = 2;
+const RADIUS = 74;
+const INNER = 24;
+const GAP = 2.5;
 const SIZE = RADIUS * 2 + 16;
 const CENTER = SIZE / 2;
 
@@ -101,14 +101,14 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
         height={SIZE}
         className="pointer-events-auto"
         style={{
-          filter: "drop-shadow(0 8px 24px rgba(249,115,22,0.15)) drop-shadow(0 2px 8px rgba(0,0,0,0.06))",
+          filter: "drop-shadow(0 8px 32px rgba(0,0,0,0.4))",
           transform: animating ? "scale(1)" : "scale(0.3)",
           opacity: animating ? 1 : 0,
           transition: "transform 150ms cubic-bezier(.34,1.56,.64,1), opacity 100ms ease-out",
         }}
       >
-        <circle cx={CENTER} cy={CENTER} r={RADIUS + 1} fill="#FFF7ED" stroke="#FED7AA" strokeWidth={1.5} />
-        <circle cx={CENTER} cy={CENTER} r={INNER} fill="#FFFBEB" stroke="#FED7AA" strokeWidth={0.5} />
+        <circle cx={CENTER} cy={CENTER} r={RADIUS + 1} fill="#1E293B" stroke="#334155" strokeWidth={1.5} />
+        <circle cx={CENTER} cy={CENTER} r={INNER} fill="#0F172A" stroke="#334155" strokeWidth={0.5} />
 
         {items.map((item, i) => {
           const [start, end] = SEGMENTS[i];
@@ -130,8 +130,8 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
             >
               <path
                 d={path}
-                fill={isHov ? "#F97316" : "#FFF7ED"}
-                stroke="#FED7AA"
+                fill={isHov ? "#6366F1" : "#1E293B"}
+                stroke="#334155"
                 strokeWidth={0.5}
                 style={{ transition: "fill 120ms ease" }}
               />
@@ -140,7 +140,7 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
                   transform="translate(-9, -15)"
                   style={{ transition: "color 120ms ease" }}
                 >
-                  <g style={{ color: isHov ? "#ffffff" : "#EA580C" }}>
+                  <g style={{ color: isHov ? "#E0E7FF" : "#64748B" }}>
                     {item.icon}
                   </g>
                 </g>
@@ -151,7 +151,7 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
                   style={{
                     fontSize: 8,
                     fontWeight: 600,
-                    fill: isHov ? "#ffffff" : "#9A3412",
+                    fill: isHov ? "#ffffff" : "#94A3B8",
                     transition: "fill 120ms ease",
                     letterSpacing: "0.02em",
                   }}
@@ -172,7 +172,7 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
               y1={CENTER + (INNER + GAP) * Math.sin(rad)}
               x2={CENTER + (RADIUS - GAP) * Math.cos(rad)}
               y2={CENTER + (RADIUS - GAP) * Math.sin(rad)}
-              stroke="#FDBA74"
+              stroke="#334155"
               strokeWidth={0.5}
               className="pointer-events-none"
             />
@@ -180,9 +180,9 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
         })}
 
         <g transform={`translate(${CENTER}, ${CENTER})`}>
-          <circle r={6} fill="none" stroke="#EA580C" strokeWidth={1} opacity={0.3} />
-          <line x1="-3" y1="0" x2="3" y2="0" stroke="#EA580C" strokeWidth={1.2} opacity={0.4} />
-          <line x1="0" y1="-3" x2="0" y2="3" stroke="#EA580C" strokeWidth={1.2} opacity={0.4} />
+          <circle r={6} fill="none" stroke="#64748B" strokeWidth={1} opacity={0.3} />
+          <line x1="-3" y1="0" x2="3" y2="0" stroke="#64748B" strokeWidth={1.2} opacity={0.4} />
+          <line x1="0" y1="-3" x2="0" y2="3" stroke="#64748B" strokeWidth={1.2} opacity={0.4} />
         </g>
       </svg>
     </div>
