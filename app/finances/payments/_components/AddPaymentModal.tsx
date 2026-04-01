@@ -531,7 +531,7 @@ export default function AddPaymentModal({
                       const amountToSuggest = typeof inv.remaining === "number" && inv.remaining >= 0
                         ? inv.remaining
                         : (isCred ? Math.abs(inv.total ?? 0) : inv.total);
-                      if (amountToSuggest != null) setAmount(String(amountToSuggest));
+                      if (amountToSuggest != null && !amount.trim()) setAmount(String(amountToSuggest));
                     }
                     if (inv?.payer_name) {
                       setPayerName(inv.payer_name);
