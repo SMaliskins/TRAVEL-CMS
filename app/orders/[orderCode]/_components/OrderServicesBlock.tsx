@@ -1606,9 +1606,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           name: String(s.serviceName ?? s.service_name ?? ""),
           supplierNameRaw: String(s.supplierName ?? s.supplier_name ?? ""),
           supplier: formatServiceSupplierDisplay(
-            s.supplierName ?? s.supplier_name,
+            (s.supplierName ?? s.supplier_name) as string | null | undefined,
             !!(s.airlineChannel ?? s.airline_channel),
-            s.airlineChannelSupplierName ?? s.airline_channel_supplier_name
+            (s.airlineChannelSupplierName ?? s.airline_channel_supplier_name) as string | null | undefined
           ),
           client: String(s.clientName ?? s.client_name ?? "-"),
           payer: String(s.payerName ?? s.payer_name ?? "-"),
