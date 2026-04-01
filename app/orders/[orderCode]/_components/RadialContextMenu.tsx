@@ -12,9 +12,10 @@ interface RadialContextMenuProps {
   items: [RadialMenuItem, RadialMenuItem, RadialMenuItem, RadialMenuItem];
 }
 
-const RADIUS = 72;
+const RADIUS = 76;
 const INNER = 28;
-const SIZE = RADIUS * 2 + 8;
+const GAP = 2;
+const SIZE = RADIUS * 2 + 16;
 const CENTER = SIZE / 2;
 
 function describeArc(
@@ -39,6 +40,13 @@ function describeArc(
   ].join(" ");
 }
 
+const SEGMENTS: [number, number][] = [
+  [270, 360],
+  [0, 90],
+  [90, 180],
+  [180, 270],
+];
+
 export default function RadialContextMenu({ items }: RadialContextMenuProps) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -47,7 +55,7 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
 
   const close = useCallback(() => {
     setAnimating(false);
-    setTimeout(() => setPos(null), 120);
+    setTimeout(() => setPos(null), 150);
   }, []);
 
   useEffect(() => {
@@ -81,20 +89,6 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
   const clampedX = Math.min(Math.max(pos.x, SIZE / 2 + 4), window.innerWidth - SIZE / 2 - 4);
   const clampedY = Math.min(Math.max(pos.y, SIZE / 2 + 4), window.innerHeight - SIZE / 2 - 4);
 
-  const segmentAngles: [number, number][] = [
-    [270, 360], // top-right
-    [0, 90],    // bottom-right
-    [90, 180],  // bottom-left
-    [180, 270], // top-left
-  ];
-
-  const labelOffsets: { dx: number; dy: number }[] = [
-    { dx: 34, dy: -34 },
-    { dx: 34, dy: 34 },
-    { dx: -34, dy: 34 },
-    { dx: -34, dy: -34 },
-  ];
-
   return (
     <div
       ref={menuRef}
@@ -105,20 +99,20 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         width={SIZE}
         height={SIZE}
-        className="pointer-events-auto drop-shadow-lg"
+        className="pointer-events-auto"
         style={{
+          filter: "drop-shadow(0 8px 24px rgba(249,115,22,0.15)) drop-shadow(0 2px 8px rgba(0,0,0,0.06))",
           transform: animating ? "scale(1)" : "scale(0.3)",
           opacity: animating ? 1 : 0,
           transition: "transform 150ms cubic-bezier(.34,1.56,.64,1), opacity 100ms ease-out",
         }}
       >
-        {/* background circle */}
-        <circle cx={CENTER} cy={CENTER} r={RADIUS} fill="white" fillOpacity={0.95} />
-        <circle cx={CENTER} cy={CENTER} r={INNER} fill="white" />
+        <circle cx={CENTER} cy={CENTER} r={RADIUS + 1} fill="#FFF7ED" stroke="#FED7AA" strokeWidth={1.5} />
+        <circle cx={CENTER} cy={CENTER} r={INNER} fill="#FFFBEB" stroke="#FED7AA" strokeWidth={0.5} />
 
         {items.map((item, i) => {
-          const [start, end] = segmentAngles[i];
-          const path = describeArc(CENTER, CENTER, RADIUS, INNER, start, end);
+          const [start, end] = SEGMENTS[i];
+          const path = describeArc(CENTER, CENTER, RADIUS - GAP, INNER + GAP, start + 1, end - 1);
           const mid = (start + end) / 2;
           const midRad = ((mid - 90) * Math.PI) / 180;
           const labelR = (RADIUS + INNER) / 2;
@@ -136,28 +130,30 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
             >
               <path
                 d={path}
-                fill={isHov ? "#3B82F6" : "white"}
-                fillOpacity={isHov ? 1 : 0.97}
-                stroke="#E5E7EB"
-                strokeWidth={1}
-                style={{ transition: "fill 100ms ease, fill-opacity 100ms ease" }}
+                fill={isHov ? "#F97316" : "#FFF7ED"}
+                stroke="#FED7AA"
+                strokeWidth={0.5}
+                style={{ transition: "fill 120ms ease" }}
               />
               <g transform={`translate(${lx}, ${ly})`}>
                 <g
-                  transform="translate(-8, -14)"
-                  style={{ color: isHov ? "white" : "#4B5563", transition: "color 100ms ease" }}
+                  transform="translate(-9, -15)"
+                  style={{ transition: "color 120ms ease" }}
                 >
-                  {item.icon}
+                  <g style={{ color: isHov ? "#ffffff" : "#EA580C" }}>
+                    {item.icon}
+                  </g>
                 </g>
                 <text
                   textAnchor="middle"
-                  y={8}
+                  y={9}
                   className="select-none"
                   style={{
-                    fontSize: 8.5,
+                    fontSize: 8,
                     fontWeight: 600,
-                    fill: isHov ? "white" : "#374151",
-                    transition: "fill 100ms ease",
+                    fill: isHov ? "#ffffff" : "#9A3412",
+                    transition: "fill 120ms ease",
+                    letterSpacing: "0.02em",
                   }}
                 >
                   {item.label}
@@ -167,22 +163,27 @@ export default function RadialContextMenu({ items }: RadialContextMenuProps) {
           );
         })}
 
-        {/* divider lines */}
         {[0, 90, 180, 270].map((angle) => {
           const rad = ((angle - 90) * Math.PI) / 180;
           return (
             <line
               key={angle}
-              x1={CENTER + INNER * Math.cos(rad)}
-              y1={CENTER + INNER * Math.sin(rad)}
-              x2={CENTER + RADIUS * Math.cos(rad)}
-              y2={CENTER + RADIUS * Math.sin(rad)}
-              stroke="#D1D5DB"
+              x1={CENTER + (INNER + GAP) * Math.cos(rad)}
+              y1={CENTER + (INNER + GAP) * Math.sin(rad)}
+              x2={CENTER + (RADIUS - GAP) * Math.cos(rad)}
+              y2={CENTER + (RADIUS - GAP) * Math.sin(rad)}
+              stroke="#FDBA74"
               strokeWidth={0.5}
               className="pointer-events-none"
             />
           );
         })}
+
+        <g transform={`translate(${CENTER}, ${CENTER})`}>
+          <circle r={6} fill="none" stroke="#EA580C" strokeWidth={1} opacity={0.3} />
+          <line x1="-3" y1="0" x2="3" y2="0" stroke="#EA580C" strokeWidth={1.2} opacity={0.4} />
+          <line x1="0" y1="-3" x2="0" y2="3" stroke="#EA580C" strokeWidth={1.2} opacity={0.4} />
+        </g>
       </svg>
     </div>
   );
