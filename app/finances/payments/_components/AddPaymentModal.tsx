@@ -415,7 +415,7 @@ export default function AddPaymentModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100000] flex items-end sm:items-start sm:pt-[5vh] justify-center">
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
       <div ref={trapRef} className="relative z-10 w-full sm:max-w-md max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto bg-white rounded-t-xl sm:rounded-lg shadow-xl" style={modalStyle}>
         <div className="flex items-center justify-between border-b px-4 py-2.5 cursor-grab active:cursor-grabbing select-none" onMouseDown={onHeaderMouseDown}>
