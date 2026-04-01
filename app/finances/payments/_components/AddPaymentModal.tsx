@@ -515,7 +515,7 @@ export default function AddPaymentModal({
           </div>
 
           {/* Invoice (optional) */}
-          {invoiceOptions.length > 0 && (
+          {orderId && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Invoice (optional)
