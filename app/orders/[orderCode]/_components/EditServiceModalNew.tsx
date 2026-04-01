@@ -477,12 +477,15 @@ export default function EditServiceModalNew({
   const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>([]);
   const [selectedCommissionIndex, setSelectedCommissionIndex] = useState<number>(-1);
   const [agentDiscountValue, setAgentDiscountValue] = useState(() => {
-    const cat = (service as { categoryType?: string; category?: string }).categoryType;
+    const cost = Number(service.servicePrice ?? 0);
+    const sale = Number(service.clientPrice ?? 0);
+    const commissionCats: CategoryType[] = ["tour", "insurance", "ancillary", "cruise", "rent_a_car", "transfer"];
     const catStr = String((service as { category?: string }).category || "").toLowerCase();
-    const isTour = cat === "tour" || catStr.includes("tour") || catStr.includes("package");
-    if (isTour) {
-      const cost = Number(service.servicePrice ?? 0);
-      const sale = Number(service.clientPrice ?? 0);
+    const isAirportSvc = catStr.includes("airport") && catStr.includes("service");
+    const ct = (service as { categoryType?: string }).categoryType as CategoryType | undefined;
+    const usesCommPricing =
+      (ct != null && commissionCats.includes(ct as CategoryType)) || isAirportSvc;
+    if (usesCommPricing) {
       const disc = Math.max(0, Math.round((cost - sale) * 100) / 100);
       return disc > 0 ? disc.toFixed(2) : "";
     }
@@ -1171,13 +1174,61 @@ export default function EditServiceModalNew({
       pricingLastEditedRef.current = null;
       return;
     }
-    // User edited cost or agent discount → recalc Sale and Margin
-    const discountAmount = getAgentDiscountAmount(cost);
-    const saleCalculated = Math.round((cost - discountAmount) * 100) / 100;
-    setMarge(Math.round((saleCalculated - netCost) * 100) / 100 + "");
-    setClientPrice(saleCalculated.toFixed(2));
+    // User edited agent discount → Sale = Cost − discount; Margin = Sale − Net
+    if (pricingLastEditedRef.current === "agent") {
+      const discountAmount = getAgentDiscountAmount(cost);
+      const saleVal = Math.round((cost - discountAmount) * 100) / 100;
+      setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
+      setClientPrice(saleVal.toFixed(2));
+      pricingLastEditedRef.current = null;
+      return;
+    }
+    // User edited cost / line items → keep Total Client price; Agent discount = Cost − Sale; Margin = Sale − Net
+    const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+    const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
+    setAgentDiscountType("€");
+    setAgentDiscountValue(discount.toFixed(2));
+    setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
     pricingLastEditedRef.current = null;
   }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice, marge]);
+
+  // When net pay to operator changes (cost, line items, commission), Margin = Client − Net; € discount = Cost − Client (do not overwrite client price).
+  // Intentionally omit clientPrice/marge/agentDiscountValue from deps — those edits are handled by the effect above; including them would fight user input.
+  useEffect(() => {
+    if (!usesCommissionPricing) return;
+    const cost = effectiveServicePrice;
+    let commissionAmount = getCommissionAmount(commissionableCost);
+    if (selectedCommissionIndex < 0) {
+      const persisted = Number((service as { commissionAmount?: number | null }).commissionAmount);
+      if (Number.isFinite(persisted) && persisted > 0) {
+        commissionAmount = Math.round(persisted * 100) / 100;
+      }
+    }
+    const netCost = Math.round((cost - commissionAmount) * 100) / 100;
+    const saleVal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+    const correctMarge = Math.round((saleVal - netCost) * 100) / 100;
+    const margeVal = Math.round((parseFloat(marge) || 0) * 100) / 100;
+    if (Math.abs(margeVal - correctMarge) > 0.005) {
+      setMarge(String(correctMarge));
+    }
+    if (agentDiscountType === "€") {
+      const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
+      const curDisc = parseFloat(agentDiscountValue) || 0;
+      if (Math.abs(curDisc - discount) > 0.005) {
+        setAgentDiscountValue(discount.toFixed(2));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when net-to-operator inputs change; clientPrice/marge read intentionally to avoid fighting the pricing effect above
+  }, [
+    usesCommissionPricing,
+    effectiveServicePrice,
+    commissionableCost,
+    selectedCommissionIndex,
+    supplierCommissions,
+    agentDiscountType,
+    service.commissionAmount,
+    service.id,
+  ]);
 
   // Non-commission-style: when Sale (Client price) changes, recalculate Marge = Sale - Cost.
   useEffect(() => {
@@ -5391,9 +5442,19 @@ export default function EditServiceModalNew({
                   </div>
                 )}
 
-                {/* Margin / Profit for Tour / commission-style */}
-                {usesCommissionPricing && (parseFloat(marge) || 0) !== 0 && (() => {
-                  const margin = parseFloat(marge) || 0;
+                {/* Margin / Profit for Tour / commission-style — margin = Client price − Service Price Net (pay to operator) */}
+                {usesCommissionPricing && (() => {
+                  const comm = selectedCommissionIndex >= 0 ? supplierCommissions[selectedCommissionIndex] : null;
+                  const hasComm = comm && comm.rate != null && comm.rate > 0;
+                  const commAmount = hasComm ? getCommissionAmount(commissionableCost) : 0;
+                  let effComm = commAmount;
+                  if (effComm === 0 && selectedCommissionIndex < 0) {
+                    const persisted = Number((service as { commissionAmount?: number | null }).commissionAmount);
+                    if (Number.isFinite(persisted) && persisted > 0) effComm = Math.round(persisted * 100) / 100;
+                  }
+                  const netForMargin = Math.round((effectiveServicePrice - effComm) * 100) / 100;
+                  const clientTotal = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+                  const margin = Math.round((clientTotal - netForMargin) * 100) / 100;
                   const vatAmount = vatRate > 0 ? margin * vatRate / (100 + vatRate) : 0;
                   const profit = margin - vatAmount;
                   return (

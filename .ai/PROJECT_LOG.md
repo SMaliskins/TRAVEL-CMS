@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-04-01] CW — Commission pricing: margin = Client − Service Net
+
+**Task:** User: margin must be Sale − pay-to-operator (e.g. €80 − €48.67 = €31.33), not driven by stale agent discount overwriting client price.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** EditServiceModalNew — split cost vs agent recalc; sync margin when net changes; init agent discount from cost − sale for commission categories; footer uses derived margin.
+
+**Результат:** SCORE pending QA
+
+**Next Step:** User verify in UI; optional QA pass on commission flows.
+
+---
+
 ## [2026-03-31] CW — Header E scoreboard: year under month in cell
 
 **Task:** User asked where to show year in date blocks.
