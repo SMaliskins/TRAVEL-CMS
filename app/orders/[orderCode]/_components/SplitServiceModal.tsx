@@ -6,6 +6,7 @@ import { useEscapeKey } from '@/lib/hooks/useEscapeKey';
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { normalizeForSearch } from "@/lib/directory/searchNormalize";
 
 interface Service {
   id: string;
@@ -114,8 +115,8 @@ export default function SplitServiceModal({
     {
       clientAmount: service.clientPrice / 2,
       serviceAmount: service.servicePrice / 2,
-      payerName: "",
-      payerPartyId: undefined,
+      payerName: service.payerName || service.payer || "",
+      payerPartyId: service.payerPartyId,
       travellerIds: defaultT0,
     },
     {
@@ -922,9 +923,18 @@ function PayerCombobox({
     }
   }, [value, selectedParty, parties.length, label]);
 
-  const filteredParties = parties.filter((p) =>
-    p.display_name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredParties = useMemo(() => {
+    const q = normalizeForSearch(search.toLowerCase());
+    const matched = parties.filter((p) => {
+      const norm = normalizeForSearch(p.display_name.toLowerCase());
+      return norm.includes(q) || p.display_name.toLowerCase().includes(search.toLowerCase());
+    });
+    return matched.sort((a, b) => {
+      if (a.isFromOrder && !b.isFromOrder) return -1;
+      if (!a.isFromOrder && b.isFromOrder) return 1;
+      return a.display_name.localeCompare(b.display_name);
+    });
+  }, [parties, search]);
 
   // Check if search query matches any existing party
   const hasExactMatch = filteredParties.some(
