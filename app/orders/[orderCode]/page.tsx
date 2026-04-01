@@ -13,7 +13,7 @@ import InvoiceCreator from "./_components/InvoiceCreator";
 import InvoiceList from "./_components/InvoiceList";
 import OrderDocumentsTab from "./_components/OrderDocumentsTab";
 import OrderCommunicationsTab from "./_components/OrderCommunicationsTab";
-import OrderPaymentsList from "./_components/OrderPaymentsList";
+import OrderPaymentsList, { type OrderPaymentsListHandle } from "./_components/OrderPaymentsList";
 import dynamic from "next/dynamic";
 const OrderFinanceOverview = dynamic(() => import("./_components/OrderFinanceOverview"), { ssr: false });
 import PartySelect from "@/components/PartySelect";
@@ -142,15 +142,20 @@ export default function OrderPage({
 
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const servicesBlockRef = useRef<OrderServicesBlockHandle>(null);
+  const paymentsListRef = useRef<OrderPaymentsListHandle>(null);
   const [stickyHeaderBottom, setStickyHeaderBottom] = useState(0);
-  const [pendingAction, setPendingAction] = useState<"service" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"service" | "payment" | null>(null);
 
-  // Fire pending action once Services tab mounts and ref becomes available
+  // Fire pending action once the target tab mounts and ref becomes available
   useEffect(() => {
-    if (!pendingAction || activeTab !== "client") return;
+    if (!pendingAction) return;
+    if (pendingAction === "service" && activeTab !== "client") return;
+    if (pendingAction === "payment" && activeTab !== "finance") return;
     const timer = setTimeout(() => {
       if (pendingAction === "service") {
         servicesBlockRef.current?.triggerAddService();
+      } else if (pendingAction === "payment") {
+        paymentsListRef.current?.triggerAddPayment();
       }
       setPendingAction(null);
     }, 100);
@@ -2059,6 +2064,7 @@ export default function OrderPage({
               {order && !showInvoiceCreator && (
                 <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
                   <OrderPaymentsList
+                    ref={paymentsListRef}
                     key={`payments-${invoiceRefetchTrigger}`}
                     orderCode={effectiveOrderCode}
                     orderId={order.id}
@@ -2129,7 +2135,14 @@ export default function OrderPage({
           {
             label: "+Payment",
             icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
-            onClick: () => setActiveTab("finance"),
+            onClick: () => {
+              if (activeTab === "finance" && paymentsListRef.current) {
+                paymentsListRef.current.triggerAddPayment();
+              } else {
+                setPendingAction("payment");
+                setActiveTab("finance");
+              }
+            },
           },
           {
             label: "Documents",

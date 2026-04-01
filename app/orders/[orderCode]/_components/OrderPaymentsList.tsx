@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
@@ -47,7 +47,11 @@ const METHOD_STYLE: Record<string, string> = {
   card: "bg-purple-50 text-purple-700",
 };
 
-export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }: OrderPaymentsListProps) {
+export interface OrderPaymentsListHandle {
+  triggerAddPayment: () => void;
+}
+
+const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListProps>(function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }, ref) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const { showToast } = useToast();
@@ -58,6 +62,8 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
   const [showAddModal, setShowAddModal] = useState(false);
   const [hideCancelled, setHideCancelled] = useState(true);
   const [receiptLangMenu, setReceiptLangMenu] = useState<string | null>(null);
+
+  useImperativeHandle(ref, () => ({ triggerAddPayment: () => setShowAddModal(true) }), []);
 
   const loadPayments = useCallback(async () => {
     try {
@@ -364,4 +370,6 @@ export default function OrderPaymentsList({ orderCode, orderId, orderAmountTotal
       />
     </div>
   );
-}
+});
+
+export default OrderPaymentsList;
