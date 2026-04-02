@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-04-01] CW — Payment reminder: body/subject from email_templates (Settings)
+
+**Task:** User: payment reminder letter text from Settings email templates.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `lib/email/emailTemplateUtils` — load default `payment_reminder` template + `{{var}}` substitution; `GET` + `POST` `.../payment-reminder` use template when no custom body; `buildPaymentReminderTemplateVars`; InvoiceList fetches draft GET, RichTextEditor for message; VARIABLES_HELP extended.
+
+---
+
+## [2026-04-01] CW — InvoiceList: payment reminder modal opens immediately
+
+**Task:** User: Payment reminder modal did not open.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `openPaymentReminderModal` — `setReminderModal` сразу после проверки долга; загрузка company/contacts в фоне (раньше модалка ждала `getSession` + fetch). Долг для проверки: поле `remaining` с API при наличии.
+
+---
+
 ## [2026-04-01] CW — Dashboard map: traveller count = active clients only
 
 **Task:** User: map must count clients like they do, not raw order_travellers rows.

@@ -6,8 +6,34 @@ export type PaymentReminderContext = {
   dueDateFormatted: string | null;
   /** When deposit schedule exists and is relevant */
   depositDateFormatted: string | null;
+  /** Final payment due date from invoice (optional, for {{final_due_date}}) */
+  finalPaymentDateFormatted?: string | null;
   companyDisplayName: string;
 };
+
+/** Variables for Settings → Email templates (category payment_reminder), lowercase keys */
+export function buildPaymentReminderTemplateVars(
+  ctx: PaymentReminderContext,
+  invoiceTotalFormatted: string
+): Record<string, string> {
+  return {
+    client_name: ctx.payerName.trim() || "Sir/Madam",
+    order_code: ctx.orderCode,
+    invoice_number: ctx.invoiceNumber,
+    total_amount: ctx.outstandingFormatted,
+    outstanding_amount: ctx.outstandingFormatted,
+    invoice_total: invoiceTotalFormatted,
+    due_date: ctx.depositDateFormatted || ctx.dueDateFormatted || "",
+    deposit_due_date: ctx.depositDateFormatted || "",
+    invoice_due_date: ctx.dueDateFormatted || "",
+    final_due_date: ctx.finalPaymentDateFormatted || "",
+    company_name: ctx.companyDisplayName.trim() || "",
+    agent_name: "",
+    service_name: "",
+    dates: "",
+    hotel_name: "",
+  };
+}
 
 function escapeHtml(s: string): string {
   return s

@@ -17,7 +17,7 @@ import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { supabase } from "@/lib/supabaseClient";
 import { INVOICE_LANGUAGE_OPTIONS, getInvoiceLanguageLabel } from "@/lib/invoiceLanguages";
 import {
-  defaultPaymentReminderPlainText,
+  defaultPaymentReminderHtml,
   defaultPaymentReminderSubject,
   type PaymentReminderContext,
 } from "@/lib/invoices/paymentReminderEmail";
@@ -40,6 +40,8 @@ interface Invoice {
   created_at?: string;
   replaced_by_invoice_id?: string | null;
   paid_amount?: number;
+  /** From GET invoices API (aligned with payments); prefer for debt checks */
+  remaining?: number;
   deposit_amount?: number | null;
   deposit_date?: string | null;
   final_payment_amount?: number | null;
@@ -666,7 +668,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const buildPaymentReminderContext = (invoice: Invoice): PaymentReminderContext | null => {
     if (isCreditInvoice(invoice) || invoice.status === "cancelled") return null;
     const paid = invoice.paid_amount ?? 0;
-    const debt = Math.max(0, invoice.total - paid);
+    const totalNum = Number(invoice.total) || 0;
+    const debt =
+      typeof invoice.remaining === "number"
+        ? Math.max(0, invoice.remaining)
+        : Math.max(0, totalNum - paid);
     if (debt < 0.01) return null;
     return {
       payerName: (invoice.payer_name || "").trim() || "Sir/Madam",
@@ -675,11 +681,14 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       outstandingFormatted: formatCurrency(debt),
       dueDateFormatted: invoice.due_date ? formatDate(invoice.due_date) : null,
       depositDateFormatted: invoice.deposit_date ? formatDate(invoice.deposit_date) : null,
+      finalPaymentDateFormatted: invoice.final_payment_date
+        ? formatDate(invoice.final_payment_date)
+        : null,
       companyDisplayName: "",
     };
   };
 
-  const openPaymentReminderModal = async (invoiceId: string) => {
+  const openPaymentReminderModal = (invoiceId: string) => {
     const invoice = invoices.find((inv) => inv.id === invoiceId);
     if (!invoice) return;
     const ctx = buildPaymentReminderContext(invoice);
@@ -688,19 +697,55 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       return;
     }
     setReminderRecipients([]);
-    const pid = invoice.payer_party_id || null;
-    if (pid) {
+    const ctxForPlaceholder: PaymentReminderContext = {
+      ...ctx,
+      companyDisplayName: ctx.companyDisplayName || "Our team",
+    };
+    setReminderModal({
+      invoiceId,
+      invoiceNumber: invoice.invoice_number,
+      to: invoice.payer_email || "",
+      subject: defaultPaymentReminderSubject(ctxForPlaceholder),
+      message: defaultPaymentReminderHtml(ctxForPlaceholder),
+    });
+
+    void (async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         const token = session?.access_token;
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
+        const draftRes = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/payment-reminder`,
+          { headers }
+        );
+        if (draftRes.ok) {
+          const d = (await draftRes.json()) as { subject?: string; message?: string };
+          setReminderModal((prev) =>
+            prev && prev.invoiceId === invoiceId
+              ? {
+                  ...prev,
+                  subject: typeof d.subject === "string" ? d.subject : prev.subject,
+                  message: typeof d.message === "string" ? d.message : prev.message,
+                }
+              : prev
+          );
+        }
+
+        const pid = invoice.payer_party_id || null;
+        if (!pid) return;
         const res = await fetch(`/api/directory/${pid}`, { headers });
         if (res.ok) {
           const data = await res.json();
           const rec = data.record || data;
           if (rec.type === "company" || rec.party_type === "company") {
-            const recipients: typeof reminderRecipients = [];
+            const recipients: Array<{
+              email: string;
+              label: string;
+              role: "company" | "financial" | "administrative";
+            }> = [];
             if (rec.email) {
               recipients.push({
                 email: rec.email,
@@ -731,14 +776,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       } catch {
         /* ignore */
       }
-    }
-    setReminderModal({
-      invoiceId,
-      invoiceNumber: invoice.invoice_number,
-      to: invoice.payer_email || "",
-      subject: defaultPaymentReminderSubject(ctx),
-      message: defaultPaymentReminderPlainText(ctx),
-    });
+    })();
   };
 
   const handleSendPaymentReminder = async () => {
@@ -1557,12 +1595,18 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea
-                  value={reminderModal.message}
-                  onChange={(e) => setReminderModal({ ...reminderModal, message: e.target.value })}
-                  rows={12}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none font-sans"
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Message{" "}
+                  <span className="text-gray-400 font-normal text-xs">(from Settings → Email templates → Payment Reminders; Ctrl+V to paste images)</span>
+                </label>
+                <RichTextEditor
+                  content={
+                    reminderModal.message.includes("<")
+                      ? reminderModal.message
+                      : `<p>${reminderModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                  }
+                  onChange={(html) => setReminderModal({ ...reminderModal, message: html })}
+                  compact
                 />
               </div>
             </div>
@@ -1941,7 +1985,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     type="button"
                     onClick={() => {
                       closeActionsModal();
-                      void openPaymentReminderModal(invoice.id);
+                      openPaymentReminderModal(invoice.id);
                     }}
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                   >
