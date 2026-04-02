@@ -5,7 +5,11 @@ import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/gen
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
-import { appendHtmlWithEmailSignature, normalizeEmailSignatureSource } from "@/lib/email/appendUserEmailSignature";
+import {
+  appendHtmlWithEmailSignature,
+  normalizeEmailSignatureSource,
+  resolveEmailSignatureInnerHtml,
+} from "@/lib/email/appendUserEmailSignature";
 import { loadDefaultEmailTemplateForCategory } from "@/lib/email/emailTemplateUtils";
 import {
   buildInvoiceEmailTemplateVars,
@@ -13,6 +17,7 @@ import {
   invoiceOutstandingFormatted,
   resolveInvoiceEmailLetter,
   formatInvoiceMoneyEur,
+  INVOICE_EMAIL_PDF_FOOTER_HTML,
 } from "@/lib/invoices/invoiceEmailTemplate";
 import { loadInvoiceWithItemsForOrder } from "@/lib/invoices/loadInvoiceWithItemsForOrder";
 
@@ -110,7 +115,18 @@ export async function GET(
       vars,
     });
 
-    return NextResponse.json({ subject, message: bodyHtml });
+    const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
+    const innerSig = await resolveEmailSignatureInnerHtml({
+      source: sigSource,
+      userId: user.id,
+      companyId: loaded.companyId,
+    });
+    const sigBlock = innerSig
+      ? `<br><div style="margin-top:16px;padding-top:12px">${innerSig}</div>`
+      : "";
+    const previewSuffixHtml = `${sigBlock}${INVOICE_EMAIL_PDF_FOOTER_HTML}`;
+
+    return NextResponse.json({ subject, message: bodyHtml, previewSuffixHtml });
   } catch (e) {
     console.error("[invoice email] GET:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -233,8 +249,6 @@ export async function POST(
       vars: templateVars,
     });
     const emailSubject = resolvedLetter.subject;
-    const footer = '<p style="margin-top:12px;color:#6b7280">Invoice is attached as a PDF file.</p>';
-    const emailHtml = `${resolvedLetter.bodyHtml}${footer}`;
 
     const attachments: { filename: string; content: Buffer }[] = [];
     const pdfBuffer = await generatePDFFromHTML(htmlBody);
@@ -250,12 +264,16 @@ export async function POST(
     });
 
     const sigSource = emailTemplate?.email_signature_source ?? normalizeEmailSignatureSource(null);
-    const withSignature = await appendHtmlWithEmailSignature(emailHtml, {
-      source: sigSource,
-      userId: user?.id ?? null,
-      companyId,
-    });
-    const finalHtml = await replaceBase64Images(withSignature);
+    const withSignature = await appendHtmlWithEmailSignature(
+      resolvedLetter.bodyHtml,
+      {
+        source: sigSource,
+        userId: user?.id ?? null,
+        companyId,
+      },
+      { borderTop: false }
+    );
+    const finalHtml = await replaceBase64Images(`${withSignature}${INVOICE_EMAIL_PDF_FOOTER_HTML}`);
 
     const result = await sendEmail(
       to.trim(),

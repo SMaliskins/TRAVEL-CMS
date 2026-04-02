@@ -72,6 +72,10 @@ export function defaultInvoiceEmailBodyPlain(invoiceNumber: string): string {
   return `Please find attached invoice ${invoiceNumber}.`;
 }
 
+/** Appended after signature in invoice emails (HTML). */
+export const INVOICE_EMAIL_PDF_FOOTER_HTML =
+  '<p style="margin-top:12px;color:#6b7280">Invoice is attached as a PDF file.</p>';
+
 /** HTML body from template or plain default (no PDF footer — added in route). */
 export function ensureInvoiceEmailBodyHtml(body: string): string {
   const t = body.trim();

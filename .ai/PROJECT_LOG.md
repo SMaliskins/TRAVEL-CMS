@@ -5,6 +5,17 @@
 
 ---
 
+## [2026-04-02] CW — Invoice email: layout (footer after sig, no hr), preview, EN translate base
+
+**Task:** User: move PDF footer below signature; remove line before signature; show signature in send preview; translate from English template when switching language.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** POST builds `body → signature (no borderTop) → INVOICE_EMAIL_PDF_FOOTER_HTML`. GET returns `previewSuffixHtml`. `appendUserEmailSignature`: `resolveEmailSignatureInnerHtml`, optional `borderTop`. InvoiceList: preview block; `invoiceEmailEnRef` + AI translate from EN snapshot; `/api/ai` uses full EN subject/body.
+
+---
+
 ## [2026-04-02] CW — Invoice email: personal signature missing on send
 
 **Task:** User: invoice email — template set to personal signature but body had no signature block (PDF still attached).

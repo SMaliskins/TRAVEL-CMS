@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
 import ContentModal from "@/components/ContentModal";
@@ -21,6 +21,7 @@ import {
   defaultPaymentReminderSubject,
   type PaymentReminderContext,
 } from "@/lib/invoices/paymentReminderEmail";
+import { INVOICE_EMAIL_PDF_FOOTER_HTML } from "@/lib/invoices/invoiceEmailTemplate";
 
 interface Invoice {
   id: string;
@@ -130,6 +131,10 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   }>>([]);
   const [emailLang, setEmailLang] = useState("en");
   const [emailTranslating, setEmailTranslating] = useState(false);
+  /** English template snapshot for AI translation (Settings template or built-in EN). */
+  const invoiceEmailEnRef = useRef<{ subject: string; message: string } | null>(null);
+  /** Signature + PDF footer HTML (from GET draft), appended in preview only. */
+  const [emailPreviewSuffixHtml, setEmailPreviewSuffixHtml] = useState("");
   const [payerLangs, setPayerLangs] = useState<string[]>(["en"]);
   const [payerPartyId, setPayerPartyId] = useState<string | null>(null);
   const [showAllLangs, setShowAllLangs] = useState(false);
@@ -549,6 +554,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
     setPayerLangs(langs);
     setEmailLang(defaultLang);
+    invoiceEmailEnRef.current = null;
+    setEmailPreviewSuffixHtml("");
     setEmailModal({
       invoiceId,
       invoiceNumber: invoice.invoice_number,
@@ -559,6 +566,10 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     });
 
     void (async () => {
+      const enBase = {
+        subject: EMAIL_TEMPLATES.en.subject(invoice.invoice_number),
+        message: EMAIL_TEMPLATES.en.message(invoice.invoice_number),
+      };
       try {
         const {
           data: { session },
@@ -570,12 +581,18 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         );
         if (res.ok) {
           const data = await res.json();
+          const subject = typeof data.subject === "string" ? data.subject : "";
+          const message = typeof data.message === "string" ? data.message : "";
+          invoiceEmailEnRef.current = { subject, message };
+          const suffix =
+            typeof data.previewSuffixHtml === "string" ? data.previewSuffixHtml : INVOICE_EMAIL_PDF_FOOTER_HTML;
+          setEmailPreviewSuffixHtml(suffix);
           setEmailModal((prev) =>
             prev && prev.invoiceId === invoiceId
               ? {
                   ...prev,
-                  subject: typeof data.subject === "string" ? data.subject : "",
-                  message: typeof data.message === "string" ? data.message : "",
+                  subject,
+                  message,
                   draftLoading: false,
                 }
               : prev
@@ -585,6 +602,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       } catch {
         // use local fallbacks below
       }
+      invoiceEmailEnRef.current = enBase;
+      setEmailPreviewSuffixHtml(INVOICE_EMAIL_PDF_FOOTER_HTML);
       const tpl = EMAIL_TEMPLATES[defaultLang] || EMAIL_TEMPLATES.en;
       setEmailModal((prev) =>
         prev && prev.invoiceId === invoiceId
@@ -627,12 +646,17 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       addLangToPayerParty(newLang);
     }
 
-    const tpl = EMAIL_TEMPLATES[newLang];
-    if (tpl) {
+    const enSnap =
+      invoiceEmailEnRef.current ?? {
+        subject: EMAIL_TEMPLATES.en.subject(emailModal.invoiceNumber),
+        message: EMAIL_TEMPLATES.en.message(emailModal.invoiceNumber),
+      };
+
+    if (newLang === "en") {
       setEmailModal({
         ...emailModal,
-        subject: tpl.subject(emailModal.invoiceNumber),
-        message: tpl.message(emailModal.invoiceNumber),
+        subject: enSnap.subject,
+        message: enSnap.message,
       });
       return;
     }
@@ -646,8 +670,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         body: JSON.stringify({
           task: "translate",
           text: JSON.stringify({
-            subject: `Invoice ${emailModal.invoiceNumber}`,
-            message: `Please find attached invoice ${emailModal.invoiceNumber}.`,
+            subject: enSnap.subject,
+            message: enSnap.message,
           }),
           targetLanguage: langLabel,
         }),
@@ -660,9 +684,25 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
           subject: translated.subject || emailModal.subject,
           message: translated.message || emailModal.message,
         });
+      } else {
+        const tpl = EMAIL_TEMPLATES[newLang];
+        if (tpl) {
+          setEmailModal({
+            ...emailModal,
+            subject: tpl.subject(emailModal.invoiceNumber),
+            message: tpl.message(emailModal.invoiceNumber),
+          });
+        }
       }
     } catch {
-      // keep current text if translation fails
+      const tpl = EMAIL_TEMPLATES[newLang];
+      if (tpl) {
+        setEmailModal({
+          ...emailModal,
+          subject: tpl.subject(emailModal.invoiceNumber),
+          message: tpl.message(emailModal.invoiceNumber),
+        });
+      }
     } finally {
       setEmailTranslating(false);
     }
@@ -1581,6 +1621,22 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   />
                 )}
               </div>
+
+              {!emailModal.draftLoading && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Preview</label>
+                  <div
+                    className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 text-sm text-gray-800 max-h-56 overflow-y-auto [&_img]:max-w-full [&_a]:text-blue-600"
+                    dangerouslySetInnerHTML={{
+                      __html: `${
+                        emailModal.message.includes("<")
+                          ? emailModal.message
+                          : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                      }${emailPreviewSuffixHtml || INVOICE_EMAIL_PDF_FOOTER_HTML}`,
+                    }}
+                  />
+                </div>
+              )}
 
               <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                 <FileDown className="h-4 w-4 text-gray-400 shrink-0" />
