@@ -676,11 +676,18 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     }
     setEmailSending(true);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const response = await fetch(
         `/api/orders/${encodeURIComponent(orderCode)}/invoices/${emailModal.invoiceId}/email`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({
             to: emailModal.to.trim(),
             subject: emailModal.subject,

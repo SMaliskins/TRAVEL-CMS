@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-04-02] CW — Invoice email: personal signature missing on send
+
+**Task:** User: invoice email — template set to personal signature but body had no signature block (PDF still attached).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** POST `/invoices/.../email` had no `Authorization` header; draft GET did. `getUser` often null without cookie → `appendHtmlWithUserEmailSignature` skipped. `InvoiceList.handleSendEmail` now sends Bearer like payment reminder.
+
+---
+
+## [2026-04-01] CW — InvoiceCreator: invoice language no longer reset on service selection churn
+
+**Task:** User: Manager (any role) — invoice language appeared not to change while creating invoice.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:**
+
+**Действия:** Load effect depended on `selectedServices` array identity; each parent re-run re-fetched and forced `defaultLang`, wiping chip selection. Deps → `orderCode` + `primaryPayerPartyId` (first row payer only).
+
+---
+
 ## [2026-04-01] CW — Finances / Payments: Account filter dropdown
 
 **Task:** User: /finances/payments — add Account to filters.

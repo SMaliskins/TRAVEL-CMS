@@ -156,10 +156,14 @@ export default function InvoiceCreator({
   // Single-invoice number (used when not bulk; effectiveInvoiceNumber reads this)
   const [invoiceNumber, setInvoiceNumber] = useState("");
 
+  // Stable id for "primary" payer row — do NOT depend on full `selectedServices` array identity (parent often passes a new array each render),
+  // or the effect re-runs and resets invoice language to the server default on every checkbox change.
+  const primaryPayerPartyId = selectedServices[0]?.payerPartyId ?? null;
+
   // Load company invoice languages on mount; pre-fill language from payer company or last invoice; list cancelled numbers for reuse.
   useEffect(() => {
     let cancelled = false;
-    const payerPartyId = selectedServices[0]?.payerPartyId;
+    const payerPartyId = primaryPayerPartyId;
     (async () => {
       try {
         const [companyRes, invoicesRes, payerDirRes] = await Promise.all([
@@ -206,13 +210,13 @@ export default function InvoiceCreator({
             .filter(Boolean);
           setCancelledInvoiceNumbers((prev) => (prev.length === cancelledNumbers.length && prev.every((n, i) => n === cancelledNumbers[i]) ? prev : cancelledNumbers));
         }
-        setInvoiceLanguage((prev) => (prev === defaultLang ? prev : defaultLang));
+        setInvoiceLanguage(defaultLang);
       } catch {
         // keep default ["en"]
       }
     })();
     return () => { cancelled = true; };
-  }, [orderCode, selectedServices]);
+  }, [orderCode, primaryPayerPartyId]);
 
   // Close Add language popup on click outside or Escape
   useEffect(() => {

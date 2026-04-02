@@ -39,9 +39,10 @@ export async function loadDefaultEmailTemplateForCategory(
   companyId: string,
   category: string
 ): Promise<EmailTemplateRow | null> {
-  const base = () =>
+  const base = (columns: string) =>
     supabaseAdmin
       .from("email_templates")
+      .select(columns)
       .eq("company_id", companyId)
       .eq("category", category)
       .eq("is_active", true)
@@ -49,12 +50,12 @@ export async function loadDefaultEmailTemplateForCategory(
       .order("updated_at", { ascending: false })
       .limit(1);
 
-  let { data: rows, error } = await base().select(
+  let { data: rows, error } = await base(
     "subject, body, email_signature_source, is_default, updated_at"
   );
 
   if (error && isLikelyMissingSignatureColumnError(error.message || "")) {
-    const retry = await base().select("subject, body, is_default, updated_at");
+    const retry = await base("subject, body, is_default, updated_at");
     rows = retry.data;
     error = retry.error;
     if (!error && rows?.[0]) {
