@@ -119,6 +119,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     to: string;
     subject: string;
     message: string;
+    draftLoading: boolean;
   } | null>(null);
   const [reminderSending, setReminderSending] = useState(false);
   const [reminderRecipients, setReminderRecipients] = useState<Array<{
@@ -697,17 +698,19 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       return;
     }
     setReminderRecipients([]);
-    const ctxForPlaceholder: PaymentReminderContext = {
-      ...ctx,
-      companyDisplayName: ctx.companyDisplayName || "Our team",
-    };
     setReminderModal({
       invoiceId,
       invoiceNumber: invoice.invoice_number,
       to: invoice.payer_email || "",
-      subject: defaultPaymentReminderSubject(ctxForPlaceholder),
-      message: defaultPaymentReminderHtml(ctxForPlaceholder),
+      subject: "",
+      message: "",
+      draftLoading: true,
     });
+
+    const ctxForFallback: PaymentReminderContext = {
+      ...ctx,
+      companyDisplayName: ctx.companyDisplayName || "Our team",
+    };
 
     void (async () => {
       try {
@@ -729,6 +732,18 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   ...prev,
                   subject: typeof d.subject === "string" ? d.subject : prev.subject,
                   message: typeof d.message === "string" ? d.message : prev.message,
+                  draftLoading: false,
+                }
+              : prev
+          );
+        } else {
+          setReminderModal((prev) =>
+            prev && prev.invoiceId === invoiceId
+              ? {
+                  ...prev,
+                  subject: defaultPaymentReminderSubject(ctxForFallback),
+                  message: defaultPaymentReminderHtml(ctxForFallback),
+                  draftLoading: false,
                 }
               : prev
           );
@@ -774,13 +789,23 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
           }
         }
       } catch {
-        /* ignore */
+        setReminderModal((prev) =>
+          prev && prev.invoiceId === invoiceId
+            ? {
+                ...prev,
+                subject: defaultPaymentReminderSubject(ctxForFallback),
+                message: defaultPaymentReminderHtml(ctxForFallback),
+                draftLoading: false,
+              }
+            : prev
+        );
       }
     })();
   };
 
   const handleSendPaymentReminder = async () => {
     if (!reminderModal) return;
+    if (reminderModal.draftLoading) return;
     if (!reminderModal.to.trim()) {
       showToast("error", "Email address is required");
       return;
@@ -1591,7 +1616,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   type="text"
                   value={reminderModal.subject}
                   onChange={(e) => setReminderModal({ ...reminderModal, subject: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                  disabled={reminderModal.draftLoading}
+                  placeholder={reminderModal.draftLoading ? "Loading…" : ""}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                 />
               </div>
               <div>
@@ -1599,15 +1626,22 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   Message{" "}
                   <span className="text-gray-400 font-normal text-xs">(from Settings → Email templates → Payment Reminders; Ctrl+V to paste images)</span>
                 </label>
-                <RichTextEditor
-                  content={
-                    reminderModal.message.includes("<")
-                      ? reminderModal.message
-                      : `<p>${reminderModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
-                  }
-                  onChange={(html) => setReminderModal({ ...reminderModal, message: html })}
-                  compact
-                />
+                {reminderModal.draftLoading ? (
+                  <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 py-10 text-sm text-gray-500">
+                    <Loader2 className="h-8 w-8 animate-spin text-amber-600" aria-hidden />
+                    <span>Loading template…</span>
+                  </div>
+                ) : (
+                  <RichTextEditor
+                    content={
+                      reminderModal.message.includes("<")
+                        ? reminderModal.message
+                        : `<p>${reminderModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                    }
+                    onChange={(html) => setReminderModal({ ...reminderModal, message: html })}
+                    compact
+                  />
+                )}
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50 shrink-0">
@@ -1622,7 +1656,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               <button
                 type="button"
                 onClick={() => void handleSendPaymentReminder()}
-                disabled={reminderSending || !reminderModal.to.trim()}
+                disabled={reminderSending || !reminderModal.to.trim() || reminderModal.draftLoading}
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
                 {reminderSending ? (

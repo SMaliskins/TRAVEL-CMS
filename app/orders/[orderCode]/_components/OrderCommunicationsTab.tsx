@@ -161,11 +161,17 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <TypeBadge type={c.type} />
-                  <DeliveryBadge
-                    status={c.delivery_status}
-                    openedAt={c.opened_at}
-                    openCount={c.open_count}
-                  />
+                  {!c.email_sent ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      Activity
+                    </span>
+                  ) : (
+                    <DeliveryBadge
+                      status={c.delivery_status}
+                      openedAt={c.opened_at}
+                      openCount={c.open_count}
+                    />
+                  )}
                   {c.invoice_id && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
                       <FileText className="h-3 w-3" />
@@ -188,7 +194,13 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
                 </div>
 
                 {c.body && (
-                  <p className="mt-1 text-xs text-gray-400 truncate max-w-md">
+                  <p
+                    className={
+                      c.email_sent
+                        ? "mt-1 text-xs text-gray-400 truncate max-w-md"
+                        : "mt-1 text-xs text-gray-600 whitespace-pre-wrap break-words max-w-full"
+                    }
+                  >
                     {c.body}
                   </p>
                 )}
@@ -198,17 +210,17 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
                 <div className="text-gray-500">
                   {formatDateDDMMYYYY(c.sent_at)} {formatTime(c.sent_at)}
                 </div>
-                {c.delivered_at && (
+                {c.email_sent && c.delivered_at && (
                   <div className="text-blue-500">
                     ✓ Delivered {formatTime(c.delivered_at)}
                   </div>
                 )}
-                {c.opened_at && (
+                {c.email_sent && c.opened_at && (
                   <div className="text-green-600">
                     👁 Opened {formatTime(c.opened_at)}{c.open_count > 1 ? ` (${c.open_count}×)` : ""}
                   </div>
                 )}
-                {c.delivery_status === "bounced" && (
+                {c.email_sent && c.delivery_status === "bounced" && (
                   <div className="text-red-500">✕ Bounced</div>
                 )}
               </div>

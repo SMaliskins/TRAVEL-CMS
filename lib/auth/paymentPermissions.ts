@@ -1,5 +1,7 @@
-/** Edit / delete / cancel payment records (API + UI). */
+/**
+ * Edit / delete payment records (API + UI).
+ * Any staff role may change payments; each change is logged on the order (Log tab).
+ */
 export function canModifyFinancePayments(role: string | null | undefined): boolean {
-  const r = (role || "").toLowerCase();
-  return r === "finance" || r === "supervisor";
+  return Boolean(String(role || "").trim());
 }

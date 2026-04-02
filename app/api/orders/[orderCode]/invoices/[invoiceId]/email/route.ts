@@ -5,6 +5,7 @@ import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/gen
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
+import { appendHtmlWithUserEmailSignature } from "@/lib/email/appendUserEmailSignature";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -150,7 +151,8 @@ export async function POST(
       content: pdfBuffer,
     });
 
-    const finalHtml = await replaceBase64Images(emailHtml);
+    const withSignature = await appendHtmlWithUserEmailSignature(emailHtml, user?.id ?? null);
+    const finalHtml = await replaceBase64Images(withSignature);
 
     const result = await sendEmail(
       to.trim(),

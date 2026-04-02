@@ -38,17 +38,30 @@ const CATEGORIES = [
 
 const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.slug, c]));
 
-const VARIABLES_HELP = [
+/** Payment Reminders — amount + schedule + lines from the invoice */
+const PAYMENT_REMINDER_VARIABLES_HELP = [
+  { var: "{{outstanding_amount}}", desc: "Amount still due (same as {{amount_due}})" },
+  { var: "{{amount_due}}", desc: "Amount still due" },
+  { var: "{{invoice_total}}", desc: "Full invoice total" },
+  { var: "{{deposit_due_date}}", desc: "Deposit due (dd.mm.yyyy), or empty" },
+  { var: "{{invoice_due_date}}", desc: "Invoice due date (dd.mm.yyyy), or empty" },
+  { var: "{{final_due_date}}", desc: "Final payment due (dd.mm.yyyy), or empty" },
+  { var: "{{due_date}}", desc: "Shortcut: deposit due if set, else invoice due" },
+  { var: "{{dates}}", desc: "Service dates from invoice lines (ranges / text, joined)" },
+  { var: "{{service_name}}", desc: "Service names from invoice lines" },
+  { var: "{{client_name}}", desc: "Payer / client name" },
+  { var: "{{order_code}}", desc: "Order code" },
+  { var: "{{invoice_number}}", desc: "Invoice number" },
+  { var: "{{company_name}}", desc: "Your company name" },
+  { var: "{{total_amount}}", desc: "Legacy: same as amount due for this category" },
+];
+
+const GENERAL_VARIABLES_HELP = [
   { var: "{{client_name}}", desc: "Client full name" },
   { var: "{{order_code}}", desc: "Order code" },
   { var: "{{invoice_number}}", desc: "Invoice number" },
-  { var: "{{total_amount}}", desc: "Total amount (same as outstanding for payment reminders)" },
-  { var: "{{outstanding_amount}}", desc: "Outstanding balance (payment reminder)" },
-  { var: "{{invoice_total}}", desc: "Invoice total (full amount)" },
-  { var: "{{due_date}}", desc: "Deposit due or invoice due (first available)" },
-  { var: "{{deposit_due_date}}", desc: "Deposit due date (dd.mm.yyyy)" },
-  { var: "{{invoice_due_date}}", desc: "Invoice due date (dd.mm.yyyy)" },
-  { var: "{{final_due_date}}", desc: "Final payment due date (dd.mm.yyyy)" },
+  { var: "{{total_amount}}", desc: "Total amount" },
+  { var: "{{due_date}}", desc: "Payment due date" },
   { var: "{{service_name}}", desc: "Service name" },
   { var: "{{dates}}", desc: "Service dates" },
   { var: "{{hotel_name}}", desc: "Hotel name" },
@@ -267,7 +280,11 @@ export default function EmailTemplatesPage() {
               Email Templates
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Create reusable templates for invoices, reminders, hotel emails, and more
+              Templates are shared for your whole company. Personal email signatures are set in{" "}
+              <Link href="/settings/profile" className="text-blue-600 hover:underline">
+                Settings → Profile
+              </Link>
+              .
             </p>
           </div>
         </div>
@@ -479,7 +496,10 @@ export default function EmailTemplatesPage() {
                   Available variables
                 </summary>
                 <div className="px-3 pb-3 grid grid-cols-2 gap-1">
-                  {VARIABLES_HELP.map((v) => (
+                  {(formCategory === "payment_reminder"
+                    ? PAYMENT_REMINDER_VARIABLES_HELP
+                    : GENERAL_VARIABLES_HELP
+                  ).map((v) => (
                     <div key={v.var} className="flex items-start gap-1.5 text-xs">
                       <code className="bg-white px-1 py-0.5 rounded text-blue-700 font-mono shrink-0">{v.var}</code>
                       <span className="text-gray-500">{v.desc}</span>

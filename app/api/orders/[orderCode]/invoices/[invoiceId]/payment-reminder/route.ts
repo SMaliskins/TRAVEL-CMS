@@ -13,9 +13,11 @@ import {
   defaultPaymentReminderSubject,
   paymentReminderSignatureHtml,
   plainTextToReminderHtml,
+  summarizeInvoiceItemsForReminder,
   type PaymentReminderContext,
 } from "@/lib/invoices/paymentReminderEmail";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+import { appendHtmlWithUserEmailSignature } from "@/lib/email/appendUserEmailSignature";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -79,6 +81,12 @@ type InvoiceReminderRow = {
   is_credit: boolean | null;
   payer_name: string | null;
   orders: { id: string; order_code: string; company_id: string } | { id: string; order_code: string; company_id: string }[] | null;
+  invoice_items?: Array<{
+    service_name: string | null;
+    service_date_from: string | null;
+    service_date_to: string | null;
+    service_dates_text: string | null;
+  }> | null;
 };
 
 async function loadInvoiceReminderRow(
@@ -103,7 +111,13 @@ async function loadInvoiceReminderRow(
         status,
         is_credit,
         payer_name,
-        orders(id, order_code, company_id)
+        orders(id, order_code, company_id),
+        invoice_items (
+          service_name,
+          service_date_from,
+          service_date_to,
+          service_dates_text
+        )
       `
     )
     .eq("id", invoiceId)
@@ -199,8 +213,9 @@ export async function GET(
     }
 
     const { ctx, invoiceTotalFormatted } = built;
+    const lineHints = summarizeInvoiceItemsForReminder(loaded.invoice.invoice_items);
     const template = await loadDefaultEmailTemplateForCategory(loaded.companyId, "payment_reminder");
-    const vars = buildPaymentReminderTemplateVars(ctx, invoiceTotalFormatted);
+    const vars = buildPaymentReminderTemplateVars(ctx, invoiceTotalFormatted, lineHints);
     const fromDb =
       template && (template.subject.trim() || template.body.trim())
         ? {
@@ -280,8 +295,9 @@ export async function POST(
 
     const { ctx, invoiceTotalFormatted } = built;
 
+    const lineHints = summarizeInvoiceItemsForReminder(loaded.invoice.invoice_items);
     const template = await loadDefaultEmailTemplateForCategory(loaded.companyId, "payment_reminder");
-    const vars = buildPaymentReminderTemplateVars(ctx, invoiceTotalFormatted);
+    const vars = buildPaymentReminderTemplateVars(ctx, invoiceTotalFormatted, lineHints);
     const fromDb =
       template && (template.subject.trim() || template.body.trim())
         ? {
@@ -314,10 +330,12 @@ export async function POST(
       bodyForLog = defaultPaymentReminderPlainText(ctx);
     }
 
+    const emailHtmlWithSignature = await appendHtmlWithUserEmailSignature(emailHtml, user.id);
+
     const result = await sendEmail(
       to.trim(),
       emailSubject,
-      emailHtml,
+      emailHtmlWithSignature,
       undefined,
       undefined,
       { from: emailFrom || undefined, companyId: loaded.companyId }

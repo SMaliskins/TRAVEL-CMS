@@ -1,3 +1,5 @@
+import { formatDateDDMMYYYY } from "@/utils/dateFormat";
+
 export type PaymentReminderContext = {
   payerName: string;
   invoiceNumber: string;
@@ -11,17 +13,61 @@ export type PaymentReminderContext = {
   companyDisplayName: string;
 };
 
+export type InvoiceLineForReminder = {
+  service_name?: string | null;
+  service_date_from?: string | null;
+  service_date_to?: string | null;
+  service_dates_text?: string | null;
+};
+
+/** One line per invoice row: free-text dates or range from / to (dd.mm.yyyy) */
+export function summarizeInvoiceItemsForReminder(
+  items: InvoiceLineForReminder[] | null | undefined
+): { dates: string; service_name: string } {
+  if (!items?.length) return { dates: "", service_name: "" };
+  const names = new Set<string>();
+  const dateChunks: string[] = [];
+  for (const it of items) {
+    const sn = (it.service_name || "").trim();
+    if (sn) names.add(sn);
+    const text = (it.service_dates_text || "").trim();
+    const from = it.service_date_from;
+    const to = it.service_date_to;
+    let chunk = "";
+    if (text) {
+      chunk = text;
+    } else if (from || to) {
+      const a = from ? formatDateDDMMYYYY(String(from)) : "";
+      const b = to ? formatDateDDMMYYYY(String(to)) : "";
+      if (a && b && a !== b) chunk = `${a}–${b}`;
+      else chunk = a || b || "";
+    }
+    if (chunk) dateChunks.push(chunk);
+  }
+  const uniqueDates = [...new Set(dateChunks)];
+  return {
+    dates: uniqueDates.join("; "),
+    service_name: [...names].join(", "),
+  };
+}
+
 /** Variables for Settings → Email templates (category payment_reminder), lowercase keys */
 export function buildPaymentReminderTemplateVars(
   ctx: PaymentReminderContext,
-  invoiceTotalFormatted: string
+  invoiceTotalFormatted: string,
+  lineHints?: { dates: string; service_name: string }
 ): Record<string, string> {
+  const dates = lineHints?.dates ?? "";
+  const service_name = lineHints?.service_name ?? "";
+  const out = ctx.outstandingFormatted;
   return {
     client_name: ctx.payerName.trim() || "Sir/Madam",
     order_code: ctx.orderCode,
     invoice_number: ctx.invoiceNumber,
-    total_amount: ctx.outstandingFormatted,
-    outstanding_amount: ctx.outstandingFormatted,
+    /** Legacy: same as amount due for payment reminders */
+    total_amount: out,
+    outstanding_amount: out,
+    amount_due: out,
     invoice_total: invoiceTotalFormatted,
     due_date: ctx.depositDateFormatted || ctx.dueDateFormatted || "",
     deposit_due_date: ctx.depositDateFormatted || "",
@@ -29,8 +75,8 @@ export function buildPaymentReminderTemplateVars(
     final_due_date: ctx.finalPaymentDateFormatted || "",
     company_name: ctx.companyDisplayName.trim() || "",
     agent_name: "",
-    service_name: "",
-    dates: "",
+    service_name,
+    dates,
     hotel_name: "",
   };
 }

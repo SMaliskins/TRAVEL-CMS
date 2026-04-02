@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-04-01] CW — Company email templates + profile signature; payment edit log; broader payment edit
+
+**Task:** User: templates company-wide (copy + link to Profile signature); allow payment PATCH/DELETE for staff with logging (old→new, author, time on order log); append user email signature to invoice + payment-reminder sends; Log tab UI for non-email activity rows.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `canModifyFinancePayments` any non-empty role; `payments/[id]` PATCH/DELETE + `paymentOrderLog` (By/At lines, `order_communications`); delete log after successful delete; `appendHtmlWithUserEmailSignature` on invoice email + payment-reminder POST; `OrderCommunicationsTab` Activity badge + pre-wrap body; Email Templates page subtitle + Profile link.
+
+---
+
+## [2026-04-01] CW — Payment reminder: no placeholder flash, {{dates}}/lines, simpler vars help
+
+**Task:** User: no default text before template; {{dates}} from invoice lines; simplify due-date variables docs.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** Modal `draftLoading` until GET draft; `summarizeInvoiceItemsForReminder` + `invoice_items` on reminder API; `amount_due`; Settings form shows `PAYMENT_REMINDER_VARIABLES_HELP` when category payment_reminder.
+
+---
+
 ## [2026-04-01] CW — Payment reminder: body/subject from email_templates (Settings)
 
 **Task:** User: payment reminder letter text from Settings email templates.

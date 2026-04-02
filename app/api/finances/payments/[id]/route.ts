@@ -3,6 +3,12 @@ import { getApiUser } from "@/lib/auth/getApiUser";
 import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { enrichPaymentsWithEnteredBy } from "@/lib/finances/paymentEnteredBy";
+import {
+  diffPaymentUpdates,
+  formatPaymentSnapshotForLog,
+  insertPaymentDeletedOrderLog,
+  insertPaymentUpdatedOrderLog,
+} from "@/lib/finances/paymentOrderLog";
 
 export async function GET(
   request: NextRequest,
@@ -60,7 +66,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (!canModifyFinancePayments(apiUser.role)) {
-      return NextResponse.json({ error: "Forbidden", message: "Only Finance and Supervisor can edit payments." }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden", message: "You cannot edit payments." }, { status: 403 });
     }
     const { companyId } = apiUser;
 
@@ -69,7 +75,7 @@ export async function PATCH(
 
     const { data: existing } = await supabaseAdmin
       .from("payments")
-      .select("id, order_id, invoice_id")
+      .select("*")
       .eq("id", id)
       .eq("company_id", companyId)
       .single();
@@ -78,6 +84,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
+    const beforeRow = existing as Record<string, unknown>;
     const updateData: Record<string, unknown> = {};
     if (body.amount !== undefined) updateData.amount = Number(body.amount);
     if (body.method !== undefined) updateData.method = body.method;
@@ -92,6 +99,10 @@ export async function PATCH(
     if (body.processing_fee !== undefined) updateData.processing_fee = Number(body.processing_fee) || 0;
     if (body.status !== undefined) updateData.status = body.status;
 
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
     const { data: updated, error } = await supabaseAdmin
       .from("payments")
       .update(updateData)
@@ -105,11 +116,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Failed to update payment" }, { status: 500 });
     }
 
+    const changes = diffPaymentUpdates(beforeRow, updateData);
+    await insertPaymentUpdatedOrderLog({
+      companyId,
+      orderId: beforeRow.order_id as string,
+      userId: apiUser.userId,
+      paymentId: id,
+      changes,
+    });
+
     // Recalculate order totals (exclude cancelled payments)
     const { data: allPayments } = await supabaseAdmin
       .from("payments")
       .select("amount, status")
-      .eq("order_id", existing.order_id);
+      .eq("order_id", beforeRow.order_id);
 
     const totalPaid = (allPayments ?? []).reduce(
       (sum: number, p: { amount: number; status?: string }) =>
@@ -120,7 +140,7 @@ export async function PATCH(
     const { data: orderData } = await supabaseAdmin
       .from("orders")
       .select("amount_total")
-      .eq("id", existing.order_id)
+      .eq("id", beforeRow.order_id)
       .single();
 
     const amountTotal = Number(orderData?.amount_total ?? 0);
@@ -128,14 +148,14 @@ export async function PATCH(
     await supabaseAdmin
       .from("orders")
       .update({ amount_paid: totalPaid, amount_debt: amountTotal - totalPaid })
-      .eq("id", existing.order_id);
+      .eq("id", beforeRow.order_id);
 
     // When cancelling, revert linked invoice status if needed
-    if (body.status === "cancelled" && existing.invoice_id) {
+    if (body.status === "cancelled" && beforeRow.invoice_id) {
       const { data: invoicePayments } = await supabaseAdmin
         .from("payments")
         .select("amount, status")
-        .eq("invoice_id", existing.invoice_id);
+        .eq("invoice_id", beforeRow.invoice_id);
 
       const invoicePaid = (invoicePayments ?? []).reduce(
         (sum: number, p: { amount: number; status?: string }) =>
@@ -146,7 +166,7 @@ export async function PATCH(
       const { data: invoice } = await supabaseAdmin
         .from("invoices")
         .select("total, status")
-        .eq("id", existing.invoice_id)
+        .eq("id", beforeRow.invoice_id)
         .single();
 
       if (invoice && invoice.status === "paid") {
@@ -155,7 +175,7 @@ export async function PATCH(
           await supabaseAdmin
             .from("invoices")
             .update({ status: "issued", updated_at: new Date().toISOString() })
-            .eq("id", existing.invoice_id);
+            .eq("id", beforeRow.invoice_id);
         }
       }
     }
@@ -177,7 +197,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (!canModifyFinancePayments(apiUser.role)) {
-      return NextResponse.json({ error: "Forbidden", message: "Only Finance and Supervisor can delete payments." }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden", message: "You cannot delete payments." }, { status: 403 });
     }
     const { companyId } = apiUser;
 
@@ -185,7 +205,7 @@ export async function DELETE(
 
     const { data: payment } = await supabaseAdmin
       .from("payments")
-      .select("order_id, invoice_id")
+      .select("*")
       .eq("id", id)
       .eq("company_id", companyId)
       .single();
@@ -193,6 +213,8 @@ export async function DELETE(
     if (!payment) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
+
+    const snap = formatPaymentSnapshotForLog(payment as Record<string, unknown>);
 
     const { error } = await supabaseAdmin
       .from("payments")
@@ -204,6 +226,14 @@ export async function DELETE(
       console.error("[payments] DELETE error:", error);
       return NextResponse.json({ error: "Failed to delete payment" }, { status: 500 });
     }
+
+    await insertPaymentDeletedOrderLog({
+      companyId,
+      orderId: payment.order_id as string,
+      userId: apiUser.userId,
+      paymentId: id,
+      snapshot: snap,
+    });
 
     // Recalculate order totals (exclude cancelled payments)
     const { data: allPayments } = await supabaseAdmin
