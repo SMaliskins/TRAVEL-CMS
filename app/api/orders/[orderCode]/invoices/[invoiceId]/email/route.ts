@@ -175,6 +175,7 @@ export async function POST(
         company_id: companyId,
         order_id: orderId,
         invoice_id: invoiceId,
+        email_kind: "invoice",
         type: "to_client",
         recipient_email: to.trim(),
         subject: emailSubject,

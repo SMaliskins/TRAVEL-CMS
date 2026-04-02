@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
 import { Pencil, Ban, Landmark, Banknote, CreditCard, Printer } from "lucide-react";
 import AddPaymentModal, { type EditPaymentData } from "@/app/finances/payments/_components/AddPaymentModal";
@@ -21,6 +23,7 @@ interface Payment {
   payer_name: string | null;
   payer_party_id: string | null;
   note: string | null;
+  entered_by_name?: string | null;
   account_id?: string | null;
   account_name?: string | null;
   status?: string;
@@ -54,6 +57,8 @@ export interface OrderPaymentsListHandle {
 const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListProps>(function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }, ref) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const userRole = useCurrentUserRole();
+  const canEditOrDeletePayments = canModifyFinancePayments(userRole);
   const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
@@ -143,12 +148,16 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
         },
         body: JSON.stringify({ status: "cancelled" }),
       });
-      if (!res.ok) throw new Error("Failed to cancel");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error((errData as { message?: string }).message || (errData as { error?: string }).error || "Failed to cancel");
+      }
       loadPayments();
       loadPaymentSummary();
       onChanged?.();
     } catch (err) {
       console.error("Error cancelling payment:", err);
+      showToast("error", err instanceof Error ? err.message : "Failed to cancel");
     }
   };
 
@@ -263,6 +272,7 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
             <th className="text-center py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.method")}</th>
             <th className="text-right py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.amount")}</th>
             <th className="text-left py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.note")}</th>
+            <th className="text-left py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.enteredBy")}</th>
             <th className="text-center py-1.5 px-2 font-medium text-gray-600">{t(lang, "payments.invoice")}</th>
             <th className="text-center py-1.5 px-2 font-medium text-gray-600 w-[80px]">{t(lang, "payments.actions")}</th>
           </tr>
@@ -285,6 +295,9 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
                 </td>
                 <td className="py-1.5 px-2 text-gray-500 text-xs max-w-[150px] truncate">
                   {isCancelled ? <span className="text-red-500 text-xs">{t(lang, "payments.cancelled")}</span> : (p.note || "—")}
+                </td>
+                <td className="py-1.5 px-2 text-gray-600 text-xs max-w-[120px] truncate" title={p.entered_by_name || undefined}>
+                  {p.entered_by_name || "—"}
                 </td>
                 <td className="py-1.5 px-2 text-center text-xs text-gray-400">
                   {p.invoice_id ? "✓" : "—"}
@@ -321,12 +334,16 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
                           </div>
                         )}
                       </div>
-                      <button onClick={() => handleEdit(p)} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => handleCancel(p.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Cancel payment">
-                        <Ban size={14} />
-                      </button>
+                      {canEditOrDeletePayments && (
+                        <>
+                          <button onClick={() => handleEdit(p)} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => handleCancel(p.id)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Cancel payment">
+                            <Ban size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </td>
@@ -340,7 +357,7 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
             <td className={`py-1.5 px-2 text-right font-semibold text-sm ${total < 0 ? "text-red-600" : "text-gray-900"}`}>
               {(total < 0 ? "-" : "") + formatCurrency(total)}
             </td>
-            <td colSpan={3} />
+            <td colSpan={4} />
           </tr>
           {total > linkedToInvoices + 0.01 && (
             <tr>
@@ -348,7 +365,7 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
               <td className="py-1 px-2 text-right font-semibold text-purple-700 text-sm">
                 +{formatCurrency(Math.round((total - linkedToInvoices) * 100) / 100)}
               </td>
-              <td colSpan={3} />
+              <td colSpan={4} />
             </tr>
           )}
         </tfoot>

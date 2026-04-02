@@ -39,7 +39,7 @@ export interface TouristLocation {
   dateTo?: string;
   completedAt?: string;
   destination?: string;
-  /** People on this order (from order_travellers); omit or use 1 when unknown */
+  /** Active clients on this order (same rule as order Travellers list); omit or use 1 when unknown */
   travellerCount?: number;
 }
 

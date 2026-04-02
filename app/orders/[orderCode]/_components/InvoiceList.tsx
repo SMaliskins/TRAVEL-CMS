@@ -11,11 +11,16 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { CheckCheck, CheckCircle, ExternalLink, Eye, FileDown, Globe, Loader2, Mail, Pencil, Plus, Send, Trash2, X, XCircle } from "lucide-react";
+import { CheckCheck, CheckCircle, ExternalLink, Eye, FileDown, Globe, Loader2, Mail, Pencil, Plus, Send, Trash2, X, XCircle, Bell } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { supabase } from "@/lib/supabaseClient";
 import { INVOICE_LANGUAGE_OPTIONS, getInvoiceLanguageLabel } from "@/lib/invoiceLanguages";
+import {
+  defaultPaymentReminderPlainText,
+  defaultPaymentReminderSubject,
+  type PaymentReminderContext,
+} from "@/lib/invoices/paymentReminderEmail";
 
 interface Invoice {
   id: string;
@@ -75,6 +80,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const isFinance = userRole === "finance" || userRole === "admin";
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [emailStatuses, setEmailStatuses] = useState<Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>>({});
+  const [reminderStatuses, setReminderStatuses] = useState<Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [openActionsInvoiceId, setOpenActionsInvoiceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,6 +111,19 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     message: string;
   } | null>(null);
   const [emailSending, setEmailSending] = useState(false);
+  const [reminderModal, setReminderModal] = useState<{
+    invoiceId: string;
+    invoiceNumber: string;
+    to: string;
+    subject: string;
+    message: string;
+  } | null>(null);
+  const [reminderSending, setReminderSending] = useState(false);
+  const [reminderRecipients, setReminderRecipients] = useState<Array<{
+    email: string;
+    label: string;
+    role: "company" | "financial" | "administrative";
+  }>>([]);
   const [emailLang, setEmailLang] = useState("en");
   const [emailTranslating, setEmailTranslating] = useState(false);
   const [payerLangs, setPayerLangs] = useState<string[]>(["en"]);
@@ -119,7 +138,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const editTrapRef = useFocusTrap<HTMLDivElement>(!!editingLinesInvoice);
   const actionsTrapRef = useFocusTrap<HTMLDivElement>(!!openActionsInvoiceId);
   const emailTrapRef = useFocusTrap<HTMLDivElement>(!!emailModal);
-  useModalOverlay(!!cancelConfirm || !!editingLinesInvoice || !!openActionsInvoiceId || !!emailModal);
+  const reminderTrapRef = useFocusTrap<HTMLDivElement>(!!reminderModal);
+  useModalOverlay(!!cancelConfirm || !!editingLinesInvoice || !!openActionsInvoiceId || !!emailModal || !!reminderModal);
 
   const [saveLinesSaving, setSaveLinesSaving] = useState(false);
   const [addLineSaving, setAddLineSaving] = useState(false);
@@ -172,12 +192,34 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       if (!res.ok) return;
       const data = await res.json();
       const map: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
+      const rmap: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
       for (const c of data.communications || []) {
-        if (c.invoice_id && !map[c.invoice_id]) {
-          map[c.invoice_id] = { delivery_status: c.delivery_status, delivered_at: c.delivered_at, opened_at: c.opened_at, open_count: c.open_count || 0, sent_at: c.sent_at };
+        if (!c.invoice_id) continue;
+        const kind = (c as { email_kind?: string | null }).email_kind;
+        if (kind === "payment_reminder") {
+          if (!rmap[c.invoice_id]) {
+            rmap[c.invoice_id] = {
+              delivery_status: c.delivery_status,
+              delivered_at: c.delivered_at,
+              opened_at: c.opened_at,
+              open_count: c.open_count || 0,
+              sent_at: c.sent_at,
+            };
+          }
+        } else {
+          if (!map[c.invoice_id]) {
+            map[c.invoice_id] = {
+              delivery_status: c.delivery_status,
+              delivered_at: c.delivered_at,
+              opened_at: c.opened_at,
+              open_count: c.open_count || 0,
+              sent_at: c.sent_at,
+            };
+          }
         }
       }
       setEmailStatuses(map);
+      setReminderStatuses(rmap);
     } catch {}
   };
 
@@ -227,12 +269,13 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   useEffect(() => {
     function handleEsc(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      if (editingLinesInvoice) closeEditLines();
+      if (reminderModal) setReminderModal(null);
+      else if (editingLinesInvoice) closeEditLines();
       else if (openActionsInvoiceId) closeActionsModal();
     }
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
-  }, [editingLinesInvoice, openActionsInvoiceId]);
+  }, [editingLinesInvoice, openActionsInvoiceId, reminderModal]);
 
   const formatCurrency = (amount: number) => {
     const n = Number(amount);
@@ -611,11 +654,130 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       showToast("success", "Invoice email sent successfully!");
       setEmailModal(null);
       loadInvoices();
+      loadEmailStatuses();
     } catch (error: any) {
       console.error('Error sending email:', error);
       showToast("error", `Failed to send email: ${error.message || "Unknown error"}`);
     } finally {
       setEmailSending(false);
+    }
+  };
+
+  const buildPaymentReminderContext = (invoice: Invoice): PaymentReminderContext | null => {
+    if (isCreditInvoice(invoice) || invoice.status === "cancelled") return null;
+    const paid = invoice.paid_amount ?? 0;
+    const debt = Math.max(0, invoice.total - paid);
+    if (debt < 0.01) return null;
+    return {
+      payerName: (invoice.payer_name || "").trim() || "Sir/Madam",
+      invoiceNumber: invoice.invoice_number,
+      orderCode,
+      outstandingFormatted: formatCurrency(debt),
+      dueDateFormatted: invoice.due_date ? formatDate(invoice.due_date) : null,
+      depositDateFormatted: invoice.deposit_date ? formatDate(invoice.deposit_date) : null,
+      companyDisplayName: "",
+    };
+  };
+
+  const openPaymentReminderModal = async (invoiceId: string) => {
+    const invoice = invoices.find((inv) => inv.id === invoiceId);
+    if (!invoice) return;
+    const ctx = buildPaymentReminderContext(invoice);
+    if (!ctx) {
+      showToast("error", t(lang, "invoices.reminderNoDebt"));
+      return;
+    }
+    setReminderRecipients([]);
+    const pid = invoice.payer_party_id || null;
+    if (pid) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`/api/directory/${pid}`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const rec = data.record || data;
+          if (rec.type === "company" || rec.party_type === "company") {
+            const recipients: typeof reminderRecipients = [];
+            if (rec.email) {
+              recipients.push({
+                email: rec.email,
+                label: `${rec.companyName || rec.display_name || "Company"} (company)`,
+                role: "company",
+              });
+            }
+            try {
+              const cRes = await fetch(`/api/directory/${pid}/contacts`, { headers });
+              if (cRes.ok) {
+                const cData = await cRes.json();
+                for (const c of cData.contacts || []) {
+                  if (c.email) {
+                    recipients.push({
+                      email: c.email,
+                      label: `${c.displayName} (${c.role})`,
+                      role: c.role,
+                    });
+                  }
+                }
+              }
+            } catch {
+              /* ignore */
+            }
+            setReminderRecipients(recipients);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    setReminderModal({
+      invoiceId,
+      invoiceNumber: invoice.invoice_number,
+      to: invoice.payer_email || "",
+      subject: defaultPaymentReminderSubject(ctx),
+      message: defaultPaymentReminderPlainText(ctx),
+    });
+  };
+
+  const handleSendPaymentReminder = async () => {
+    if (!reminderModal) return;
+    if (!reminderModal.to.trim()) {
+      showToast("error", "Email address is required");
+      return;
+    }
+    setReminderSending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${reminderModal.invoiceId}/payment-reminder`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({
+            to: reminderModal.to.trim(),
+            subject: reminderModal.subject,
+            message: reminderModal.message,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast("error", err.error || err.message || "Failed to send reminder");
+        return;
+      }
+      showToast("success", t(lang, "invoices.reminderSentToast"));
+      setReminderModal(null);
+      setReminderRecipients([]);
+      loadEmailStatuses();
+    } catch (e: unknown) {
+      showToast("error", e instanceof Error ? e.message : "Failed to send reminder");
+    } finally {
+      setReminderSending(false);
     }
   };
 
@@ -1333,6 +1495,109 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         </div>
       )}
 
+      {reminderModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40 p-4">
+          <div
+            ref={reminderTrapRef}
+            className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[calc(100vh-2rem)] overflow-hidden shrink-0 my-auto"
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-amber-600" />
+                <h3 className="text-base font-semibold text-gray-900">
+                  {t(lang, "invoices.paymentReminder")} — {reminderModal.invoiceNumber}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setReminderModal(null); setReminderRecipients([]); }}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1 min-h-0">
+              <p className="text-xs text-gray-500">{t(lang, "invoices.reminderTrackingHint")}</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                {reminderRecipients.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {reminderRecipients.map((r, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setReminderModal({ ...reminderModal, to: r.email })}
+                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-colors ${
+                          reminderModal.to === r.email
+                            ? "border-amber-500 bg-amber-50 text-amber-900"
+                            : "border-gray-200 bg-gray-50 text-gray-600 hover:border-amber-300"
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  inputMode="email"
+                  value={reminderModal.to}
+                  onChange={(e) => setReminderModal({ ...reminderModal, to: e.target.value })}
+                  placeholder="recipient@example.com"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={reminderModal.subject}
+                  onChange={(e) => setReminderModal({ ...reminderModal, subject: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={reminderModal.message}
+                  onChange={(e) => setReminderModal({ ...reminderModal, message: e.target.value })}
+                  rows={12}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none font-sans"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50 shrink-0">
+              <button
+                type="button"
+                onClick={() => { setReminderModal(null); setReminderRecipients([]); }}
+                disabled={reminderSending}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSendPaymentReminder()}
+                disabled={reminderSending || !reminderModal.to.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50"
+              >
+                {reminderSending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    {t(lang, "invoices.sendReminder")}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">{t(lang, "invoices.title")}</h2>
         <div className="flex items-center gap-2">
@@ -1383,6 +1648,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               <col className="w-[70px]" />
               <col className="w-[150px]" />
               <col className="w-[80px]" />
+              <col className="w-[88px]" />
               <col className="w-[90px]" />
               <col className="w-[85px]" />
             </colgroup>
@@ -1398,6 +1664,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 <th className="text-left py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.dueSchedule")}</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.invoiceDate")}</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Email</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-700">{t(lang, "invoices.reminder")}</th>
                 <th className="text-center py-2 px-3 font-medium text-gray-700">Actions</th>
               </tr>
             </thead>
@@ -1519,6 +1786,52 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                           })()}
                         </td>
                         <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          {(() => {
+                            const rs = reminderStatuses[invoice.id];
+                            if (!rs) return <span className="text-gray-300">—</span>;
+                            const fmtDt = (s: string | null) => {
+                              if (!s) return "";
+                              const d = new Date(s);
+                              return `${formatDate(s)} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+                            };
+                            if (rs.opened_at) {
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800">
+                                    <Eye className="h-2.5 w-2.5" />
+                                    {t(lang, "invoices.reminderOpened")}
+                                    {rs.open_count > 1 ? ` ${rs.open_count}×` : ""}
+                                  </span>
+                                  <span className="text-[9px] text-gray-400">{fmtDt(rs.opened_at)}</span>
+                                </div>
+                              );
+                            }
+                            if (rs.delivered_at || rs.delivery_status === "delivered") {
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                                    <CheckCheck className="h-2.5 w-2.5" />
+                                    {t(lang, "invoices.reminderDelivered")}
+                                  </span>
+                                  <span className="text-[9px] text-gray-400">{fmtDt(rs.delivered_at || rs.sent_at)}</span>
+                                </div>
+                              );
+                            }
+                            if (rs.delivery_status === "bounced") {
+                              return <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700">✕</span>;
+                            }
+                            return (
+                              <div className="inline-flex flex-col items-center gap-0.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                                  <Send className="h-2.5 w-2.5" />
+                                  {t(lang, "invoices.reminderSent")}
+                                </span>
+                                <span className="text-[9px] text-gray-400">{fmtDt(rs.sent_at)}</span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => handlePreviewPDF(invoice.id)}
@@ -1623,6 +1936,19 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   <Mail size={16} />
                   Send email
                 </button>
+                {invoice.status !== "cancelled" && !isCreditInvoice(invoice) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeActionsModal();
+                      void openPaymentReminderModal(invoice.id);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                  >
+                    <Bell size={16} />
+                    {t(lang, "invoices.paymentReminder")}
+                  </button>
+                )}
                 {invoice.status !== "cancelled" && (
                   <button
                     type="button"

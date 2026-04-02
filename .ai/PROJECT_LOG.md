@@ -5,6 +5,50 @@
 
 ---
 
+## [2026-04-01] CW — Dashboard map: traveller count = active clients only
+
+**Task:** User: map must count clients like they do, not raw order_travellers rows.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `/api/dashboard/map` — count only `order_travellers` whose `party.status` is `active` (same filter as GET `.../travellers`); join `party:party_id(status)`.
+
+---
+
+## [2026-04-01] CW — Apply DB migrations (email_kind, payments.created_by)
+
+**Task:** User: run migrations on Supabase (not only SQL files in repo).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `apply_migration` MCP: `add_order_communications_email_kind`. Second `apply_migration` hit duplicate `schema_migrations` version; same DDL applied via `execute_sql` for `payments.created_by`. Verified `information_schema` for both columns.
+
+---
+
+## [2026-04-01] CW — Invoice payment reminder email + open tracking
+
+**Task:** User: respectful payment reminder letter, Payment Reminder action, track read like invoice email.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** Migration `add_order_communications_email_kind.sql`; invoice emails `email_kind=invoice`; POST `.../payment-reminder` + `lib/invoices/paymentReminderEmail.ts`; communications GET + InvoiceList column Reminder + modal; Resend webhook unchanged (resend_email_id).
+
+---
+
+## [2026-04-01] CW — Payments: entered-by column; edit/delete finance+supervisor only
+
+**Task:** Finances payments: column after Note (who entered); Edit/Delete only Finance and Supervisor (UI + API).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** Migration `add_payments_created_by.sql`; POST sets `created_by`; GET enriches `entered_by_name`; PATCH/DELETE 403 unless finance|supervisor; payments page + OrderPaymentsList column + role-gated actions; i18n `payments.enteredBy`.
+
+---
+
 ## [2026-04-01] CW — Commission pricing: margin = Client − Service Net
 
 **Task:** User: margin must be Sale − pay-to-operator (e.g. €80 − €48.67 = €31.33), not driven by stale agent discount overwriting client price.

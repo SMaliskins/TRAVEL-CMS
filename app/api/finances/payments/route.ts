@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { enrichPaymentsWithEnteredBy } from "@/lib/finances/paymentEnteredBy";
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     const rows = (data ?? []) as Record<string, unknown>[];
-    const payments = rows.map((p) => ({
+    const flattened = rows.map((p) => ({
       ...p,
       order_code: (p.orders as Record<string, unknown>)?.order_code ?? null,
       order_client: (p.orders as Record<string, unknown>)?.client_display_name ?? null,
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
       orders: undefined,
       company_bank_accounts: undefined,
     }));
+    const payments = await enrichPaymentsWithEnteredBy(flattened);
 
     return NextResponse.json({ data: payments });
   } catch (err: unknown) {
@@ -187,6 +189,7 @@ export async function POST(request: NextRequest) {
         payer_name: payer_name || null,
         payer_party_id: payer_party_id || null,
         note: note || null,
+        created_by: apiUser.userId,
       })
       .select()
       .single();

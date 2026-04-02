@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { enrichPaymentsWithEnteredBy } from "@/lib/finances/paymentEnteredBy";
 
 export async function GET(
   request: NextRequest,
@@ -30,7 +32,18 @@ export async function GET(
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ data });
+    const row = data as Record<string, unknown>;
+    const flat = {
+      ...row,
+      order_code: (row.orders as Record<string, unknown>)?.order_code ?? null,
+      order_client: (row.orders as Record<string, unknown>)?.client_display_name ?? null,
+      account_name: (row.company_bank_accounts as Record<string, unknown>)?.account_name ?? null,
+      bank_name: (row.company_bank_accounts as Record<string, unknown>)?.bank_name ?? null,
+      orders: undefined,
+      company_bank_accounts: undefined,
+    };
+    const [enriched] = await enrichPaymentsWithEnteredBy([flat]);
+    return NextResponse.json({ data: enriched });
   } catch (err) {
     console.error("[payments] GET by id:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -45,6 +58,9 @@ export async function PATCH(
     const apiUser = await getApiUser(request);
     if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canModifyFinancePayments(apiUser.role)) {
+      return NextResponse.json({ error: "Forbidden", message: "Only Finance and Supervisor can edit payments." }, { status: 403 });
     }
     const { companyId } = apiUser;
 
@@ -159,6 +175,9 @@ export async function DELETE(
     const apiUser = await getApiUser(request);
     if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!canModifyFinancePayments(apiUser.role)) {
+      return NextResponse.json({ error: "Forbidden", message: "Only Finance and Supervisor can delete payments." }, { status: 403 });
     }
     const { companyId } = apiUser;
 

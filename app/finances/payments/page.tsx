@@ -8,6 +8,8 @@ import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import AddPaymentModal, { type EditPaymentData } from "./_components/AddPaymentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
 import { Landmark, Banknote, CreditCard, Trash2, Pencil, Printer } from "lucide-react";
 
@@ -26,6 +28,7 @@ interface Payment {
   bank_name: string | null;
   payer_name: string | null;
   note: string | null;
+  entered_by_name?: string | null;
   created_at: string;
   status?: string;
   processor?: string | null;
@@ -61,6 +64,8 @@ export default function PaymentsPage() {
   const router = useRouter();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const userRole = useCurrentUserRole();
+  const canEditOrDeletePayments = canModifyFinancePayments(userRole);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -153,7 +158,10 @@ export default function PaymentsPage() {
 
     if (res.ok) {
       loadPayments();
+      return;
     }
+    const json = await res.json().catch(() => ({}));
+    alert((json as { message?: string }).message || (json as { error?: string }).error || "Failed to delete payment");
   };
 
   const handlePrintDepositReceipt = async (paymentId: string, receiptLang = "en") => {
@@ -312,7 +320,7 @@ export default function PaymentsPage() {
 
       {/* Payments Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[700px]">
+        <table className="w-full text-sm min-w-[820px]">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.date")}</th>
@@ -322,13 +330,14 @@ export default function PaymentsPage() {
               <th className="px-4 py-3 text-right font-semibold text-gray-700">{t(lang, "payments.amount")}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.account")}</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.note")}</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "payments.enteredBy")}</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700">{t(lang, "payments.actions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {visiblePayments.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
                   {t(lang, "payments.noPayments")}
                 </td>
               </tr>
@@ -369,6 +378,9 @@ export default function PaymentsPage() {
                   <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate">
                     {p.note || "-"}
                   </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs max-w-[160px] truncate" title={p.entered_by_name || undefined}>
+                    {p.entered_by_name || "—"}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <div className="relative">
@@ -400,20 +412,24 @@ export default function PaymentsPage() {
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleEdit(p)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                        title={t(lang, "payments.editPayment")}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                        title={t(lang, "payments.deletePayment")}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {canEditOrDeletePayments && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(p)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title={t(lang, "payments.editPayment")}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title={t(lang, "payments.deletePayment")}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

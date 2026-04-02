@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       query,
       supabaseAdmin
         .from("order_communications")
-        .select("invoice_id, delivery_status, delivered_at, opened_at, open_count, sent_at")
+        .select("invoice_id, delivery_status, delivered_at, opened_at, open_count, sent_at, email_kind")
         .eq("company_id", companyId)
         .not("invoice_id", "is", null)
         .order("sent_at", { ascending: false })
@@ -70,9 +70,10 @@ export async function GET(request: NextRequest) {
 
     const commsMap = new Map<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>();
     for (const c of commsResult.data || []) {
-      if (c.invoice_id && !commsMap.has(c.invoice_id)) {
-        commsMap.set(c.invoice_id, c);
-      }
+      if (!c.invoice_id || commsMap.has(c.invoice_id)) continue;
+      const kind = (c as { email_kind?: string | null }).email_kind;
+      if (kind === "payment_reminder") continue;
+      commsMap.set(c.invoice_id, c);
     }
 
     const paidMap = new Map<string, number>();

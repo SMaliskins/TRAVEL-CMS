@@ -192,6 +192,19 @@ function geocodeCity(cityName: string): [number, number] | null {
   return null;
 }
 
+type OrderTravellerPartyRow = {
+  order_id: string;
+  party?: { status?: string } | { status?: string }[] | null;
+};
+
+/** Match GET /api/orders/[orderCode]/travellers: only active parties count as clients */
+function isActivePartyOnOrderTravellerRow(row: OrderTravellerPartyRow): boolean {
+  const partyRaw = row.party;
+  const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw;
+  const status = party?.status ?? "active";
+  return status === "active";
+}
+
 export async function GET(request: NextRequest) {
   try {
     const apiUser = await getApiUser(request);
@@ -228,14 +241,16 @@ export async function GET(request: NextRequest) {
         const chunk = orderIds.slice(i, i + chunkSize);
         const { data: otRows, error: otErr } = await supabaseAdmin
           .from("order_travellers")
-          .select("order_id")
+          .select("order_id, party:party_id(status)")
           .eq("company_id", companyId)
           .in("order_id", chunk);
         if (otErr) {
           console.error("order_travellers map count error:", otErr);
         } else {
           for (const row of otRows || []) {
-            const oid = (row as { order_id: string }).order_id;
+            const r = row as OrderTravellerPartyRow;
+            if (!isActivePartyOnOrderTravellerRow(r)) continue;
+            const oid = r.order_id;
             travellerCountByOrder.set(oid, (travellerCountByOrder.get(oid) || 0) + 1);
           }
         }
@@ -252,7 +267,7 @@ export async function GET(request: NextRequest) {
       dateTo?: string;
       completedAt?: string;
       destination?: string;
-      /** People on the order (from order_travellers); defaults to 1 if none linked yet */
+      /** Active clients on the order (order_travellers + party.status active, same as order Travellers UI); defaults to 1 if none linked yet */
       travellerCount: number;
     }
 

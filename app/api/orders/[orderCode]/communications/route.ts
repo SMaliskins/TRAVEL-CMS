@@ -35,7 +35,8 @@ export async function GET(
         open_count,
         invoice_id,
         service_id,
-        resend_email_id
+        resend_email_id,
+        email_kind
       `)
       .eq("order_id", order.id)
       .order("sent_at", { ascending: false });
