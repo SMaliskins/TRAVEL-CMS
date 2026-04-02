@@ -5,7 +5,16 @@ import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/gen
 import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
-import { appendHtmlWithUserEmailSignature } from "@/lib/email/appendUserEmailSignature";
+import { appendHtmlWithEmailSignature, normalizeEmailSignatureSource } from "@/lib/email/appendUserEmailSignature";
+import { loadDefaultEmailTemplateForCategory } from "@/lib/email/emailTemplateUtils";
+import {
+  buildInvoiceEmailTemplateVars,
+  formatInvoiceDueParts,
+  invoiceOutstandingFormatted,
+  resolveInvoiceEmailLetter,
+  formatInvoiceMoneyEur,
+} from "@/lib/invoices/invoiceEmailTemplate";
+import { loadInvoiceWithItemsForOrder } from "@/lib/invoices/loadInvoiceWithItemsForOrder";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -30,13 +39,91 @@ async function getUser(request: NextRequest) {
   return null;
 }
 
+/** GET draft subject/message from Settings → Email templates → Invoices (same substitution as POST when body empty). */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string; invoiceId: string }> }
+) {
+  try {
+    const { orderCode, invoiceId } = await params;
+    const user = await getUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const loaded = await loadInvoiceWithItemsForOrder(invoiceId, orderCode);
+    if (!loaded.ok) {
+      return NextResponse.json({ error: loaded.error }, { status: loaded.status });
+    }
+
+    const { data: company } = await supabaseAdmin
+      .from("companies")
+      .select("name, legal_name, trading_name")
+      .eq("id", loaded.companyId)
+      .single();
+
+    const rawName = (company as { name?: string } | null)?.name ?? "";
+    const legalName = (company as { legal_name?: string } | null)?.legal_name ?? "";
+    const tradingName = (company as { trading_name?: string } | null)?.trading_name ?? "";
+    const companyDisplayName =
+      legalName ||
+      (rawName.trim() !== "Default Company" ? rawName : "") ||
+      tradingName ||
+      rawName ||
+      "Our team";
+
+    const { dueDateFormatted, depositDateFormatted, finalPaymentDateFormatted } = formatInvoiceDueParts(
+      loaded.invoice
+    );
+    const invRow = loaded.invoice as {
+      total?: unknown;
+      payer_name?: unknown;
+      invoice_number?: unknown;
+      invoice_items?: Parameters<typeof buildInvoiceEmailTemplateVars>[0]["items"];
+      paid_amount?: unknown;
+      remaining?: unknown;
+    };
+    const totalNum = Number(invRow.total) || 0;
+    const template = await loadDefaultEmailTemplateForCategory(loaded.companyId, "invoice");
+    const vars = buildInvoiceEmailTemplateVars({
+      payerName: String(invRow.payer_name ?? "").trim() || "Sir/Madam",
+      orderCode: loaded.orderRow.order_code,
+      invoiceNumber: String(invRow.invoice_number),
+      invoiceTotalFormatted: formatInvoiceMoneyEur(totalNum),
+      outstandingFormatted: invoiceOutstandingFormatted({
+        total: invRow.total as string | number | null,
+        paid_amount: invRow.paid_amount as number | null | undefined,
+        remaining: invRow.remaining as number | null | undefined,
+      }),
+      dueDateFormatted,
+      depositDateFormatted,
+      finalPaymentDateFormatted,
+      companyDisplayName,
+      items: invRow.invoice_items,
+    });
+
+    const { subject, bodyHtml } = resolveInvoiceEmailLetter({
+      invoiceNumber: String(loaded.invoice.invoice_number),
+      subjectFromClient: null,
+      messageFromClient: null,
+      template,
+      vars,
+    });
+
+    return NextResponse.json({ subject, message: bodyHtml });
+  } catch (e) {
+    console.error("[invoice email] GET:", e);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
 // POST /api/orders/[orderCode]/invoices/[invoiceId]/email - Send invoice via email (Resend)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ orderCode: string; invoiceId: string }> }
 ) {
   try {
-    const { invoiceId } = await params;
+    const { orderCode, invoiceId } = await params;
     const body = await request.json();
     const { to, subject, message } = body;
 
@@ -49,43 +136,20 @@ export async function POST(
       );
     }
 
-    // Get invoice with items and company logo
-    const { data: invoice, error: invoiceError } = await supabaseAdmin
-      .from("invoices")
-      .select(`
-        *,
-        orders(id, order_code, company_id),
-        invoice_items (
-          id,
-          service_name,
-          service_client,
-          service_category,
-          service_date_from,
-          service_date_to,
-          service_dates_text,
-          quantity,
-          unit_price,
-          line_total
-        )
-      `)
-      .eq("id", invoiceId)
-      .single();
-
-    if (invoiceError || !invoice) {
-      return NextResponse.json(
-        { error: "Invoice not found" },
-        { status: 404 }
-      );
+    const loaded = await loadInvoiceWithItemsForOrder(invoiceId, orderCode);
+    if (!loaded.ok) {
+      return NextResponse.json({ error: loaded.error }, { status: loaded.status });
     }
-
-    const orderRow = Array.isArray(invoice?.orders) ? invoice.orders[0] : invoice?.orders;
-    const companyId = orderRow?.company_id ?? null;
+    const invoice = loaded.invoice;
+    const orderRow = loaded.orderRow;
+    const companyId = loaded.companyId;
 
     let companyLogoUrl: string | null = null;
     let companyInfo: InvoiceCompanyInfo | null = null;
     let emailFrom: string | null = null;
     let invoiceTemplateId: string | undefined;
     let invoiceAccentColor: string | undefined;
+    let companyDisplayNameForTemplate = "Our team";
     if (companyId) {
       const { data: company } = await supabaseAdmin
         .from("companies")
@@ -98,6 +162,7 @@ export async function POST(
         const legalName = (company as { legal_name?: string }).legal_name ?? "";
         const tradingName = (company as { trading_name?: string }).trading_name ?? "";
         const displayName = legalName || (rawName.trim() !== "Default Company" ? rawName : "") || tradingName || rawName || "";
+        companyDisplayNameForTemplate = displayName || companyDisplayNameForTemplate;
         const companyEmailFrom = (company as { invoice_email_from?: string | null }).invoice_email_from?.trim() || null;
         const envFrom = process.env.EMAIL_FROM || "";
         const extractEmail = (s: string) => { const m = s.match(/<([^>]+)>/); return m ? m[1].trim() : s.trim(); };
@@ -130,13 +195,46 @@ export async function POST(
     }
 
     const htmlBody = generateInvoiceHTML(invoice, companyLogoUrl, companyInfo, invoiceTemplateId, invoiceAccentColor);
-    const emailSubject = subject?.trim() || `Invoice ${invoice.invoice_number}`;
+
+    const emailTemplate = await loadDefaultEmailTemplateForCategory(companyId, "invoice");
+    const invPost = invoice as {
+      total?: unknown;
+      payer_name?: unknown;
+      invoice_number?: unknown;
+      invoice_items?: Parameters<typeof buildInvoiceEmailTemplateVars>[0]["items"];
+      paid_amount?: unknown;
+      remaining?: unknown;
+    };
+    const { dueDateFormatted, depositDateFormatted, finalPaymentDateFormatted } = formatInvoiceDueParts(
+      invoice as Parameters<typeof formatInvoiceDueParts>[0]
+    );
+    const totalNum = Number(invPost.total) || 0;
+    const templateVars = buildInvoiceEmailTemplateVars({
+      payerName: String(invPost.payer_name ?? "").trim() || "Sir/Madam",
+      orderCode: orderRow.order_code,
+      invoiceNumber: String(invPost.invoice_number),
+      invoiceTotalFormatted: formatInvoiceMoneyEur(totalNum),
+      outstandingFormatted: invoiceOutstandingFormatted({
+        total: invPost.total as string | number | null,
+        paid_amount: invPost.paid_amount as number | null | undefined,
+        remaining: invPost.remaining as number | null | undefined,
+      }),
+      dueDateFormatted,
+      depositDateFormatted,
+      finalPaymentDateFormatted,
+      companyDisplayName: companyDisplayNameForTemplate,
+      items: invPost.invoice_items,
+    });
+    const resolvedLetter = resolveInvoiceEmailLetter({
+      invoiceNumber: String(invoice.invoice_number),
+      subjectFromClient: subject,
+      messageFromClient: message,
+      template: emailTemplate,
+      vars: templateVars,
+    });
+    const emailSubject = resolvedLetter.subject;
     const footer = '<p style="margin-top:12px;color:#6b7280">Invoice is attached as a PDF file.</p>';
-    const emailHtml = message?.trim()
-      ? (message.includes("<") && message.includes(">")
-          ? `${message}${footer}`
-          : `<p>${message.replace(/\n/g, "<br>")}</p>${footer}`)
-      : `<p>Please find attached invoice ${invoice.invoice_number}.</p>`;
+    const emailHtml = `${resolvedLetter.bodyHtml}${footer}`;
 
     const attachments: { filename: string; content: Buffer }[] = [];
     const pdfBuffer = await generatePDFFromHTML(htmlBody);
@@ -151,7 +249,12 @@ export async function POST(
       content: pdfBuffer,
     });
 
-    const withSignature = await appendHtmlWithUserEmailSignature(emailHtml, user?.id ?? null);
+    const sigSource = emailTemplate?.email_signature_source ?? normalizeEmailSignatureSource(null);
+    const withSignature = await appendHtmlWithEmailSignature(emailHtml, {
+      source: sigSource,
+      userId: user?.id ?? null,
+      companyId,
+    });
     const finalHtml = await replaceBase64Images(withSignature);
 
     const result = await sendEmail(
@@ -181,7 +284,7 @@ export async function POST(
         type: "to_client",
         recipient_email: to.trim(),
         subject: emailSubject,
-        body: message?.trim() || `Invoice ${invoice.invoice_number}`,
+        body: resolvedLetter.bodyForLog,
         sent_by: user?.id ?? null,
         email_sent: true,
         resend_email_id: result.id ?? null,

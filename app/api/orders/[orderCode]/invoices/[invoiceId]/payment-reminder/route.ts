@@ -17,7 +17,10 @@ import {
   type PaymentReminderContext,
 } from "@/lib/invoices/paymentReminderEmail";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
-import { appendHtmlWithUserEmailSignature } from "@/lib/email/appendUserEmailSignature";
+import { appendHtmlWithEmailSignature, normalizeEmailSignatureSource } from "@/lib/email/appendUserEmailSignature";
+import { generateInvoiceHTML, type InvoiceCompanyInfo } from "@/lib/invoices/generateInvoiceHTML";
+import { generatePDFFromHTML } from "@/lib/invoices/generateInvoicePDF";
+import { loadInvoiceWithItemsForOrder } from "@/lib/invoices/loadInvoiceWithItemsForOrder";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -267,6 +270,10 @@ export async function POST(
     const { data: company } = await supabaseAdmin.from("companies").select("*").eq("id", loaded.companyId).single();
 
     let emailFrom: string | null = null;
+    let companyLogoUrl: string | null = null;
+    let companyInfo: InvoiceCompanyInfo | null = null;
+    let invoiceTemplateId: string | undefined;
+    let invoiceAccentColor: string | undefined;
     if (company) {
       const rawName = (company as { name?: string }).name ?? "";
       const legalName = (company as { legal_name?: string }).legal_name ?? "";
@@ -280,6 +287,43 @@ export async function POST(
       };
       const fallbackEmail = envFrom ? extractEmail(envFrom) : "noreply@travel-cms.com";
       emailFrom = `${displayName} <${companyEmailFrom || fallbackEmail}>`;
+      companyLogoUrl = (company as { logo_url?: string | null }).logo_url ?? null;
+      const { data: bankAccounts } = await supabaseAdmin
+        .from("company_bank_accounts")
+        .select("account_name, bank_name, iban, swift, currency")
+        .eq("company_id", loaded.companyId)
+        .eq("is_active", true)
+        .eq("use_in_invoices", true)
+        .order("is_default", { ascending: false })
+        .order("account_name");
+      const defaultBank = bankAccounts?.[0];
+      companyInfo = {
+        name: displayName,
+        address:
+          (company as { address?: string; legal_address?: string; operating_address?: string }).address ||
+          (company as { legal_address?: string }).legal_address ||
+          (company as { operating_address?: string }).operating_address ||
+          null,
+        regNr:
+          (company as { registration_number?: string; reg_nr?: string }).registration_number ??
+          (company as { reg_nr?: string }).reg_nr ??
+          null,
+        vatNr:
+          (company as { vat_number?: string; vat_nr?: string }).vat_number ??
+          (company as { vat_nr?: string }).vat_nr ??
+          null,
+        bankName: defaultBank?.bank_name || (company as { bank_name?: string }).bank_name || null,
+        bankAccount: defaultBank?.iban || (company as { bank_account?: string }).bank_account || null,
+        bankSwift:
+          defaultBank?.swift ||
+          (company as { swift_code?: string; bank_swift?: string }).swift_code ||
+          (company as { bank_swift?: string }).bank_swift ||
+          null,
+        bankAccounts: bankAccounts ?? [],
+        country: (company as { country?: string }).country ?? null,
+      };
+      invoiceTemplateId = (company as { invoice_template?: string }).invoice_template ?? undefined;
+      invoiceAccentColor = (company as { invoice_accent_color?: string }).invoice_accent_color ?? undefined;
     }
 
     const companyDisplayName =
@@ -330,14 +374,43 @@ export async function POST(
       bodyForLog = defaultPaymentReminderPlainText(ctx);
     }
 
-    const emailHtmlWithSignature = await appendHtmlWithUserEmailSignature(emailHtml, user.id);
+    const pdfAttachmentNote =
+      '<p style="margin-top:12px;color:#6b7280">The invoice is attached as a PDF file.</p>';
+    const emailHtmlWithAttachmentNote = `${emailHtml}${pdfAttachmentNote}`;
+    const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
+    const emailHtmlWithSignature = await appendHtmlWithEmailSignature(emailHtmlWithAttachmentNote, {
+      source: sigSource,
+      userId: user.id,
+      companyId: loaded.companyId,
+    });
+
+    const fullInvoice = await loadInvoiceWithItemsForOrder(invoiceId, orderCode);
+    if (!fullInvoice.ok) {
+      return NextResponse.json({ error: fullInvoice.error }, { status: fullInvoice.status });
+    }
+    const htmlBody = generateInvoiceHTML(
+      fullInvoice.invoice,
+      companyLogoUrl,
+      companyInfo,
+      invoiceTemplateId,
+      invoiceAccentColor
+    );
+    const pdfBuffer = await generatePDFFromHTML(htmlBody);
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      return NextResponse.json(
+        { error: "Failed to generate invoice PDF attachment. Email was not sent." },
+        { status: 500 }
+      );
+    }
+    const invNum = String(fullInvoice.invoice["invoice_number"] ?? "invoice").replace(/\s+/g, "-");
+    const attachments = [{ filename: `${invNum}.pdf`, content: pdfBuffer }];
 
     const result = await sendEmail(
       to.trim(),
       emailSubject,
       emailHtmlWithSignature,
       undefined,
-      undefined,
+      attachments,
       { from: emailFrom || undefined, companyId: loaded.companyId }
     );
 

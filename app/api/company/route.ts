@@ -158,6 +158,7 @@ export async function PATCH(request: NextRequest) {
       "invoice_prefix",
       "default_payment_terms",
       "invoice_email_from",
+      "email_signature",
       // Email configuration (per-company Resend)
       "resend_api_key",
       "email_domain_verified",

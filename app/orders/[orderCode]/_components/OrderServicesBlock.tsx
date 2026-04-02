@@ -2376,6 +2376,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       <div className="space-y-4 overflow-hidden">
         {/* Services table — skeleton when loading; Itinerary block always rendered below */}
         {isLoading ? servicesTableContent : (
+        <>
         <div className="rounded-lg bg-white shadow-sm overflow-hidden">
         <div className="border-b border-gray-200 px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0 sm:justify-between">
           <div className="flex items-center gap-2">
@@ -2966,9 +2967,10 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
             </tbody>
           </table>
         </div>
+        </div>
 
-        {/* Itinerary Timeline — attached under Services; header z-[60] so scrolling content goes under, not over */}
-        <div className="bg-white mt-10">
+        {/* Itinerary + Map outside Services card: avoid overflow-hidden + sticky (z-60) stacking over table rows */}
+        <div className="min-w-0">
           <div id="itinerary" className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-start">
           <div className="lg:col-span-2">
             <ItineraryTimeline
@@ -3057,7 +3059,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           </div>
         </div>
         </div>
-      </div>
+        </>
         )}
 
       </div>

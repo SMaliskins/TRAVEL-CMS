@@ -5,6 +5,85 @@
 
 ---
 
+## [2026-04-01] CW — Add/Edit service: Cost decimal input (78.09) without losing "."
+
+**Task:** User: typing Cost "78." then "0" removed the dot (Insurance / commission pricing).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** Root cause: `onChange` used `parseFloat` + `Math.round` → `78.0` became `"78"`. Added `sanitizeDecimalInput` in `utils/sanitizeNumber.ts`; commission-style Cost / Service Price inputs use `type="text"` `inputMode="decimal"` + that sanitizer in `AddServiceModal.tsx` and `EditServiceModalNew.tsx`.
+
+---
+
+## [2026-04-01] CW — Supabase: apply_migration add_email_template_signature_source
+
+**Task:** User: run email_templates / companies signature migration via connected Supabase.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `user-supabase` MCP `apply_migration` `add_email_template_signature_source`; verified `information_schema` for `email_templates.email_signature_source` (NOT NULL, default personal) and `companies.email_signature`.
+
+---
+
+## [2026-04-01] CW — RichTextEditor: placeholders vs body font (prose code)
+
+**Task:** User: email template body shows two fonts; no font picker.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** Typography `prose` + `<code>` (TipTap inline code / paste) forced monospace. Editor root `font-sans` + `[&_code]:font-sans` and reset code backticks/background; `pre` stays monospace. Toolbar: `toggleCode` with Braces icon + tooltip.
+
+---
+
+## [2026-04-01] CW — Email templates: signature source (company vs personal) + follow-up fixes
+
+**Task:** User: Templates — choose signature (Company Settings vs User Profile); verify types/UI.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** (Prior) Migration `email_templates.email_signature_source`, `companies.email_signature`; `appendHtmlWithEmailSignature`; Settings Email Templates select; Company Settings HTML signature; send paths (invoice, payment reminder, send-to-hotel). **This step:** Removed invalid `disabled` on `RichTextEditor` (use read-only wrapper); narrowed `Record<string, unknown>` invoice rows in `.../invoices/[invoiceId]/email/route.ts` for `tsc`.
+
+**Next Step:** Apply SQL migration on DB; manual send tests per template mode.
+
+---
+
+## [2026-04-01] CW — Order services: Itinerary bar no longer overlaps table (layout)
+
+**Task:** User: Itinerary sticky header overlapped last service rows.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** Moved Itinerary + Map grid outside the Services `rounded-lg overflow-hidden` card (fragment wrapper); `sticky` + `z-[60]` no longer stacks over table inside same clipping ancestor.
+
+---
+
+## [2026-04-01] CW — Payment reminder: attach same invoice PDF as Send Invoice
+
+**Task:** User: auto-attach invoice PDF on payment reminder emails.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** POST `payment-reminder` loads full invoice via `loadInvoiceWithItemsForOrder`, `generateInvoiceHTML` + `generatePDFFromHTML`, passes attachments to `sendEmail`; body note + Profile signature; company block mirrors invoice email (logo, `companyInfo`, template/accent). Extracted `lib/invoices/loadInvoiceWithItemsForOrder.ts`; invoice `email` route uses it. InvoiceList reminder modal shows PDF hint.
+
+---
+
+## [2026-04-01] CW — Send Invoice: load email_templates category `invoice` (GET draft + POST)
+
+**Task:** User: invoice email did not use Settings templates; how to configure.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `lib/invoices/invoiceEmailTemplate.ts` (vars + `resolveInvoiceEmailLetter`); GET + POST `.../invoices/[invoiceId]/email` use `loadDefaultEmailTemplateForCategory(companyId, "invoice")`; `InvoiceList` fetches draft on open; Settings → Email templates → Invoices shows `INVOICE_SEND_VARIABLES_HELP`.
+
+---
+
 ## [2026-04-01] CW — Company email templates + profile signature; payment edit log; broader payment edit
 
 **Task:** User: templates company-wide (copy + link to Profile signature); allow payment PATCH/DELETE for staff with logging (old→new, author, time on order log); append user email signature to invoice + payment-reminder sends; Log tab UI for non-email activity rows.

@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), { ssr: false });
 import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 import { setGlobalDateFormat, DateFormatPattern } from "@/utils/dateFormat";
@@ -140,6 +143,8 @@ interface Company {
   invoice_prefix?: string;
   default_payment_terms?: number;
   invoice_email_from?: string;
+  /** Shared HTML signature when a template uses “company” signature */
+  email_signature?: string | null;
   invoice_languages?: string[];
   invoice_currencies?: string[];
   concierge_hotel_markup?: number;
@@ -1132,6 +1137,60 @@ export default function CompanySettingsPage() {
                 placeholder="e.g. invoices@yourcompany.com"
               />
               <p className="text-xs text-gray-500 mt-1">All outgoing emails will be sent from this address. Domain must be verified in Resend.</p>
+            </div>
+
+            {/* Company-wide email signature (for templates that use “Company” signature) */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company email signature (HTML)</label>
+              <p className="text-xs text-gray-500 mb-2">
+                Used when an email template is set to &quot;Company&quot; signature (Settings → Email Templates). Personal templates use each user&apos;s signature from Settings → Profile.
+              </p>
+              <div className={readonly ? "pointer-events-none opacity-60" : ""}>
+              <RichTextEditor
+                content={
+                  (formData.email_signature || "").includes("<")
+                    ? formData.email_signature || ""
+                    : `<p>${(formData.email_signature || "").replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                }
+                onChange={(html) => updateField("email_signature", html)}
+                placeholder="Kind regards, …"
+                compact
+                onImageUpload={async () => {
+                  return new Promise<string | null>((resolve) => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = "image/*";
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) {
+                        resolve(null);
+                        return;
+                      }
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (!session) {
+                          resolve(null);
+                          return;
+                        }
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        const res = await fetch("/api/upload-avatar", {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${session.access_token}` },
+                          body: fd,
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+                        resolve(data.url);
+                      } catch {
+                        resolve(null);
+                      }
+                    };
+                    input.click();
+                  });
+                }}
+              />
+              </div>
             </div>
 
             {/* Test Email */}

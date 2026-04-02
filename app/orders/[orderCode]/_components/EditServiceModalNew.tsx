@@ -18,7 +18,7 @@ import CancelServiceModal from './CancelServiceModal';
 import HotelSuggestInput from '@/components/HotelSuggestInput';
 import AddAccompanyingModal from './AddAccompanyingModal';
 import { Hotel, Link2, Sparkles } from "lucide-react";
-import { sanitizeNumber } from "@/utils/sanitizeNumber";
+import { sanitizeNumber, sanitizeDecimalInput } from "@/utils/sanitizeNumber";
 import LinkedServicesModal from "./LinkedServicesModal";
 import ParseFeedbackPanel from "@/components/ParseFeedbackPanel";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
@@ -4819,18 +4819,17 @@ export default function EditServiceModalNew({
                           <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                             <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
                             <input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
                               value={servicePrice}
                               onChange={(e) => {
                                 pricingLastEditedRef.current = "cost";
-                                const v = parseFloat(e.target.value) || 0;
-                                setServicePrice(String(Math.round(v * 100) / 100));
+                                setServicePrice(sanitizeDecimalInput(e.target.value));
                                 markCorrected("servicePrice");
                               }}
                               placeholder="0.00"
-                              className={`flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] border-0 bg-transparent ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : ""}`}
+                              className={`flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right tabular-nums border-0 bg-transparent ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : ""}`}
                             />
                           </div>
                         )}

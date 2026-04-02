@@ -19,6 +19,7 @@ interface EmailTemplate {
   category: string;
   subject: string;
   body: string;
+  email_signature_source?: string | null;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -56,6 +57,26 @@ const PAYMENT_REMINDER_VARIABLES_HELP = [
   { var: "{{total_amount}}", desc: "Legacy: same as amount due for this category" },
 ];
 
+/** Send Invoice email (body + subject) — same substitution as API uses for category `invoice` */
+const INVOICE_SEND_VARIABLES_HELP = [
+  { var: "{{client_name}}", desc: "Payer / client name" },
+  { var: "{{order_code}}", desc: "Order code" },
+  { var: "{{invoice_number}}", desc: "Invoice number" },
+  { var: "{{total_amount}}", desc: "Invoice total (formatted)" },
+  { var: "{{invoice_total}}", desc: "Same as invoice total" },
+  { var: "{{amount_due}}", desc: "Outstanding balance (formatted)" },
+  { var: "{{outstanding_amount}}", desc: "Same as amount due" },
+  { var: "{{deposit_due_date}}", desc: "Deposit due (dd.mm.yyyy), or empty" },
+  { var: "{{invoice_due_date}}", desc: "Invoice due date (dd.mm.yyyy), or empty" },
+  { var: "{{final_due_date}}", desc: "Final payment due (dd.mm.yyyy), or empty" },
+  { var: "{{due_date}}", desc: "Deposit due if set, else invoice due" },
+  { var: "{{dates}}", desc: "Service dates from invoice lines" },
+  { var: "{{service_name}}", desc: "Service names from invoice lines" },
+  { var: "{{company_name}}", desc: "Your company name" },
+  { var: "{{agent_name}}", desc: "Reserved (empty for now)" },
+  { var: "{{hotel_name}}", desc: "Reserved (empty for now)" },
+];
+
 const GENERAL_VARIABLES_HELP = [
   { var: "{{client_name}}", desc: "Client full name" },
   { var: "{{order_code}}", desc: "Order code" },
@@ -82,6 +103,7 @@ export default function EmailTemplatesPage() {
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState("custom");
   const [formSubject, setFormSubject] = useState("");
+  const [formSignatureSource, setFormSignatureSource] = useState<"personal" | "company">("personal");
   const [formBody, setFormBody] = useState("");
   const [formDefault, setFormDefault] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -125,6 +147,7 @@ export default function EmailTemplatesPage() {
     setFormName("");
     setFormCategory(category || "custom");
     setFormSubject("");
+    setFormSignatureSource("personal");
     setFormBody("");
     setFormDefault(false);
   };
@@ -135,6 +158,7 @@ export default function EmailTemplatesPage() {
     setFormName(t.name);
     setFormCategory(t.category);
     setFormSubject(t.subject);
+    setFormSignatureSource(t.email_signature_source === "company" ? "company" : "personal");
     setFormBody(t.body);
     setFormDefault(t.is_default);
   };
@@ -163,6 +187,7 @@ export default function EmailTemplatesPage() {
         subject: formSubject,
         bodyHtml: formBody,
         is_default: formDefault,
+        email_signature_source: formSignatureSource,
       };
 
       const res = await fetch("/api/settings/email-templates", {
@@ -280,11 +305,16 @@ export default function EmailTemplatesPage() {
               Email Templates
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Templates are shared for your whole company. Personal email signatures are set in{" "}
-              <Link href="/settings/profile" className="text-blue-600 hover:underline">
-                Settings → Profile
+              Templates are shared for your whole company. Per template, choose{" "}
+              <strong className="font-medium text-gray-600">Signature</strong> below: company-wide ({" "}
+              <Link href="/settings/company" className="text-blue-600 hover:underline">
+                Company Settings
               </Link>
-              .
+              ) or personal ({" "}
+              <Link href="/settings/profile" className="text-blue-600 hover:underline">
+                Profile
+              </Link>
+              ).
             </p>
           </div>
         </div>
@@ -471,6 +501,21 @@ export default function EmailTemplatesPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Signature when sending</label>
+                <select
+                  value={formSignatureSource}
+                  onChange={(e) => setFormSignatureSource(e.target.value as "personal" | "company")}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="personal">Personal — each user&apos;s signature from Settings → Profile</option>
+                  <option value="company">Company — shared signature from Settings → Company (Email section)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Appended below the message when the email is sent (invoices, reminders, hotel mail, etc.).
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Body</label>
                 <RichTextEditor
                   content={formBody}
@@ -498,7 +543,9 @@ export default function EmailTemplatesPage() {
                 <div className="px-3 pb-3 grid grid-cols-2 gap-1">
                   {(formCategory === "payment_reminder"
                     ? PAYMENT_REMINDER_VARIABLES_HELP
-                    : GENERAL_VARIABLES_HELP
+                    : formCategory === "invoice"
+                      ? INVOICE_SEND_VARIABLES_HELP
+                      : GENERAL_VARIABLES_HELP
                   ).map((v) => (
                     <div key={v.var} className="flex items-start gap-1.5 text-xs">
                       <code className="bg-white px-1 py-0.5 rounded text-blue-700 font-mono shrink-0">{v.var}</code>

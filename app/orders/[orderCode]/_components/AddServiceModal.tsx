@@ -18,7 +18,7 @@ import { toTitleCaseForDisplay } from "@/utils/nameFormat";
 import DateInput from "@/components/DateInput";
 import type { SupplierCommission } from "@/lib/types/directory";
 import { Hotel, Link2, Sparkles } from "lucide-react";
-import { sanitizeNumber } from "@/utils/sanitizeNumber";
+import { sanitizeNumber, sanitizeDecimalInput } from "@/utils/sanitizeNumber";
 import LinkedServicesModal from "./LinkedServicesModal";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 
@@ -3875,17 +3875,16 @@ export default function AddServiceModal({
                           </div>
                         ) : (
                           <input
-                            type="number"
-                            step="0.01"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
                             value={servicePrice}
                             onChange={(e) => {
                               pricingLastEditedRef.current = "cost";
-                              const v = parseFloat(e.target.value) || 0;
-                              setServicePrice(String(Math.round(v * 100) / 100));
+                              setServicePrice(sanitizeDecimalInput(e.target.value));
                             }}
                             placeholder="0.00"
-                            className={`w-full rounded-lg border px-2.5 py-1.5 text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
+                            className={`w-full rounded-lg border px-2.5 py-1.5 text-sm tabular-nums ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
                           />
                         )}
                       </div>

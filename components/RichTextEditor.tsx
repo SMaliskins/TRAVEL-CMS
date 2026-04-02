@@ -11,7 +11,7 @@ import { useState, useCallback, useEffect } from "react";
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
-  ImagePlus, LinkIcon, Undo2, Redo2, Code, Loader2, Minus,
+  ImagePlus, LinkIcon, Undo2, Redo2, Code, Loader2, Minus, Braces,
 } from "lucide-react";
 
 interface RichTextEditorProps {
@@ -22,6 +22,19 @@ interface RichTextEditorProps {
   /** Compact mode: smaller height, no HTML toggle. For modals. */
   compact?: boolean;
 }
+
+/** Tailwind Typography styles <code> as monospace; email templates use {{vars}} — keep inline code visually same as body. */
+const editorProseClass = (compact: boolean) =>
+  [
+    "prose prose-sm max-w-none focus:outline-none px-4 py-3 text-[13px] font-sans",
+    "[&_h1]:text-[13px] [&_h2]:text-[13px] [&_h3]:text-[13px]",
+    "[&_p]:text-[13px] [&_li]:text-[13px] [&_td]:text-[13px] [&_th]:text-[13px]",
+    "[&_img]:max-w-full [&_img]:max-h-[320px] [&_img]:h-auto [&_img]:object-contain",
+    "[&_code]:font-sans [&_code]:text-[13px] [&_code]:font-normal [&_code]:bg-transparent [&_code]:p-0 [&_code]:shadow-none [&_code]:rounded-none",
+    "[&_code]:before:content-none [&_code]:after:content-none",
+    "[&_pre]:font-mono [&_pre]:text-[12px] [&_pre_code]:font-mono",
+    compact ? "min-h-[100px]" : "min-h-[200px]",
+  ].join(" ");
 
 export default function RichTextEditor({ content, onChange, placeholder, onImageUpload, compact }: RichTextEditorProps) {
   const [showSource, setShowSource] = useState(false);
@@ -52,7 +65,7 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
     },
     editorProps: {
       attributes: {
-        class: `prose prose-sm max-w-none focus:outline-none px-4 py-3 text-[13px] [&_h1]:text-[13px] [&_h2]:text-[13px] [&_h3]:text-[13px] [&_p]:text-[13px] [&_li]:text-[13px] [&_td]:text-[13px] [&_th]:text-[13px] [&_img]:max-w-full [&_img]:max-h-[320px] [&_img]:h-auto [&_img]:object-contain ${compact ? "min-h-[100px]" : "min-h-[200px]"}`,
+        class: editorProseClass(!!compact),
       },
     },
   });
@@ -130,6 +143,13 @@ export default function RichTextEditor({ content, onChange, placeholder, onImage
         </ToolbarButton>
         <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive("strike")} title="Strikethrough">
           <Strikethrough size={14} />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleCode().run()}
+          active={editor.isActive("code")}
+          title="Inline code: turn off when placeholders look wrong (select text, click again)"
+        >
+          <Braces size={14} />
         </ToolbarButton>
 
         <Divider />

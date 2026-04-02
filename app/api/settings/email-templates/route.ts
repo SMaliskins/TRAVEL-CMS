@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, category, subject, bodyHtml, is_default } = body;
+  const { name, category, subject, bodyHtml, is_default, email_signature_source } = body;
 
   if (!name || !category) {
     return NextResponse.json({ error: "Name and category are required" }, { status: 400 });
@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
       .eq("category", category);
   }
 
+  const sigSrc =
+    email_signature_source === "company" || email_signature_source === "personal"
+      ? email_signature_source
+      : "personal";
+
   const { data, error } = await supabaseAdmin
     .from("email_templates")
     .insert({
@@ -49,6 +54,7 @@ export async function POST(request: NextRequest) {
       subject: subject || "",
       body: bodyHtml || "",
       is_default: is_default || false,
+      email_signature_source: sigSrc,
     })
     .select()
     .single();
@@ -65,7 +71,7 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, name, category, subject, bodyHtml, is_default, is_active } = body;
+  const { id, name, category, subject, bodyHtml, is_default, is_active, email_signature_source } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Template ID is required" }, { status: 400 });
@@ -97,6 +103,9 @@ export async function PATCH(request: NextRequest) {
   if (bodyHtml !== undefined) updateData.body = bodyHtml;
   if (is_default !== undefined) updateData.is_default = is_default;
   if (is_active !== undefined) updateData.is_active = is_active;
+  if (email_signature_source === "company" || email_signature_source === "personal") {
+    updateData.email_signature_source = email_signature_source;
+  }
 
   const { data, error } = await supabaseAdmin
     .from("email_templates")

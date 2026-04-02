@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeEmailToField, sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
+import { loadDefaultEmailTemplateForCategory } from "@/lib/email/emailTemplateUtils";
+import { appendHtmlWithEmailSignature } from "@/lib/email/appendUserEmailSignature";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -59,20 +61,14 @@ export async function POST(
       .replace(/>/g, "&gt;")
       .replace(/\n/g, "<br>");
 
-    let signatureHtml = "";
-    if (user?.id) {
-      const { data: profile } = await supabaseAdmin
-        .from("user_profiles")
-        .select("email_signature")
-        .eq("id", user.id)
-        .single();
-      if (profile?.email_signature) {
-        signatureHtml = `<br><div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb">${profile.email_signature}</div>`;
-      }
-    }
-
-    const rawEmailHtml = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333">${htmlBody}${signatureHtml}</div>`;
-    const finalEmailHtml = await replaceBase64Images(rawEmailHtml);
+    const tpl = await loadDefaultEmailTemplateForCategory(order.company_id, "hotel");
+    const innerDiv = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333">${htmlBody}</div>`;
+    const withSignature = await appendHtmlWithEmailSignature(innerDiv, {
+      source: tpl?.email_signature_source ?? "personal",
+      userId: user?.id,
+      companyId: order.company_id,
+    });
+    const finalEmailHtml = await replaceBase64Images(withSignature);
 
     const result = await sendEmail(
       toNormalized,

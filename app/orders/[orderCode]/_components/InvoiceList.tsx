@@ -111,6 +111,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     to: string;
     subject: string;
     message: string;
+    draftLoading: boolean;
   } | null>(null);
   const [emailSending, setEmailSending] = useState(false);
   const [reminderModal, setReminderModal] = useState<{
@@ -548,14 +549,54 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
     setPayerLangs(langs);
     setEmailLang(defaultLang);
-    const tpl = EMAIL_TEMPLATES[defaultLang] || EMAIL_TEMPLATES.en;
     setEmailModal({
       invoiceId,
       invoiceNumber: invoice.invoice_number,
       to: invoice.payer_email || "",
-      subject: tpl.subject(invoice.invoice_number),
-      message: tpl.message(invoice.invoice_number),
+      subject: "",
+      message: "",
+      draftLoading: true,
     });
+
+    void (async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const res = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/invoices/${encodeURIComponent(invoiceId)}/email`,
+          { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setEmailModal((prev) =>
+            prev && prev.invoiceId === invoiceId
+              ? {
+                  ...prev,
+                  subject: typeof data.subject === "string" ? data.subject : "",
+                  message: typeof data.message === "string" ? data.message : "",
+                  draftLoading: false,
+                }
+              : prev
+          );
+          return;
+        }
+      } catch {
+        // use local fallbacks below
+      }
+      const tpl = EMAIL_TEMPLATES[defaultLang] || EMAIL_TEMPLATES.en;
+      setEmailModal((prev) =>
+        prev && prev.invoiceId === invoiceId
+          ? {
+              ...prev,
+              subject: tpl.subject(invoice.invoice_number),
+              message: tpl.message(invoice.invoice_number),
+              draftLoading: false,
+            }
+          : prev
+      );
+    })();
   };
 
   const addLangToPayerParty = async (lang: string) => {
@@ -579,7 +620,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   };
 
   const handleEmailLangChange = async (newLang: string) => {
-    if (!emailModal || newLang === emailLang) return;
+    if (!emailModal || emailModal.draftLoading || newLang === emailLang) return;
     setEmailLang(newLang);
 
     if (!payerLangs.includes(newLang)) {
@@ -628,7 +669,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   };
 
   const handleSendEmail = async () => {
-    if (!emailModal) return;
+    if (!emailModal || emailModal.draftLoading) return;
     if (!emailModal.to.trim()) {
       showToast("error", "Email address is required");
       return;
@@ -1414,7 +1455,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                       key={code}
                       type="button"
                       onClick={() => handleEmailLangChange(code)}
-                      disabled={emailTranslating}
+                      disabled={emailTranslating || emailModal.draftLoading}
                       className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
                         emailLang === code
                           ? "bg-blue-600 text-white border-blue-600"
@@ -1503,23 +1544,35 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   type="text"
                   value={emailModal.subject}
                   onChange={(e) => setEmailModal({ ...emailModal, subject: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  disabled={emailModal.draftLoading}
+                  placeholder={emailModal.draftLoading ? "Loading…" : ""}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Message <span className="text-gray-400 font-normal text-xs">(Ctrl+V to paste images)</span>
+                  Message{" "}
+                  <span className="text-gray-400 font-normal text-xs">
+                    (from Settings → Email templates → Invoices; Ctrl+V to paste images)
+                  </span>
                 </label>
-                <RichTextEditor
-                  content={
-                    emailModal.message.includes("<")
-                      ? emailModal.message
-                      : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
-                  }
-                  onChange={(html) => setEmailModal({ ...emailModal, message: html })}
-                  compact
-                />
+                {emailModal.draftLoading ? (
+                  <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 py-10 text-sm text-gray-500">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-hidden />
+                    <span>Loading template…</span>
+                  </div>
+                ) : (
+                  <RichTextEditor
+                    content={
+                      emailModal.message.includes("<")
+                        ? emailModal.message
+                        : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                    }
+                    onChange={(html) => setEmailModal({ ...emailModal, message: html })}
+                    compact
+                  />
+                )}
               </div>
 
               <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
@@ -1538,7 +1591,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               </button>
               <button
                 onClick={handleSendEmail}
-                disabled={emailSending || !emailModal.to.trim()}
+                disabled={emailSending || !emailModal.to.trim() || emailModal.draftLoading}
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {emailSending ? (
@@ -1642,6 +1695,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     compact
                   />
                 )}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <FileDown className="h-4 w-4 text-gray-400 shrink-0" />
+                <span>PDF invoice will be attached automatically</span>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50 shrink-0">

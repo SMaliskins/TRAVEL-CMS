@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { normalizeEmailSignatureSource, type EmailSignatureSource } from "@/lib/email/appendUserEmailSignature";
 
 /**
  * Replace {{placeholders}} in template subject/body (email_templates from settings).
@@ -15,7 +16,11 @@ export function substituteEmailTemplatePlaceholders(
   });
 }
 
-export type EmailTemplateRow = { subject: string; body: string };
+export type EmailTemplateRow = {
+  subject: string;
+  body: string;
+  email_signature_source: EmailSignatureSource;
+};
 
 /**
  * Active template for category: prefers is_default, then newest updated_at.
@@ -26,7 +31,7 @@ export async function loadDefaultEmailTemplateForCategory(
 ): Promise<EmailTemplateRow | null> {
   const { data: rows, error } = await supabaseAdmin
     .from("email_templates")
-    .select("subject, body, is_default, updated_at")
+    .select("subject, body, email_signature_source, is_default, updated_at")
     .eq("company_id", companyId)
     .eq("category", category)
     .eq("is_active", true)
@@ -38,10 +43,14 @@ export async function loadDefaultEmailTemplateForCategory(
     console.error("[emailTemplateUtils] load template:", error.message);
     return null;
   }
-  const row = rows?.[0] as { subject?: string; body?: string } | undefined;
+  const row = rows?.[0] as { subject?: string; body?: string; email_signature_source?: string | null } | undefined;
   if (!row) return null;
   const subject = (row.subject ?? "").trim();
   const body = (row.body ?? "").trim();
-  if (!subject && !body) return null;
-  return { subject, body };
+  const email_signature_source = normalizeEmailSignatureSource(row.email_signature_source);
+  // Keep row when subject+body empty so callers still read email_signature_source
+  if (!subject && !body) {
+    return { subject: "", body: "", email_signature_source };
+  }
+  return { subject, body, email_signature_source };
 }
