@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendEmail } from "@/lib/email/sendEmail";
+import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
 import {
   loadDefaultEmailTemplateForCategory,
   substituteEmailTemplatePlaceholders,
@@ -228,13 +229,24 @@ export async function GET(
         : null;
 
     const subject = fromDb?.subject.trim() || defaultPaymentReminderSubject(ctx);
-    const message = fromDb?.message.trim()
+    const letterBodyHtml = fromDb?.message.trim()
       ? ensurePaymentReminderBodyHtml(fromDb.message)
       : defaultPaymentReminderHtml(ctx);
 
+    const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
+    const pdfAttachmentNote =
+      '<p style="margin-top:12px;color:#6b7280">The invoice is attached as a PDF file.</p>';
+    const messageWithPdfNote = `${letterBodyHtml}${pdfAttachmentNote}`;
+    const fullMessage = await appendHtmlWithEmailSignature(messageWithPdfNote, {
+      source: sigSource,
+      userId: user.id,
+      companyId: loaded.companyId,
+    });
+
     return NextResponse.json({
       subject,
-      message,
+      message: fullMessage,
+      letter_body_html: letterBodyHtml,
       fromTemplate: Boolean(fromDb?.message.trim()),
     });
   } catch (e) {
@@ -251,7 +263,12 @@ export async function POST(
   try {
     const { orderCode, invoiceId } = await params;
     const body = await request.json().catch(() => ({}));
-    const { to, subject, message } = body as { to?: string; subject?: string; message?: string };
+    const { to, subject, message, email_body_complete } = body as {
+      to?: string;
+      subject?: string;
+      message?: string;
+      email_body_complete?: boolean;
+    };
 
     const user = await getUser(request);
     if (!user) {
@@ -354,35 +371,42 @@ export async function POST(
       subject?.trim() || fromDb?.subject.trim() || defaultPaymentReminderSubject(ctx);
 
     const msg = message?.trim();
-    let emailHtml: string;
+    const clientBodyComplete = email_body_complete === true;
+    let emailHtmlWithSignature: string;
     let bodyForLog: string;
 
-    if (msg) {
-      if (msg.includes("<") && msg.includes(">")) {
-        // HTML from template or RichTextEditor: do not append signature (avoid duplicate with {{company_name}} in template)
-        emailHtml = msg;
-        bodyForLog = roughHtmlToPlain(msg);
-      } else {
-        emailHtml = plainTextToReminderHtml(msg) + paymentReminderSignatureHtml(ctx.companyDisplayName);
-        bodyForLog = msg;
-      }
-    } else if (fromDb?.bodyHtml.trim()) {
-      emailHtml = ensurePaymentReminderBodyHtml(fromDb.bodyHtml);
-      bodyForLog = roughHtmlToPlain(emailHtml);
+    if (clientBodyComplete && msg && msg.includes("<") && msg.includes(">")) {
+      emailHtmlWithSignature = await replaceBase64Images(msg);
+      bodyForLog = roughHtmlToPlain(msg);
     } else {
-      emailHtml = defaultPaymentReminderHtml(ctx);
-      bodyForLog = defaultPaymentReminderPlainText(ctx);
-    }
+      let emailHtml: string;
 
-    const pdfAttachmentNote =
-      '<p style="margin-top:12px;color:#6b7280">The invoice is attached as a PDF file.</p>';
-    const emailHtmlWithAttachmentNote = `${emailHtml}${pdfAttachmentNote}`;
-    const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
-    const emailHtmlWithSignature = await appendHtmlWithEmailSignature(emailHtmlWithAttachmentNote, {
-      source: sigSource,
-      userId: user.id,
-      companyId: loaded.companyId,
-    });
+      if (msg) {
+        if (msg.includes("<") && msg.includes(">")) {
+          emailHtml = msg;
+          bodyForLog = roughHtmlToPlain(msg);
+        } else {
+          emailHtml = plainTextToReminderHtml(msg) + paymentReminderSignatureHtml(ctx.companyDisplayName);
+          bodyForLog = msg;
+        }
+      } else if (fromDb?.bodyHtml.trim()) {
+        emailHtml = ensurePaymentReminderBodyHtml(fromDb.bodyHtml);
+        bodyForLog = roughHtmlToPlain(emailHtml);
+      } else {
+        emailHtml = defaultPaymentReminderHtml(ctx);
+        bodyForLog = defaultPaymentReminderPlainText(ctx);
+      }
+
+      const pdfAttachmentNote =
+        '<p style="margin-top:12px;color:#6b7280">The invoice is attached as a PDF file.</p>';
+      const emailHtmlWithAttachmentNote = `${emailHtml}${pdfAttachmentNote}`;
+      const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
+      emailHtmlWithSignature = await appendHtmlWithEmailSignature(emailHtmlWithAttachmentNote, {
+        source: sigSource,
+        userId: user.id,
+        companyId: loaded.companyId,
+      });
+    }
 
     const fullInvoice = await loadInvoiceWithItemsForOrder(invoiceId, orderCode);
     if (!fullInvoice.ok) {

@@ -122,6 +122,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     subject: string;
     message: string;
     draftLoading: boolean;
+    /** GET returned letter_body_html + full message (note + signature in editor). */
+    bodyFromServerComplete?: boolean;
   } | null>(null);
   const [reminderSending, setReminderSending] = useState(false);
   const [reminderRecipients, setReminderRecipients] = useState<Array<{
@@ -131,10 +133,10 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   }>>([]);
   const [emailLang, setEmailLang] = useState("en");
   const [emailTranslating, setEmailTranslating] = useState(false);
-  /** English template snapshot for AI translation (Settings template or built-in EN). */
+  /** Letter body only (English / template), without signature or PDF footer — source for AI translation. */
   const invoiceEmailEnRef = useRef<{ subject: string; message: string } | null>(null);
-  /** Signature + PDF footer HTML (from GET draft), appended in preview only. */
-  const [emailPreviewSuffixHtml, setEmailPreviewSuffixHtml] = useState("");
+  /** Signature + PDF footer HTML; re-appended after subject/body edits and translation. */
+  const invoiceEmailSuffixRef = useRef<string>(INVOICE_EMAIL_PDF_FOOTER_HTML);
   const [payerLangs, setPayerLangs] = useState<string[]>(["en"]);
   const [payerPartyId, setPayerPartyId] = useState<string | null>(null);
   const [showAllLangs, setShowAllLangs] = useState(false);
@@ -555,7 +557,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     setPayerLangs(langs);
     setEmailLang(defaultLang);
     invoiceEmailEnRef.current = null;
-    setEmailPreviewSuffixHtml("");
+    invoiceEmailSuffixRef.current = INVOICE_EMAIL_PDF_FOOTER_HTML;
     setEmailModal({
       invoiceId,
       invoiceNumber: invoice.invoice_number,
@@ -566,10 +568,6 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     });
 
     void (async () => {
-      const enBase = {
-        subject: EMAIL_TEMPLATES.en.subject(invoice.invoice_number),
-        message: EMAIL_TEMPLATES.en.message(invoice.invoice_number),
-      };
       try {
         const {
           data: { session },
@@ -582,17 +580,28 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         if (res.ok) {
           const data = await res.json();
           const subject = typeof data.subject === "string" ? data.subject : "";
-          const message = typeof data.message === "string" ? data.message : "";
-          invoiceEmailEnRef.current = { subject, message };
-          const suffix =
-            typeof data.previewSuffixHtml === "string" ? data.previewSuffixHtml : INVOICE_EMAIL_PDF_FOOTER_HTML;
-          setEmailPreviewSuffixHtml(suffix);
+          const suffixFromApi =
+            typeof data.previewSuffixHtml === "string"
+              ? data.previewSuffixHtml
+              : INVOICE_EMAIL_PDF_FOOTER_HTML;
+          let letterBody: string;
+          let fullMessage: string;
+          if (typeof data.letter_body_html === "string" && typeof data.message === "string") {
+            letterBody = data.letter_body_html;
+            fullMessage = data.message;
+            invoiceEmailSuffixRef.current = data.message.slice(data.letter_body_html.length);
+          } else {
+            letterBody = typeof data.message === "string" ? data.message : "";
+            fullMessage = `${letterBody}${suffixFromApi}`;
+            invoiceEmailSuffixRef.current = suffixFromApi;
+          }
+          invoiceEmailEnRef.current = { subject, message: letterBody };
           setEmailModal((prev) =>
             prev && prev.invoiceId === invoiceId
               ? {
                   ...prev,
                   subject,
-                  message,
+                  message: fullMessage,
                   draftLoading: false,
                 }
               : prev
@@ -602,15 +611,24 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       } catch {
         // use local fallbacks below
       }
-      invoiceEmailEnRef.current = enBase;
-      setEmailPreviewSuffixHtml(INVOICE_EMAIL_PDF_FOOTER_HTML);
+      const invNum = invoice.invoice_number;
+      const wrapPlain = (plain: string) =>
+        plain.includes("<") && plain.includes(">")
+          ? plain
+          : `<p>${plain.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>");
+      invoiceEmailEnRef.current = {
+        subject: EMAIL_TEMPLATES.en.subject(invNum),
+        message: wrapPlain(EMAIL_TEMPLATES.en.message(invNum)),
+      };
+      invoiceEmailSuffixRef.current = INVOICE_EMAIL_PDF_FOOTER_HTML;
       const tpl = EMAIL_TEMPLATES[defaultLang] || EMAIL_TEMPLATES.en;
+      const bodyOnly = wrapPlain(tpl.message(invNum));
       setEmailModal((prev) =>
         prev && prev.invoiceId === invoiceId
           ? {
               ...prev,
-              subject: tpl.subject(invoice.invoice_number),
-              message: tpl.message(invoice.invoice_number),
+              subject: tpl.subject(invNum),
+              message: bodyOnly + INVOICE_EMAIL_PDF_FOOTER_HTML,
               draftLoading: false,
             }
           : prev
@@ -656,7 +674,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       setEmailModal({
         ...emailModal,
         subject: enSnap.subject,
-        message: enSnap.message,
+        message: enSnap.message + invoiceEmailSuffixRef.current,
       });
       return;
     }
@@ -679,28 +697,43 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       if (res.ok) {
         const data = await res.json();
         const translated = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
+        const suffix = invoiceEmailSuffixRef.current;
+        const bodyTranslated =
+          typeof translated.message === "string" && translated.message.trim() !== ""
+            ? translated.message
+            : enSnap.message;
         setEmailModal({
           ...emailModal,
           subject: translated.subject || emailModal.subject,
-          message: translated.message || emailModal.message,
+          message: bodyTranslated + suffix,
         });
       } else {
         const tpl = EMAIL_TEMPLATES[newLang];
         if (tpl) {
+          const plain = tpl.message(emailModal.invoiceNumber);
+          const bodyOnly =
+            plain.includes("<") && plain.includes(">")
+              ? plain
+              : `<p>${plain.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>");
           setEmailModal({
             ...emailModal,
             subject: tpl.subject(emailModal.invoiceNumber),
-            message: tpl.message(emailModal.invoiceNumber),
+            message: bodyOnly + invoiceEmailSuffixRef.current,
           });
         }
       }
     } catch {
       const tpl = EMAIL_TEMPLATES[newLang];
       if (tpl) {
+        const plain = tpl.message(emailModal.invoiceNumber);
+        const bodyOnly =
+          plain.includes("<") && plain.includes(">")
+            ? plain
+            : `<p>${plain.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>");
         setEmailModal({
           ...emailModal,
           subject: tpl.subject(emailModal.invoiceNumber),
-          message: tpl.message(emailModal.invoiceNumber),
+          message: bodyOnly + invoiceEmailSuffixRef.current,
         });
       }
     } finally {
@@ -732,6 +765,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             to: emailModal.to.trim(),
             subject: emailModal.subject,
             message: emailModal.message,
+            email_body_complete: true,
           }),
         }
       );
@@ -793,6 +827,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       subject: "",
       message: "",
       draftLoading: true,
+      bodyFromServerComplete: false,
     });
 
     const ctxForFallback: PaymentReminderContext = {
@@ -821,6 +856,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   subject: typeof d.subject === "string" ? d.subject : prev.subject,
                   message: typeof d.message === "string" ? d.message : prev.message,
                   draftLoading: false,
+                  bodyFromServerComplete: true,
                 }
               : prev
           );
@@ -832,6 +868,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   subject: defaultPaymentReminderSubject(ctxForFallback),
                   message: defaultPaymentReminderHtml(ctxForFallback),
                   draftLoading: false,
+                  bodyFromServerComplete: false,
                 }
               : prev
           );
@@ -884,6 +921,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 subject: defaultPaymentReminderSubject(ctxForFallback),
                 message: defaultPaymentReminderHtml(ctxForFallback),
                 draftLoading: false,
+                bodyFromServerComplete: false,
               }
             : prev
         );
@@ -913,6 +951,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             to: reminderModal.to.trim(),
             subject: reminderModal.subject,
             message: reminderModal.message,
+            email_body_complete: reminderModal.bodyFromServerComplete === true,
           }),
         }
       );
@@ -1621,22 +1660,6 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                   />
                 )}
               </div>
-
-              {!emailModal.draftLoading && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Preview</label>
-                  <div
-                    className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 text-sm text-gray-800 max-h-56 overflow-y-auto [&_img]:max-w-full [&_a]:text-blue-600"
-                    dangerouslySetInnerHTML={{
-                      __html: `${
-                        emailModal.message.includes("<")
-                          ? emailModal.message
-                          : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
-                      }${emailPreviewSuffixHtml || INVOICE_EMAIL_PDF_FOOTER_HTML}`,
-                    }}
-                  />
-                </div>
-              )}
 
               <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                 <FileDown className="h-4 w-4 text-gray-400 shrink-0" />

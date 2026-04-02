@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-04-02] CW — Payment reminder: signature + PDF note in draft Message (email_body_complete)
+
+**Task:** User: payment reminder modal had no visible signature; same pattern as invoice email.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** GET appends PDF note + `appendHtmlWithEmailSignature` to letter body; returns `letter_body_html` + full `message`. POST respects `email_body_complete` + `replaceBase64Images`. InvoiceList sets `bodyFromServerComplete` on successful draft fetch.
+
+---
+
+## [2026-04-02] CW — Invoice send modal: signature inside Message, drop duplicate Preview
+
+**Task:** User: avoid separate Preview — embed signature/footer in the rich text body; POST uses `email_body_complete` so server does not double-append.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** GET returns `message` (full) + `letter_body_html`; `invoiceEmailSuffixRef` for re-append on language change; removed Preview block.
+
+---
+
 ## [2026-04-02] CW — Invoice email: layout (footer after sig, no hr), preview, EN translate base
 
 **Task:** User: move PDF footer below signature; remove line before signature; show signature in send preview; translate from English template when switching language.

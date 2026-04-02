@@ -124,9 +124,15 @@ export async function GET(
     const sigBlock = innerSig
       ? `<br><div style="margin-top:16px;padding-top:12px">${innerSig}</div>`
       : "";
-    const previewSuffixHtml = `${sigBlock}${INVOICE_EMAIL_PDF_FOOTER_HTML}`;
+    const suffixHtml = `${sigBlock}${INVOICE_EMAIL_PDF_FOOTER_HTML}`;
+    const message = `${bodyHtml}${suffixHtml}`;
 
-    return NextResponse.json({ subject, message: bodyHtml, previewSuffixHtml });
+    return NextResponse.json({
+      subject,
+      message,
+      letter_body_html: bodyHtml,
+      previewSuffixHtml: suffixHtml,
+    });
   } catch (e) {
     console.error("[invoice email] GET:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -141,7 +147,7 @@ export async function POST(
   try {
     const { orderCode, invoiceId } = await params;
     const body = await request.json();
-    const { to, subject, message } = body;
+    const { to, subject, message, email_body_complete } = body;
 
     const user = await getUser(request);
 
@@ -263,17 +269,21 @@ export async function POST(
       content: pdfBuffer,
     });
 
+    const clientBodyComplete = email_body_complete === true;
     const sigSource = emailTemplate?.email_signature_source ?? normalizeEmailSignatureSource(null);
-    const withSignature = await appendHtmlWithEmailSignature(
-      resolvedLetter.bodyHtml,
-      {
-        source: sigSource,
-        userId: user?.id ?? null,
-        companyId,
-      },
-      { borderTop: false }
-    );
-    const finalHtml = await replaceBase64Images(`${withSignature}${INVOICE_EMAIL_PDF_FOOTER_HTML}`);
+    const finalHtml = clientBodyComplete
+      ? await replaceBase64Images(resolvedLetter.bodyHtml)
+      : await replaceBase64Images(
+          `${await appendHtmlWithEmailSignature(
+            resolvedLetter.bodyHtml,
+            {
+              source: sigSource,
+              userId: user?.id ?? null,
+              companyId,
+            },
+            { borderTop: false }
+          )}${INVOICE_EMAIL_PDF_FOOTER_HTML}`
+        );
 
     const result = await sendEmail(
       to.trim(),
