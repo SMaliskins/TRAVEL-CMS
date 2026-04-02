@@ -13,6 +13,11 @@ import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
 import { Landmark, Banknote, CreditCard, Trash2, Pencil, Printer } from "lucide-react";
 
+interface BankAccountOption {
+  id: string;
+  account_name: string;
+}
+
 interface Payment {
   id: string;
   order_id: string;
@@ -48,12 +53,26 @@ function loadPaymentsFilters() {
   if (typeof window === "undefined") return null;
   try {
     const s = localStorage.getItem(PAYMENTS_STORAGE_KEY);
-    if (s) return JSON.parse(s) as { filterMethod: string; period: PeriodType; filterDateFrom: string; filterDateTo: string };
+    if (s) {
+      return JSON.parse(s) as {
+        filterMethod: string;
+        period: PeriodType;
+        filterDateFrom: string;
+        filterDateTo: string;
+        filterAccountId?: string;
+      };
+    }
   } catch {}
   return null;
 }
 
-function savePaymentsFilters(f: { filterMethod: string; period: PeriodType; filterDateFrom: string; filterDateTo: string }) {
+function savePaymentsFilters(f: {
+  filterMethod: string;
+  period: PeriodType;
+  filterDateFrom: string;
+  filterDateTo: string;
+  filterAccountId: string;
+}) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(f));
@@ -73,6 +92,8 @@ export default function PaymentsPage() {
   const [receiptLangMenu, setReceiptLangMenu] = useState<string | null>(null);
 
   const [filterMethod, setFilterMethod] = useState<string>(() => loadPaymentsFilters()?.filterMethod ?? "all");
+  const [filterAccountId, setFilterAccountId] = useState<string>(() => loadPaymentsFilters()?.filterAccountId ?? "");
+  const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
   const [period, setPeriod] = useState<PeriodType>(() => loadPaymentsFilters()?.period ?? "currentMonth");
   const [filterDateFrom, setFilterDateFrom] = useState(() => {
     const s = loadPaymentsFilters();
@@ -91,8 +112,27 @@ export default function PaymentsPage() {
   };
 
   useEffect(() => {
-    savePaymentsFilters({ filterMethod, period, filterDateFrom, filterDateTo });
-  }, [filterMethod, period, filterDateFrom, filterDateTo]);
+    savePaymentsFilters({ filterMethod, period, filterDateFrom, filterDateTo, filterAccountId });
+  }, [filterMethod, period, filterDateFrom, filterDateTo, filterAccountId]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch("/api/company/bank-accounts", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const list = (json.data ?? []) as BankAccountOption[];
+          setBankAccounts(list);
+        }
+      } catch {
+        /* non-critical */
+      }
+    })();
+  }, []);
 
   const loadPayments = useCallback(async () => {
     try {
@@ -104,6 +144,7 @@ export default function PaymentsPage() {
 
       const params = new URLSearchParams();
       if (filterMethod !== "all") params.set("method", filterMethod);
+      if (filterAccountId) params.set("accountId", filterAccountId);
       if (filterDateFrom) params.set("dateFrom", filterDateFrom);
       if (filterDateTo) params.set("dateTo", filterDateTo);
 
@@ -120,7 +161,7 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterMethod, filterDateFrom, filterDateTo, router]);
+  }, [filterMethod, filterAccountId, filterDateFrom, filterDateTo, router]);
 
   useEffect(() => {
     loadPayments();
@@ -291,6 +332,24 @@ export default function PaymentsPage() {
             <CreditCard size={16} className="shrink-0" />
             {t(lang, "payments.card")}
           </button>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <label htmlFor="payments-filter-account" className="text-sm text-gray-700 whitespace-nowrap">
+            {t(lang, "payments.account")}:
+          </label>
+          <select
+            id="payments-filter-account"
+            value={filterAccountId}
+            onChange={(e) => setFilterAccountId(e.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 min-w-[10rem] max-w-[min(100vw-2rem,20rem)]"
+          >
+            <option value="">{t(lang, "payments.allAccounts")}</option>
+            {bankAccounts.map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.account_name}
+              </option>
+            ))}
+          </select>
         </div>
         <PeriodSelector
           value={period}

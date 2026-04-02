@@ -9,6 +9,27 @@ interface SplitPart {
   travellerIds?: string[];
 }
 
+/** Split a currency total across parts by positive weights; last part absorbs rounding remainder. Preserves sign. */
+function splitProportionalCurrencySigned(total: number, weights: number[]): number[] {
+  if (weights.length === 0) return [];
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  if (sumW <= 0) return weights.map(() => 0);
+  const sign = total < 0 ? -1 : 1;
+  const absTotal = Math.abs(total);
+  const out: number[] = [];
+  let allocated = 0;
+  for (let i = 0; i < weights.length; i++) {
+    if (i === weights.length - 1) {
+      out.push(Math.round((absTotal - allocated) * sign * 100) / 100);
+    } else {
+      const v = Math.round(((absTotal * weights[i]) / sumW) * 100) / 100;
+      out.push(Math.round(v * sign * 100) / 100);
+      allocated += v;
+    }
+  }
+  return out;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ orderCode: string; serviceId: string }> }
@@ -187,6 +208,31 @@ export async function POST(
       };
     };
 
+    const origClientPrice = Number(originalService.client_price) || 0;
+    const partWeights = parts.map((p) => p.amount);
+    const origCommission = Number(originalService.commission_amount) || 0;
+    const commissionPerPart =
+      parts.length > 0 && origCommission !== 0
+        ? splitProportionalCurrencySigned(
+            origCommission,
+            origClientPrice > 0 ? partWeights : parts.map(() => 1)
+          )
+        : parts.map(() => origCommission);
+
+    const agentType = String(
+      (originalService as { agent_discount_type?: string | null }).agent_discount_type || ""
+    ).trim();
+    const origAgentVal = Number((originalService as { agent_discount_value?: unknown }).agent_discount_value) || 0;
+    const agentPerPart =
+      parts.length > 0 &&
+      origAgentVal !== 0 &&
+      (agentType === "€" || agentType === "EUR" || agentType.toLowerCase() === "eur")
+        ? splitProportionalCurrencySigned(
+            origAgentVal,
+            origClientPrice > 0 ? partWeights : parts.map(() => 1)
+          )
+        : null;
+
     const newServices = parts.map((part, index) => {
       const client = getClientForPart(part);
       return {
@@ -194,6 +240,10 @@ export async function POST(
         ...client,
         client_price: part.amount,
         service_price: getServicePrice(part),
+        commission_amount: commissionPerPart[index] ?? origCommission,
+        ...(agentPerPart
+          ? { agent_discount_value: agentPerPart[index] ?? origAgentVal }
+          : {}),
         payer_party_id: part.payerPartyId || originalService.payer_party_id,
         payer_name: part.payerName || originalService.payer_name,
         split_group_id: splitGroupId,
@@ -262,18 +312,30 @@ export async function POST(
       }
     }
 
+    const { error: delTravError } = await supabaseAdmin
+      .from("order_service_travellers")
+      .delete()
+      .eq("service_id", serviceId);
+    if (delTravError) {
+      console.error("Error clearing travellers on original service before split delete:", delTravError);
+    }
+
     const { error: deleteError } = await supabaseAdmin
       .from("order_services")
       .delete()
       .eq("id", serviceId);
 
     if (deleteError) {
-      console.error("Error deleting original service:", deleteError);
-      return NextResponse.json({
-        success: true,
-        createdServices,
-        warning: "Original service could not be deleted",
-      });
+      console.error("Error deleting original service after split:", deleteError);
+      return NextResponse.json(
+        {
+          error:
+            "Split rows were created but the original service could not be removed. Remove the duplicate line manually or contact support.",
+          details: deleteError.message,
+          createdServiceIds: (createdServices || []).map((r) => r.id),
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

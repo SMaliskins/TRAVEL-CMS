@@ -5,6 +5,39 @@
 
 ---
 
+## [2026-04-01] CW — Finances / Payments: Account filter dropdown
+
+**Task:** User: /finances/payments — add Account to filters.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:**�
+
+**Действия:** `GET /api/finances/payments` already supports `accountId`; `page.tsx` loads `/api/company/bank-accounts`, `<select>` + `filterAccountId` in localStorage with other filters; i18n `payments.allAccounts` en/ru/lv.
+
+---
+
+## [2026-04-01] CW — emailTemplateUtils: fallback select if email_signature_source missing
+
+**Task:** User: invoice email modal not loading Settings template; prior schema cache error on `email_signature_source`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `loadDefaultEmailTemplateForCategory` retries without `email_signature_source` when PostgREST error indicates missing column/schema cache; signature defaults to `personal`.
+
+---
+
+## [2026-04-01] CW — Service split: proportional commission_amount + stricter original delete
+
+**Task:** User: after split, original row still visible; insurance margins wrong (full commission on each part).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `split/route.ts` — split `commission_amount` (and € `agent_discount_value`) by part `amount` / original client price with rounding remainder on last part; delete `order_service_travellers` for original before deleting row; on delete failure return 500 + `createdServiceIds` instead of silent success.
+
+---
+
 ## [2026-04-01] CW — Add/Edit service: Cost decimal input (78.09) without losing "."
 
 **Task:** User: typing Cost "78." then "0" removed the dot (Insurance / commission pricing).
