@@ -3745,8 +3745,38 @@ export default function EditServiceModalNew({
                     </button>
                   </div>
 
-                  {/* Cancel / Save */}
-                  <div className="flex items-center gap-2 pt-1">
+                  {/* Cancel service (same flow as Air Ticket right column) + Delete + Save — hotel hides global footer */}
+                  <div className="flex items-center gap-2 pt-1 flex-wrap">
+                    {isCancellationService && onRestoreToOriginal && service.parentServiceId ? (
+                      <button
+                        type="button"
+                        onClick={handleRestoreToOriginal}
+                        disabled={isRestoring}
+                        className="px-3 py-2 text-sm font-medium bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        title="Restore to original"
+                      >
+                        {isRestoring ? (
+                          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        )}
+                        Restore to Original
+                      </button>
+                    ) : !isCancellationService && resStatus !== "cancelled" ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowCancelModal(true)}
+                        className="px-3 py-2 text-sm font-medium bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-1.5"
+                        title="Cancel service"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        Cancel service
+                      </button>
+                    ) : null}
                     {onDeleteService && (
                       <button
                         type="button"
@@ -3761,7 +3791,7 @@ export default function EditServiceModalNew({
                         Delete
                       </button>
                     )}
-                    <div className="flex-1" />
+                    <div className="flex-1 min-w-0" />
                     <button type="button" onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
                       Cancel
                     </button>

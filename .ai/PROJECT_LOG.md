@@ -5,6 +5,83 @@
 
 ---
 
+## [2026-04-03] CW — InvoiceCreator: wider % inputs (Payment Terms grid)
+
+**Task:** User: cramped % fields — number and % suffix overlapped; need more room to read percentages.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** Grid first column `minmax(8.5rem,0.62fr)`; % wrappers `min-w-[7.5rem] max-w-[11rem] w-full`; inputs `min-w-[4rem] pl-2`, `tabular-nums`, `%` `pr-2` + `aria-hidden`.
+
+---
+
+## [2026-04-03] CW — InvoiceCreator: €→% without 2dp % (fix 2000 → 2000.04)
+
+**Task:** User: in % mode entered deposit 2000 €, field showed 2000.04 — `roundMoney2` on % broke amount round-trip.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `depositPercentFromAmountEur` (6dp on %); deposit EUR mirror + `syncFinalEurMirrorFromRaw`; `parseInvoiceNumericInput` strips `%`.
+
+---
+
+## [2026-04-03] CW — InvoiceCreator: deposit € primary — focus-only draft + wider field
+
+**Task:** User: no comma; typed `2` to enter 2000 — field must not show `String(depositValue)` while focused (avoids overwriting partial input); widen box for 4-digit sums.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `isDepositAmountPrimaryFocused`; while focused `value = draft ?? ""` only; on blur reset; `min-w-[7rem] w-28 max-w-[11rem]`.
+
+---
+
+## [2026-04-03] CW — InvoiceCreator: primary Deposit Amount (€) field = text + draft
+
+**Task:** User: works in Amount mode (sum in €); primary deposit field was still `type="number"` — same comma / typing issues as mirrors.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `paymentDraftDepositAmountPrimary` + `type="text"` / `inputMode="decimal"` for first-column deposit when `depositType === "amount"`; included in `clearPaymentFieldDrafts` and payer snapshot reset.
+
+---
+
+## [2026-04-03] CW — InvoiceCreator payment plan: draft strings on mirrored fields (fix 1→1.98 trap)
+
+**Task:** User: any digit in amount mirror showed "1 98" / could not type multi-digit — controlled value was derived EUR (1% of 198 = 1.98) after first keystroke.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** Mirrored payment inputs use local draft string on focus; `type="text"` + `inputMode="decimal"`; `syncFinalEurMirrorFromRaw`; clear drafts on %/€ type switch and payer snapshot load.
+
+---
+
+## [2026-04-01] CW — InvoiceCreator payment plan: comma decimals, clamp, deposit/final sync
+
+**Task:** User: deposit/final fields fought while typing; parseFloat broke comma decimals; 0% vs amount mismatch; reset manual final when editing deposit.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `InvoiceCreator.tsx` — all payment-term `onChange` handlers use `parseInvoiceNumericInput`, `clampNum`, `roundMoney2`; `depositValue ?? ""`; deposit-side edits call `setIsFinalPaymentManual(false)`; amounts clamped to `[0,total]`, % to `[0,100]`; final-% column updates deposit as `100 - fpPct`.
+
+---
+
+## [2026-04-02] CW — Edit Hotel service: Cancel service + Restore (parity with Flight)
+
+**Task:** User: Hotel had no Cancel service like Air Ticket — footer with that action is hidden for hotel/flight; flight had right-column actions, hotel did not.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `EditServiceModalNew` hotel footer row: `Cancel service` → `CancelServiceModal`; cancellation line → `Restore to Original` like flight.
+
+---
+
 ## [2026-04-02] CW — Payment reminder: signature + PDF note in draft Message (email_body_complete)
 
 **Task:** User: payment reminder modal had no visible signature; same pattern as invoice email.

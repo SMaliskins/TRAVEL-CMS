@@ -92,6 +92,32 @@ interface CompanyInfo {
   defaultCurrency?: string;
 }
 
+/** Parse amount/% from input; supports comma as decimal separator (lv/de locales). */
+function parseInvoiceNumericInput(raw: string): number | null {
+  const s = String(raw).trim().replace(/\s/g, "").replace(/%/g, "").replace(",", ".");
+  if (s === "" || s === "-" || s === ".") return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function roundMoney2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function clampNum(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+/**
+ * Deposit % derived from an exact € share of invoice total.
+ * Do NOT use roundMoney2 here: 2dp % makes round-trip wrong (e.g. 2000 € → 50.57% → 2000.04 €).
+ */
+function depositPercentFromAmountEur(amountEur: number, total: number): number {
+  if (total <= 0) return 0;
+  const raw = (amountEur / total) * 100;
+  return clampNum(Math.round(raw * 1e6) / 1e6, 0, 100);
+}
+
 interface PartyInfo {
   id: string;
   name: string;
@@ -567,6 +593,26 @@ export default function InvoiceCreator({
   const [showTypePopover, setShowTypePopover] = useState(false);
   const typePopoverRef = useRef<HTMLDivElement>(null);
 
+  /** Raw string while focused — mirrored fields must not use derived numbers as value (e.g. "1" → 1.98 € at total 198). */
+  /** Primary deposit € (Amount mode): while focused, value is only the draft string — never `String(depositValue)` — so nothing can overwrite "2" before "2000". */
+  const [isDepositAmountPrimaryFocused, setIsDepositAmountPrimaryFocused] = useState(false);
+  const [paymentDraftDepositAmountPrimary, setPaymentDraftDepositAmountPrimary] = useState<string | null>(null);
+  const [paymentDraftDepositEurMirror, setPaymentDraftDepositEurMirror] = useState<string | null>(null);
+  const [paymentDraftDepositPctMirror, setPaymentDraftDepositPctMirror] = useState<string | null>(null);
+  const [paymentDraftFinalPct, setPaymentDraftFinalPct] = useState<string | null>(null);
+  const [paymentDraftFinalEurMirror, setPaymentDraftFinalEurMirror] = useState<string | null>(null);
+  const [paymentDraftFinalPctMirror, setPaymentDraftFinalPctMirror] = useState<string | null>(null);
+
+  const clearPaymentFieldDrafts = () => {
+    setIsDepositAmountPrimaryFocused(false);
+    setPaymentDraftDepositAmountPrimary(null);
+    setPaymentDraftDepositEurMirror(null);
+    setPaymentDraftDepositPctMirror(null);
+    setPaymentDraftFinalPct(null);
+    setPaymentDraftFinalEurMirror(null);
+    setPaymentDraftFinalPctMirror(null);
+  };
+
   // Helper: current form as PaymentTermsSnapshot (for bulk: save/restore per payer)
   const currentFormAsTerms = (): PaymentTermsSnapshot => ({
     depositType,
@@ -600,6 +646,13 @@ export default function InvoiceCreator({
     setFinalPaymentAmount(snap.finalPaymentAmount);
     setFinalPaymentDate(snap.finalPaymentDate);
     setIsFinalPaymentManual(snap.isFinalPaymentManual);
+    setIsDepositAmountPrimaryFocused(false);
+    setPaymentDraftDepositAmountPrimary(null);
+    setPaymentDraftDepositEurMirror(null);
+    setPaymentDraftDepositPctMirror(null);
+    setPaymentDraftFinalPct(null);
+    setPaymentDraftFinalEurMirror(null);
+    setPaymentDraftFinalPctMirror(null);
   }, [currentPayerIndex, paymentTermsByPayerIndex, hasMultiplePayers, payerGroups.length]);
 
   // Close type popover on click outside (not on trigger or popover)
@@ -705,22 +758,52 @@ export default function InvoiceCreator({
   
   // Calculate deposit and final payment (AFTER total is calculated)
   const calculatedDeposit = useMemo(() => {
-    if (!depositValue) return null;
-    if (depositType === 'percent') {
-      return Math.round((total * depositValue / 100) * 100) / 100;
+    if (depositValue == null) return null;
+    if (total <= 0) return null;
+    if (depositType === "percent") {
+      const pct = clampNum(depositValue, 0, 100);
+      return roundMoney2((total * pct) / 100);
     }
-    return depositValue;
+    return roundMoney2(clampNum(depositValue, 0, total));
   }, [depositValue, depositType, total]);
-  
+
   const calculatedFinalPayment = useMemo(() => {
-    if (calculatedDeposit === null) return total > 0 ? Math.round(total * 100) / 100 : null;
-    return Math.round((total - calculatedDeposit) * 100) / 100;
+    if (total <= 0) return null;
+    if (calculatedDeposit == null) return roundMoney2(total);
+    return roundMoney2(total - calculatedDeposit);
   }, [calculatedDeposit, total]);
 
   // When deposit is %, final payment % = 100 - deposit %
-  const finalPaymentPercent = depositType === 'percent' && depositValue != null ? 100 - depositValue : null;
-  
-  // Update final payment when deposit changes (only if not manually edited)
+  const finalPaymentPercent =
+    depositType === "percent" && depositValue != null ? clampNum(100 - clampNum(depositValue, 0, 100), 0, 100) : null;
+
+  /** Final EUR field (auto or manual): commit parsed amount and mirror deposit (% or €). */
+  const syncFinalEurMirrorFromRaw = (raw: string) => {
+    setIsFinalPaymentManual(true);
+    if (raw.trim() === "") {
+      setFinalPaymentAmount(null);
+      return;
+    }
+    const amt = parseInvoiceNumericInput(raw);
+    if (amt == null) return;
+    if (total <= 0) {
+      setFinalPaymentAmount(roundMoney2(amt));
+      return;
+    }
+    const fin = roundMoney2(clampNum(amt, 0, total));
+    setFinalPaymentAmount(fin);
+    const newDeposit = roundMoney2(total - fin);
+    if (newDeposit >= 0) {
+      if (depositType === "percent") {
+        setDepositValue(depositPercentFromAmountEur(newDeposit, total));
+      } else {
+        setDepositValue(newDeposit);
+        setDepositType("amount");
+      }
+    }
+  };
+
+  // Keep stored final amount in sync when deposit drives the split (not after user edited final)
   useEffect(() => {
     if (calculatedFinalPayment !== null && !isFinalPaymentManual) {
       setFinalPaymentAmount(calculatedFinalPayment);
@@ -1547,8 +1630,8 @@ export default function InvoiceCreator({
           </p>
 
           {/* Deposit row: Deposit (%) | (€) | Deposit Date — one row of labels, one row of inputs */}
-          <div className="grid grid-cols-[minmax(0,0.5fr)_auto_minmax(200px,1fr)] gap-4 items-start">
-            <div className="flex flex-col gap-1 relative">
+          <div className="grid grid-cols-[minmax(8.5rem,0.62fr)_auto_minmax(200px,1fr)] gap-4 items-start">
+            <div className="flex flex-col gap-1 relative min-w-0">
               <label className="block text-sm font-medium text-gray-700">
                 Deposit
                 <span
@@ -1570,14 +1653,14 @@ export default function InvoiceCreator({
                 >
                   <button
                     type="button"
-                    onClick={() => { setDepositType("percent"); setDepositValue(null); setShowTypePopover(false); }}
+                    onClick={() => { setDepositType("percent"); setDepositValue(null); setShowTypePopover(false); clearPaymentFieldDrafts(); }}
                     className="block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
                   >
                     Percentage (%)
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setDepositType("amount"); setDepositValue(null); setShowTypePopover(false); }}
+                    onClick={() => { setDepositType("amount"); setDepositValue(null); setShowTypePopover(false); clearPaymentFieldDrafts(); }}
                     className="block w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
                   >
                     Amount ({currencySymbol})
@@ -1585,23 +1668,61 @@ export default function InvoiceCreator({
                 </div>
               )}
               {depositType === "percent" ? (
-                <div className="inline-flex w-12 max-w-[52px] items-center rounded border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-0 focus-within:border-blue-500">
+                <div className="inline-flex w-full min-w-[7.5rem] max-w-[11rem] items-center rounded border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-0 focus-within:border-blue-500">
                   <input
                     type="number"
                     step="0.1"
-                    value={depositValue || ""}
-                    onChange={(e) => setDepositValue(e.target.value ? parseFloat(e.target.value) : null)}
-                    className="min-w-0 flex-1 w-5 py-1.5 pl-1.5 pr-0 border-0 bg-transparent text-sm focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    min={0}
+                    max={100}
+                    value={depositValue ?? ""}
+                    onChange={(e) => {
+                      const v = parseInvoiceNumericInput(e.target.value);
+                      setIsFinalPaymentManual(false);
+                      if (v == null) {
+                        setDepositValue(null);
+                        return;
+                      }
+                      setDepositValue(roundMoney2(clampNum(v, 0, 100)));
+                    }}
+                    className="min-w-[4rem] flex-1 py-1.5 pl-2 pr-1 border-0 bg-transparent text-sm tabular-nums focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="text-sm text-gray-500 pr-1 shrink-0">%</span>
+                  <span className="text-sm text-gray-500 pr-2 shrink-0" aria-hidden>
+                    %
+                  </span>
                 </div>
               ) : (
                 <input
-                  type="number"
-                  step="0.01"
-                  value={depositValue || ""}
-                  onChange={(e) => setDepositValue(e.target.value ? parseFloat(e.target.value) : null)}
-                  className="w-16 max-w-[72px] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={
+                    isDepositAmountPrimaryFocused
+                      ? (paymentDraftDepositAmountPrimary ?? "")
+                      : depositValue != null
+                        ? String(depositValue)
+                        : ""
+                  }
+                  onFocus={() => {
+                    setIsDepositAmountPrimaryFocused(true);
+                    setPaymentDraftDepositAmountPrimary(depositValue != null ? String(depositValue) : "");
+                  }}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setPaymentDraftDepositAmountPrimary(raw);
+                    setIsFinalPaymentManual(false);
+                    if (raw.trim() === "") {
+                      setDepositValue(null);
+                      return;
+                    }
+                    const v = parseInvoiceNumericInput(raw);
+                    if (v == null) return;
+                    setDepositValue(total > 0 ? roundMoney2(clampNum(v, 0, total)) : roundMoney2(v));
+                  }}
+                  onBlur={() => {
+                    setIsDepositAmountPrimaryFocused(false);
+                    setPaymentDraftDepositAmountPrimary(null);
+                  }}
+                  className="min-w-[7rem] w-28 max-w-[11rem] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               )}
             </div>
@@ -1611,36 +1732,71 @@ export default function InvoiceCreator({
               </label>
               {depositType === "percent" ? (
                 <input
-                  type="number"
-                  step="0.01"
-                  value={calculatedDeposit != null ? calculatedDeposit : ""}
-                  onChange={(e) => {
-                    const amt = e.target.value ? parseFloat(e.target.value) : null;
-                    if (amt != null && total > 0) {
-                      const pct = Math.round((amt / total) * 10000) / 100;
-                      setDepositValue(pct);
-                    } else {
-                      setDepositValue(null);
-                    }
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={
+                    paymentDraftDepositEurMirror !== null
+                      ? paymentDraftDepositEurMirror
+                      : calculatedDeposit != null
+                        ? String(calculatedDeposit)
+                        : ""
+                  }
+                  onFocus={() => {
+                    setPaymentDraftDepositEurMirror(calculatedDeposit != null ? String(calculatedDeposit) : "");
                   }}
-                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setPaymentDraftDepositEurMirror(raw);
+                    setIsFinalPaymentManual(false);
+                    if (raw.trim() === "") {
+                      setDepositValue(null);
+                      return;
+                    }
+                    const amt = parseInvoiceNumericInput(raw);
+                    if (amt == null || total <= 0) return;
+                    const clamped = roundMoney2(clampNum(amt, 0, total));
+                    setDepositValue(depositPercentFromAmountEur(clamped, total));
+                  }}
+                  onBlur={() => setPaymentDraftDepositEurMirror(null)}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               ) : (
                 <input
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  max={100}
-                  value={total > 0 && depositValue != null ? (Math.round((depositValue / total) * 1000) / 10).toFixed(1) : ""}
-                  onChange={(e) => {
-                    const pct = e.target.value ? parseFloat(e.target.value) : null;
-                    if (pct != null && total > 0) {
-                      setDepositValue(Math.round((total * pct / 100) * 100) / 100);
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={
+                    paymentDraftDepositPctMirror !== null
+                      ? paymentDraftDepositPctMirror
+                      : total > 0 && depositValue != null
+                        ? (Math.round((clampNum(depositValue, 0, total) / total) * 1000) / 10).toFixed(1)
+                        : ""
+                  }
+                  onFocus={() => {
+                    if (total > 0 && depositValue != null) {
+                      setPaymentDraftDepositPctMirror(
+                        (Math.round((clampNum(depositValue, 0, total) / total) * 1000) / 10).toFixed(1)
+                      );
                     } else {
-                      setDepositValue(null);
+                      setPaymentDraftDepositPctMirror("");
                     }
                   }}
-                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setPaymentDraftDepositPctMirror(raw);
+                    setIsFinalPaymentManual(false);
+                    if (raw.trim() === "") {
+                      setDepositValue(null);
+                      return;
+                    }
+                    const pct = parseInvoiceNumericInput(raw);
+                    if (pct == null || total <= 0) return;
+                    const p = clampNum(pct, 0, 100);
+                    setDepositValue(roundMoney2((total * p) / 100));
+                  }}
+                  onBlur={() => setPaymentDraftDepositPctMirror(null)}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               )}
             </div>
@@ -1656,8 +1812,8 @@ export default function InvoiceCreator({
           </div>
 
           {/* Final Payment row: Final Payment (%)/Amount ({currencySymbol}) | (€) | Final Payment Date — one row of labels */}
-          <div className="grid grid-cols-[minmax(0,0.5fr)_auto_minmax(200px,1fr)] gap-4 items-start">
-            <div className="relative">
+          <div className="grid grid-cols-[minmax(8.5rem,0.62fr)_auto_minmax(200px,1fr)] gap-4 items-start">
+            <div className="relative min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {isFullPayment ? (
                   "Full Payment (100%)"
@@ -1679,50 +1835,76 @@ export default function InvoiceCreator({
                 )}
               </label>
               {depositType === 'percent' ? (
-                <div className="inline-flex w-12 max-w-[52px] items-center rounded border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-0 focus-within:border-blue-500">
+                <div className="inline-flex w-full min-w-[7.5rem] max-w-[11rem] items-center rounded border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-0 focus-within:border-blue-500">
                   <input
-                    type="number"
-                    step="0.1"
-                    min={0}
-                    max={100}
-                    value={finalPaymentPercent != null ? finalPaymentPercent : ""}
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={
+                      paymentDraftFinalPct !== null
+                        ? paymentDraftFinalPct
+                        : finalPaymentPercent != null
+                          ? String(roundMoney2(finalPaymentPercent))
+                          : ""
+                    }
+                    onFocus={() => {
+                      setPaymentDraftFinalPct(
+                        finalPaymentPercent != null ? String(roundMoney2(finalPaymentPercent)) : ""
+                      );
+                    }}
                     onChange={(e) => {
                       const raw = e.target.value;
-                      if (raw === "" || raw === undefined) {
+                      setPaymentDraftFinalPct(raw);
+                      setIsFinalPaymentManual(false);
+                      if (raw.trim() === "") {
                         setDepositValue(null);
                         return;
                       }
-                      const v = parseFloat(raw);
-                      if (!isNaN(v) && v >= 0 && v <= 100) setDepositValue(100 - v);
+                      const v = parseInvoiceNumericInput(raw);
+                      if (v == null) return;
+                      const fpPct = clampNum(v, 0, 100);
+                      setDepositValue(roundMoney2(100 - fpPct));
                     }}
-                    className="min-w-0 flex-1 w-5 py-1.5 pl-1.5 pr-0 border-0 bg-transparent text-sm focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onBlur={() => setPaymentDraftFinalPct(null)}
+                    className="min-w-[4rem] flex-1 py-1.5 pl-2 pr-1 border-0 bg-transparent text-sm tabular-nums focus:ring-0 focus:outline-none"
                   />
-                  <span className="text-sm text-gray-500 pr-1 shrink-0">%</span>
+                  <span className="text-sm text-gray-500 pr-2 shrink-0" aria-hidden>
+                    %
+                  </span>
                 </div>
               ) : (
                 <input
-                  type="number"
-                  step="0.01"
-                  value={isFinalPaymentManual ? (finalPaymentAmount ?? "") : (calculatedFinalPayment ?? "")}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={
+                    paymentDraftFinalEurMirror !== null
+                      ? paymentDraftFinalEurMirror
+                      : isFinalPaymentManual
+                        ? finalPaymentAmount != null
+                          ? String(finalPaymentAmount)
+                          : ""
+                        : calculatedFinalPayment != null
+                          ? String(calculatedFinalPayment)
+                          : ""
+                  }
+                  onFocus={() => {
+                    const base = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
+                    setPaymentDraftFinalEurMirror(base != null ? String(base) : "");
+                  }}
                   onChange={(e) => {
-                    const value = e.target.value ? parseFloat(e.target.value) : null;
-                    setFinalPaymentAmount(value);
-                    setIsFinalPaymentManual(true);
-                    if (value !== null && total > 0) {
-                      const newDeposit = Math.round((total - value) * 100) / 100;
-                      if (newDeposit >= 0) {
-                        setDepositValue(newDeposit);
-                        setDepositType('amount');
-                      }
-                    }
+                    const raw = e.target.value;
+                    setPaymentDraftFinalEurMirror(raw);
+                    syncFinalEurMirrorFromRaw(raw);
                   }}
                   onBlur={() => {
+                    setPaymentDraftFinalEurMirror(null);
                     if (finalPaymentAmount === null && calculatedFinalPayment !== null) {
                       setIsFinalPaymentManual(false);
                       setFinalPaymentAmount(calculatedFinalPayment);
                     }
                   }}
-                  className="w-16 max-w-[72px] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-16 max-w-[72px] rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               )}
             </div>
@@ -1732,44 +1914,82 @@ export default function InvoiceCreator({
               </label>
               {depositType === "percent" ? (
                 <input
-                  type="number"
-                  step="0.01"
-                  value={isFinalPaymentManual ? (finalPaymentAmount ?? "") : (calculatedFinalPayment ?? "")}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={
+                    paymentDraftFinalEurMirror !== null
+                      ? paymentDraftFinalEurMirror
+                      : isFinalPaymentManual
+                        ? finalPaymentAmount != null
+                          ? String(finalPaymentAmount)
+                          : ""
+                        : calculatedFinalPayment != null
+                          ? String(calculatedFinalPayment)
+                          : ""
+                  }
+                  onFocus={() => {
+                    const base = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
+                    setPaymentDraftFinalEurMirror(base != null ? String(base) : "");
+                  }}
                   onChange={(e) => {
-                    const amt = e.target.value ? parseFloat(e.target.value) : null;
-                    setFinalPaymentAmount(amt);
-                    setIsFinalPaymentManual(true);
-                    if (amt != null && total > 0) {
-                      const newDeposit = Math.round((total - amt) * 100) / 100;
-                      if (newDeposit >= 0) setDepositValue(Math.round((newDeposit / total) * 10000) / 100);
+                    const raw = e.target.value;
+                    setPaymentDraftFinalEurMirror(raw);
+                    syncFinalEurMirrorFromRaw(raw);
+                  }}
+                  onBlur={() => {
+                    setPaymentDraftFinalEurMirror(null);
+                    if (finalPaymentAmount === null && calculatedFinalPayment !== null) {
+                      setIsFinalPaymentManual(false);
+                      setFinalPaymentAmount(calculatedFinalPayment);
                     }
                   }}
-                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               ) : (
                 <input
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  max={100}
-                  value={(() => {
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={
+                    paymentDraftFinalPctMirror !== null
+                      ? paymentDraftFinalPctMirror
+                      : (() => {
+                          const fp = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
+                          return total > 0 && fp != null
+                            ? (Math.round((clampNum(fp, 0, total) / total) * 1000) / 10).toFixed(1)
+                            : "";
+                        })()
+                  }
+                  onFocus={() => {
                     const fp = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
-                    return total > 0 && fp != null ? (Math.round((fp / total) * 1000) / 10).toFixed(1) : "";
-                  })()}
-                  onChange={(e) => {
-                    const pct = e.target.value ? parseFloat(e.target.value) : null;
-                    if (pct != null && total > 0) {
-                      const fpAmt = Math.round((total * pct / 100) * 100) / 100;
-                      setFinalPaymentAmount(fpAmt);
-                      setIsFinalPaymentManual(true);
-                      const newDeposit = Math.round((total - fpAmt) * 100) / 100;
-                      if (newDeposit >= 0) setDepositValue(newDeposit);
+                    if (total > 0 && fp != null) {
+                      setPaymentDraftFinalPctMirror(
+                        (Math.round((clampNum(fp, 0, total) / total) * 1000) / 10).toFixed(1)
+                      );
                     } else {
-                      setFinalPaymentAmount(null);
-                      setIsFinalPaymentManual(false);
+                      setPaymentDraftFinalPctMirror("");
                     }
                   }}
-                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setPaymentDraftFinalPctMirror(raw);
+                    if (raw.trim() === "") {
+                      setFinalPaymentAmount(null);
+                      setIsFinalPaymentManual(false);
+                      return;
+                    }
+                    const pct = parseInvoiceNumericInput(raw);
+                    if (pct == null || total <= 0) return;
+                    const p = clampNum(pct, 0, 100);
+                    const fpAmt = roundMoney2((total * p) / 100);
+                    setFinalPaymentAmount(fpAmt);
+                    setIsFinalPaymentManual(true);
+                    const newDeposit = roundMoney2(total - fpAmt);
+                    if (newDeposit >= 0) setDepositValue(newDeposit);
+                  }}
+                  onBlur={() => setPaymentDraftFinalPctMirror(null)}
+                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               )}
             </div>
