@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchOrderServicesList, orderPageQueryKeys } from "@/lib/orders/orderPageQueries";
+import {
+  fetchOrderClientsDataParties,
+  fetchOrderServicesList,
+  orderPageQueryKeys,
+  ORDER_CLIENTS_DATA_STALE_MS,
+} from "@/lib/orders/orderPageQueries";
 import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
@@ -138,7 +143,7 @@ export default function OrderPage({
 
   const currentRole = useCurrentUserRole();
 
-  // Sync tab from URL (on load and when user uses back/forward)
+  // Sync tab from URL on load / when Next syncs searchParams (e.g. external navigation)
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab");
     if (tabFromUrl === "referral" && currentRole === "subagent") {
@@ -150,23 +155,39 @@ export default function OrderPage({
     }
   }, [searchParams, currentRole]);
 
+  // ORDER_PAGE_PERF_SPEC: browser back/forward after tab changes use history.replaceState (no Next router cycle)
+  useEffect(() => {
+    const onPopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const tabFromUrl = sp.get("tab");
+      if (tabFromUrl === "referral" && currentRole === "subagent") {
+        setActiveTabState("client");
+        return;
+      }
+      if (isValidTab(tabFromUrl)) {
+        setActiveTabState(tabFromUrl);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [currentRole]);
+
   useEffect(() => {
     if (currentRole === "subagent" && activeTab === "referral") {
       setActiveTabState("client");
     }
   }, [currentRole, activeTab]);
 
-  // Update URL when tab changes so reload keeps the same tab
-  const setActiveTab = useCallback(
-    (tab: TabType) => {
-      setActiveTabState(tab);
-      const next = new URLSearchParams(searchParams?.toString() ?? "");
-      next.set("tab", tab);
-      const query = next.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname);
-    },
-    [pathname, searchParams, router]
-  );
+  // Update URL when tab changes — replaceState only (avoids router.replace RSC work)
+  const setActiveTab = useCallback((tab: TabType) => {
+    setActiveTabState(tab);
+    if (typeof window === "undefined") return;
+    const next = new URLSearchParams(window.location.search);
+    next.set("tab", tab);
+    const query = next.toString();
+    const url = query ? `${pathname}?${query}` : pathname;
+    window.history.replaceState(window.history.state, "", url);
+  }, [pathname]);
 
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const servicesBlockRef = useRef<OrderServicesBlockHandle>(null);
@@ -329,9 +350,17 @@ export default function OrderPage({
     };
   }, [activeTab, orderLoading]);
 
-  // Load world cities on mount so getCityByName finds Tashkent etc. for DESTINATION display
+  // ORDER_PAGE_PERF_SPEC Step 5: defer heavy world-cities fetch (non-blocking first paint)
   useEffect(() => {
-    loadWorldCities().then(() => setWorldCitiesLoaded(true));
+    const run = () => {
+      void loadWorldCities().then(() => setWorldCitiesLoaded(true));
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 8000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 1);
+    return () => clearTimeout(t);
   }, []);
 
   // Track Ctrl key for Ctrl+click navigation
@@ -866,6 +895,15 @@ export default function OrderPage({
           setOrder(data.order || data);
           setOrderTravellers((data.travellers || []) as Traveller[]);
           setLinkedToInvoices(Number(data?.invoiceSummary?.linkedToInvoices) || 0);
+          void queryClient
+            .prefetchQuery({
+              queryKey: orderPageQueryKeys.clientsDataParties(orderCodeFromUrl),
+              queryFn: () => fetchOrderClientsDataParties(orderCodeFromUrl),
+              staleTime: ORDER_CLIENTS_DATA_STALE_MS,
+            })
+            .catch(() => {
+              /* tab will refetch on open */
+            });
         } else if (response.status === 404) {
           setError(t(lang, "order.notFound"));
         } else {
@@ -882,7 +920,7 @@ export default function OrderPage({
       }
     })();
     return () => { cancelled = true; };
-  }, [orderCodeFromUrl, lang, invoiceRefetchTrigger]);
+  }, [orderCodeFromUrl, lang, invoiceRefetchTrigger, queryClient]);
 
   // Update order status
   const handleStatusChange = async (newStatus: OrderStatus) => {
@@ -2078,7 +2116,7 @@ export default function OrderPage({
                 ) : (
                   <InvoiceList
                     orderCode={effectiveOrderCode}
-                    key={invoiceRefetchTrigger}
+                    key={`${effectiveOrderCode}-${invoiceRefetchTrigger}`}
                     orderAmountTotal={order?.amount_total ?? 0}
                     onCreateNew={() => {
                       setActiveTab("client");

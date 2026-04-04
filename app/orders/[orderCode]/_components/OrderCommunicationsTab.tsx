@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchOrderCommunications, orderPageQueryKeys } from "@/lib/orders/orderPageQueries";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
@@ -100,15 +101,28 @@ function formatTime(dateStr: string) {
 }
 
 export default function OrderCommunicationsTab({ orderCode }: { orderCode: string }) {
+  const [commPage, setCommPage] = useState(1);
+  useEffect(() => {
+    setCommPage(1);
+  }, [orderCode]);
+
   const {
-    data: communications = [],
+    data: commPayload,
     isPending: loading,
     refetch: fetchData,
   } = useQuery({
-    queryKey: orderPageQueryKeys.communications(orderCode),
-    queryFn: () => fetchOrderCommunications(orderCode),
+    queryKey: orderPageQueryKeys.communications(orderCode, commPage),
+    queryFn: () => fetchOrderCommunications(orderCode, commPage),
     enabled: Boolean(orderCode),
   });
+  const communications = commPayload?.communications ?? [];
+  const commPagination = commPayload?.pagination;
+  const commTotalPages =
+    commPagination && commPagination.limit > 0
+      ? Math.max(1, Math.ceil(commPagination.total / commPagination.limit))
+      : 1;
+  const showCommEmptyOnboarding =
+    !loading && (commPagination?.total ?? 0) === 0 && communications.length === 0;
 
   if (loading) {
     return (
@@ -119,7 +133,7 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
     );
   }
 
-  if (communications.length === 0) {
+  if (showCommEmptyOnboarding) {
     return (
       <div className="py-12 text-center text-gray-400">
         <Mail className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -144,6 +158,9 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
         </button>
       </div>
 
+      {communications.length === 0 ? (
+        <p className="py-6 text-center text-sm text-gray-500">No communications on this page.</p>
+      ) : (
       <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
         {communications.map((c) => (
           <div key={c.id} className="px-4 py-3 hover:bg-gray-50/50 transition-colors">
@@ -218,6 +235,32 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
           </div>
         ))}
       </div>
+      )}
+      {commTotalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+          <span>
+            Page {commPage} of {commTotalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={commPage <= 1}
+              onClick={() => setCommPage((p) => Math.max(1, p - 1))}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={commPage >= commTotalPages}
+              onClick={() => setCommPage((p) => p + 1)}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

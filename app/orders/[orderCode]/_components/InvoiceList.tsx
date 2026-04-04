@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
 import ContentModal from "@/components/ContentModal";
@@ -22,6 +22,8 @@ import {
   type PaymentReminderContext,
 } from "@/lib/invoices/paymentReminderEmail";
 import { INVOICE_EMAIL_PDF_FOOTER_HTML } from "@/lib/invoices/invoiceEmailTemplate";
+
+const INVOICE_LIST_PAGE_SIZE = 30;
 
 interface Invoice {
   id: string;
@@ -89,6 +91,12 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const [loading, setLoading] = useState(true);
   const [hideCancelled, setHideCancelled] = useState(true);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
+  const [invoiceListPage, setInvoiceListPage] = useState(1);
+  const [invoicePagination, setInvoicePagination] = useState<{
+    page: number;
+    pageSize: number;
+    total: number;
+  } | null>(null);
   const { showToast } = useToast();
   const [cancelConfirm, setCancelConfirm] = useState<{ invoiceId: string; message: string } | null>(null);
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
@@ -169,9 +177,17 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     unit_price: "",
   });
 
-  const loadInvoices = async (): Promise<Invoice[]> => {
+  const loadInvoices = useCallback(async (): Promise<Invoice[]> => {
     try {
-      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`);
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices?page=${invoiceListPage}&pageSize=${INVOICE_LIST_PAGE_SIZE}`,
+        {
+          credentials: "include",
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        }
+      );
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         let rawMsg = typeof errorData?.error === "string" ? errorData.error : "";
@@ -192,58 +208,87 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       const list = data.invoices || [];
       setInvoices(list);
       setPaymentSummary(data.paymentSummary || null);
+      setInvoicePagination(data.pagination ?? null);
       return list;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Unknown error";
       console.error("Error loading invoices:", error);
       showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load invoices: ${msg}`);
+      setInvoicePagination(null);
       return [];
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderCode, invoiceListPage, showToast]);
 
-  const loadEmailStatuses = async () => {
-    try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/communications`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const map: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
-      const rmap: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
-      for (const c of data.communications || []) {
-        if (!c.invoice_id) continue;
-        const kind = (c as { email_kind?: string | null }).email_kind;
-        if (kind === "payment_reminder") {
-          if (!rmap[c.invoice_id]) {
-            rmap[c.invoice_id] = {
-              delivery_status: c.delivery_status,
-              delivered_at: c.delivered_at,
-              opened_at: c.opened_at,
-              open_count: c.open_count || 0,
-              sent_at: c.sent_at,
-            };
+  const loadEmailStatuses = useCallback(
+    async (invoiceIds: string[]) => {
+      if (invoiceIds.length === 0) {
+        setEmailStatuses({});
+        setReminderStatuses({});
+        return;
+      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const params = new URLSearchParams();
+        params.set("invoiceIds", invoiceIds.slice(0, 200).join(","));
+        params.set("limit", "500");
+        params.set("offset", "0");
+        const res = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/communications?${params.toString()}`,
+          {
+            credentials: "include",
+            headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
           }
-        } else {
-          if (!map[c.invoice_id]) {
-            map[c.invoice_id] = {
-              delivery_status: c.delivery_status,
-              delivered_at: c.delivered_at,
-              opened_at: c.opened_at,
-              open_count: c.open_count || 0,
-              sent_at: c.sent_at,
-            };
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const map: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
+        const rmap: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
+        for (const c of data.communications || []) {
+          if (!c.invoice_id) continue;
+          const kind = (c as { email_kind?: string | null }).email_kind;
+          if (kind === "payment_reminder") {
+            if (!rmap[c.invoice_id]) {
+              rmap[c.invoice_id] = {
+                delivery_status: c.delivery_status,
+                delivered_at: c.delivered_at,
+                opened_at: c.opened_at,
+                open_count: c.open_count || 0,
+                sent_at: c.sent_at,
+              };
+            }
+          } else {
+            if (!map[c.invoice_id]) {
+              map[c.invoice_id] = {
+                delivery_status: c.delivery_status,
+                delivered_at: c.delivered_at,
+                opened_at: c.opened_at,
+                open_count: c.open_count || 0,
+                sent_at: c.sent_at,
+              };
+            }
           }
         }
+        setEmailStatuses(map);
+        setReminderStatuses(rmap);
+      } catch {
+        // ignore
       }
-      setEmailStatuses(map);
-      setReminderStatuses(rmap);
-    } catch {}
-  };
+    },
+    [orderCode]
+  );
 
   useEffect(() => {
-    loadInvoices();
-    loadEmailStatuses();
-  }, [orderCode]);
+    void loadInvoices();
+  }, [loadInvoices]);
+
+  const invoiceIdsKey = useMemo(() => [...invoices].map((i) => i.id).sort().join(","), [invoices]);
+
+  useEffect(() => {
+    const ids = invoiceIdsKey ? invoiceIdsKey.split(",").filter(Boolean) : [];
+    void loadEmailStatuses(ids);
+  }, [orderCode, invoiceIdsKey, loadEmailStatuses]);
 
   const handlePreviewPDF = async (invoiceId: string) => {
     try {
@@ -331,6 +376,20 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     });
     return grouped;
   }, [invoices, hideCancelled]);
+
+  const invoiceTotalPages = useMemo(
+    () =>
+      invoicePagination && invoicePagination.pageSize > 0
+        ? Math.max(1, Math.ceil(invoicePagination.total / invoicePagination.pageSize))
+        : 1,
+    [invoicePagination]
+  );
+
+  const showInvoiceOnboarding =
+    !loading &&
+    invoicePagination !== null &&
+    invoicePagination.total === 0 &&
+    invoices.length === 0;
 
   const calculateGroupTotals = (groupInvoices: Invoice[]) => {
     return groupInvoices.reduce((acc, inv) => {
@@ -857,8 +916,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
       showToast("success", "Invoice email sent successfully!");
       setEmailModal(null);
-      loadInvoices();
-      loadEmailStatuses();
+      const list = await loadInvoices();
+      void loadEmailStatuses(list.map((i) => i.id));
     } catch (error: any) {
       console.error('Error sending email:', error);
       showToast("error", `Failed to send email: ${error.message || "Unknown error"}`);
@@ -1245,7 +1304,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       showToast("success", t(lang, "invoices.reminderSentToast"));
       setReminderModal(null);
       setReminderRecipients([]);
-      loadEmailStatuses();
+      const listAfterReminder = await loadInvoices();
+      void loadEmailStatuses(listAfterReminder.map((i) => i.id));
     } catch (e: unknown) {
       showToast("error", e instanceof Error ? e.message : "Failed to send reminder");
     } finally {
@@ -2207,7 +2267,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         </div>
       </div>
 
-      {groupedInvoices.size === 0 ? (
+      {showInvoiceOnboarding ? (
         <div className="rounded-lg bg-gray-50 border border-gray-200 p-8 text-center">
           <p className="text-gray-500 mb-4">{t(lang, "order.noInvoicesYet")}</p>
           <button
@@ -2219,6 +2279,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         </div>
       ) : (
         <div className="overflow-x-auto">
+          {groupedInvoices.size === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-500">
+              No invoices match the current filter on this page.
+            </p>
+          ) : (
           <table className="w-full text-sm border-collapse table-fixed">
             <colgroup>
               <col className="w-[55px]" />
@@ -2451,6 +2516,32 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               ))}
             </tbody>
           </table>
+          )}
+          {invoiceTotalPages > 1 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 text-sm text-gray-600">
+              <span>
+                Page {invoiceListPage} of {invoiceTotalPages}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={invoiceListPage <= 1}
+                  onClick={() => setInvoiceListPage((p) => Math.max(1, p - 1))}
+                  className="rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={invoiceListPage >= invoiceTotalPages}
+                  onClick={() => setInvoiceListPage((p) => p + 1)}
+                  className="rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

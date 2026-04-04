@@ -88,128 +88,43 @@ const OrderPaymentsList = dynamic(
 
 ### Step 2: Narrow SELECT for services API + eliminate duplicate fetch
 
-**Files to change:**
+**Status:** ✅ Partially implemented by Cursor.
 
-- `app/api/orders/[orderCode]/services/route.ts` — replace `SELECT `*
-- `app/orders/[orderCode]/page.tsx` — lift services data to parent, pass to both tabs
+**What was done:**
 
-#### 2a. Replace `SELECT *` with explicit columns
+- **2a.** `SELECT *` replaced with explicit `ORDER_SERVICES_LIST_COLUMNS` (79 fields) in `services/route.ts`
+- **2b.** Separate `GET /api/orders/{code}/services/[serviceId]` endpoint created — returns `SELECT *` for edit modal
+- **2c.** Duplicate fetch eliminated — single `useQuery` in `page.tsx` with shared `orderPageQueryKeys.services()` key; both Client tab and Finance tab use the same cached data
 
-In `app/api/orders/[orderCode]/services/route.ts` line ~83, replace:
+**What remains — further narrowing (optional, trade-off):**
 
-```typescript
-// BEFORE
-.select("*")
+The current 79-column list SELECT is intentionally wide because `OrderServicesBlock` renders inline data that would otherwise require a detail fetch:
+- **Terms column** uses `refund_policy`, `free_cancellation_until`, `price_type`, `cancellation_penalty_amount`, `cancellation_penalty_percent` (see `case "terms"` ~line 2961–3012 in OrderServicesBlock)
+- **Hotel/transfer display** uses `hotel_address`, `hotel_phone`, `hotel_email`, `hotel_bed_type`, etc.
 
-// AFTER — only columns needed for the services list view
-.select(`
-  id, order_id, company_id, category_type, category_id,
-  service_date_from, service_date_to, status,
-  supplier_name, supplier_id,
-  description, notes,
-  sale_amount, sale_currency, cost_amount, cost_currency,
-  commission_amount, commission_percent,
-  quantity,
-  hotel_name, hotel_star_rating, hotel_board, hotel_room_type,
-  hotel_checkin_date, hotel_checkout_date, hotel_nights,
-  flight_segments,
-  transfer_type, transfer_route,
-  created_at, updated_at
-`)
-```
+Fields that are **safely removable** from list SELECT (only used in edit modal, fetched via `/services/[serviceId]`):
+- `driver_name`, `driver_phone`, `driver_notes` — not rendered in default table columns
+- Potentially `payment_terms`, `supplier_booking_type` — verify with UI first
 
-Drop: `boarding_passes`, `ticket_numbers`, `service_price_line_items`, `pricing_per_client`, all `hotel_preference_*` columns, `hotel_contact_*` overrides, `meal_plan_text`, `seat_preference`, etc. These are only needed when opening the edit modal for a specific service — fetch them on demand.
-
-#### 2b. Add a lightweight `/services/detail/[serviceId]` endpoint
-
-For the edit modal, create a new endpoint that returns ALL columns for a single service:
-
-```
-GET /api/orders/{orderCode}/services/{serviceId}
-→ SELECT * FROM order_services WHERE id = serviceId
-```
-
-This way the list is fast, and full data loads only when user clicks "Edit" on a specific service.
-
-#### 2c. Eliminate duplicate services fetch
-
-Currently `OrderServicesBlock` and `OrderFinanceOverview` both independently fetch `/api/orders/{code}/services`.
-
-**Option A (simple):** Fetch services once in `page.tsx` and pass as prop to both components:
-
-```tsx
-const [services, setServices] = useState(null);
-
-useEffect(() => {
-  fetch(`/api/orders/${code}/services`).then(r => r.json()).then(setServices);
-}, [code]);
-
-// In render:
-{activeTab === "client" && <OrderServicesBlock services={services} ... />}
-{activeTab === "finances" && <OrderFinanceOverview services={services} ... />}
-```
-
-**Option B (better, Step 4):** Use React Query with shared cache key — both components call `useServices(orderCode)` and React Query deduplicates automatically.
-
-**Expected impact:** Response payload reduced from ~200KB to ~30-50KB. One fewer API call.
+> ⚠️ Do NOT blindly cut to 20-25 columns — audit each field against `mapOrderServiceRowToListApi`, smart hints, itinerary display, and Terms column before removing.
 
 ---
 
 ### Step 3: Bootstrap endpoint for order header
 
-**Files to create/change:**
+**Status:** ✅ Implemented by Cursor.
 
-- Create `app/api/orders/[orderCode]/bootstrap/route.ts`
-- Update `app/orders/[orderCode]/page.tsx` — single fetch on mount
+**What was done:**
 
-**What the bootstrap returns:**
+- `app/api/orders/[orderCode]/bootstrap/route.ts` created
+- `lib/orders/orderPageBootstrap.ts` contains `buildExpandedOrderAndInvoiceSummary()` with internal `Promise.all` for parallel sub-queries
+- Bootstrap returns: `order` (expanded), `travellers`, `invoiceSummary`
+- `page.tsx` (~line 871-886) fetches bootstrap on mount
 
-```typescript
-{
-  order: { /* core order fields: code, status, dates, amounts, owner, manager */ },
-  travellers: [ /* id, name, dob — lightweight */ ],
-  invoiceSummary: { count, totalAmount, paidAmount, outstandingAmount },
-}
-```
+**What remains:**
 
-**Inside the bootstrap route — parallelize everything:**
-
-```typescript
-const [order, travellers, invoiceSummary] = await Promise.all([
-  fetchOrderCore(orderCode, companyId),      // 1 query
-  fetchTravellers(orderId),                    // 1 query
-  fetchInvoiceSummary(orderId, companyId),     // 1 query
-]);
-```
-
-**Refactor `fetchOrderCore`** — currently does 6-7 sequential queries. Merge into 2-3 parallel ones:
-
-```typescript
-const [orderRow, amounts, ownerProfile] = await Promise.all([
-  supabaseAdmin.from("orders").select("...").eq("order_code", code).single(),
-  supabaseAdmin.rpc("get_order_amounts", { p_order_id: orderId }),  // DB function
-  supabaseAdmin.from("profiles").select("display_name, avatar_url").eq("user_id", ownerId).single(),
-]);
-```
-
-Consider creating a Postgres function `get_order_amounts(order_id)` that calculates service totals + payment totals in one query instead of multiple round-trips.
-
-**On the page:** Replace 3 separate useEffects with one:
-
-```typescript
-useEffect(() => {
-  const token = await supabase.auth.getSession(); // ONE getSession call
-  const res = await fetch(`/api/orders/${code}/bootstrap`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  const { order, travellers, invoiceSummary } = await res.json();
-  setOrder(order);
-  setTravellers(travellers);
-  setInvoiceSummary(invoiceSummary);
-}, [code]);
-```
-
-**Expected impact:** 3 API calls → 1. Multiple sequential DB queries → parallel. Faster first render of order header.
+- Both `bootstrap/route.ts` (line ~33-35) and `GET /api/orders/[orderCode]/route.ts` (line 36) still use `select("*")` on the `orders` table. Replace with an explicit column list matching what `buildExpandedOrderAndInvoiceSummary` + the page header actually need.
+- This is a safe, low-risk change: enumerate the fields used by `OrderPageHeaderE`, date pickers, status badge, client display, and the bootstrap summary builder.
 
 ---
 
@@ -417,3 +332,160 @@ After each step, measure:
 5. **Server response time** for `/api/orders/{code}` — should halve after Step 3+7
 
 Target: order page loads in < 1s, tab switching feels instant.
+
+---
+
+## Part 2: Orders LIST Page (`/orders`) — Performance Problems
+
+> Applies to `app/orders/page.tsx` (1600+ lines) and `app/api/orders/route.ts` (573 lines, Edge Runtime).
+
+### Current State: Why the List is Slow
+
+#### Backend (API) Layer
+
+1. **Search disables pagination** — when `search` param is present, `range()` is NOT applied (`if (!search)`). The API loads ALL orders for the company, then filters in-memory. For 500+ orders this is 200KB+ before filtering even starts.
+
+2. **Search triggers 4+ extra DB round-trips** — after loading all orders, the search path runs:
+   - `order_services` query (client_name, payer_name per order) — chunked in 400s
+   - `collectTravellerSearchLabelsByOrder()` — which itself does:
+     - `order_travellers` + `party` join (chunked)
+     - `order_services` → `order_service_travellers` → `party` (3 sequential chunked queries)
+   - Total: 5-8 extra DB queries just for search name resolution
+
+3. **Client-side profit recalculation** — the API fetches ALL `order_services` for ALL orders on the page (line 253), then runs `computeServiceLineEconomics()` per service line in JS to calculate profit, VAT, referral commission. This is O(orders × services) in application code instead of one DB aggregation.
+
+4. **4 sequential post-queries after main fetch** — after the primary orders query, the API runs:
+   - `order_services` (for profit calc + invoice stats)
+   - `user_profiles` (owner names)
+   - `invoices` (invoice statistics)
+   - `referral_accrual_line` (referral commissions) — sequential, NOT in the Promise.all
+   - `payments` (processing fees) — sequential, NOT in the Promise.all
+   - `collectTravellerSearchLabelsByOrder()` — sequential, for list display
+
+   Only the first three are in `Promise.all`. The last three run sequentially after.
+
+5. **No server-side search** — Supabase `ilike` / `textSearch` is not used. The entire search is JS `matchesSearch()` on client_display_name, order_code, and service client names loaded in bulk.
+
+#### Frontend Layer
+
+6. **`loadWorldCities()` on orders list page** — `app/orders/page.tsx` line 14 imports `getCityByName, loadWorldCities` and calls it on mount to resolve country flags from city names. This is a ~150KB dataset loaded eagerly.
+
+7. **Calendar view: O(n × 42 cells)** — the calendar iterates all filtered orders against every visible day cell. With 200 orders × 42 cells = 8400 comparisons per render.
+
+8. **Tree view rebuilt on every filter change** — `buildOrdersTree()` groups orders into Year→Month→Day hierarchy, recalculated on every filter/search keystroke without memoization.
+
+9. **No data caching** — navigating to an order detail and pressing Back re-fetches the entire orders list from scratch.
+
+---
+
+### Implementation Plan: Orders List Page (5 Steps)
+
+#### List Step 1: Move search to server-side with `ilike` / `or()` filter
+
+**File:** `app/api/orders/route.ts`
+
+Replace the in-memory search with Supabase filters:
+
+```typescript
+if (search) {
+  const pattern = `%${search}%`;
+  query = query.or(
+    `order_code.ilike.${pattern},client_display_name.ilike.${pattern}`
+  );
+  // Still apply pagination!
+  const from = (page - 1) * pageSize;
+  query = query.range(from, from + pageSize - 1);
+}
+```
+
+For traveller name search, add a DB function or a materialized `search_text` column on orders:
+
+```sql
+-- Option: trigger that updates orders.search_text on service/traveller changes
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS search_text TEXT;
+-- Contains: client_display_name + all traveller names + payer names
+-- Updated by trigger on order_travellers, order_services, order_service_travellers
+```
+
+**Expected impact:** Eliminates 5-8 extra DB queries during search. Pagination always works. Response time drops from 2-5s to <300ms.
+
+#### List Step 2: Move profit/VAT calculation to DB
+
+**File:** `app/api/orders/route.ts`
+
+Create a Postgres function that calculates profit per order:
+
+```sql
+CREATE FUNCTION get_orders_summary(p_company_id UUID, p_order_ids UUID[])
+RETURNS TABLE(
+  order_id UUID,
+  service_amount NUMERIC,
+  profit_net NUMERIC,
+  vat_on_margin NUMERIC,
+  referral_commission NUMERIC
+) AS $$ ... $$ LANGUAGE SQL STABLE;
+```
+
+This replaces fetching ALL services + running `computeServiceLineEconomics()` per line in JS.
+
+**Expected impact:** Removes the biggest payload (services for all orders) and all per-line JS computation. API response payload drops 60-80%.
+
+#### List Step 3: Parallelize ALL post-queries
+
+**File:** `app/api/orders/route.ts`
+
+Move `referral_accrual_line`, `payments` (processing fees), and `collectTravellerSearchLabelsByOrder()` into the existing `Promise.all`:
+
+```typescript
+const [servicesResult, ownerProfilesResult, invoicesResult, refRows, feeRows, travellerLabels] = await Promise.all([
+  // ... existing 3 ...
+  supabaseAdmin.from("referral_accrual_line")...,
+  supabaseAdmin.from("payments")...,
+  collectTravellerSearchLabelsByOrder(...),
+]);
+```
+
+**Expected impact:** 3 sequential queries become parallel. Saves 200-500ms.
+
+#### List Step 4: Cache orders list with React Query
+
+**File:** `app/orders/page.tsx`
+
+Wrap the orders fetch in `useQuery`:
+
+```typescript
+const { data, isPending } = useQuery({
+  queryKey: ["orders-list", { status, orderType, search, page }],
+  queryFn: () => fetchOrdersList({ status, orderType, search, page }),
+  staleTime: 30_000,
+  gcTime: 5 * 60_000,
+});
+```
+
+**Benefits:** Back button from order detail → instant list from cache. Filter changes within 30s don't re-fetch.
+
+#### List Step 5: Defer flag resolution / memoize tree
+
+**File:** `app/orders/page.tsx`
+
+- Remove `loadWorldCities()` from orders list — pre-compute `countryFlag` in the API response instead
+- Memoize `buildOrdersTree()` and calendar cell matching with `useMemo` keyed on filtered orders
+- Debounce search input (300ms) to avoid re-renders on every keystroke
+
+**Expected impact:** Faster renders, no blocking city data load.
+
+---
+
+### Orders List — Execution Order
+
+| Step | What | Effort | Impact | Risk |
+| ---- | ---- | ------ | ------ | ---- |
+| L1 | Server-side search | 3-4h | CRITICAL — eliminates bulk load | MEDIUM |
+| L2 | DB profit calculation | 4-6h | HIGH — 80% less payload | MEDIUM (new DB function) |
+| L3 | Parallelize post-queries | 30min | MEDIUM — 200-500ms faster | LOW |
+| L4 | React Query for list | 1-2h | HIGH — instant back navigation | LOW |
+| L5 | Defer cities + memoize | 1h | MEDIUM — smoother UI | LOW |
+
+**Total estimated effort: 1-1.5 days**
+
+L3 is a quick win. L1 is the most impactful single change. L2 is the biggest refactor but eliminates the heaviest payload.

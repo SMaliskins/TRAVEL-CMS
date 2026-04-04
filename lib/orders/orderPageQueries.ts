@@ -7,10 +7,17 @@ import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import type { DirectoryRecord } from "@/lib/types/directory";
 import type { RelatedPartyTag } from "@/lib/types/orderRelatedParties";
 
+/** Paginated tab fetch sizes (ORDER_PAGE_PERF_SPEC). */
+export const ORDER_DOCUMENTS_PAGE_SIZE = 30;
+export const ORDER_COMMUNICATIONS_PAGE_SIZE = 40;
+
+/** Clients Data tab + idle prefetch: avoid refetch while user switches tabs on the same order. */
+export const ORDER_CLIENTS_DATA_STALE_MS = 60_000;
+
 export const orderPageQueryKeys = {
   services: (orderCode: string) => ["order-services", orderCode] as const,
-  documents: (orderCode: string) => ["order-documents", orderCode] as const,
-  communications: (orderCode: string) => ["order-communications", orderCode] as const,
+  documents: (orderCode: string, page: number) => ["order-documents", orderCode, page] as const,
+  communications: (orderCode: string, page: number) => ["order-communications", orderCode, page] as const,
   clientsDataParties: (orderCode: string) => ["order-clients-data-parties", orderCode] as const,
 };
 
@@ -49,13 +56,31 @@ export type OrderDocumentListRow = {
   invoice_date?: string | null;
 };
 
-export async function fetchOrderDocuments(orderCode: string): Promise<OrderDocumentListRow[]> {
+export type ListPagination = { offset: number; limit: number; total: number };
+
+export type OrderDocumentsQueryResult = {
+  documents: OrderDocumentListRow[];
+  pagination?: ListPagination;
+};
+
+export async function fetchOrderDocuments(
+  orderCode: string,
+  page = 1
+): Promise<OrderDocumentsQueryResult> {
   const headers = await authHeaders();
-  const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/documents`, {
-    headers,
-    credentials: "include",
-  });
-  const json = (await res.json().catch(() => ({}))) as { documents?: OrderDocumentListRow[]; error?: string };
+  const offset = (Math.max(1, page) - 1) * ORDER_DOCUMENTS_PAGE_SIZE;
+  const res = await fetch(
+    `/api/orders/${encodeURIComponent(orderCode)}/documents?limit=${ORDER_DOCUMENTS_PAGE_SIZE}&offset=${offset}`,
+    {
+      headers,
+      credentials: "include",
+    }
+  );
+  const json = (await res.json().catch(() => ({}))) as {
+    documents?: OrderDocumentListRow[];
+    pagination?: ListPagination;
+    error?: string;
+  };
   if (!res.ok) {
     const msg =
       res.status === 503
@@ -63,7 +88,7 @@ export async function fetchOrderDocuments(orderCode: string): Promise<OrderDocum
         : json.error || "Failed to load documents";
     throw new Error(msg);
   }
-  return json.documents ?? [];
+  return { documents: json.documents ?? [], pagination: json.pagination };
 }
 
 export type CommunicationListRow = {
@@ -81,18 +106,44 @@ export type CommunicationListRow = {
   open_count: number;
   invoice_id: string | null;
   service_id: string | null;
+  email_kind?: string | null;
 };
 
-export async function fetchOrderCommunications(orderCode: string): Promise<CommunicationListRow[]> {
-  const headers = await authHeaders();
-  const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/communications`, {
-    headers,
-    credentials: "include",
-  });
-  if (!res.ok) return [];
-  const data = (await res.json()) as { communications?: CommunicationListRow[] };
-  return data.communications ?? [];
+export type OrderCommunicationsQueryResult = {
+  communications: CommunicationListRow[];
+  pagination?: ListPagination;
 };
+
+/** Tab: paginated log. Optional `invoiceIds` (e.g. InvoiceList) uses filter + high limit instead of page. */
+export async function fetchOrderCommunications(
+  orderCode: string,
+  page = 1,
+  opts?: { invoiceIds?: string[] }
+): Promise<OrderCommunicationsQueryResult> {
+  const headers = await authHeaders();
+  const params = new URLSearchParams();
+  if (opts?.invoiceIds?.length) {
+    params.set("invoiceIds", opts.invoiceIds.slice(0, 200).join(","));
+    params.set("limit", "500");
+    params.set("offset", "0");
+  } else {
+    params.set("limit", String(ORDER_COMMUNICATIONS_PAGE_SIZE));
+    params.set("offset", String((Math.max(1, page) - 1) * ORDER_COMMUNICATIONS_PAGE_SIZE));
+  }
+  const res = await fetch(
+    `/api/orders/${encodeURIComponent(orderCode)}/communications?${params.toString()}`,
+    {
+      headers,
+      credentials: "include",
+    }
+  );
+  if (!res.ok) return { communications: [] };
+  const data = (await res.json()) as {
+    communications?: CommunicationListRow[];
+    pagination?: ListPagination;
+  };
+  return { communications: data.communications ?? [], pagination: data.pagination };
+}
 
 export type ClientsDataPartiesPayload = {
   parties: { partyId: string; tags: RelatedPartyTag[] }[];

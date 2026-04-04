@@ -45,9 +45,12 @@ export default function CityMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const worldCitiesLoadStarted = useRef(false);
 
-  useEffect(() => {
-    loadWorldCities().then(() => setWorldCitiesLoaded(true));
+  const ensureWorldCitiesLoaded = useCallback(() => {
+    if (worldCitiesLoadStarted.current) return;
+    worldCitiesLoadStarted.current = true;
+    void loadWorldCities().then(() => setWorldCitiesLoaded(true));
   }, []);
 
   const selectedCountries = useMemo(() => {
@@ -236,10 +239,12 @@ export default function CityMultiSelect({
           type="text"
           value={searchQuery}
           onChange={(e) => {
+            ensureWorldCitiesLoaded();
             setSearchQuery(e.target.value);
             if (!isOpen && e.target.value.length >= 2) setIsOpen(true);
           }}
           onFocus={() => {
+            ensureWorldCitiesLoaded();
             if (searchQuery.length >= 2) setIsOpen(true);
           }}
           placeholder={placeholder}

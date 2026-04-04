@@ -5,6 +5,69 @@
 
 ---
 
+## [2026-04-04] CW — Clients Data: prefetch after bootstrap + narrow batch selects
+
+**Task:** Finish Clients Data tab perf: warm React Query cache when order loads; reduce DB row payload in `loadDirectoryRecordsForPartyIds` (explicit columns; `partner_party` only `party_id` so merged supplier fields stay on `party`).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `app/orders/[orderCode]/page.tsx` — `prefetchQuery` for `orderPageQueryKeys.clientsDataParties` after successful bootstrap (`staleTime: ORDER_CLIENTS_DATA_STALE_MS`, errors swallowed). `lib/directory/loadDirectoryRecordsBatch.ts` — column lists + typed row casts for Supabase string-select inference.
+
+**Результат:** `npx next build --webpack` OK.
+
+---
+
+## [2026-04-04] CW — Clients Data tab: skip audit name resolution in batch party load
+
+**Task:** Clients Data tab felt slow; `loadDirectoryRecordsForPartyIds` (only used by `GET .../clients-data-parties`) called `resolveAuditDisplayNamesBatch`, which runs extra profile queries and can call `auth.admin.getUserById` per missing id — UI never shows those fields.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `lib/directory/loadDirectoryRecordsBatch.ts` — removed `resolveAuditDisplayNamesBatch` from batch loader; comment documents behavior.
+
+---
+
+## [2026-04-04] CW — ORDER_PAGE_PERF_SPEC: tab URL replaceState + paginated documents/communications/invoices
+
+**Task:** Finish ORDER_PAGE_PERF_SPEC items outside numbered steps: order tabs use `history.replaceState` + `popstate` (no `router.replace`); paginate `GET .../documents`, `.../communications`, `.../invoices` with backward compatibility (no `limit` / no `page` = previous full-list behaviour); `InvoiceList` loads communications with `invoiceIds` filter; `paymentSummary` still uses all invoice id/status rows + payments when list is paginated.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/orders/[orderCode]/page.tsx` (replaceState, popstate); `app/api/orders/[orderCode]/documents/route.ts` (optional `limit`/`offset` + `pagination`); `app/api/orders/[orderCode]/communications/route.ts` (`getApiUser`, company check, `invoiceIds`, optional `limit`/`offset`); `app/api/orders/[orderCode]/invoices/route.ts` (`page`/`pageSize` branch + status query for summary); `lib/orders/orderPageQueries.ts`; `OrderDocumentsTab`, `OrderCommunicationsTab`, `InvoiceList`; `InvoiceList` key includes `orderCode`.
+
+**Результат:** `npx next build --webpack` OK.
+
+---
+
+## [2026-04-04] CW — ORDER_PAGE_PERF_SPEC Step 7: parallel owner resolution + skip duplicate order fetch in bootstrap
+
+**Task:** Step 7 — batch `user_profiles` + `profiles` for owner/manager/created_by/current user; run `resolveOwnerDisplayName` in same `Promise.all` as services/payments/invoices; `loadFormattedTravellersForOrder(..., orderHint)` avoids second `orders` row fetch when bootstrap already has the row.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `lib/orders/orderPageBootstrap.ts`, `app/api/orders/[orderCode]/bootstrap/route.ts`.
+
+**Результат:** `npx next build --webpack` OK.
+
+---
+
+## [2026-04-04] CW — ORDER_PAGE_PERF_SPEC Steps 5–6: defer world cities + batch document signed URLs
+
+**Task:** Step 5 — `loadWorldCities` via `requestIdleCallback` on order page; `CityMultiSelect` loads dataset on first focus/typing. Step 6 — `GET .../documents` uses `createSignedUrls` with fallback to per-file signing on error.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `page.tsx` idle scheduling; `CityMultiSelect.tsx` `ensureWorldCitiesLoaded`; `app/api/orders/[orderCode]/documents/route.ts` batch signing + fallback.
+
+**Результат:** `npx next build --webpack` (verify).
+
+---
+
 ## [2026-04-04] CW — ORDER_PAGE_PERF_SPEC Step 4: React Query (services + tab data cache)
 
 **Task:** Step 4 — `@tanstack/react-query`, shared query keys/fetchers, orders layout provider; page uses `useQuery` for `/services`; documents / communications / clients-data tabs cached; invalidate services on `invoiceRefetchTrigger` + `reloadOrderServices` → `refetchQueries`. Fix services GET typing (`unknown` cast) + `OrderServicesBlock` mapper (`numOrNull`, `as Service`) so `next build` passes.

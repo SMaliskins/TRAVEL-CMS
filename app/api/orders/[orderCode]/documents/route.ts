@@ -49,11 +49,29 @@ export async function GET(
     const orderResult = await getOrderAndVerify(orderCode, companyId);
     if ("error" in orderResult) return orderResult.error;
 
-    const { data: docs, error } = await supabaseAdmin
+    const { searchParams } = new URL(request.url);
+    const limitRaw = searchParams.get("limit");
+    const limit =
+      limitRaw === null || limitRaw === ""
+        ? null
+        : Math.min(100, Math.max(1, parseInt(limitRaw, 10) || 30));
+    const offset =
+      limit !== null ? Math.max(0, parseInt(searchParams.get("offset") || "0", 10) || 0) : 0;
+
+    const selectCols =
+      "id, document_type, file_name, file_path, file_size, mime_type, created_at, amount, currency, invoice_number, supplier_name, invoice_date, parsed_amount, parsed_currency, parsed_invoice_number, parsed_supplier, parsed_invoice_date";
+
+    let q = supabaseAdmin
       .from("order_documents")
-      .select("id, document_type, file_name, file_path, file_size, mime_type, created_at, amount, currency, invoice_number, supplier_name, invoice_date, parsed_amount, parsed_currency, parsed_invoice_number, parsed_supplier, parsed_invoice_date")
+      .select(selectCols, limit !== null ? { count: "exact" } : undefined)
       .eq("order_id", orderResult.orderId)
       .order("created_at", { ascending: false });
+
+    if (limit !== null) {
+      q = q.range(offset, offset + limit - 1);
+    }
+
+    const { data: docs, error, count } = await q;
 
     if (error) {
       if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(error.message || "")) {
@@ -63,16 +81,49 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 });
     }
 
-    const withUrls = await Promise.all(
-      (docs || []).map(async (d) => {
-        const { data: signed } = await supabaseAdmin.storage
-          .from(BUCKET_NAME)
-          .createSignedUrl(d.file_path, 60 * 60);
-        return { ...d, download_url: signed?.signedUrl || null };
-      })
-    );
+    const list = docs || [];
+    /** ORDER_PAGE_PERF_SPEC Step 6: one Storage call instead of N× createSignedUrl */
+    let withUrls = list.map((d) => ({ ...d, download_url: null as string | null }));
+    const paths = list.map((d) => d.file_path).filter((p): p is string => Boolean(p));
+    if (paths.length > 0) {
+      const { data: signedRows, error: batchSignError } = await supabaseAdmin.storage
+        .from(BUCKET_NAME)
+        .createSignedUrls(paths, 60 * 60);
+      if (!batchSignError && signedRows?.length) {
+        const urlByPath = new Map<string, string | null>();
+        for (const row of signedRows) {
+          const r = row as { path?: string; signedUrl?: string | null };
+          if (r.path) urlByPath.set(r.path, r.signedUrl ?? null);
+        }
+        withUrls = list.map((d) => ({
+          ...d,
+          download_url: d.file_path ? urlByPath.get(d.file_path) ?? null : null,
+        }));
+      } else {
+        withUrls = await Promise.all(
+          list.map(async (d) => {
+            if (!d.file_path) return { ...d, download_url: null as string | null };
+            const { data: signed } = await supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .createSignedUrl(d.file_path, 60 * 60);
+            return { ...d, download_url: signed?.signedUrl || null };
+          })
+        );
+      }
+    }
 
-    return NextResponse.json({ documents: withUrls });
+    const payload: {
+      documents: typeof withUrls;
+      pagination?: { offset: number; limit: number; total: number };
+    } = { documents: withUrls };
+    if (limit !== null) {
+      payload.pagination = {
+        offset,
+        limit,
+        total: typeof count === "number" ? count : withUrls.length,
+      };
+    }
+    return NextResponse.json(payload);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(msg)) {

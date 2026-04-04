@@ -45,7 +45,10 @@ export async function GET(
 
     const [expanded, travellers] = await Promise.all([
       buildExpandedOrderAndInvoiceSummary(supabaseAdmin, orderRecord, companyId, apiUser),
-      loadFormattedTravellersForOrder(supabaseAdmin, companyId, orderCode),
+      loadFormattedTravellersForOrder(supabaseAdmin, companyId, orderCode, {
+        id: orderRecord.id as string,
+        client_party_id: (orderRecord.client_party_id as string | null | undefined) ?? null,
+      }),
     ]);
 
     return NextResponse.json({

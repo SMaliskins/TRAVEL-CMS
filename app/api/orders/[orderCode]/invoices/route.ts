@@ -189,10 +189,7 @@ export async function GET(
       return NextResponse.json({ nextInvoiceNumbers: allNumbers.slice(0, count) });
     }
 
-    // Get all invoices for this order
-    const { data: invoices, error: invoicesError } = await supabaseAdmin
-      .from("invoices")
-      .select(`
+    const invoiceSelect = `
         *,
         invoice_items (
           id,
@@ -207,21 +204,74 @@ export async function GET(
           unit_price,
           line_total
         )
-      `)
-      .eq("order_id", order.id)
-      .order("created_at", { ascending: false });
+      `;
 
-    if (invoicesError) {
-      console.error("[Invoices API] Error fetching invoices:", invoicesError);
-      console.error("[Invoices API] Order ID:", order.id);
+    const listPageParam = searchParams.get("page");
+    let invoices: Array<{
+      id: string;
+      status?: string;
+      total?: string | number;
+      [key: string]: unknown;
+    }>;
+    let paginatedMeta: { page: number; pageSize: number; total: number } | undefined;
+
+    if (listPageParam !== null) {
+      const p = parseInt(listPageParam, 10);
+      const pageNum = Number.isFinite(p) && p > 0 ? p : 1;
+      const psRaw = parseInt(searchParams.get("pageSize") || "30", 10);
+      const pageSize = Number.isFinite(psRaw) ? Math.min(100, Math.max(1, psRaw)) : 30;
+      const offset = (pageNum - 1) * pageSize;
+
+      const { data: inv, error: invoicesError, count } = await supabaseAdmin
+        .from("invoices")
+        .select(invoiceSelect, { count: "exact" })
+        .eq("order_id", order.id)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (invoicesError) {
+        console.error("[Invoices API] Error fetching invoices:", invoicesError);
+        console.error("[Invoices API] Order ID:", order.id);
+        return NextResponse.json(
+          { error: "Failed to fetch invoices", details: invoicesError.message, orderId: order.id },
+          { status: 500 }
+        );
+      }
+      invoices = inv || [];
+      const total = typeof count === "number" ? count : invoices.length;
+      paginatedMeta = { page: pageNum, pageSize, total };
+    } else {
+      const { data: inv, error: invoicesError } = await supabaseAdmin
+        .from("invoices")
+        .select(invoiceSelect)
+        .eq("order_id", order.id)
+        .order("created_at", { ascending: false });
+
+      if (invoicesError) {
+        console.error("[Invoices API] Error fetching invoices:", invoicesError);
+        console.error("[Invoices API] Order ID:", order.id);
+        return NextResponse.json(
+          { error: "Failed to fetch invoices", details: invoicesError.message, orderId: order.id },
+          { status: 500 }
+        );
+      }
+      invoices = inv || [];
+    }
+
+    const { data: statusRows, error: statusErr } = await supabaseAdmin
+      .from("invoices")
+      .select("id, status")
+      .eq("order_id", order.id);
+
+    if (statusErr) {
+      console.error("[Invoices API] Error fetching invoice statuses:", statusErr);
       return NextResponse.json(
-        { error: "Failed to fetch invoices", details: invoicesError.message, orderId: order.id },
+        { error: "Failed to fetch invoices", details: statusErr.message, orderId: order.id },
         { status: 500 }
       );
     }
 
-    // Only "active" invoices (not cancelled/replaced) count for linked payments
-    const activeInvoiceIds = (invoices || []).filter(
+    const activeInvoiceIds = (statusRows || []).filter(
       (inv: { status?: string }) => inv.status !== "cancelled" && inv.status !== "replaced"
     ).map((inv: { id: string }) => inv.id);
 
@@ -261,7 +311,7 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       invoices: invoicesWithPaid,
       orderId: order.id,
       orderCode: orderCode,
@@ -270,6 +320,7 @@ export async function GET(
         linkedToInvoices: Math.round(linkedTotal * 100) / 100,
         deposit: Math.round(unlinkedTotal * 100) / 100,
       },
+      ...(paginatedMeta ? { pagination: paginatedMeta } : {}),
     });
   } catch (error) {
     console.error("Error in GET /api/orders/[orderCode]/invoices:", error);

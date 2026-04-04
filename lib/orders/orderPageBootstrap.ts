@@ -35,26 +35,39 @@ function computeTravellerTitle(gender: string | null | undefined, dob: string | 
   return "Mr";
 }
 
+export type OrderTravellersLoadHint = { id: string; client_party_id?: string | null };
+
+/**
+ * @param orderHint — when provided (e.g. from bootstrap after full order row), skips duplicate `orders` lookup by code.
+ */
 export async function loadFormattedTravellersForOrder(
   admin: SupabaseClient,
   companyId: string,
-  orderCode: string
+  orderCode: string,
+  orderHint?: OrderTravellersLoadHint | null
 ): Promise<unknown[]> {
-  const { data: order, error: orderError } = await admin
-    .from("orders")
-    .select("id, client_party_id")
-    .eq("company_id", companyId)
-    .eq("order_code", orderCode)
-    .single();
+  let order: { id: string; client_party_id: string | null };
 
-  if (orderError || !order) return [];
+  if (orderHint?.id) {
+    order = { id: orderHint.id, client_party_id: orderHint.client_party_id ?? null };
+  } else {
+    const { data: o, error: orderError } = await admin
+      .from("orders")
+      .select("id, client_party_id")
+      .eq("company_id", companyId)
+      .eq("order_code", orderCode)
+      .single();
+
+    if (orderError || !o) return [];
+    order = { id: o.id, client_party_id: o.client_party_id ?? null };
+  }
 
   if (order.client_party_id) {
     const { data: existingRecords } = await admin
       .from("order_travellers")
       .select("id")
       .eq("order_id", order.id)
-      .eq("party_id", order.client_party_id);
+      .eq("party_id", order.client_party_id as string);
 
     if (!existingRecords || existingRecords.length === 0) {
       await admin.from("order_travellers").insert({
@@ -151,6 +164,75 @@ export async function loadFormattedTravellersForOrder(
     });
 }
 
+function formatUserProfileName(row: { first_name?: string | null; last_name?: string | null }): string | null {
+  const s = [row.first_name, row.last_name].filter(Boolean).join(" ").trim();
+  return s.length > 0 ? s : null;
+}
+
+/** ORDER_PAGE_PERF_SPEC Step 7: batch profile lookups instead of sequential awaits. */
+async function resolveOwnerDisplayName(
+  admin: SupabaseClient,
+  order: Record<string, unknown>,
+  apiUser: ApiUser
+): Promise<string | null> {
+  const ownerUserId = order.owner_user_id as string | undefined;
+  const managerUserId = order.manager_user_id as string | undefined;
+  const createdBy = order.created_by as string | undefined;
+  const currentUserId = apiUser.userId;
+
+  const profileIds = [...new Set([ownerUserId, managerUserId, createdBy, currentUserId].filter(Boolean))] as string[];
+  const legacyUserIds = [...new Set([ownerUserId, createdBy].filter(Boolean))] as string[];
+
+  const [profilesRes, legacyRes] = await Promise.all([
+    profileIds.length > 0
+      ? admin.from("user_profiles").select("id, first_name, last_name").in("id", profileIds)
+      : Promise.resolve({ data: [] as { id: string; first_name?: string | null; last_name?: string | null }[] }),
+    legacyUserIds.length > 0
+      ? admin.from("profiles").select("user_id, display_name").in("user_id", legacyUserIds)
+      : Promise.resolve({ data: [] as { user_id: string; display_name?: string | null }[] }),
+  ]);
+
+  const upById = new Map<string, string | null>();
+  for (const r of profilesRes.data || []) {
+    upById.set(r.id, formatUserProfileName(r));
+  }
+  const legacyByUserId = new Map<string, string | null>();
+  for (const r of legacyRes.data || []) {
+    const d = (r.display_name || "").trim();
+    legacyByUserId.set(r.user_id, d.length > 0 ? d : null);
+  }
+
+  const up = (id?: string) => (id ? upById.get(id) ?? null : null);
+  const leg = (id?: string) => (id ? legacyByUserId.get(id) ?? null : null);
+
+  let ownerName: string | null = null;
+  if (ownerUserId) {
+    ownerName = up(ownerUserId) || leg(ownerUserId);
+  }
+  if (!ownerName && managerUserId) {
+    ownerName = up(managerUserId);
+  }
+  if (!ownerName && createdBy) {
+    ownerName = up(createdBy) || leg(createdBy);
+  }
+  if (!ownerName && createdBy) {
+    const { data: authUser } = await admin.auth.admin.getUserById(createdBy);
+    if (authUser?.user) {
+      const meta = authUser.user.user_metadata as Record<string, unknown> | undefined;
+      const full = typeof meta?.full_name === "string" ? meta.full_name.trim() : "";
+      const nm = typeof meta?.name === "string" ? meta.name.trim() : "";
+      const fn = typeof meta?.first_name === "string" ? meta.first_name.trim() : "";
+      const ln = typeof meta?.last_name === "string" ? meta.last_name.trim() : "";
+      const fromMeta = [fn, ln].filter(Boolean).join(" ").trim();
+      ownerName = full || nm || fromMeta || authUser.user.email?.split("@")[0] || null;
+    }
+  }
+  if (!ownerName) {
+    ownerName = up(currentUserId);
+  }
+  return ownerName;
+}
+
 export async function buildExpandedOrderAndInvoiceSummary(
   admin: SupabaseClient,
   order: Record<string, unknown>,
@@ -162,7 +244,7 @@ export async function buildExpandedOrderAndInvoiceSummary(
   const needDateFill = !order.date_from || !order.date_to;
   const referralId = order.referral_party_id as string | null | undefined;
 
-  const [servicesRes, paymentsRes, invoicesRes, dateServicesRes, refPartyRes] = await Promise.all([
+  const [servicesRes, paymentsRes, invoicesRes, dateServicesRes, refPartyRes, ownerName] = await Promise.all([
     admin.from("order_services").select("res_status, client_price").eq("order_id", orderId).eq("company_id", companyId),
     admin.from("payments").select("amount, status, invoice_id").eq("order_id", orderId),
     admin
@@ -182,6 +264,7 @@ export async function buildExpandedOrderAndInvoiceSummary(
     referralId
       ? admin.from("party").select("display_name").eq("id", referralId).maybeSingle()
       : Promise.resolve({ data: null as { display_name?: string | null } | null }),
+    resolveOwnerDisplayName(admin, order, apiUser),
   ]);
 
   const services = servicesRes.data || [];
@@ -292,74 +375,6 @@ export async function buildExpandedOrderAndInvoiceSummary(
         .filter(Boolean) as string[];
       if (froms.length > 0 && !effectiveDateFrom) effectiveDateFrom = froms.sort()[0];
       if (tos.length > 0 && !effectiveDateTo) effectiveDateTo = tos.sort().reverse()[0];
-    }
-  }
-
-  let ownerName: string | null = null;
-  const ownerUserId = order.owner_user_id as string | null | undefined;
-  if (ownerUserId) {
-    const { data: profile } = await admin.from("user_profiles").select("first_name, last_name").eq("id", ownerUserId).single();
-    if (profile) {
-      ownerName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || null;
-    }
-    if (!ownerName) {
-      const { data: oldProfile } = await admin
-        .from("profiles")
-        .select("display_name, initials")
-        .eq("user_id", ownerUserId)
-        .single();
-      if (oldProfile) ownerName = oldProfile.display_name || null;
-    }
-  }
-  if (!ownerName && order.manager_user_id) {
-    const { data: managerProfile } = await admin
-      .from("user_profiles")
-      .select("first_name, last_name")
-      .eq("id", order.manager_user_id as string)
-      .single();
-    if (managerProfile) {
-      ownerName = [managerProfile.first_name, managerProfile.last_name].filter(Boolean).join(" ") || null;
-    }
-  }
-  if (!ownerName && order.created_by) {
-    const createdBy = order.created_by as string;
-    const { data: creatorProfile } = await admin
-      .from("user_profiles")
-      .select("first_name, last_name")
-      .eq("id", createdBy)
-      .single();
-    if (creatorProfile) {
-      ownerName = [creatorProfile.first_name, creatorProfile.last_name].filter(Boolean).join(" ") || null;
-    }
-    if (!ownerName) {
-      const { data: creatorOldProfile } = await admin
-        .from("profiles")
-        .select("display_name, initials")
-        .eq("user_id", createdBy)
-        .single();
-      if (creatorOldProfile) ownerName = creatorOldProfile.display_name || null;
-    }
-  }
-  if (!ownerName && order.created_by) {
-    const { data: authUser } = await admin.auth.admin.getUserById(order.created_by as string);
-    if (authUser?.user) {
-      const meta = authUser.user.user_metadata;
-      ownerName =
-        meta?.full_name ||
-        meta?.name ||
-        [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
-        authUser.user.email?.split("@")[0] ||
-        null;
-    }
-  }
-  if (!ownerName) {
-    const { data: currentProfile } = await admin
-      .from("user_profiles")
-      .select("first_name, last_name")
-      .eq("id", apiUser.userId)
-      .single();
-    if (currentProfile) {
-      ownerName = [currentProfile.first_name, currentProfile.last_name].filter(Boolean).join(" ") || null;
     }
   }
 

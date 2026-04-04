@@ -12,6 +12,7 @@ import {
   fetchOrderDocuments,
   orderPageQueryKeys,
   type OrderDocumentListRow,
+  type OrderDocumentsQueryResult,
 } from "@/lib/orders/orderPageQueries";
 
 type OrderDocument = OrderDocumentListRow;
@@ -32,17 +33,24 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const queryClient = useQueryClient();
-  const docsQueryKey = orderPageQueryKeys.documents(orderCode);
+  const [docPage, setDocPage] = useState(1);
+  const docsQueryKey = orderPageQueryKeys.documents(orderCode, docPage);
   const {
-    data: documents = [],
+    data: documentsPayload,
     isPending: loading,
     error: queryLoadError,
     isError: loadFailed,
   } = useQuery({
     queryKey: docsQueryKey,
-    queryFn: () => fetchOrderDocuments(orderCode),
+    queryFn: () => fetchOrderDocuments(orderCode, docPage),
     enabled: Boolean(orderCode),
   });
+  const documents = documentsPayload?.documents ?? [];
+  const docPagination = documentsPayload?.pagination;
+  const docTotalPages =
+    docPagination && docPagination.limit > 0
+      ? Math.max(1, Math.ceil(docPagination.total / docPagination.limit))
+      : 1;
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const displayError =
@@ -54,6 +62,13 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<OrderDocument>>({});
   const [docDropActive, setDocDropActive] = useState(false);
+
+  useEffect(() => {
+    setDocPage(1);
+  }, [orderCode]);
+
+  const showDocumentsEmptyOnboarding =
+    !loading && (docPagination?.total ?? 0) === 0 && documents.length === 0;
 
   const parseDocument = useCallback(async (doc: OrderDocument): Promise<void> => {
     const mime = (doc.mime_type || doc.file_name || "").toLowerCase();
@@ -86,8 +101,17 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         });
 
         if (patchRes.ok) {
-          queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) =>
-            (prev ?? []).map((d) => (d.id === doc.id ? { ...d, ...updatePayload } : d))
+          queryClient.setQueriesData<OrderDocumentsQueryResult>(
+            { queryKey: ["order-documents", orderCode] },
+            (prev) =>
+              prev
+                ? {
+                    ...prev,
+                    documents: prev.documents.map((d) =>
+                      d.id === doc.id ? { ...d, ...updatePayload } : d
+                    ),
+                  }
+                : prev
           );
         }
       }
@@ -101,7 +125,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
       });
       setAttemptedParse((prev) => new Set(prev).add(doc.id));
     }
-  }, [orderCode, queryClient, docsQueryKey]);
+  }, [orderCode, queryClient]);
 
   // Parse existing documents on load (e.g. uploaded before, or page refresh)
   useEffect(() => {
@@ -141,8 +165,15 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         body: JSON.stringify(editForm),
       });
       if (res.ok) {
-        queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) =>
-          (prev ?? []).map((d) => (d.id === docId ? { ...d, ...editForm } : d))
+        queryClient.setQueriesData<OrderDocumentsQueryResult>(
+          { queryKey: ["order-documents", orderCode] },
+          (prev) =>
+            prev
+              ? {
+                  ...prev,
+                  documents: prev.documents.map((d) => (d.id === docId ? { ...d, ...editForm } : d)),
+                }
+              : prev
         );
       } else {
         setError("Failed to save document details.");
@@ -208,7 +239,8 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         if (res.ok) {
           const json = await res.json();
           const newDoc = json.document as OrderDocument;
-          queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) => [newDoc, ...(prev ?? [])]);
+          setDocPage(1);
+          await queryClient.invalidateQueries({ queryKey: ["order-documents", orderCode] });
           const mime = (newDoc.mime_type || newDoc.file_name || "").toLowerCase();
           const isPdf = mime.includes("pdf");
           const isImage = /\.(png|jpg|jpeg|webp)$/i.test(newDoc.file_name || "") ||
@@ -229,7 +261,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         setUploading(false);
       }
     },
-    [orderCode, compressImage, parseDocument, queryClient, docsQueryKey]
+    [orderCode, compressImage, parseDocument, queryClient]
   );
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -272,9 +304,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
       if (res.ok) {
-        queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) =>
-          (prev ?? []).filter((d) => d.id !== docId)
-        );
+        await queryClient.invalidateQueries({ queryKey: ["order-documents", orderCode] });
       } else {
         setError("Failed to delete");
       }
@@ -332,7 +362,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
 
       {loading ? (
         <div className="py-8 text-center text-gray-500">{t(lang, "order.loadingDocuments")}</div>
-      ) : documents.length === 0 ? (
+      ) : showDocumentsEmptyOnboarding ? (
         <div
           className={`rounded-lg border-2 border-dashed py-12 text-center text-gray-500 transition-colors ${
             docDropActive ? "border-blue-400 bg-blue-50/60 ring-2 ring-blue-200" : "border-gray-200"
@@ -345,6 +375,9 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         </div>
       ) : (
         <>
+        {documents.length === 0 ? (
+          <p className="py-8 text-center text-gray-500">No documents on this page.</p>
+        ) : (
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-600">
@@ -497,6 +530,32 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
             })}
           </tbody>
         </table>
+        )}
+        {docTotalPages > 1 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+            <span>
+              Page {docPage} of {docTotalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={docPage <= 1}
+                onClick={() => setDocPage((p) => Math.max(1, p - 1))}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={docPage >= docTotalPages}
+                onClick={() => setDocPage((p) => p + 1)}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
         <div
           className={`mt-4 rounded-lg border-2 border-dashed py-6 text-center text-sm transition-colors ${
             docDropActive ? "border-blue-400 bg-blue-50/60 ring-2 ring-blue-200" : "border-gray-200 text-gray-400"
