@@ -2134,6 +2134,7 @@ export default function OrderPage({
                     orderCode={effectiveOrderCode}
                     orderId={order.id}
                     orderAmountTotal={order.amount_total}
+                    linkedToInvoicesHint={linkedToInvoices}
                     onChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
                   />
                 </div>

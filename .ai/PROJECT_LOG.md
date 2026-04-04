@@ -5,6 +5,30 @@
 
 ---
 
+## [2026-04-04] CW — Invoices & Payments tab: lighter summary fetch + parallel invoice aggregates
+
+**Task:** Tab felt slow: `OrderPaymentsList` called full `GET .../invoices` (all rows + items) only for `paymentSummary`; `InvoiceList` blocked second network on communications for email/reminder columns immediately after invoices.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `GET .../invoices?summaryOnly=1` — two small queries, no invoice bodies. `buildInvoicePaymentAggregates` shared with main GET; paginated/full invoice fetch runs in `Promise.all` with aggregates. `OrderPaymentsList` uses `summaryOnly` + `linkedToInvoicesHint` from bootstrap. `InvoiceList` defers `loadEmailStatuses` via `requestIdleCallback` (fallback `setTimeout(0)`).
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-04] CW — ORDER_PAGE_PERF Part 2 L3: parallel referral + payments on orders list API
+
+**Task:** `GET /api/orders` — run `referral_accrual_line` and `payments` (processing fees) in same `Promise.all` as services / profiles / invoices; remove two sequential awaits. `collectTravellerSearchLabelsByOrder` stays after services (needs service ids; parallel with `null` would duplicate `order_services` reads).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-04] CW — Clients Data: prefetch after bootstrap + narrow batch selects
 
 **Task:** Finish Clients Data tab perf: warm React Query cache when order loads; reduce DB row payload in `loadDirectoryRecordsForPartyIds` (explicit columns; `partner_party` only `party_id` so merged supplier fields stay on `party`).

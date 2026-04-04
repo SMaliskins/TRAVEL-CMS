@@ -250,25 +250,45 @@ export async function GET(request: NextRequest) {
     // Run all sub-queries in parallel
     const ownerIds = [...new Set((orders || []).map((o: any) => o.owner_user_id || o.manager_user_id).filter(Boolean))];
 
-    const [servicesResult, ownerProfilesResult, invoicesResult] = await Promise.all([
-      supabaseAdmin
-        .from("order_services")
-        .select("id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount")
-        .eq("company_id", companyId)
-        .in("order_id", orderIds),
-      ownerIds.length > 0
-        ? supabaseAdmin
-            .from("user_profiles")
-            .select("id, first_name, last_name")
-            .in("id", ownerIds)
-        : Promise.resolve({ data: [] }),
-      supabaseAdmin
-        .from("invoices")
-        .select("id, order_id, status, total, due_date, final_payment_date")
-        .eq("company_id", companyId)
-        .in("order_id", orderIds)
-        .neq("status", "cancelled"),
-    ]);
+    const [servicesResult, ownerProfilesResult, invoicesResult, referralResult, paymentsResult] =
+      await Promise.all([
+        supabaseAdmin
+          .from("order_services")
+          .select(
+            "id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount"
+          )
+          .eq("company_id", companyId)
+          .in("order_id", orderIds),
+        ownerIds.length > 0
+          ? supabaseAdmin
+              .from("user_profiles")
+              .select("id, first_name, last_name")
+              .in("id", ownerIds)
+          : Promise.resolve({ data: [] as { id: string; first_name: string | null; last_name: string | null }[] }),
+        supabaseAdmin
+          .from("invoices")
+          .select("id, order_id, status, total, due_date, final_payment_date")
+          .eq("company_id", companyId)
+          .in("order_id", orderIds)
+          .neq("status", "cancelled"),
+        orderIds.length > 0
+          ? supabaseAdmin
+              .from("referral_accrual_line")
+              .select("order_id, commission_amount")
+              .eq("company_id", companyId)
+              .in("order_id", orderIds)
+              .in("status", ["planned", "accrued"])
+          : Promise.resolve({ data: [] as { order_id: string; commission_amount?: number | string | null }[] }),
+        orderIds.length > 0
+          ? supabaseAdmin
+              .from("payments")
+              .select("order_id, processing_fee")
+              .eq("company_id", companyId)
+              .in("order_id", orderIds)
+              .neq("status", "cancelled")
+              .gt("processing_fee", 0)
+          : Promise.resolve({ data: [] as { order_id: string; processing_fee: number | string }[] }),
+      ]);
 
     const servicesData = servicesResult.data || [];
     const invoicesData = invoicesResult.data || [];
@@ -365,41 +385,20 @@ export async function GET(request: NextRequest) {
     });
 
     const referralCommissionByOrder = new Map<string, number>();
-    if (orderIds.length > 0) {
-      const { data: refRows } = await supabaseAdmin
-        .from("referral_accrual_line")
-        .select("order_id, commission_amount")
-        .eq("company_id", companyId)
-        .in("order_id", orderIds)
-        .in("status", ["planned", "accrued"]);
-      for (const r of refRows || []) {
-        const row = r as { order_id: string; commission_amount?: number | string | null };
-        const amt = Number(row.commission_amount) || 0;
-        referralCommissionByOrder.set(
-          row.order_id,
-          (referralCommissionByOrder.get(row.order_id) || 0) + amt
-        );
-      }
+    for (const r of referralResult.data || []) {
+      const row = r as { order_id: string; commission_amount?: number | string | null };
+      const amt = Number(row.commission_amount) || 0;
+      referralCommissionByOrder.set(
+        row.order_id,
+        (referralCommissionByOrder.get(row.order_id) || 0) + amt
+      );
     }
 
-    // Processing fees from card payments
     const processingFeesByOrder = new Map<string, number>();
-    if (orderIds.length > 0) {
-      const { data: feeRows } = await supabaseAdmin
-        .from("payments")
-        .select("order_id, processing_fee")
-        .eq("company_id", companyId)
-        .in("order_id", orderIds)
-        .neq("status", "cancelled")
-        .gt("processing_fee", 0);
-      for (const r of (feeRows || []) as { order_id: string; processing_fee: number | string }[]) {
-        const fee = Number(r.processing_fee) || 0;
-        if (fee > 0) {
-          processingFeesByOrder.set(
-            r.order_id,
-            (processingFeesByOrder.get(r.order_id) || 0) + fee
-          );
-        }
+    for (const r of (paymentsResult.data || []) as { order_id: string; processing_fee: number | string }[]) {
+      const fee = Number(r.processing_fee) || 0;
+      if (fee > 0) {
+        processingFeesByOrder.set(r.order_id, (processingFeesByOrder.get(r.order_id) || 0) + fee);
       }
     }
 

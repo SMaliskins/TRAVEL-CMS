@@ -1,6 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+/** Payments linked to active invoices + totals (used for list rows and paymentSummary). */
+async function buildInvoicePaymentAggregates(orderId: string): Promise<
+  | { ok: true; paidByInvoice: Record<string, number>; paymentSummary: { totalPaid: number; linkedToInvoices: number; deposit: number } }
+  | { ok: false; message: string }
+> {
+  const { data: statusRows, error: statusErr } = await supabaseAdmin
+    .from("invoices")
+    .select("id, status")
+    .eq("order_id", orderId);
+
+  if (statusErr) {
+    return { ok: false, message: statusErr.message };
+  }
+
+  const activeInvoiceIds = (statusRows || [])
+    .filter((inv: { status?: string }) => inv.status !== "cancelled" && inv.status !== "replaced")
+    .map((inv: { id: string }) => inv.id);
+
+  const { data: allOrderPayments } = await supabaseAdmin
+    .from("payments")
+    .select("invoice_id, amount, status")
+    .eq("order_id", orderId);
+
+  const paidByInvoice: Record<string, number> = {};
+  let linkedTotal = 0;
+  let unlinkedTotal = 0;
+  let totalOrderPayments = 0;
+
+  if (allOrderPayments) {
+    for (const p of allOrderPayments) {
+      if ((p as { status?: string }).status === "cancelled") continue;
+      const amt = Number(p.amount) || 0;
+      totalOrderPayments += amt;
+      if (p.invoice_id && activeInvoiceIds.includes(p.invoice_id)) {
+        paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] || 0) + amt;
+        linkedTotal += amt;
+      } else if (!p.invoice_id) {
+        unlinkedTotal += amt;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    paidByInvoice,
+    paymentSummary: {
+      totalPaid: Math.round(totalOrderPayments * 100) / 100,
+      linkedToInvoices: Math.round(linkedTotal * 100) / 100,
+      deposit: Math.round(unlinkedTotal * 100) / 100,
+    },
+  };
+}
+
 // GET /api/orders/[orderCode]/invoices - List all invoices for an order
 // Also supports ?nextNumber=true to get next invoice number
 export async function GET(
@@ -189,6 +242,24 @@ export async function GET(
       return NextResponse.json({ nextInvoiceNumbers: allNumbers.slice(0, count) });
     }
 
+    /** Lightweight: paymentSummary only (Invoices&Payments tab — avoid loading all invoice rows + items). */
+    if (searchParams.get("summaryOnly") === "1") {
+      const agg = await buildInvoicePaymentAggregates(order.id);
+      if (!agg.ok) {
+        console.error("[Invoices API] summaryOnly aggregates error:", agg.message);
+        return NextResponse.json(
+          { error: "Failed to fetch payment summary", details: agg.message, orderId: order.id },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({
+        invoices: [],
+        orderId: order.id,
+        orderCode,
+        paymentSummary: agg.paymentSummary,
+      });
+    }
+
     const invoiceSelect = `
         *,
         invoice_items (
@@ -214,6 +285,14 @@ export async function GET(
       [key: string]: unknown;
     }>;
     let paginatedMeta: { page: number; pageSize: number; total: number } | undefined;
+    let paidByInvoice: Record<string, number> = {};
+    let paymentSummary: { totalPaid: number; linkedToInvoices: number; deposit: number } = {
+      totalPaid: 0,
+      linkedToInvoices: 0,
+      deposit: 0,
+    };
+
+    const aggregatesPromise = buildInvoicePaymentAggregates(order.id);
 
     if (listPageParam !== null) {
       const p = parseInt(listPageParam, 10);
@@ -222,30 +301,49 @@ export async function GET(
       const pageSize = Number.isFinite(psRaw) ? Math.min(100, Math.max(1, psRaw)) : 30;
       const offset = (pageNum - 1) * pageSize;
 
-      const { data: inv, error: invoicesError, count } = await supabaseAdmin
-        .from("invoices")
-        .select(invoiceSelect, { count: "exact" })
-        .eq("order_id", order.id)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + pageSize - 1);
+      const [invResult, aggResult] = await Promise.all([
+        supabaseAdmin
+          .from("invoices")
+          .select(invoiceSelect, { count: "exact" })
+          .eq("order_id", order.id)
+          .order("created_at", { ascending: false })
+          .range(offset, offset + pageSize - 1),
+        aggregatesPromise,
+      ]);
+
+      const { data: inv, error: invoicesError, count } = invResult;
 
       if (invoicesError) {
         console.error("[Invoices API] Error fetching invoices:", invoicesError);
         console.error("[Invoices API] Order ID:", order.id);
         return NextResponse.json(
           { error: "Failed to fetch invoices", details: invoicesError.message, orderId: order.id },
+          { status: 500 }
+        );
+      }
+      if (!aggResult.ok) {
+        console.error("[Invoices API] Aggregates error:", aggResult.message);
+        return NextResponse.json(
+          { error: "Failed to fetch invoices", details: aggResult.message, orderId: order.id },
           { status: 500 }
         );
       }
       invoices = inv || [];
       const total = typeof count === "number" ? count : invoices.length;
       paginatedMeta = { page: pageNum, pageSize, total };
+      paidByInvoice = aggResult.paidByInvoice;
+      paymentSummary = aggResult.paymentSummary;
     } else {
-      const { data: inv, error: invoicesError } = await supabaseAdmin
-        .from("invoices")
-        .select(invoiceSelect)
-        .eq("order_id", order.id)
-        .order("created_at", { ascending: false });
+      const [invResult, aggResult] = await Promise.all([
+        supabaseAdmin
+          .from("invoices")
+          .select(invoiceSelect)
+          .eq("order_id", order.id)
+          .order("created_at", { ascending: false }),
+        aggregatesPromise,
+      ]);
+
+      const { data: inv, error: invoicesError } = invResult;
 
       if (invoicesError) {
         console.error("[Invoices API] Error fetching invoices:", invoicesError);
@@ -255,50 +353,16 @@ export async function GET(
           { status: 500 }
         );
       }
-      invoices = inv || [];
-    }
-
-    const { data: statusRows, error: statusErr } = await supabaseAdmin
-      .from("invoices")
-      .select("id, status")
-      .eq("order_id", order.id);
-
-    if (statusErr) {
-      console.error("[Invoices API] Error fetching invoice statuses:", statusErr);
-      return NextResponse.json(
-        { error: "Failed to fetch invoices", details: statusErr.message, orderId: order.id },
-        { status: 500 }
-      );
-    }
-
-    const activeInvoiceIds = (statusRows || []).filter(
-      (inv: { status?: string }) => inv.status !== "cancelled" && inv.status !== "replaced"
-    ).map((inv: { id: string }) => inv.id);
-
-    const { data: allOrderPayments } = await supabaseAdmin
-      .from("payments")
-      .select("invoice_id, amount, status")
-      .eq("order_id", order.id);
-
-    // linkedTotal = only payments linked to active (non-cancelled) invoices
-    let paidByInvoice: Record<string, number> = {};
-    let linkedTotal = 0;
-    let unlinkedTotal = 0;
-    let totalOrderPayments = 0;
-
-    if (allOrderPayments) {
-      for (const p of allOrderPayments) {
-        if ((p as { status?: string }).status === "cancelled") continue;
-        const amt = Number(p.amount) || 0;
-        totalOrderPayments += amt;
-        if (p.invoice_id && activeInvoiceIds.includes(p.invoice_id)) {
-          paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] || 0) + amt;
-          linkedTotal += amt;
-        } else if (!p.invoice_id) {
-          unlinkedTotal += amt;
-        }
-        // Payments linked to cancelled/replaced invoices are not in linkedTotal (count as overpayment)
+      if (!aggResult.ok) {
+        console.error("[Invoices API] Aggregates error:", aggResult.message);
+        return NextResponse.json(
+          { error: "Failed to fetch invoices", details: aggResult.message, orderId: order.id },
+          { status: 500 }
+        );
       }
+      invoices = inv || [];
+      paidByInvoice = aggResult.paidByInvoice;
+      paymentSummary = aggResult.paymentSummary;
     }
 
     const invoicesWithPaid = (invoices || []).map((inv: { id: string; total?: string | number }) => {
@@ -315,11 +379,7 @@ export async function GET(
       invoices: invoicesWithPaid,
       orderId: order.id,
       orderCode: orderCode,
-      paymentSummary: {
-        totalPaid: Math.round(totalOrderPayments * 100) / 100,
-        linkedToInvoices: Math.round(linkedTotal * 100) / 100,
-        deposit: Math.round(unlinkedTotal * 100) / 100,
-      },
+      paymentSummary,
       ...(paginatedMeta ? { pagination: paginatedMeta } : {}),
     });
   } catch (error) {

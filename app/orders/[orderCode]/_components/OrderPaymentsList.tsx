@@ -35,6 +35,8 @@ interface OrderPaymentsListProps {
   orderCode: string;
   orderId: string;
   orderAmountTotal?: number;
+  /** From bootstrap header; avoids wrong overpayment row until summary fetch completes */
+  linkedToInvoicesHint?: number;
   onChanged?: () => void;
 }
 
@@ -54,14 +56,17 @@ export interface OrderPaymentsListHandle {
   triggerAddPayment: () => void;
 }
 
-const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListProps>(function OrderPaymentsList({ orderCode, orderId, orderAmountTotal = 0, onChanged }, ref) {
+const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListProps>(function OrderPaymentsList(
+  { orderCode, orderId, orderAmountTotal = 0, linkedToInvoicesHint = 0, onChanged },
+  ref
+) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const userRole = useCurrentUserRole();
   const canEditOrDeletePayments = canModifyFinancePayments(userRole);
   const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [linkedToInvoices, setLinkedToInvoices] = useState(0);
+  const [linkedToInvoices, setLinkedToInvoices] = useState(() => linkedToInvoicesHint);
   const [loading, setLoading] = useState(true);
   const [editPayment, setEditPayment] = useState<EditPaymentData | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -94,12 +99,19 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
     }
   }, [orderId, showToast]);
 
+  useEffect(() => {
+    setLinkedToInvoices(linkedToInvoicesHint);
+  }, [linkedToInvoicesHint]);
+
   const loadPaymentSummary = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/invoices`, {
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-      });
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices?summaryOnly=1`,
+        {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        }
+      );
       if (!res.ok) return;
       const data = await res.json();
       const linked = Number(data?.paymentSummary?.linkedToInvoices) || 0;

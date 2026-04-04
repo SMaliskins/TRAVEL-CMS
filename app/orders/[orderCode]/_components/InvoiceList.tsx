@@ -287,7 +287,19 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
   useEffect(() => {
     const ids = invoiceIdsKey ? invoiceIdsKey.split(",").filter(Boolean) : [];
-    void loadEmailStatuses(ids);
+    if (ids.length === 0) {
+      void loadEmailStatuses([]);
+      return;
+    }
+    const run = () => {
+      void loadEmailStatuses(ids);
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 1200 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 0);
+    return () => window.clearTimeout(t);
   }, [orderCode, invoiceIdsKey, loadEmailStatuses]);
 
   const handlePreviewPDF = async (invoiceId: string) => {
