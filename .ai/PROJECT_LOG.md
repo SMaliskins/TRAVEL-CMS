@@ -5,6 +5,119 @@
 
 ---
 
+## [2026-04-04] CW — ORDER_PAGE_PERF_SPEC Step 4: React Query (services + tab data cache)
+
+**Task:** Step 4 — `@tanstack/react-query`, shared query keys/fetchers, orders layout provider; page uses `useQuery` for `/services`; documents / communications / clients-data tabs cached; invalidate services on `invoiceRefetchTrigger` + `reloadOrderServices` → `refetchQueries`. Fix services GET typing (`unknown` cast) + `OrderServicesBlock` mapper (`numOrNull`, `as Service`) so `next build` passes.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `npm i @tanstack/react-query`; `components/providers/ReactQueryProvider.tsx`; `app/orders/layout.tsx`; `lib/orders/orderPageQueries.ts`; `page.tsx` services via RQ; tab components wired; `services/route.ts` rows cast; mapper hardening.
+
+**Результат:** `npx next build --webpack` exit 0.
+
+**Next Step:** Step 5 per ORDER_PAGE_PERF_SPEC (defer `loadWorldCities`) or Step 6 (batch signed URLs).
+
+---
+
+## [2026-04-01 12:00] CW — ORDER_PAGE_PERF Step 3: `/bootstrap` + page single fetch + GET order via lib
+
+**Task:** ORDER_PAGE_PERF Step 3 — one API for order header + travellers + invoice summary; `GET /api/orders/[code]` uses shared `buildExpandedOrderAndInvoiceSummary`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `app/api/orders/[orderCode]/bootstrap/route.ts` (new). `route.ts` GET delegates to `buildExpandedOrderAndInvoiceSummary`. `page.tsx`: single effect → `fetch(.../bootstrap)`, sets order, travellers, `linkedToInvoices` from `invoiceSummary`; `invoiceRefetchTrigger` + `saveClient` travellers refetch unchanged.
+
+**Результат:** SCORE: pending QA (order load, header totals, travellers avatars, invoice-linked payment hint after invoice change).
+
+**Next Step:** QA
+
+---
+
+## [2026-04-01] CW — ORDER_PAGE_PERF Step 2c: shared order services fetch (page → Services + Finances)
+
+**Task:** Eliminate duplicate GET `/api/orders/{code}/services` — parent holds `orderServicesRaw`, `OrderServicesBlock` + `OrderFinanceOverview` consume it; `reloadOrderServices` for refetch after mutations.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `page.tsx`: state `orderServicesRaw`, `reloadOrderServices`, effect on `orderCode`; props on `OrderServicesBlock` / `OrderFinanceOverview`. `OrderServicesBlock`: `mapOrderServicesApiRowsToServices`, `servicesFromParent` + `reloadServicesFromParent`, sync effect + `fetchServices` delegates to parent reload. `OrderFinanceOverview`: optional `servicesFromParent`, `mapApiRowsToFinanceServices`, load payments only when rows from parent.
+
+**Результат:** SCORE: pending QA (Client table + Finances tab + edit service refetch).
+
+---
+
+## [2026-04-01] CW — ORDER_PAGE_PERF_SPEC Step 1: dynamic tab chunks + `OrderTabSkeleton`
+
+**Task:** ORDER_PAGE_PERF_SPEC Step 1 — code-split heavy order tabs with `next/dynamic`; do not change `OrderFinanceOverview` options; keep `OrderServicesBlock` static; `OrderPaymentsList` ref via type-only import + dynamic default.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** Added `_components/OrderTabSkeleton.tsx`. `page.tsx`: `dynamic` + `loading: () => <OrderTabSkeleton />` for Referral, InvoiceCreator, InvoiceList, Documents, Communications, ClientsData, OrderPaymentsList; `OrderFinanceOverview` unchanged `{ ssr: false }` only; static `OrderServicesBlock`; `import type { OrderPaymentsListHandle }`.
+
+**Результат:** SCORE: pending QA (Finance tab ref / + Payment, `?tab=documents`, referral, invoice flow, first paint skeletons).
+
+---
+
+## [2026-04-01] CW — Email templates: DB `translations` + regenerate on save; drafts use `?lang=`
+
+**Task:** User: persist AI translations per locale when template exists (not only live translate); find one-line EMAIL_TEMPLATES fallbacks and move to stored translations.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🔴
+
+**Действия:** Migration `add_email_templates_translations.sql` (JSONB `translations`). `refreshEmailTemplateTranslations` masks `{{placeholders}}`, translates master subject/body to all `INVOICE_LANGUAGE_OPTIONS` except `en` via `translateEmailSubjectAndBody`, saves map. `POST`/`PATCH` `/api/settings/email-templates` schedules `after(refresh...)`. `loadDefaultEmailTemplateForCategory` selects `translations`; `applyEmailTemplateLocale`. Invoice + payment-reminder GET accept `lang`, return `canonical_*` + `used_db_translation`. `InvoiceList` uses DB draft first, then AI fallback; open modals pass `lang`, force-translate when no cache.
+
+---
+
+## [2026-04-01] CW — Payment reminder modal: language chips + AI translate (parity with Send Invoice)
+
+**Task:** User: no language choice on payment reminders — add same pattern as invoice email (payer langs, + Add, Translating…, `/api/ai` translate).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** GET `payment-reminder` returns `previewSuffixHtml` (PDF note + signature tail). `InvoiceList`: `reminderLang` / `reminderTranslating`, refs for letter + suffix, `handleReminderLangChange`, async `openPaymentReminderModal` loads payer correspondence langs + draft refs; amber-styled language row in reminder modal; `void` open handler.
+
+---
+
+## [2026-04-01] CW — Send Invoice: fix AI language switch (Russian one-line body)
+
+**Task:** User: choosing Russian showed "Translating…" then only one line in body — mismatch between `/api/ai` translate response and `InvoiceList` expecting `data.result` JSON; catch fell back to short `EMAIL_TEMPLATES`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** Added `translateEmailSubjectAndBody` (JSON `subject` + HTML `message`, preserve markup via `aiJSON`). `POST /api/ai` `translate` detects JSON payload and returns `{ result: JSON.stringify({ subject, message }) }`. Client sends `targetLanguage` as ISO code (`ru`, not "Russian"). Draft load uses `previewSuffixHtml` for suffix when present.
+
+**Результат:** SCORE: pending QA (manual: Send Invoice → Russian, full template body translated).
+
+---
+
+## [2026-04-03] CW — Order Finances: exclude cancellation lines from active totals
+
+**Task:** User: cancelled / cancellation services should appear only under Cancelled and not affect margin/profit totals.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:** `OrderFinanceOverview` — `isExcludedFromFinanceTotals`: `res_status` cancelled (case-insensitive) or `service_type === "cancellation"`; those rows only in cancelled bucket, not in `active` aggregates.
+
+---
+
+## [2026-04-03] CW — Edit service VAT: PATCH persist + GET uses order_services.vat_rate
+
+**Task:** User: VAT 21% in Edit Service (Ancillary) not saved — PATCH ignored `vat_rate`/`category_id`; GET list used category default only; modal effect reset VAT from category on categories load.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:** `services/[serviceId]/route.ts` PATCH maps `vat_rate`, `category_id`; GET list prefers row `vat_rate` then category; removed VAT overwrite `useEffect` in `EditServiceModalNew`; `onServiceUpdated` includes `vatRate`, `categoryId`.
+
+---
+
 ## [2026-04-03] CW — InvoiceCreator: wider % inputs (Payment Terms grid)
 
 **Task:** User: cramped % fields — number and % suffix overlapped; need more room to read percentages.

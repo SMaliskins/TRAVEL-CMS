@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { refreshEmailTemplateTranslations } from "@/lib/email/refreshEmailTemplateTranslations";
 
 export async function GET(request: NextRequest) {
   const user = await getApiUser(request);
@@ -63,6 +65,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const row = data as { id: string; subject?: string; body?: string };
+  after(async () => {
+    await refreshEmailTemplateTranslations(row.id, row.subject ?? "", row.body ?? "");
+  });
+
   return NextResponse.json({ template: data });
 }
 
@@ -117,6 +124,11 @@ export async function PATCH(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  const row = data as { id: string; subject?: string; body?: string };
+  after(async () => {
+    await refreshEmailTemplateTranslations(row.id, row.subject ?? "", row.body ?? "");
+  });
 
   return NextResponse.json({ template: data });
 }

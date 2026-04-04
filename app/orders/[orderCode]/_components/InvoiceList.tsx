@@ -126,6 +126,8 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     bodyFromServerComplete?: boolean;
   } | null>(null);
   const [reminderSending, setReminderSending] = useState(false);
+  const [reminderLang, setReminderLang] = useState("en");
+  const [reminderTranslating, setReminderTranslating] = useState(false);
   const [reminderRecipients, setReminderRecipients] = useState<Array<{
     email: string;
     label: string;
@@ -137,6 +139,10 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const invoiceEmailEnRef = useRef<{ subject: string; message: string } | null>(null);
   /** Signature + PDF footer HTML; re-appended after subject/body edits and translation. */
   const invoiceEmailSuffixRef = useRef<string>(INVOICE_EMAIL_PDF_FOOTER_HTML);
+  /** Payment reminder: letter HTML from template (English / server draft), without PDF note + signature block. */
+  const reminderLetterEnRef = useRef<{ subject: string; message: string } | null>(null);
+  /** PDF attachment note + email signature wrapper (server-built). */
+  const reminderSuffixRef = useRef<string>("");
   const [payerLangs, setPayerLangs] = useState<string[]>(["en"]);
   const [payerPartyId, setPayerPartyId] = useState<string | null>(null);
   const [showAllLangs, setShowAllLangs] = useState(false);
@@ -574,11 +580,19 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         } = await supabase.auth.getSession();
         const token = session?.access_token;
         const res = await fetch(
-          `/api/orders/${encodeURIComponent(orderCode)}/invoices/${encodeURIComponent(invoiceId)}/email`,
+          `/api/orders/${encodeURIComponent(orderCode)}/invoices/${encodeURIComponent(invoiceId)}/email?lang=${encodeURIComponent(defaultLang)}`,
           { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
         );
         if (res.ok) {
-          const data = await res.json();
+          const data = await res.json() as {
+            subject?: string;
+            message?: string;
+            letter_body_html?: string;
+            previewSuffixHtml?: string;
+            canonical_subject?: string;
+            canonical_letter_body_html?: string;
+            used_db_translation?: boolean;
+          };
           const subject = typeof data.subject === "string" ? data.subject : "";
           const suffixFromApi =
             typeof data.previewSuffixHtml === "string"
@@ -589,13 +603,22 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
           if (typeof data.letter_body_html === "string" && typeof data.message === "string") {
             letterBody = data.letter_body_html;
             fullMessage = data.message;
-            invoiceEmailSuffixRef.current = data.message.slice(data.letter_body_html.length);
+            invoiceEmailSuffixRef.current =
+              typeof data.previewSuffixHtml === "string"
+                ? data.previewSuffixHtml
+                : data.message.slice(data.letter_body_html.length);
           } else {
             letterBody = typeof data.message === "string" ? data.message : "";
             fullMessage = `${letterBody}${suffixFromApi}`;
             invoiceEmailSuffixRef.current = suffixFromApi;
           }
-          invoiceEmailEnRef.current = { subject, message: letterBody };
+          const canonSub =
+            typeof data.canonical_subject === "string" ? data.canonical_subject : subject;
+          const canonBody =
+            typeof data.canonical_letter_body_html === "string"
+              ? data.canonical_letter_body_html
+              : letterBody;
+          invoiceEmailEnRef.current = { subject: canonSub, message: canonBody };
           setEmailModal((prev) =>
             prev && prev.invoiceId === invoiceId
               ? {
@@ -606,6 +629,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 }
               : prev
           );
+          if (!data.used_db_translation && defaultLang && defaultLang !== "en") {
+            await handleEmailLangChange(defaultLang, { force: true });
+          }
           return;
         }
       } catch {
@@ -656,8 +682,12 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     }
   };
 
-  const handleEmailLangChange = async (newLang: string) => {
-    if (!emailModal || emailModal.draftLoading || newLang === emailLang) return;
+  const handleEmailLangChange = async (
+    newLang: string,
+    options?: { force?: boolean }
+  ) => {
+    if (!emailModal || (!options?.force && emailModal.draftLoading)) return;
+    if (!options?.force && newLang === emailLang) return;
     setEmailLang(newLang);
 
     if (!payerLangs.includes(newLang)) {
@@ -681,7 +711,43 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
     setEmailTranslating(true);
     try {
-      const langLabel = getInvoiceLanguageLabel(newLang);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const draftRes = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${encodeURIComponent(emailModal.invoiceId)}/email?lang=${encodeURIComponent(newLang)}`,
+        { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+      );
+      if (draftRes.ok) {
+        const d = (await draftRes.json()) as {
+          subject?: string;
+          message?: string;
+          letter_body_html?: string;
+          previewSuffixHtml?: string;
+          used_db_translation?: boolean;
+        };
+        if (d.used_db_translation === true) {
+          const subject = typeof d.subject === "string" ? d.subject : "";
+          const fullMessage = typeof d.message === "string" ? d.message : "";
+          const letterBody =
+            typeof d.letter_body_html === "string" && d.letter_body_html.trim() !== ""
+              ? d.letter_body_html
+              : fullMessage;
+          if (typeof d.previewSuffixHtml === "string") {
+            invoiceEmailSuffixRef.current = d.previewSuffixHtml;
+          } else if (typeof d.message === "string" && letterBody && d.message.startsWith(letterBody)) {
+            invoiceEmailSuffixRef.current = d.message.slice(letterBody.length);
+          }
+          setEmailModal({
+            ...emailModal,
+            subject,
+            message: fullMessage,
+          });
+          return;
+        }
+      }
+
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -691,12 +757,22 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             subject: enSnap.subject,
             message: enSnap.message,
           }),
-          targetLanguage: langLabel,
+          targetLanguage: newLang,
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        const translated = typeof data.result === "string" ? JSON.parse(data.result) : data.result;
+        let translated: { subject?: string; message?: string } = {};
+        try {
+          const raw = data.result;
+          if (typeof raw === "string") {
+            translated = JSON.parse(raw) as { subject?: string; message?: string };
+          } else if (raw && typeof raw === "object") {
+            translated = raw as { subject?: string; message?: string };
+          }
+        } catch {
+          translated = {};
+        }
         const suffix = invoiceEmailSuffixRef.current;
         const bodyTranslated =
           typeof translated.message === "string" && translated.message.trim() !== ""
@@ -704,7 +780,10 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             : enSnap.message;
         setEmailModal({
           ...emailModal,
-          subject: translated.subject || emailModal.subject,
+          subject:
+            typeof translated.subject === "string" && translated.subject.trim() !== ""
+              ? translated.subject
+              : emailModal.subject,
           message: bodyTranslated + suffix,
         });
       } else {
@@ -788,6 +867,135 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     }
   };
 
+  const handleReminderLangChange = async (
+    newLang: string,
+    options?: { force?: boolean }
+  ) => {
+    if (!reminderModal || (!options?.force && reminderModal.draftLoading)) return;
+    if (!options?.force && newLang === reminderLang) return;
+    setReminderLang(newLang);
+
+    if (payerPartyId && !payerLangs.includes(newLang)) {
+      addLangToPayerParty(newLang);
+    }
+
+    const suffix = reminderSuffixRef.current;
+    const bodyFromModal =
+      suffix && reminderModal.message.endsWith(suffix)
+        ? reminderModal.message.slice(0, -suffix.length)
+        : reminderModal.message;
+    const enSnap =
+      reminderLetterEnRef.current ?? {
+        subject: reminderModal.subject,
+        message: bodyFromModal,
+      };
+
+    if (newLang === "en") {
+      setReminderModal({
+        ...reminderModal,
+        subject: enSnap.subject,
+        message: enSnap.message + reminderSuffixRef.current,
+      });
+      return;
+    }
+
+    setReminderTranslating(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const draftRes = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${encodeURIComponent(reminderModal.invoiceId)}/payment-reminder?lang=${encodeURIComponent(newLang)}`,
+        { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+      );
+      if (draftRes.ok) {
+        const d = (await draftRes.json()) as {
+          subject?: string;
+          message?: string;
+          letter_body_html?: string;
+          previewSuffixHtml?: string;
+          used_db_translation?: boolean;
+        };
+        if (d.used_db_translation === true) {
+          const subject = typeof d.subject === "string" ? d.subject : "";
+          const fullMessage = typeof d.message === "string" ? d.message : "";
+          const letterBody =
+            typeof d.letter_body_html === "string" && d.letter_body_html.trim() !== ""
+              ? d.letter_body_html
+              : fullMessage;
+          if (typeof d.previewSuffixHtml === "string") {
+            reminderSuffixRef.current = d.previewSuffixHtml;
+          } else if (typeof d.message === "string" && letterBody && d.message.startsWith(letterBody)) {
+            reminderSuffixRef.current = d.message.slice(letterBody.length);
+          }
+          setReminderModal({
+            ...reminderModal,
+            subject,
+            message: fullMessage,
+          });
+          return;
+        }
+      }
+
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: "translate",
+          text: JSON.stringify({
+            subject: enSnap.subject,
+            message: enSnap.message,
+          }),
+          targetLanguage: newLang,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        let translated: { subject?: string; message?: string } = {};
+        try {
+          const raw = data.result;
+          if (typeof raw === "string") {
+            translated = JSON.parse(raw) as { subject?: string; message?: string };
+          } else if (raw && typeof raw === "object") {
+            translated = raw as { subject?: string; message?: string };
+          }
+        } catch {
+          translated = {};
+        }
+        const suf = reminderSuffixRef.current;
+        const bodyTranslated =
+          typeof translated.message === "string" && translated.message.trim() !== ""
+            ? translated.message
+            : enSnap.message;
+        setReminderModal({
+          ...reminderModal,
+          subject:
+            typeof translated.subject === "string" && translated.subject.trim() !== ""
+              ? translated.subject
+              : reminderModal.subject,
+          message: bodyTranslated + suf,
+        });
+      } else {
+        showToast("error", "Translation failed");
+        setReminderModal({
+          ...reminderModal,
+          subject: enSnap.subject,
+          message: enSnap.message + reminderSuffixRef.current,
+        });
+      }
+    } catch {
+      showToast("error", "Translation failed");
+      setReminderModal({
+        ...reminderModal,
+        subject: enSnap.subject,
+        message: enSnap.message + reminderSuffixRef.current,
+      });
+    } finally {
+      setReminderTranslating(false);
+    }
+  };
+
   const buildPaymentReminderContext = (invoice: Invoice): PaymentReminderContext | null => {
     if (isCreditInvoice(invoice) || invoice.status === "cancelled") return null;
     const paid = invoice.paid_amount ?? 0;
@@ -811,7 +1019,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     };
   };
 
-  const openPaymentReminderModal = (invoiceId: string) => {
+  const openPaymentReminderModal = async (invoiceId: string) => {
     const invoice = invoices.find((inv) => inv.id === invoiceId);
     if (!invoice) return;
     const ctx = buildPaymentReminderContext(invoice);
@@ -819,7 +1027,44 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       showToast("error", t(lang, "invoices.reminderNoDebt"));
       return;
     }
+
+    let defaultLang = "en";
+    let langs: string[] = ["en"];
+    const pid = invoice.payer_party_id || null;
+    setPayerPartyId(pid);
+    setShowAllLangs(false);
+    reminderLetterEnRef.current = null;
+    reminderSuffixRef.current = "";
+
+    if (pid) {
+      try {
+        const session = await supabase.auth.getSession();
+        const token = session.data.session?.access_token;
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`/api/directory/${pid}`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const rec = data.record || data;
+          if (Array.isArray(rec.correspondenceLanguages) && rec.correspondenceLanguages.length > 0) {
+            langs = rec.correspondenceLanguages;
+          }
+          if (rec.invoiceLanguage) {
+            defaultLang = rec.invoiceLanguage;
+            if (!langs.includes(defaultLang)) langs = [defaultLang, ...langs];
+          } else {
+            defaultLang = langs[0];
+          }
+        }
+      } catch {
+        /* keep defaults */
+      }
+    }
+
+    setPayerLangs(langs);
+    setReminderLang(defaultLang);
     setReminderRecipients([]);
+
     setReminderModal({
       invoiceId,
       invoiceNumber: invoice.invoice_number,
@@ -835,47 +1080,80 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       companyDisplayName: ctx.companyDisplayName || "Our team",
     };
 
-    void (async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const draftRes = await fetch(
-          `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/payment-reminder`,
-          { headers }
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const draftRes = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/invoices/${invoiceId}/payment-reminder?lang=${encodeURIComponent(defaultLang)}`,
+        { headers }
+      );
+      if (draftRes.ok) {
+        const d = (await draftRes.json()) as {
+          subject?: string;
+          message?: string;
+          letter_body_html?: string;
+          previewSuffixHtml?: string;
+          canonical_subject?: string;
+          canonical_letter_body_html?: string;
+          used_db_translation?: boolean;
+        };
+        const subject = typeof d.subject === "string" ? d.subject : "";
+        const fullMessage = typeof d.message === "string" ? d.message : "";
+        const letterBody =
+          typeof d.letter_body_html === "string" && d.letter_body_html.trim() !== ""
+            ? d.letter_body_html
+            : fullMessage;
+        const suffix =
+          typeof d.previewSuffixHtml === "string"
+            ? d.previewSuffixHtml
+            : fullMessage.length >= letterBody.length && fullMessage.startsWith(letterBody)
+              ? fullMessage.slice(letterBody.length)
+              : "";
+        const canonSub =
+          typeof d.canonical_subject === "string" ? d.canonical_subject : subject;
+        const canonBody =
+          typeof d.canonical_letter_body_html === "string"
+            ? d.canonical_letter_body_html
+            : letterBody;
+        reminderLetterEnRef.current = { subject: canonSub, message: canonBody };
+        reminderSuffixRef.current = suffix;
+        setReminderModal((prev) =>
+          prev && prev.invoiceId === invoiceId
+            ? {
+                ...prev,
+                subject,
+                message: fullMessage,
+                draftLoading: false,
+                bodyFromServerComplete: true,
+              }
+            : prev
         );
-        if (draftRes.ok) {
-          const d = (await draftRes.json()) as { subject?: string; message?: string };
-          setReminderModal((prev) =>
-            prev && prev.invoiceId === invoiceId
-              ? {
-                  ...prev,
-                  subject: typeof d.subject === "string" ? d.subject : prev.subject,
-                  message: typeof d.message === "string" ? d.message : prev.message,
-                  draftLoading: false,
-                  bodyFromServerComplete: true,
-                }
-              : prev
-          );
-        } else {
-          setReminderModal((prev) =>
-            prev && prev.invoiceId === invoiceId
-              ? {
-                  ...prev,
-                  subject: defaultPaymentReminderSubject(ctxForFallback),
-                  message: defaultPaymentReminderHtml(ctxForFallback),
-                  draftLoading: false,
-                  bodyFromServerComplete: false,
-                }
-              : prev
-          );
+        if (!d.used_db_translation && defaultLang && defaultLang !== "en") {
+          await handleReminderLangChange(defaultLang, { force: true });
         }
+      } else {
+        const subj = defaultPaymentReminderSubject(ctxForFallback);
+        const msg = defaultPaymentReminderHtml(ctxForFallback);
+        reminderLetterEnRef.current = { subject: subj, message: msg };
+        reminderSuffixRef.current = "";
+        setReminderModal((prev) =>
+          prev && prev.invoiceId === invoiceId
+            ? {
+                ...prev,
+                subject: subj,
+                message: msg,
+                draftLoading: false,
+                bodyFromServerComplete: false,
+              }
+            : prev
+        );
+      }
 
-        const pid = invoice.payer_party_id || null;
-        if (!pid) return;
+      if (pid) {
         const res = await fetch(`/api/directory/${pid}`, { headers });
         if (res.ok) {
           const data = await res.json();
@@ -913,20 +1191,24 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             setReminderRecipients(recipients);
           }
         }
-      } catch {
-        setReminderModal((prev) =>
-          prev && prev.invoiceId === invoiceId
-            ? {
-                ...prev,
-                subject: defaultPaymentReminderSubject(ctxForFallback),
-                message: defaultPaymentReminderHtml(ctxForFallback),
-                draftLoading: false,
-                bodyFromServerComplete: false,
-              }
-            : prev
-        );
       }
-    })();
+    } catch {
+      const subj = defaultPaymentReminderSubject(ctxForFallback);
+      const msg = defaultPaymentReminderHtml(ctxForFallback);
+      reminderLetterEnRef.current = { subject: subj, message: msg };
+      reminderSuffixRef.current = "";
+      setReminderModal((prev) =>
+        prev && prev.invoiceId === invoiceId
+          ? {
+              ...prev,
+              subject: subj,
+              message: msg,
+              draftLoading: false,
+              bodyFromServerComplete: false,
+            }
+          : prev
+      );
+    }
   };
 
   const handleSendPaymentReminder = async () => {
@@ -1712,7 +1994,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               </div>
               <button
                 type="button"
-                onClick={() => { setReminderModal(null); setReminderRecipients([]); }}
+                onClick={() => {
+                  setReminderModal(null);
+                  setReminderRecipients([]);
+                  setReminderTranslating(false);
+                }}
                 className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
               >
                 <XCircle className="h-5 w-5" />
@@ -1720,6 +2006,71 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             </div>
             <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1 min-h-0">
               <p className="text-xs text-gray-500">{t(lang, "invoices.reminderTrackingHint")}</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5" />
+                    Language
+                    {payerPartyId && (() => {
+                      const inv = invoices.find((i) => i.id === reminderModal.invoiceId);
+                      const name = inv?.payer_name;
+                      return name ? (
+                        <span className="font-normal text-xs text-gray-400 ml-1">— {name}</span>
+                      ) : null;
+                    })()}
+                  </span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {payerLangs.map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => void handleReminderLangChange(code)}
+                      disabled={reminderTranslating || reminderModal.draftLoading}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                        reminderLang === code
+                          ? "bg-amber-600 text-white border-amber-600"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-amber-400 hover:text-amber-800"
+                      } disabled:opacity-50`}
+                    >
+                      {getInvoiceLanguageLabel(code)}
+                    </button>
+                  ))}
+
+                  {!showAllLangs ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllLangs(true)}
+                      className="px-2 py-1 text-xs font-medium rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      + Add
+                    </button>
+                  ) : (
+                    INVOICE_LANGUAGE_OPTIONS.filter((opt) => !payerLangs.includes(opt.value)).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => void handleReminderLangChange(opt.value)}
+                        disabled={reminderTranslating}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                          reminderLang === opt.value
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-gray-50 text-gray-500 border-gray-200 hover:border-amber-400 hover:text-amber-800"
+                        } disabled:opacity-50`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))
+                  )}
+
+                  {reminderTranslating && (
+                    <span className="flex items-center gap-1 text-xs text-gray-400 ml-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Translating...
+                    </span>
+                  )}
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
                 {reminderRecipients.length > 0 && (
@@ -1791,7 +2142,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50 shrink-0">
               <button
                 type="button"
-                onClick={() => { setReminderModal(null); setReminderRecipients([]); }}
+                onClick={() => {
+                  setReminderModal(null);
+                  setReminderRecipients([]);
+                  setReminderTranslating(false);
+                }}
                 disabled={reminderSending}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
@@ -1800,7 +2155,12 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
               <button
                 type="button"
                 onClick={() => void handleSendPaymentReminder()}
-                disabled={reminderSending || !reminderModal.to.trim() || reminderModal.draftLoading}
+                disabled={
+                  reminderSending ||
+                  !reminderModal.to.trim() ||
+                  reminderModal.draftLoading ||
+                  reminderTranslating
+                }
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
                 {reminderSending ? (
@@ -2163,7 +2523,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     type="button"
                     onClick={() => {
                       closeActionsModal();
-                      openPaymentReminderModal(invoice.id);
+                      void openPaymentReminderModal(invoice.id);
                     }}
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                   >

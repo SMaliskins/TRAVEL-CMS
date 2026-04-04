@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchOrderCommunications, orderPageQueryKeys } from "@/lib/orders/orderPageQueries";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import {
   Mail,
@@ -99,27 +100,15 @@ function formatTime(dateStr: string) {
 }
 
 export default function OrderCommunicationsTab({ orderCode }: { orderCode: string }) {
-  const [communications, setCommunications] = useState<Communication[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/communications`);
-      if (res.ok) {
-        const data = await res.json();
-        setCommunications(data.communications || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch communications:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [orderCode]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const {
+    data: communications = [],
+    isPending: loading,
+    refetch: fetchData,
+  } = useQuery({
+    queryKey: orderPageQueryKeys.communications(orderCode),
+    queryFn: () => fetchOrderCommunications(orderCode),
+    enabled: Boolean(orderCode),
+  });
 
   if (loading) {
     return (
@@ -146,7 +135,8 @@ export default function OrderCommunicationsTab({ orderCode }: { orderCode: strin
           Email Log
         </h3>
         <button
-          onClick={fetchData}
+          type="button"
+          onClick={() => void fetchData()}
           className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
         >
           <RefreshCw className="h-3 w-3" />

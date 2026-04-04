@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchOrderServicesList, orderPageQueryKeys } from "@/lib/orders/orderPageQueries";
 import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
@@ -8,14 +10,41 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
 import OrderServicesBlock, { OrderServicesBlockHandle, type Traveller } from "./_components/OrderServicesBlock";
-import OrderReferralServicesPanel from "./_components/OrderReferralServicesPanel";
-import InvoiceCreator from "./_components/InvoiceCreator";
-import InvoiceList from "./_components/InvoiceList";
-import OrderDocumentsTab from "./_components/OrderDocumentsTab";
-import OrderCommunicationsTab from "./_components/OrderCommunicationsTab";
-import OrderPaymentsList, { type OrderPaymentsListHandle } from "./_components/OrderPaymentsList";
+import OrderTabSkeleton from "./_components/OrderTabSkeleton";
+import type { OrderPaymentsListHandle } from "./_components/OrderPaymentsList";
 import dynamic from "next/dynamic";
+
+/** Already code-split; leave options unchanged (ORDER_PAGE_PERF_SPEC Step 1). */
 const OrderFinanceOverview = dynamic(() => import("./_components/OrderFinanceOverview"), { ssr: false });
+
+const OrderReferralServicesPanel = dynamic(
+  () => import("./_components/OrderReferralServicesPanel"),
+  { loading: () => <OrderTabSkeleton />, ssr: false }
+);
+const InvoiceCreator = dynamic(() => import("./_components/InvoiceCreator"), {
+  loading: () => <OrderTabSkeleton />,
+  ssr: false,
+});
+const InvoiceList = dynamic(() => import("./_components/InvoiceList"), {
+  loading: () => <OrderTabSkeleton />,
+  ssr: false,
+});
+const OrderDocumentsTab = dynamic(() => import("./_components/OrderDocumentsTab"), {
+  loading: () => <OrderTabSkeleton />,
+  ssr: false,
+});
+const OrderCommunicationsTab = dynamic(() => import("./_components/OrderCommunicationsTab"), {
+  loading: () => <OrderTabSkeleton />,
+  ssr: false,
+});
+const OrderPaymentsList = dynamic(() => import("./_components/OrderPaymentsList"), {
+  loading: () => <OrderTabSkeleton />,
+  ssr: false,
+});
+const OrderClientsDataTab = dynamic(() => import("./_components/OrderClientsDataTab"), {
+  loading: () => <OrderTabSkeleton />,
+  ssr: false,
+});
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
@@ -28,7 +57,6 @@ import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
-import OrderClientsDataTab from "./_components/OrderClientsDataTab";
 import { OrderPageHeaderE, type OrderHeaderEOrder } from "./_components/OrderPageHeaderE";
 import RadialContextMenu from "./_components/RadialContextMenu";
 
@@ -199,6 +227,43 @@ export default function OrderPage({
   const autoDestSavedRef = useRef(false);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
+  const queryClient = useQueryClient();
+  const servicesOrderCode = orderCodeFromUrl || orderCode;
+  const {
+    data: orderServicesData,
+    isPending: orderServicesPending,
+  } = useQuery({
+    queryKey: orderPageQueryKeys.services(servicesOrderCode || "__none__"),
+    queryFn: () => fetchOrderServicesList(servicesOrderCode!),
+    enabled: Boolean(servicesOrderCode),
+  });
+  /** Shared services list for Client + Finances (ORDER_PAGE_PERF Step 2c + Step 4 React Query cache). */
+  const orderServicesRaw = orderServicesPending ? null : (orderServicesData ?? []);
+  const reloadOrderServices = useCallback(
+    async (noCache?: boolean) => {
+      const code = orderCodeFromUrl || orderCode;
+      if (!code) return;
+      if (noCache) {
+        await queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.services(code) });
+      }
+      await queryClient.refetchQueries({ queryKey: orderPageQueryKeys.services(code) });
+    },
+    [orderCodeFromUrl, orderCode, queryClient]
+  );
+
+  const invServicesSync = useRef<{ code: string; t: number }>({ code: "", t: -1 });
+  useEffect(() => {
+    const c = orderCodeFromUrl || orderCode;
+    if (!c) return;
+    const prev = invServicesSync.current;
+    if (prev.code !== c) {
+      invServicesSync.current = { code: c, t: invoiceRefetchTrigger };
+      return;
+    }
+    if (prev.t === invoiceRefetchTrigger) return;
+    invServicesSync.current = { code: c, t: invoiceRefetchTrigger };
+    void queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.services(c) });
+  }, [invoiceRefetchTrigger, orderCodeFromUrl, orderCode, queryClient]);
 
   const clientPickerPrioritizedParties = useMemo(
     () =>
@@ -779,7 +844,7 @@ export default function OrderPage({
     if (orderCodeFromUrl) setOrderCode(orderCodeFromUrl);
   }, [orderCodeFromUrl]);
 
-  // Fetch order as soon as we have orderCode (from useParams — fast path)
+  // ORDER_PAGE_PERF Step 3: order + travellers + invoice summary in one request (parallel on server)
   useEffect(() => {
     if (!orderCodeFromUrl) return;
     let cancelled = false;
@@ -789,7 +854,7 @@ export default function OrderPage({
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}`, {
+        const response = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}/bootstrap`, {
           headers: {
             ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
           },
@@ -799,6 +864,8 @@ export default function OrderPage({
         if (response.ok) {
           const data = await response.json();
           setOrder(data.order || data);
+          setOrderTravellers((data.travellers || []) as Traveller[]);
+          setLinkedToInvoices(Number(data?.invoiceSummary?.linkedToInvoices) || 0);
         } else if (response.status === 404) {
           setError(t(lang, "order.notFound"));
         } else {
@@ -807,7 +874,7 @@ export default function OrderPage({
         }
       } catch (err) {
         if (!cancelled) {
-          console.error("Fetch order error:", err);
+          console.error("Fetch order bootstrap error:", err);
           setError(t(lang, "order.networkError"));
         }
       } finally {
@@ -816,49 +883,6 @@ export default function OrderPage({
     })();
     return () => { cancelled = true; };
   }, [orderCodeFromUrl, lang, invoiceRefetchTrigger]);
-
-  // Travellers on this order — same API as Travellers UI; feed header PartySelect for matching avatars (runs as soon as we have orderCodeFromUrl)
-  useEffect(() => {
-    if (!orderCodeFromUrl) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}/travellers`, {
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-          credentials: "include",
-        });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled) setOrderTravellers((data.travellers || []) as Traveller[]);
-      } catch {
-        if (!cancelled) setOrderTravellers([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orderCodeFromUrl, order?.client_party_id]);
-
-  // Payment summary (linkedToInvoices) for overpayment in header — refetch when invoices may change (runs as soon as we have orderCodeFromUrl)
-  useEffect(() => {
-    if (!orderCodeFromUrl) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`/api/orders/${encodeURIComponent(orderCodeFromUrl)}/invoices`, {
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled) setLinkedToInvoices(Number(data?.paymentSummary?.linkedToInvoices) || 0);
-      } catch {
-        if (!cancelled) setLinkedToInvoices(0);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [orderCodeFromUrl, invoiceRefetchTrigger]);
 
   // Update order status
   const handleStatusChange = async (newStatus: OrderStatus) => {
@@ -1888,6 +1912,8 @@ export default function OrderPage({
               <OrderServicesBlock
                 ref={servicesBlockRef}
                 orderCode={effectiveOrderCode}
+                servicesFromParent={orderServicesRaw}
+                reloadServicesFromParent={reloadOrderServices}
                 travellersState={[orderTravellers, setOrderTravellers]}
                 defaultClientId={order?.client_party_id}
                 defaultClientName={order?.client_display_name || undefined}
@@ -2024,6 +2050,7 @@ export default function OrderPage({
               currency={companyCurrencyCode || "EUR"}
               lang={lang}
               hasReferral={Boolean(order.referral_party_id)}
+              servicesFromParent={orderServicesRaw}
             />
           )}
 

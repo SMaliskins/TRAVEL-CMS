@@ -18,6 +18,8 @@ interface Props {
   currency: string;
   lang: string;
   hasReferral: boolean;
+  /** When set, service rows reuse parent fetch (`null` = parent still loading). Omit to fetch services inside this component. */
+  servicesFromParent?: unknown[] | null;
 }
 
 type ServiceRow = {
@@ -73,6 +75,13 @@ function pctOfGrossMargin(value: number, margin: number): string {
   return `${((value / margin) * 100).toFixed(1)}%`;
 }
 
+/** Excluded from revenue/margin totals; shown only under Cancelled. */
+function isExcludedFromFinanceTotals(svc: ServiceRow): boolean {
+  if ((svc.resStatus || "").toLowerCase() === "cancelled") return true;
+  if (svc.serviceType === "cancellation") return true;
+  return false;
+}
+
 /** One subtle line under amounts (KPI + Margin Flow only) */
 function PctSubline({ pct, label, align = "start" }: { pct: string; label: string; align?: "start" | "end" }) {
   const cls = align === "end" ? "text-right" : "text-left";
@@ -90,7 +99,27 @@ const METHOD_COLORS: Record<string, string> = {
   other: "#6b7280",
 };
 
-export default function OrderFinanceOverview({ orderCode, orderId, currency, lang, hasReferral }: Props) {
+function mapApiRowsToFinanceServices(rows: unknown[]): ServiceRow[] {
+  return rows.map((r) => {
+    const s = r as Record<string, unknown>;
+    return {
+      id: String(s.id),
+      category: String(s.category || ""),
+      serviceName: String(s.serviceName || ""),
+      serviceType: String(s.serviceType || "original"),
+      resStatus: String(s.resStatus || ""),
+      clientPrice: Number(s.clientPrice) || 0,
+      servicePrice: Number(s.servicePrice) || 0,
+      commissionAmount: s.commissionAmount != null ? Number(s.commissionAmount) : null,
+      vatRate: s.vatRate != null ? Number(s.vatRate) : null,
+      referralIncludeInCommission: s.referralIncludeInCommission !== false,
+      referralCommissionPercentOverride: s.referralCommissionPercentOverride != null ? Number(s.referralCommissionPercentOverride) : null,
+      referralCommissionFixedAmount: s.referralCommissionFixedAmount != null ? Number(s.referralCommissionFixedAmount) : null,
+    };
+  });
+}
+
+export default function OrderFinanceOverview({ orderCode, orderId, currency, lang, hasReferral, servicesFromParent }: Props) {
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,11 +127,34 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setLoading(true);
       const session = (await supabase.auth.getSession()).data.session;
       const headers: Record<string, string> = {};
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
 
+      if (servicesFromParent !== undefined) {
+        if (servicesFromParent === null) {
+          setLoading(true);
+          return;
+        }
+        setLoading(true);
+        const payRes = await fetch(`/api/finances/payments?orderId=${orderId}`, { headers });
+        if (cancelled) return;
+        const payData = payRes.ok ? await payRes.json() : { payments: [] };
+        const payMapped: PaymentRow[] = (payData.payments || payData.data || []).map((p: Record<string, unknown>) => ({
+          id: String(p.id),
+          amount: Number(p.amount) || 0,
+          method: String(p.method || "other"),
+          status: String(p.status || "active"),
+          processing_fee: Number(p.processing_fee) || 0,
+          processor: p.processor ? String(p.processor) : null,
+        }));
+        setServices(mapApiRowsToFinanceServices(servicesFromParent));
+        setPayments(payMapped);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       const [svcRes, payRes] = await Promise.all([
         fetch(`/api/orders/${encodeURIComponent(orderCode)}/services`, { headers }),
         fetch(`/api/finances/payments?orderId=${orderId}`, { headers }),
@@ -113,20 +165,7 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
       const svcData = svcRes.ok ? await svcRes.json() : { services: [] };
       const payData = payRes.ok ? await payRes.json() : { payments: [] };
 
-      const mapped: ServiceRow[] = (svcData.services || []).map((s: Record<string, unknown>) => ({
-        id: String(s.id),
-        category: String(s.category || ""),
-        serviceName: String(s.serviceName || ""),
-        serviceType: String(s.serviceType || "original"),
-        resStatus: String(s.resStatus || ""),
-        clientPrice: Number(s.clientPrice) || 0,
-        servicePrice: Number(s.servicePrice) || 0,
-        commissionAmount: s.commissionAmount != null ? Number(s.commissionAmount) : null,
-        vatRate: s.vatRate != null ? Number(s.vatRate) : null,
-        referralIncludeInCommission: s.referralIncludeInCommission !== false,
-        referralCommissionPercentOverride: s.referralCommissionPercentOverride != null ? Number(s.referralCommissionPercentOverride) : null,
-        referralCommissionFixedAmount: s.referralCommissionFixedAmount != null ? Number(s.referralCommissionFixedAmount) : null,
-      }));
+      const mapped = mapApiRowsToFinanceServices(svcData.services || []);
 
       const payMapped: PaymentRow[] = (payData.payments || payData.data || []).map((p: Record<string, unknown>) => ({
         id: String(p.id),
@@ -141,9 +180,9 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
       setPayments(payMapped);
       setLoading(false);
     }
-    load();
+    void load();
     return () => { cancelled = true; };
-  }, [orderCode, orderId]);
+  }, [orderCode, orderId, servicesFromParent]);
 
   const activePayments = useMemo(() => payments.filter((p) => p.status !== "cancelled"), [payments]);
 
@@ -161,7 +200,7 @@ export default function OrderFinanceOverview({ orderCode, orderId, currency, lan
         vat_rate: svc.vatRate,
       });
       const row: ServiceWithEcon = { ...svc, econ, feeShare: 0, referralAmount: 0, netProfit: 0 };
-      if (svc.resStatus === "cancelled") {
+      if (isExcludedFromFinanceTotals(svc)) {
         cancelled.push(row);
       } else {
         active.push(row);

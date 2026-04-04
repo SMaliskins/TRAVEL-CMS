@@ -10,7 +10,10 @@ import {
   normalizeEmailSignatureSource,
   resolveEmailSignatureInnerHtml,
 } from "@/lib/email/appendUserEmailSignature";
-import { loadDefaultEmailTemplateForCategory } from "@/lib/email/emailTemplateUtils";
+import {
+  applyEmailTemplateLocale,
+  loadDefaultEmailTemplateForCategory,
+} from "@/lib/email/emailTemplateUtils";
 import {
   buildInvoiceEmailTemplateVars,
   formatInvoiceDueParts,
@@ -89,7 +92,9 @@ export async function GET(
       remaining?: unknown;
     };
     const totalNum = Number(invRow.total) || 0;
-    const template = await loadDefaultEmailTemplateForCategory(loaded.companyId, "invoice");
+    const templateRow = await loadDefaultEmailTemplateForCategory(loaded.companyId, "invoice");
+    const langParam = request.nextUrl.searchParams.get("lang")?.trim().toLowerCase() || undefined;
+    const templateForDisplay = applyEmailTemplateLocale(templateRow, langParam);
     const vars = buildInvoiceEmailTemplateVars({
       payerName: String(invRow.payer_name ?? "").trim() || "Sir/Madam",
       orderCode: loaded.orderRow.order_code,
@@ -107,15 +112,34 @@ export async function GET(
       items: invRow.invoice_items,
     });
 
-    const { subject, bodyHtml } = resolveInvoiceEmailLetter({
+    const canonicalResolved = resolveInvoiceEmailLetter({
       invoiceNumber: String(loaded.invoice.invoice_number),
       subjectFromClient: null,
       messageFromClient: null,
-      template,
+      template: templateRow,
       vars,
     });
 
-    const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
+    const displayResolved = resolveInvoiceEmailLetter({
+      invoiceNumber: String(loaded.invoice.invoice_number),
+      subjectFromClient: null,
+      messageFromClient: null,
+      template: templateForDisplay,
+      vars,
+    });
+
+    const usedDbTranslation = Boolean(
+      langParam &&
+        langParam !== "en" &&
+        templateRow?.translations?.[langParam] &&
+        ((templateRow.translations[langParam].subject ?? "").trim() !== "" ||
+          (templateRow.translations[langParam].body ?? "").trim() !== "")
+    );
+
+    const subject = displayResolved.subject;
+    const bodyHtml = displayResolved.bodyHtml;
+
+    const sigSource = templateRow?.email_signature_source ?? normalizeEmailSignatureSource(null);
     const innerSig = await resolveEmailSignatureInnerHtml({
       source: sigSource,
       userId: user.id,
@@ -132,6 +156,9 @@ export async function GET(
       message,
       letter_body_html: bodyHtml,
       previewSuffixHtml: suffixHtml,
+      canonical_subject: canonicalResolved.subject,
+      canonical_letter_body_html: canonicalResolved.bodyHtml,
+      used_db_translation: usedDbTranslation,
     });
   } catch (e) {
     console.error("[invoice email] GET:", e);

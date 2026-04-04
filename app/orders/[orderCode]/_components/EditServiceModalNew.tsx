@@ -1934,12 +1934,6 @@ export default function EditServiceModalNew({
     return 'other';
   };
 
-  // When categories available: sync VAT only (category/type already from service — avoid form flash)
-  useEffect(() => {
-    const matched = categories.find(c => c.id === categoryId);
-    if (matched && matched.vat_rate != null) setVatRate(matched.vat_rate);
-  }, [categoryId, categories]);
-
   // Tour: init depositPercent/finalPercent from paymentTerms on open
   useEffect(() => {
     const pt = service.paymentTerms || "";
@@ -2805,6 +2799,8 @@ export default function EditServiceModalNew({
           id: service.id,
           name: serviceName,
           category,
+          categoryId,
+          vatRate,
           supplier: supplierName || "-",
           supplierNameRaw: supplierName || "",
           client: primaryClient?.name || "-",

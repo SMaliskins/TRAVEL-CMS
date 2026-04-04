@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
+import { buildExpandedOrderAndInvoiceSummary } from "@/lib/orders/orderPageBootstrap";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -41,213 +42,14 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Sum of active (non-cancelled) services → amount_total for header
-    const { data: services } = await supabaseAdmin
-      .from("order_services")
-      .select("res_status, client_price")
-      .eq("order_id", order.id)
-      .eq("company_id", companyId);
-
-    const activeServices = (services || []).filter((s: { res_status?: string }) => s.res_status !== "cancelled");
-    const amountTotalFromServices = activeServices.reduce(
-      (sum: number, s: { client_price?: string | number }) => sum + (Number(s.client_price) || 0),
-      0
+    const { order: expanded } = await buildExpandedOrderAndInvoiceSummary(
+      supabaseAdmin,
+      order as Record<string, unknown>,
+      companyId,
+      apiUser
     );
 
-    // Recalculate amount_paid from actual non-cancelled payments
-    const { data: orderPayments } = await supabaseAdmin
-      .from("payments")
-      .select("amount, status")
-      .eq("order_id", order.id);
-
-    const amountPaid = (orderPayments ?? []).reduce(
-      (sum: number, p: { amount: number; status?: string }) =>
-        p.status === "cancelled" ? sum : sum + Number(p.amount),
-      0
-    );
-    const amountDebt = Math.max(0, amountTotalFromServices - amountPaid);
-
-    // Sync stale amount_paid if needed
-    const storedPaid = Number(order.amount_paid) || 0;
-    if (Math.abs(storedPaid - amountPaid) > 0.01) {
-      await supabaseAdmin
-        .from("orders")
-        .update({ amount_paid: amountPaid, amount_debt: amountDebt })
-        .eq("id", order.id);
-    }
-
-    // Payment dates and overdue from invoices (non-cancelled)
-    const { data: invoices } = await supabaseAdmin
-      .from("invoices")
-      .select("deposit_date, final_payment_date, status")
-      .eq("order_id", order.id)
-      .eq("company_id", companyId)
-      .neq("status", "cancelled");
-
-    const paymentDates: { type: string; date: string }[] = [];
-    let overdueDays: number | null = null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    (invoices || []).forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null; status?: string }) => {
-      if (inv.deposit_date) paymentDates.push({ type: "deposit", date: inv.deposit_date });
-      if (inv.final_payment_date) paymentDates.push({ type: "final", date: inv.final_payment_date });
-    });
-
-    // Only count overdue for invoices that are not paid (paid/processed = no overdue)
-    const unpaidInvoices = (invoices || []).filter(
-      (inv: { status?: string }) => inv.status !== "paid" && inv.status !== "processed"
-    );
-    const dueDatesToCheck: string[] = [];
-    unpaidInvoices.forEach((inv: { deposit_date?: string | null; final_payment_date?: string | null }) => {
-      if (inv.deposit_date) dueDatesToCheck.push(inv.deposit_date);
-      if (inv.final_payment_date) dueDatesToCheck.push(inv.final_payment_date);
-    });
-    dueDatesToCheck.forEach((dateStr) => {
-      const d = new Date(dateStr);
-      d.setHours(0, 0, 0, 0);
-      if (d < today) {
-        const days = Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
-        if (overdueDays === null || days > overdueDays) overdueDays = days;
-      }
-    });
-
-    // Get owner name from user_profiles or profiles if owner_user_id exists
-    let ownerName = null;
-    if (order.owner_user_id) {
-      // Try user_profiles first (id = auth.users.id)
-      const { data: profile } = await supabaseAdmin
-        .from("user_profiles")
-        .select("first_name, last_name")
-        .eq("id", order.owner_user_id)
-        .single();
-      
-      if (profile) {
-        ownerName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || null;
-      }
-      
-      // Fallback to profiles table
-      if (!ownerName) {
-        const { data: oldProfile } = await supabaseAdmin
-          .from("profiles")
-          .select("display_name, initials")
-          .eq("user_id", order.owner_user_id)
-          .single();
-        
-        if (oldProfile) {
-          ownerName = oldProfile.display_name || null;
-        }
-      }
-    }
-    
-    // Fallback: try manager_user_id if owner_user_id not set
-    if (!ownerName && order.manager_user_id) {
-      const { data: managerProfile } = await supabaseAdmin
-        .from("user_profiles")
-        .select("first_name, last_name")
-        .eq("id", order.manager_user_id)
-        .single();
-      
-      if (managerProfile) {
-        ownerName = [managerProfile.first_name, managerProfile.last_name].filter(Boolean).join(" ") || null;
-      }
-    }
-    
-    // Fallback: try created_by if still no owner
-    if (!ownerName && order.created_by) {
-      const { data: creatorProfile } = await supabaseAdmin
-        .from("user_profiles")
-        .select("first_name, last_name")
-        .eq("id", order.created_by)
-        .single();
-      
-      if (creatorProfile) {
-        ownerName = [creatorProfile.first_name, creatorProfile.last_name].filter(Boolean).join(" ") || null;
-      }
-      
-      // Also try profiles table for created_by
-      if (!ownerName) {
-        const { data: creatorOldProfile } = await supabaseAdmin
-          .from("profiles")
-          .select("display_name, initials")
-          .eq("user_id", order.created_by)
-          .single();
-        
-        if (creatorOldProfile) {
-          ownerName = creatorOldProfile.display_name || null;
-        }
-      }
-    }
-    
-    // Last fallback: try to get name from auth.users metadata
-    if (!ownerName && order.created_by) {
-      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(order.created_by);
-      if (authUser?.user) {
-        const meta = authUser.user.user_metadata;
-        ownerName = meta?.full_name || meta?.name || 
-                    [meta?.first_name, meta?.last_name].filter(Boolean).join(" ") ||
-                    authUser.user.email?.split("@")[0] || null;
-      }
-    }
-    
-    // Ultimate fallback: use current user's name from user_profiles
-    if (!ownerName && apiUser) {
-      const { data: currentProfile } = await supabaseAdmin
-        .from("user_profiles")
-        .select("first_name, last_name")
-        .eq("id", apiUser.userId)
-        .single();
-      if (currentProfile) {
-        ownerName = [currentProfile.first_name, currentProfile.last_name].filter(Boolean).join(" ") || null;
-      }
-    }
-
-    // If order dates were not set, derive from active services: date_from = first service start, date_to = last service end
-    let effectiveDateFrom = order.date_from;
-    let effectiveDateTo = order.date_to;
-    if (!effectiveDateFrom || !effectiveDateTo) {
-      const { data: dateServices } = await supabaseAdmin
-        .from("order_services")
-        .select("service_date_from, service_date_to")
-        .eq("order_id", order.id)
-        .eq("company_id", companyId)
-        .neq("res_status", "cancelled");
-      const withDates = (dateServices || []).filter(
-        (s: { service_date_from?: string | null; service_date_to?: string | null }) =>
-          s.service_date_from != null || s.service_date_to != null
-      );
-      if (withDates.length > 0) {
-        const froms = withDates.map((s: { service_date_from?: string | null }) => s.service_date_from).filter(Boolean) as string[];
-        const tos = withDates.map((s: { service_date_to?: string | null }) => s.service_date_to).filter(Boolean) as string[];
-        if (froms.length > 0 && !effectiveDateFrom) effectiveDateFrom = froms.sort()[0];
-        if (tos.length > 0 && !effectiveDateTo) effectiveDateTo = tos.sort().reverse()[0];
-      }
-    }
-
-    let referral_party_display_name: string | null = null;
-    if (order.referral_party_id) {
-      const { data: refParty } = await supabaseAdmin
-        .from("party")
-        .select("display_name")
-        .eq("id", order.referral_party_id)
-        .maybeSingle();
-      referral_party_display_name = refParty?.display_name ?? null;
-    }
-
-    return NextResponse.json({ 
-      order: {
-        ...order,
-        date_from: effectiveDateFrom ?? order.date_from,
-        date_to: effectiveDateTo ?? order.date_to,
-        owner_name: ownerName,
-        amount_total: amountTotalFromServices,
-        amount_paid: amountPaid,
-        amount_debt: amountDebt,
-        payment_dates: paymentDates,
-        overdue_days: overdueDays,
-        referral_party_display_name,
-      }
-    });
+    return NextResponse.json({ order: expanded });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Order GET error:", errorMsg);

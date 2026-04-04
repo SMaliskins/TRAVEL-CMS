@@ -1,6 +1,8 @@
 "use client";
 
-import React, { Fragment, useEffect, useState, useMemo } from "react";
+import React, { Fragment, useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchOrderClientsDataParties, orderPageQueryKeys } from "@/lib/orders/orderPageQueries";
 import type { DirectoryRecord, LoyaltyCard } from "@/lib/types/directory";
 import type { RelatedPartyTag } from "@/lib/types/orderRelatedParties";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
@@ -8,18 +10,6 @@ import { t } from "@/lib/i18n";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { formatPhoneForDisplay } from "@/utils/phone";
 import { useToast } from "@/contexts/ToastContext";
-
-type RelatedPartiesResponse = {
-  parties: { partyId: string; tags: RelatedPartyTag[] }[];
-  leadPartyId?: string | null;
-  nameOnlyPayers: string[];
-};
-
-/** GET /api/orders/.../clients-data-parties — related parties + directory records in one round-trip */
-type ClientsDataPartiesResponse = RelatedPartiesResponse & {
-  partyRows?: { partyId: string; tags: RelatedPartyTag[]; record: DirectoryRecord | null }[];
-  error?: string;
-};
 
 function canRemoveTravellerFromOrder(
   tags: RelatedPartyTag[],
@@ -121,55 +111,32 @@ export default function OrderClientsDataTab({
   lang: string;
 }) {
   const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState<{ partyId: string; tags: RelatedPartyTag[]; record: DirectoryRecord }[]>([]);
-  const [nameOnlyPayers, setNameOnlyPayers] = useState<string[]>([]);
-  const [leadPartyId, setLeadPartyId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const partiesQueryKey = orderPageQueryKeys.clientsDataParties(orderCode);
+  const {
+    data,
+    isPending: loading,
+    error: queryError,
+    isError,
+  } = useQuery({
+    queryKey: partiesQueryKey,
+    queryFn: () => fetchOrderClientsDataParties(orderCode),
+    enabled: Boolean(orderCode),
+  });
+  const error = isError && queryError instanceof Error ? queryError.message : null;
+  const nameOnlyPayers = data?.nameOnlyPayers ?? [];
+  const leadPartyId = data?.leadPartyId ?? null;
+  const loaded = useMemo(() => {
+    const rows = data?.partyRows || [];
+    return rows
+      .filter((r): r is typeof r & { record: DirectoryRecord } => r.record != null)
+      .map((r) => ({ partyId: r.partyId, tags: r.tags, record: r.record }));
+  }, [data]);
   const [removingPartyId, setRemovingPartyId] = useState<string | null>(null);
 
   const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PreferencesDraft | null>(null);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      setLoaded([]);
-      setNameOnlyPayers([]);
-      setLeadPartyId(null);
-      setExpandedPartyId(null);
-      setDraft(null);
-      try {
-        const metaRes = await fetchWithAuth(`/api/orders/${encodeURIComponent(orderCode)}/clients-data-parties`);
-        const metaJson = (await metaRes.json()) as ClientsDataPartiesResponse;
-        if (!metaRes.ok || metaJson.error) {
-          if (!cancelled) setError(metaJson.error || "Failed to load");
-          return;
-        }
-        if (cancelled) return;
-        setLeadPartyId(metaJson.leadPartyId ?? null);
-        setNameOnlyPayers(metaJson.nameOnlyPayers || []);
-
-        const rows = metaJson.partyRows || [];
-        const records = rows
-          .filter((r): r is typeof r & { record: DirectoryRecord } => r.record != null)
-          .map((r) => ({ partyId: r.partyId, tags: r.tags, record: r.record }));
-
-        if (cancelled) return;
-        setLoaded(records);
-      } catch {
-        if (!cancelled) setError("Failed to load");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orderCode]);
 
   const sorted = useMemo(() => sortParties(loaded), [loaded]);
 
@@ -263,7 +230,7 @@ export default function OrderClientsDataTab({
         return;
       }
       const updated = json.record as DirectoryRecord;
-      setLoaded((prev) => prev.map((row) => (row.partyId === partyId ? { ...row, record: updated } : row)));
+      void queryClient.invalidateQueries({ queryKey: partiesQueryKey });
       setDraft(recordToDraft(updated));
       showToast("success", t(lang, "order.clientsData.edit.saved"));
     } catch {
@@ -293,7 +260,7 @@ export default function OrderClientsDataTab({
         }
         return;
       }
-      setLoaded((prev) => prev.filter((r) => r.partyId !== partyId));
+      void queryClient.invalidateQueries({ queryKey: partiesQueryKey });
       if (expandedPartyId === partyId) {
         setExpandedPartyId(null);
         setDraft(null);

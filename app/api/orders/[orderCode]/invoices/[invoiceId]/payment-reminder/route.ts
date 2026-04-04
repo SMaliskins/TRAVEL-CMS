@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
 import {
+  applyEmailTemplateLocale,
   loadDefaultEmailTemplateForCategory,
   substituteEmailTemplatePlaceholders,
 } from "@/lib/email/emailTemplateUtils";
@@ -218,22 +219,49 @@ export async function GET(
 
     const { ctx, invoiceTotalFormatted } = built;
     const lineHints = summarizeInvoiceItemsForReminder(loaded.invoice.invoice_items);
-    const template = await loadDefaultEmailTemplateForCategory(loaded.companyId, "payment_reminder");
+    const templateRow = await loadDefaultEmailTemplateForCategory(
+      loaded.companyId,
+      "payment_reminder"
+    );
+    const langParam = request.nextUrl.searchParams.get("lang")?.trim().toLowerCase() || undefined;
+    const templateDisplay = applyEmailTemplateLocale(templateRow, langParam);
     const vars = buildPaymentReminderTemplateVars(ctx, invoiceTotalFormatted, lineHints);
-    const fromDb =
-      template && (template.subject.trim() || template.body.trim())
+
+    const fromDbCanonical =
+      templateRow && (templateRow.subject.trim() || templateRow.body.trim())
         ? {
-            subject: substituteEmailTemplatePlaceholders(template.subject, vars),
-            message: substituteEmailTemplatePlaceholders(template.body, vars),
+            subject: substituteEmailTemplatePlaceholders(templateRow.subject, vars),
+            message: substituteEmailTemplatePlaceholders(templateRow.body, vars),
           }
         : null;
 
-    const subject = fromDb?.subject.trim() || defaultPaymentReminderSubject(ctx);
-    const letterBodyHtml = fromDb?.message.trim()
-      ? ensurePaymentReminderBodyHtml(fromDb.message)
+    const fromDbDisplay =
+      templateDisplay && (templateDisplay.subject.trim() || templateDisplay.body.trim())
+        ? {
+            subject: substituteEmailTemplatePlaceholders(templateDisplay.subject, vars),
+            message: substituteEmailTemplatePlaceholders(templateDisplay.body, vars),
+          }
+        : null;
+
+    const canonicalSubject = fromDbCanonical?.subject.trim() || defaultPaymentReminderSubject(ctx);
+    const canonicalLetterBody = fromDbCanonical?.message.trim()
+      ? ensurePaymentReminderBodyHtml(fromDbCanonical.message)
       : defaultPaymentReminderHtml(ctx);
 
-    const sigSource = template?.email_signature_source ?? normalizeEmailSignatureSource(null);
+    const subject = fromDbDisplay?.subject.trim() || defaultPaymentReminderSubject(ctx);
+    const letterBodyHtml = fromDbDisplay?.message.trim()
+      ? ensurePaymentReminderBodyHtml(fromDbDisplay.message)
+      : defaultPaymentReminderHtml(ctx);
+
+    const usedDbTranslation = Boolean(
+      langParam &&
+        langParam !== "en" &&
+        templateRow?.translations?.[langParam] &&
+        ((templateRow.translations[langParam].subject ?? "").trim() !== "" ||
+          (templateRow.translations[langParam].body ?? "").trim() !== "")
+    );
+
+    const sigSource = templateRow?.email_signature_source ?? normalizeEmailSignatureSource(null);
     const pdfAttachmentNote =
       '<p style="margin-top:12px;color:#6b7280">The invoice is attached as a PDF file.</p>';
     const messageWithPdfNote = `${letterBodyHtml}${pdfAttachmentNote}`;
@@ -243,11 +271,20 @@ export async function GET(
       companyId: loaded.companyId,
     });
 
+    const previewSuffixHtml =
+      fullMessage.length >= letterBodyHtml.length && fullMessage.startsWith(letterBodyHtml)
+        ? fullMessage.slice(letterBodyHtml.length)
+        : "";
+
     return NextResponse.json({
       subject,
       message: fullMessage,
       letter_body_html: letterBodyHtml,
-      fromTemplate: Boolean(fromDb?.message.trim()),
+      previewSuffixHtml,
+      fromTemplate: Boolean(fromDbDisplay?.message.trim()),
+      canonical_subject: canonicalSubject,
+      canonical_letter_body_html: canonicalLetterBody,
+      used_db_translation: usedDbTranslation,
     });
   } catch (e) {
     console.error("[payment-reminder] GET:", e);

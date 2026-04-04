@@ -3,7 +3,11 @@ import { parseFlightItinerary, parseFlightText } from "@/lib/ai/tasks/parseFligh
 import { parseDocument } from "@/lib/ai/tasks/parseDocument";
 import { parseEmail, classifyEmail } from "@/lib/ai/tasks/parseEmail";
 import { suggestServices, suggestTransferTime } from "@/lib/ai/tasks/suggestServices";
-import { translateText, detectLanguage } from "@/lib/ai/tasks/translateText";
+import {
+  translateText,
+  detectLanguage,
+  translateEmailSubjectAndBody,
+} from "@/lib/ai/tasks/translateText";
 import { isAIAvailable } from "@/lib/ai/config";
 
 /**
@@ -105,9 +109,43 @@ export async function POST(request: NextRequest) {
         if (!isAIAvailable("fast")) {
           return NextResponse.json({ error: "AI not configured" }, { status: 503 });
         }
+        const rawText = params.text;
+        const targetRaw = params.targetLanguage;
+        let emailPayload: { subject: string; message: string } | null = null;
+        if (typeof rawText === "string") {
+          try {
+            const o = JSON.parse(rawText) as unknown;
+            if (
+              o &&
+              typeof o === "object" &&
+              typeof (o as { subject?: unknown }).subject === "string" &&
+              typeof (o as { message?: unknown }).message === "string"
+            ) {
+              emailPayload = {
+                subject: (o as { subject: string }).subject,
+                message: (o as { message: string }).message,
+              };
+            }
+          } catch {
+            /* plain string — use translateText below */
+          }
+        }
+
+        if (emailPayload && typeof targetRaw === "string" && targetRaw.trim() !== "") {
+          const out = await translateEmailSubjectAndBody(
+            emailPayload.subject,
+            emailPayload.message,
+            targetRaw
+          );
+          if (out) {
+            return NextResponse.json({ result: JSON.stringify(out) });
+          }
+          return NextResponse.json({ error: "Translation failed" }, { status: 502 });
+        }
+
         const result = await translateText(
-          params.text,
-          params.targetLanguage,
+          typeof rawText === "string" ? rawText : JSON.stringify(rawText ?? ""),
+          typeof targetRaw === "string" ? targetRaw : "en",
           params.context
         );
         return NextResponse.json(result);

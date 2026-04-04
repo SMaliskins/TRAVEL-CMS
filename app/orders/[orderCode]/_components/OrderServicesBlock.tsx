@@ -283,6 +283,137 @@ function signedClientPriceForSum(s: Pick<Service, "clientPrice" | "serviceType">
   return p;
 }
 
+function numOrNull(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/** Map `/api/orders/.../services` list items (camelCase API shape) to `Service` — shared by internal fetch and parent-provided rows. */
+function mapOrderServicesApiRowsToServices(rows: unknown): Service[] {
+  const list = Array.isArray(rows) ? rows : [];
+  return list.map((rawRow) => {
+    const s = rawRow as Record<string, unknown>;
+    return {
+      id: String(s.id),
+      dateFrom: String(s.dateFrom ?? s.service_date_from ?? ""),
+      dateTo: String(s.dateTo ?? s.service_date_to ?? s.dateFrom ?? s.service_date_from ?? ""),
+      category: String(s.category ?? "Other"),
+      categoryId: (s.categoryId ?? s.category_id) as string | null,
+      categoryType: ((s.categoryType ?? s.category_type) || undefined) as Service["categoryType"],
+      vatRate: numOrNull(s.vatRate ?? s.vat_rate),
+      name: String(s.serviceName ?? s.service_name ?? ""),
+      supplierNameRaw: String(s.supplierName ?? s.supplier_name ?? ""),
+      supplier: formatServiceSupplierDisplay(
+        (s.supplierName ?? s.supplier_name) as string | null | undefined,
+        !!(s.airlineChannel ?? s.airline_channel),
+        (s.airlineChannelSupplierName ?? s.airline_channel_supplier_name) as string | null | undefined
+      ),
+      client: String(s.clientName ?? s.client_name ?? "-"),
+      payer: String(s.payerName ?? s.payer_name ?? "-"),
+      supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
+      payerPartyId: (s.payerPartyId ?? s.payer_party_id) as string | undefined,
+      clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
+      servicePrice: Number(s.servicePrice ?? s.service_price ?? 0),
+      clientPrice: Number(s.clientPrice ?? s.client_price ?? 0),
+      serviceCurrency: (() => {
+        const v = s.serviceCurrency ?? (s as { service_currency?: unknown }).service_currency;
+        return typeof v === "string" ? v : null;
+      })(),
+      servicePriceForeign: numOrNull(s.servicePriceForeign ?? (s as { service_price_foreign?: unknown }).service_price_foreign),
+      exchangeRate: numOrNull(s.exchangeRate ?? (s as { exchange_rate?: unknown }).exchange_rate),
+      actuallyPaid: numOrNull(s.actuallyPaid ?? (s as { actually_paid?: unknown }).actually_paid),
+      quantity: Number(s.quantity ?? (s as { quantity?: number }).quantity ?? 1),
+      resStatus: String(s.resStatus ?? s.res_status ?? "booked") as Service["resStatus"],
+      refNr: String(s.refNr ?? s.ref_nr ?? ""),
+      ticketNr: String(s.ticketNr ?? s.ticket_nr ?? ""),
+      assignedTravellerIds: (s.travellerIds ?? s.traveller_ids ?? []) as string[],
+      invoice_id: (s.invoice_id ?? null) as string | null,
+      splitGroupId: (s.splitGroupId ?? s.split_group_id ?? null) as string | null,
+      flightSegments: (s.flightSegments ?? s.flight_segments ?? []) as FlightSegment[],
+      ticketNumbers: (s.ticketNumbers ?? s.ticket_numbers ?? []) as Service["ticketNumbers"],
+      boardingPasses: (s.boardingPasses ?? s.boarding_passes ?? []) as Service["boardingPasses"],
+      baggage: String(s.baggage ?? ""),
+      cabinClass: String(s.cabinClass ?? s.cabin_class ?? "economy") as Service["cabinClass"],
+      airlineChannel: !!(s.airlineChannel ?? s.airline_channel),
+      airlineChannelSupplierId: (s.airlineChannelSupplierId ?? s.airline_channel_supplier_id ?? null) as string | null,
+      airlineChannelSupplierName: String(s.airlineChannelSupplierName ?? s.airline_channel_supplier_name ?? ""),
+      pricingPerClient: Array.isArray(s.pricingPerClient ?? s.pricing_per_client) ? (s.pricingPerClient ?? s.pricing_per_client) as Service["pricingPerClient"] : null,
+      priceType: (s.priceType ?? s.price_type ?? null) as Service["priceType"],
+      refundPolicy: (s.refundPolicy ?? s.refund_policy ?? null) as Service["refundPolicy"],
+      freeCancellationUntil: (s.freeCancellationUntil ?? s.free_cancellation_until ?? null) as string | null,
+      cancellationPenaltyAmount: (s.cancellationPenaltyAmount ?? s.cancellation_penalty_amount ?? null) as number | null,
+      cancellationPenaltyPercent: (s.cancellationPenaltyPercent ?? s.cancellation_penalty_percent ?? null) as number | null,
+      parentServiceId: (s.parentServiceId ?? s.parent_service_id ?? null) as string | null,
+      serviceType: String(s.serviceType ?? s.service_type ?? "original") as Service["serviceType"],
+      ancillaryType: (s.ancillaryType ?? s.ancillary_type ?? null) as Service["ancillaryType"],
+      cancellationFee: (s.cancellationFee ?? s.cancellation_fee ?? null) as number | null,
+      refundAmount: (s.refundAmount ?? s.refund_amount ?? null) as number | null,
+      changeFee: (s.changeFee ?? s.change_fee ?? null) as number | null,
+      commissionName: (s.commissionName ?? s.commission_name ?? null) as string | null,
+      commissionRate: (s.commissionRate ?? s.commission_rate ?? null) as number | null,
+      commissionAmount: (s.commissionAmount ?? s.commission_amount ?? null) as number | null,
+      agentDiscountValue: (s.agentDiscountValue ?? s.agent_discount_value ?? null) as number | null,
+      agentDiscountType: (s.agentDiscountType ?? s.agent_discount_type ?? null) as string | null,
+      servicePriceLineItems: Array.isArray(s.servicePriceLineItems ?? s.service_price_line_items)
+        ? ((s.servicePriceLineItems ?? s.service_price_line_items) as { description?: string; amount?: number; commissionable?: boolean }[]).map((it) => ({
+            description: String(it.description ?? ""),
+            amount: Number(it.amount ?? 0),
+            commissionable: !!it.commissionable,
+          }))
+        : [],
+      hotelName: (s.hotelName ?? s.hotel_name ?? null) as string | null,
+      hotelHid: (s.hotelHid ?? (s as { hotel_hid?: number }).hotel_hid ?? null) as number | null,
+      hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
+      hotelRoom: (s.hotelRoom ?? s.hotel_room ?? null) as string | null,
+      hotelBoard: (s.hotelBoard ?? s.hotel_board ?? null) as string | null,
+      hotelBedType: (s.hotelBedType ?? s.hotel_bed_type ?? null) as Service["hotelBedType"],
+      mealPlanText: (s.mealPlanText ?? s.meal_plan_text ?? null) as string | null,
+      transferType: (s.transferType ?? s.transfer_type ?? null) as string | null,
+      transferRoutes: (Array.isArray(s.transferRoutes ?? s.transfer_routes) ? (s.transferRoutes ?? s.transfer_routes) : []) as Service["transferRoutes"],
+      transferMode: (s.transferMode ?? s.transfer_mode ?? null) as string | null,
+      vehicleClass: (s.vehicleClass ?? s.vehicle_class ?? null) as string | null,
+      pickupLocation: (s.pickupLocation ?? (s as { pickup_location?: string }).pickup_location ?? null) as string | null,
+      dropoffLocation: (s.dropoffLocation ?? (s as { dropoff_location?: string }).dropoff_location ?? null) as string | null,
+      pickupTime: (s.pickupTime ?? (s as { pickup_time?: string }).pickup_time ?? null) as string | null,
+      estimatedDuration: (s.estimatedDuration ?? (s as { estimated_duration?: string }).estimated_duration ?? null) as string | null,
+      linkedFlightId: (s.linkedFlightId ?? (s as { linked_flight_id?: string }).linked_flight_id ?? null) as string | null,
+      airportServiceFlow: (s.airportServiceFlow ?? (s as { airport_service_flow?: string }).airport_service_flow ?? null) as string | null,
+      driverName: (s.driverName ?? (s as { driver_name?: string }).driver_name ?? null) as string | null,
+      driverPhone: (s.driverPhone ?? (s as { driver_phone?: string }).driver_phone ?? null) as string | null,
+      driverNotes: (s.driverNotes ?? (s as { driver_notes?: string }).driver_notes ?? null) as string | null,
+      additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
+      hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
+      hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
+      hotelEmail: (s.hotelEmail ?? s.hotel_email ?? null) as string | null,
+      hotelEarlyCheckIn: (s.hotelEarlyCheckIn ?? s.hotel_early_check_in ?? null) as boolean | null,
+      hotelEarlyCheckInTime: (s.hotelEarlyCheckInTime ?? (s as { hotel_early_check_in_time?: string }).hotel_early_check_in_time ?? null) as string | null,
+      hotelLateCheckIn: (s.hotelLateCheckIn ?? s.hotel_late_check_in ?? null) as boolean | null,
+      hotelLateCheckInTime: (s.hotelLateCheckInTime ?? (s as { hotel_late_check_in_time?: string }).hotel_late_check_in_time ?? null) as string | null,
+      hotelRoomUpgrade: (s.hotelRoomUpgrade ?? (s as { hotel_room_upgrade?: boolean }).hotel_room_upgrade ?? null) as boolean | null,
+      hotelLateCheckOut: (s.hotelLateCheckOut ?? (s as { hotel_late_check_out?: boolean }).hotel_late_check_out ?? null) as boolean | null,
+      hotelLateCheckOutTime: (s.hotelLateCheckOutTime ?? (s as { hotel_late_check_out_time?: string }).hotel_late_check_out_time ?? null) as string | null,
+      hotelHigherFloor: (s.hotelHigherFloor ?? s.hotel_higher_floor ?? null) as boolean | null,
+      hotelKingSizeBed: (s.hotelKingSizeBed ?? s.hotel_king_size_bed ?? null) as boolean | null,
+      hotelHoneymooners: (s.hotelHoneymooners ?? s.hotel_honeymooners ?? null) as boolean | null,
+      hotelSilentRoom: (s.hotelSilentRoom ?? s.hotel_silent_room ?? null) as boolean | null,
+      hotelRepeatGuests: (s.hotelRepeatGuests ?? s.hotel_repeat_guests ?? null) as boolean | null,
+      hotelRoomsNextTo: (s.hotelRoomsNextTo ?? s.hotel_rooms_next_to ?? null) as string | null,
+      hotelParking: (s.hotelParking ?? s.hotel_parking ?? null) as boolean | null,
+      hotelPreferencesFreeText: (s.hotelPreferencesFreeText ?? s.hotel_preferences_free_text ?? null) as string | null,
+      hotelPricePer: (s.hotelPricePer ?? (s as { hotel_price_per?: string }).hotel_price_per ?? null) as Service["hotelPricePer"],
+      supplierBookingType: (s.supplierBookingType ?? s.supplier_booking_type ?? null) as string | null,
+      paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
+      paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,
+      paymentTerms: (s.paymentTerms ?? s.payment_terms ?? null) as string | null,
+    } as Service;
+  });
+}
+
 // Fallback when API is unavailable (for "What service?" chooser)
 const CHOOSE_CATEGORY_FALLBACK: { id: string; name: string; type: string; vat_rate?: number }[] = [
   { id: "fallback-flight", name: "Flight", type: "flight", vat_rate: 0 },
@@ -602,6 +733,12 @@ interface OrderServicesBlockProps {
    * When set, travellers list is owned by the parent (single GET .../travellers for header + services block).
    */
   travellersState?: readonly [Traveller[], React.Dispatch<React.SetStateAction<Traveller[]>>];
+  /**
+   * Parent-owned `/api/orders/.../services` rows (order page shares one fetch with Finances). `null` = loading.
+   */
+  servicesFromParent?: unknown[] | null;
+  /** Refetch shared list; when set, this block does not fetch services on its own. */
+  reloadServicesFromParent?: (noCache?: boolean) => Promise<void>;
 }
 
 const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlockProps>(function OrderServicesBlock({ 
@@ -621,6 +758,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   userRole,
   onOpenDirectoryParty,
   travellersState,
+  servicesFromParent,
+  reloadServicesFromParent,
 }, ref) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -650,6 +789,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const orderTravellers = travellersState ? travellersState[0] : localTravellers;
   const setOrderTravellers = travellersState ? travellersState[1] : setLocalTravellers;
   const skipTravellersFetch = !!travellersState;
+  const parentControlsServices = reloadServicesFromParent != null;
   const [services, setServices] = useState<Service[]>([]);
   const [modalServiceId, setModalServiceId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -1578,7 +1718,16 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   // Fetch services from API (noCache = true after edit so Itinerary gets fresh dates)
   const fetchServices = useCallback(async (noCache?: boolean) => {
     if (!orderCode) return;
-    
+    if (reloadServicesFromParent) {
+      try {
+        await reloadServicesFromParent(noCache);
+      } catch (err) {
+        console.error("Fetch services error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const url = `/api/orders/${encodeURIComponent(orderCode)}/services${noCache ? `?_=${Date.now()}` : ""}`;
@@ -1592,133 +1741,24 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
       if (response.ok) {
         const data = await response.json();
-        // Map API response to Service interface
-        const mappedServices: Service[] = (data.services || []).map((raw: unknown) => {
-          const s = raw as Record<string, unknown>;
-          return {
-          id: String(s.id),
-          dateFrom: String(s.dateFrom ?? s.service_date_from ?? ""),
-          dateTo: String(s.dateTo ?? s.service_date_to ?? s.dateFrom ?? s.service_date_from ?? ""),
-          category: String(s.category ?? "Other"),
-          categoryId: (s.categoryId ?? s.category_id) as string | null,
-          categoryType: ((s.categoryType ?? s.category_type) || undefined) as Service["categoryType"],
-          vatRate: (s.vatRate ?? s.vat_rate) as number | null,
-          name: String(s.serviceName ?? s.service_name ?? ""),
-          supplierNameRaw: String(s.supplierName ?? s.supplier_name ?? ""),
-          supplier: formatServiceSupplierDisplay(
-            (s.supplierName ?? s.supplier_name) as string | null | undefined,
-            !!(s.airlineChannel ?? s.airline_channel),
-            (s.airlineChannelSupplierName ?? s.airline_channel_supplier_name) as string | null | undefined
-          ),
-          client: String(s.clientName ?? s.client_name ?? "-"),
-          payer: String(s.payerName ?? s.payer_name ?? "-"),
-          supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
-          payerPartyId: (s.payerPartyId ?? s.payer_party_id) as string | undefined,
-          clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
-          servicePrice: Number(s.servicePrice ?? s.service_price ?? 0),
-          clientPrice: Number(s.clientPrice ?? s.client_price ?? 0),
-          serviceCurrency: (s.serviceCurrency ?? (s as { service_currency?: string }).service_currency) ?? null,
-          servicePriceForeign: (s.servicePriceForeign ?? (s as { service_price_foreign?: number }).service_price_foreign) ?? null,
-          exchangeRate: (s.exchangeRate ?? (s as { exchange_rate?: number }).exchange_rate) ?? null,
-          actuallyPaid: (s.actuallyPaid ?? (s as { actually_paid?: number }).actually_paid) ?? null,
-          quantity: Number(s.quantity ?? (s as { quantity?: number }).quantity ?? 1),
-          resStatus: String(s.resStatus ?? s.res_status ?? "booked") as Service["resStatus"],
-          refNr: String(s.refNr ?? s.ref_nr ?? ""),
-          ticketNr: String(s.ticketNr ?? s.ticket_nr ?? ""),
-          assignedTravellerIds: (s.travellerIds ?? s.traveller_ids ?? []) as string[],
-          invoice_id: (s.invoice_id ?? null) as string | null,
-          splitGroupId: (s.splitGroupId ?? s.split_group_id ?? null) as string | null,
-          // Flight-specific
-          flightSegments: (s.flightSegments ?? s.flight_segments ?? []) as FlightSegment[],
-          ticketNumbers: (s.ticketNumbers ?? s.ticket_numbers ?? []) as Service["ticketNumbers"],
-          boardingPasses: (s.boardingPasses ?? s.boarding_passes ?? []) as Service["boardingPasses"],
-          baggage: String(s.baggage ?? ""),
-          cabinClass: String(s.cabinClass ?? s.cabin_class ?? "economy") as Service["cabinClass"],
-          airlineChannel: !!(s.airlineChannel ?? s.airline_channel),
-          airlineChannelSupplierId: (s.airlineChannelSupplierId ?? s.airline_channel_supplier_id ?? null) as string | null,
-          airlineChannelSupplierName: String(s.airlineChannelSupplierName ?? s.airline_channel_supplier_name ?? ""),
-          pricingPerClient: Array.isArray(s.pricingPerClient ?? s.pricing_per_client) ? (s.pricingPerClient ?? s.pricing_per_client) as Service["pricingPerClient"] : null,
-          // Terms & Conditions
-          priceType: (s.priceType ?? s.price_type ?? null) as Service["priceType"],
-          refundPolicy: (s.refundPolicy ?? s.refund_policy ?? null) as Service["refundPolicy"],
-          freeCancellationUntil: (s.freeCancellationUntil ?? s.free_cancellation_until ?? null) as string | null,
-          cancellationPenaltyAmount: (s.cancellationPenaltyAmount ?? s.cancellation_penalty_amount ?? null) as number | null,
-          cancellationPenaltyPercent: (s.cancellationPenaltyPercent ?? s.cancellation_penalty_percent ?? null) as number | null,
-          // Amendment fields
-          parentServiceId: (s.parentServiceId ?? s.parent_service_id ?? null) as string | null,
-          serviceType: String(s.serviceType ?? s.service_type ?? "original") as Service["serviceType"],
-          ancillaryType: (s.ancillaryType ?? s.ancillary_type ?? null) as Service["ancillaryType"],
-          cancellationFee: (s.cancellationFee ?? s.cancellation_fee ?? null) as number | null,
-          refundAmount: (s.refundAmount ?? s.refund_amount ?? null) as number | null,
-          changeFee: (s.changeFee ?? s.change_fee ?? null) as number | null,
-          // Tour (persisted commission - must pass all for Edit modal to display)
-          commissionName: (s.commissionName ?? s.commission_name ?? null) as string | null,
-          commissionRate: (s.commissionRate ?? s.commission_rate ?? null) as number | null,
-          commissionAmount: (s.commissionAmount ?? s.commission_amount ?? null) as number | null,
-          agentDiscountValue: (s.agentDiscountValue ?? s.agent_discount_value ?? null) as number | null,
-          agentDiscountType: (s.agentDiscountType ?? s.agent_discount_type ?? null) as string | null,
-          servicePriceLineItems: Array.isArray(s.servicePriceLineItems ?? s.service_price_line_items)
-            ? ((s.servicePriceLineItems ?? s.service_price_line_items) as { description?: string; amount?: number; commissionable?: boolean }[]).map((it) => ({
-                description: String(it.description ?? ""),
-                amount: Number(it.amount ?? 0),
-                commissionable: !!it.commissionable,
-              }))
-            : [],
-          // Tour/Hotel fields (must pass for Edit modal to display after save)
-          hotelName: (s.hotelName ?? s.hotel_name ?? null) as string | null,
-          hotelHid: (s.hotelHid ?? (s as { hotel_hid?: number }).hotel_hid ?? null) as number | null,
-          hotelStarRating: (s.hotelStarRating ?? s.hotel_star_rating ?? null) as string | null,
-          hotelRoom: (s.hotelRoom ?? s.hotel_room ?? null) as string | null,
-          hotelBoard: (s.hotelBoard ?? s.hotel_board ?? null) as string | null,
-          hotelBedType: (s.hotelBedType ?? s.hotel_bed_type ?? null) as Service["hotelBedType"],
-          mealPlanText: (s.mealPlanText ?? s.meal_plan_text ?? null) as string | null,
-          transferType: (s.transferType ?? s.transfer_type ?? null) as string | null,
-          transferRoutes: (Array.isArray(s.transferRoutes ?? s.transfer_routes) ? (s.transferRoutes ?? s.transfer_routes) : []) as Service["transferRoutes"],
-          transferMode: (s.transferMode ?? s.transfer_mode ?? null) as string | null,
-          vehicleClass: (s.vehicleClass ?? s.vehicle_class ?? null) as string | null,
-          pickupLocation: (s.pickupLocation ?? (s as { pickup_location?: string }).pickup_location ?? null) as string | null,
-          dropoffLocation: (s.dropoffLocation ?? (s as { dropoff_location?: string }).dropoff_location ?? null) as string | null,
-          pickupTime: (s.pickupTime ?? (s as { pickup_time?: string }).pickup_time ?? null) as string | null,
-          estimatedDuration: (s.estimatedDuration ?? (s as { estimated_duration?: string }).estimated_duration ?? null) as string | null,
-          linkedFlightId: (s.linkedFlightId ?? (s as { linked_flight_id?: string }).linked_flight_id ?? null) as string | null,
-          airportServiceFlow: (s.airportServiceFlow ?? (s as { airport_service_flow?: string }).airport_service_flow ?? null) as string | null,
-          driverName: (s.driverName ?? (s as { driver_name?: string }).driver_name ?? null) as string | null,
-          driverPhone: (s.driverPhone ?? (s as { driver_phone?: string }).driver_phone ?? null) as string | null,
-          driverNotes: (s.driverNotes ?? (s as { driver_notes?: string }).driver_notes ?? null) as string | null,
-          additionalServices: (s.additionalServices ?? s.additional_services ?? null) as string | null,
-          hotelAddress: (s.hotelAddress ?? s.hotel_address ?? null) as string | null,
-          hotelPhone: (s.hotelPhone ?? s.hotel_phone ?? null) as string | null,
-          hotelEmail: (s.hotelEmail ?? s.hotel_email ?? null) as string | null,
-          hotelEarlyCheckIn: (s.hotelEarlyCheckIn ?? s.hotel_early_check_in ?? null) as boolean | null,
-          hotelEarlyCheckInTime: (s.hotelEarlyCheckInTime ?? (s as { hotel_early_check_in_time?: string }).hotel_early_check_in_time ?? null) as string | null,
-          hotelLateCheckIn: (s.hotelLateCheckIn ?? s.hotel_late_check_in ?? null) as boolean | null,
-          hotelLateCheckInTime: (s.hotelLateCheckInTime ?? (s as { hotel_late_check_in_time?: string }).hotel_late_check_in_time ?? null) as string | null,
-          hotelRoomUpgrade: (s.hotelRoomUpgrade ?? (s as { hotel_room_upgrade?: boolean }).hotel_room_upgrade ?? null) as boolean | null,
-          hotelLateCheckOut: (s.hotelLateCheckOut ?? (s as { hotel_late_check_out?: boolean }).hotel_late_check_out ?? null) as boolean | null,
-          hotelLateCheckOutTime: (s.hotelLateCheckOutTime ?? (s as { hotel_late_check_out_time?: string }).hotel_late_check_out_time ?? null) as string | null,
-          hotelHigherFloor: (s.hotelHigherFloor ?? s.hotel_higher_floor ?? null) as boolean | null,
-          hotelKingSizeBed: (s.hotelKingSizeBed ?? s.hotel_king_size_bed ?? null) as boolean | null,
-          hotelHoneymooners: (s.hotelHoneymooners ?? s.hotel_honeymooners ?? null) as boolean | null,
-          hotelSilentRoom: (s.hotelSilentRoom ?? s.hotel_silent_room ?? null) as boolean | null,
-          hotelRepeatGuests: (s.hotelRepeatGuests ?? s.hotel_repeat_guests ?? null) as boolean | null,
-          hotelRoomsNextTo: (s.hotelRoomsNextTo ?? s.hotel_rooms_next_to ?? null) as string | null,
-          hotelParking: (s.hotelParking ?? s.hotel_parking ?? null) as boolean | null,
-          hotelPreferencesFreeText: (s.hotelPreferencesFreeText ?? s.hotel_preferences_free_text ?? null) as string | null,
-          hotelPricePer: (s.hotelPricePer ?? (s as { hotel_price_per?: string }).hotel_price_per ?? null) as Service["hotelPricePer"],
-          supplierBookingType: (s.supplierBookingType ?? s.supplier_booking_type ?? null) as string | null,
-          paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
-          paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,
-          paymentTerms: (s.paymentTerms ?? s.payment_terms ?? null) as string | null,
-        };
-        });
-        setServices(mappedServices);
+        setServices(mapOrderServicesApiRowsToServices(data.services));
       }
     } catch (err) {
       console.error("Fetch services error:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [orderCode]);
+  }, [orderCode, reloadServicesFromParent]);
+
+  useEffect(() => {
+    if (!parentControlsServices) return;
+    if (servicesFromParent === null || servicesFromParent === undefined) {
+      setIsLoading(true);
+      return;
+    }
+    setIsLoading(false);
+    setServices(mapOrderServicesApiRowsToServices(servicesFromParent));
+  }, [parentControlsServices, servicesFromParent]);
 
   // Fetch travellers from API
   const fetchTravellers = useCallback(async () => {
@@ -1744,9 +1784,40 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   }, [orderCode]);
 
   useEffect(() => {
-    fetchServices();
+    if (!reloadServicesFromParent) {
+      void fetchServices();
+    }
     if (!skipTravellersFetch) fetchTravellers();
-  }, [fetchServices, fetchTravellers, skipTravellersFetch]);
+  }, [fetchServices, fetchTravellers, skipTravellersFetch, reloadServicesFromParent]);
+
+  useEffect(() => {
+    if (!editServiceId || !orderCode) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/services/${editServiceId}`,
+          {
+            headers: {
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            credentials: "include",
+          }
+        );
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { service?: unknown };
+        if (!data.service || cancelled) return;
+        const [mapped] = mapOrderServicesApiRowsToServices([data.service]);
+        setServices((prev) => prev.map((svc) => (svc.id === editServiceId ? { ...svc, ...mapped } : svc)));
+      } catch (e) {
+        console.warn("[OrderServicesBlock] service detail for edit", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editServiceId, orderCode]);
 
   // Recalculate totals whenever services change
   // Include: active services + cancelled with penalty/credit (formal annulment: original + cancellation child)

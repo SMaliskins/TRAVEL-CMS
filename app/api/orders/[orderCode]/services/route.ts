@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { mapOrderServiceRowToListApiItem } from "@/lib/orders/mapOrderServiceRowToListApi";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
@@ -54,6 +55,92 @@ function fireReferralSync(orderId: string, companyId: string) {
   );
 }
 
+/**
+ * List GET: lean columns (ORDER_PAGE_PERF Step 2). Heavy / edit-only fields load via
+ * GET .../services/[serviceId] (`mapOrderServiceRowToListApi` + SELECT *).
+ */
+const ORDER_SERVICES_LIST_COLUMNS = [
+  "id",
+  "category",
+  "category_id",
+  "service_name",
+  "service_date_from",
+  "service_date_to",
+  "supplier_party_id",
+  "supplier_name",
+  "airline_channel",
+  "airline_channel_supplier_id",
+  "airline_channel_supplier_name",
+  "client_party_id",
+  "client_name",
+  "payer_party_id",
+  "payer_name",
+  "service_price",
+  "client_price",
+  "quantity",
+  "res_status",
+  "ref_nr",
+  "ticket_nr",
+  "vat_rate",
+  "service_currency",
+  "service_price_foreign",
+  "exchange_rate",
+  "actually_paid",
+  "invoice_id",
+  "referral_include_in_commission",
+  "referral_commission_percent_override",
+  "referral_commission_fixed_amount",
+  "split_group_id",
+  "flight_segments",
+  "baggage",
+  "cabin_class",
+  "hotel_name",
+  "hotel_hid",
+  "hotel_star_rating",
+  "hotel_room",
+  "hotel_board",
+  "transfer_type",
+  "additional_services",
+  "hotel_address",
+  "hotel_phone",
+  "hotel_email",
+  "hotel_bed_type",
+  "hotel_price_per",
+  "supplier_booking_type",
+  "payment_deadline_deposit",
+  "payment_deadline_final",
+  "payment_terms",
+  "price_type",
+  "refund_policy",
+  "free_cancellation_until",
+  "cancellation_penalty_amount",
+  "cancellation_penalty_percent",
+  "commission_name",
+  "commission_rate",
+  "commission_amount",
+  "agent_discount_value",
+  "agent_discount_type",
+  "pickup_location",
+  "dropoff_location",
+  "pickup_time",
+  "estimated_duration",
+  "linked_flight_id",
+  "airport_service_flow",
+  "transfer_routes",
+  "transfer_mode",
+  "vehicle_class",
+  "driver_name",
+  "driver_phone",
+  "driver_notes",
+  "parent_service_id",
+  "service_type",
+  "ancillary_type",
+  "cancellation_fee",
+  "refund_amount",
+  "change_fee",
+  "cancellation_refund_type",
+].join(",");
+
 // GET - List services for an order
 export async function GET(
   request: NextRequest,
@@ -77,10 +164,9 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Fetch services with all columns
     const { data: services, error } = await supabaseAdmin
       .from("order_services")
-      .select("*")
+      .select(ORDER_SERVICES_LIST_COLUMNS)
       .eq("order_id", orderId)
       .eq("company_id", companyId)
       .order("service_date_from", { ascending: true });
@@ -90,8 +176,11 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch services" }, { status: 500 });
     }
 
+    type ServiceListRow = Record<string, unknown> & { id: string; category_id?: string | null; hotel_hid?: number | null };
+    const rows = (services ?? []) as unknown as ServiceListRow[];
+
     // Fetch travellers for each service
-    const serviceIds = (services || []).map(s => s.id);
+    const serviceIds = rows.map((s) => s.id);
     let travellerMap: Record<string, string[]> = {};
     
     if (serviceIds.length > 0) {
@@ -110,7 +199,7 @@ export async function GET(
     }
 
     // Batch lookup category types from travel_service_categories for services with category_id
-    const categoryIds = [...new Set((services || []).map((s: { category_id?: string | null }) => (s as { category_id?: string }).category_id).filter((id): id is string => !!id))];
+    const categoryIds = [...new Set(rows.map((s) => s.category_id).filter((id): id is string => !!id))];
     let categoryMap: Record<string, { type: string; vat_rate: number }> = {};
     if (categoryIds.length > 0) {
       const { data: cats } = await supabaseAdmin
@@ -126,7 +215,7 @@ export async function GET(
     }
 
     // Enrich hotel services with contacts from hotel_contact_overrides when order_services has hotel_hid
-    const hotelHids = [...new Set((services || []).map((s: { hotel_hid?: number | null }) => (s as { hotel_hid?: number }).hotel_hid).filter((hid): hid is number => hid != null))];
+    const hotelHids = [...new Set(rows.map((s) => s.hotel_hid).filter((hid): hid is number => hid != null))];
     let contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }> = {};
     if (hotelHids.length > 0 && companyId) {
       const { data: overrides } = await supabaseAdmin
@@ -146,206 +235,26 @@ export async function GET(
       }
     }
 
-    // Map to API format (flight for Itinerary; Tour/hotel/terms for Edit)
-    // For cancellation services: ensure supplier is inherited from parent when missing
-    type Row = typeof services extends (infer R)[] ? R : never;
-    const servicesList = services || [];
-    const byId = servicesList.reduce((acc, svc) => {
-      acc[svc.id] = svc as { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null };
-      return acc;
-    }, {} as Record<string, { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null }>);
-    const resolveSupplier = (s: typeof servicesList[0] & { parent_service_id?: string | null; service_type?: string | null }) => {
-      const sTyped = s as { supplier_name?: string | null; supplier_party_id?: string | null };
-      if ((sTyped.supplier_name && sTyped.supplier_name.trim()) || (s as { service_type?: string | null }).service_type !== "cancellation") {
-        return sTyped.supplier_name || "";
-      }
-      const parentId = (s as { parent_service_id?: string | null }).parent_service_id;
-      if (!parentId) return sTyped.supplier_name || "";
-      const parent = byId[parentId];
-      return (parent?.supplier_name && parent.supplier_name.trim()) ? parent.supplier_name : (sTyped.supplier_name || "");
-    };
-    const mappedServices = servicesList.map(s => {
-      const row = s as Row & {
-        flight_segments?: unknown;
-        ticket_numbers?: unknown;
-        boarding_passes?: unknown;
-        baggage?: string | null;
-        cabin_class?: string | null;
-        hotel_name?: string | null;
-        hotel_star_rating?: string | null;
-        hotel_room?: string | null;
-        hotel_board?: string | null;
-        meal_plan_text?: string | null;
-        transfer_type?: string | null;
-        additional_services?: string | null;
-        hotel_address?: string | null;
-        hotel_phone?: string | null;
-        hotel_email?: string | null;
-        hotel_bed_type?: string | null;
-        hotel_early_check_in?: boolean | null;
-        hotel_late_check_in?: boolean | null;
-        hotel_higher_floor?: boolean | null;
-        hotel_king_size_bed?: boolean | null;
-        hotel_honeymooners?: boolean | null;
-        hotel_silent_room?: boolean | null;
-        hotel_repeat_guests?: boolean | null;
-        hotel_rooms_next_to?: string | null;
-        hotel_parking?: boolean | null;
-        hotel_preferences_free_text?: string | null;
-        supplier_booking_type?: string | null;
-        payment_deadline_deposit?: string | null;
-        payment_deadline_final?: string | null;
-        payment_terms?: string | null;
-        price_type?: string | null;
-        refund_policy?: string | null;
-        free_cancellation_until?: string | null;
-        cancellation_penalty_amount?: string | number | null;
-        cancellation_penalty_percent?: number | null;
-        commission_name?: string | null;
-        commission_rate?: number | null;
-        commission_amount?: number | null;
-        agent_discount_value?: number | null;
-        agent_discount_type?: string | null;
-        // Transfer fields
-        pickup_location?: string | null;
-        dropoff_location?: string | null;
-        pickup_time?: string | null;
-        estimated_duration?: string | null;
-        linked_flight_id?: string | null;
-        transfer_routes?: unknown;
-        transfer_mode?: string | null;
-        vehicle_class?: string | null;
-        driver_name?: string | null;
-        driver_phone?: string | null;
-        driver_notes?: string | null;
-      };
-      return {
-        id: s.id,
-        category: s.category || "",
-        categoryId: (row as { category_id?: string | null }).category_id ?? null,
-        categoryType: ((row as { category_id?: string | null }).category_id && categoryMap[(row as { category_id: string }).category_id]?.type) || null,
-        vatRate: ((row as { category_id?: string | null }).category_id && categoryMap[(row as { category_id: string }).category_id]?.vat_rate) ?? null,
-        serviceName: s.service_name,
-        dateFrom: s.service_date_from,
-        dateTo: s.service_date_to,
-        supplierPartyId: (() => {
-          const svc = s as { supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null };
-          if (svc.supplier_party_id || svc.service_type !== "cancellation") return s.supplier_party_id;
-          const parent = svc.parent_service_id ? byId[svc.parent_service_id] : null;
-          return (parent?.supplier_party_id ?? s.supplier_party_id) ?? null;
-        })(),
-        supplierName: resolveSupplier(s),
-        airlineChannel: s.airline_channel || false,
-        airlineChannelSupplierId: s.airline_channel_supplier_id || null,
-        airlineChannelSupplierName: s.airline_channel_supplier_name || "",
-        clientPartyId: s.client_party_id,
-        clientName: s.client_name || "",
-        payerPartyId: s.payer_party_id,
-        payerName: s.payer_name || "",
-        servicePrice: parseFloat(s.service_price || "0"),
-        clientPrice: parseFloat(s.client_price || "0"),
-        serviceCurrency: (row as { service_currency?: string | null }).service_currency ?? null,
-        servicePriceForeign: (row as { service_price_foreign?: number | null }).service_price_foreign != null ? parseFloat(String((row as { service_price_foreign?: number }).service_price_foreign)) : null,
-        exchangeRate: (row as { exchange_rate?: number | null }).exchange_rate != null ? parseFloat(String((row as { exchange_rate?: number }).exchange_rate)) : null,
-        actuallyPaid: (row as { actually_paid?: number | null }).actually_paid != null ? parseFloat(String((row as { actually_paid?: number }).actually_paid)) : null,
-        quantity: (s as { quantity?: number | null }).quantity ?? 1,
-        resStatus: s.res_status || "booked",
-        refNr: s.ref_nr || "",
-        ticketNr: s.ticket_nr || "",
-        travellerIds: travellerMap[s.id] || [],
-        invoice_id: (s as { invoice_id?: string | null }).invoice_id ?? null,
-        referralIncludeInCommission:
-          (s as { referral_include_in_commission?: boolean | null }).referral_include_in_commission !== false,
-        referralCommissionPercentOverride: (() => {
-          const v = (s as { referral_commission_percent_override?: number | string | null })
-            .referral_commission_percent_override;
-          if (v == null || v === "") return null;
-          const n = parseFloat(String(v));
-          return Number.isFinite(n) ? n : null;
-        })(),
-        referralCommissionFixedAmount: (() => {
-          const v = (s as { referral_commission_fixed_amount?: number | string | null })
-            .referral_commission_fixed_amount;
-          if (v == null || v === "") return null;
-          const n = parseFloat(String(v));
-          return Number.isFinite(n) ? n : null;
-        })(),
-        splitGroupId: (s as { split_group_id?: string | null }).split_group_id ?? null,
-        flightSegments: Array.isArray(row.flight_segments) ? row.flight_segments : [],
-        ticketNumbers: Array.isArray(row.ticket_numbers) ? row.ticket_numbers : [],
-        boardingPasses: Array.isArray(row.boarding_passes) ? row.boarding_passes : [],
-        baggage: row.baggage ?? "",
-        cabinClass: row.cabin_class ?? "economy",
-        // Tour / Hotel / terms (for Edit modal)
-        hotelName: row.hotel_name ?? null,
-        hotelHid: (row as { hotel_hid?: number | null }).hotel_hid ?? null,
-        hotelStarRating: row.hotel_star_rating ?? null,
-        hotelRoom: row.hotel_room ?? null,
-        hotelBoard: row.hotel_board ?? null,
-        mealPlanText: row.meal_plan_text ?? null,
-        transferType: row.transfer_type ?? null,
-        additionalServices: row.additional_services ?? null,
-        hotelAddress: (row.hotel_address?.trim() || contactOverridesMap[(row as { hotel_hid?: number }).hotel_hid as number]?.address) ?? null,
-        hotelPhone: (row.hotel_phone?.trim() || contactOverridesMap[(row as { hotel_hid?: number }).hotel_hid as number]?.phone) ?? null,
-        hotelEmail: (row.hotel_email?.trim() || contactOverridesMap[(row as { hotel_hid?: number }).hotel_hid as number]?.email) ?? null,
-        hotelBedType: row.hotel_bed_type ?? null,
-        hotelEarlyCheckIn: row.hotel_early_check_in ?? null,
-        hotelLateCheckIn: row.hotel_late_check_in ?? null,
-        hotelEarlyCheckInTime: (row as { hotel_early_check_in_time?: string | null }).hotel_early_check_in_time ?? null,
-        hotelLateCheckInTime: (row as { hotel_late_check_in_time?: string | null }).hotel_late_check_in_time ?? null,
-        hotelRoomUpgrade: (row as { hotel_room_upgrade?: boolean | null }).hotel_room_upgrade ?? null,
-        hotelLateCheckOut: (row as { hotel_late_check_out?: boolean | null }).hotel_late_check_out ?? null,
-        hotelLateCheckOutTime: (row as { hotel_late_check_out_time?: string | null }).hotel_late_check_out_time ?? null,
-        hotelHigherFloor: row.hotel_higher_floor ?? null,
-        hotelKingSizeBed: row.hotel_king_size_bed ?? null,
-        hotelHoneymooners: row.hotel_honeymooners ?? null,
-        hotelSilentRoom: row.hotel_silent_room ?? null,
-        hotelRepeatGuests: row.hotel_repeat_guests ?? null,
-        hotelRoomsNextTo: row.hotel_rooms_next_to ?? null,
-        hotelParking: row.hotel_parking ?? null,
-        hotelPreferencesFreeText: row.hotel_preferences_free_text ?? null,
-        hotelPricePer: (row as { hotel_price_per?: string | null }).hotel_price_per ?? null,
-        supplierBookingType: row.supplier_booking_type ?? null,
-        paymentDeadlineDeposit: row.payment_deadline_deposit ?? null,
-        paymentDeadlineFinal: row.payment_deadline_final ?? null,
-        paymentTerms: row.payment_terms ?? null,
-        priceType: row.price_type ?? null,
-        refundPolicy: row.refund_policy ?? null,
-        freeCancellationUntil: row.free_cancellation_until ?? null,
-        cancellationPenaltyAmount: row.cancellation_penalty_amount != null ? parseFloat(String(row.cancellation_penalty_amount)) : null,
-        cancellationPenaltyPercent: row.cancellation_penalty_percent ?? null,
-        commissionName: row.commission_name ?? null,
-        commissionRate: row.commission_rate ?? null,
-        commissionAmount: row.commission_amount ?? null,
-        agentDiscountValue: row.agent_discount_value ?? null,
-        agentDiscountType: row.agent_discount_type ?? null,
-        servicePriceLineItems: Array.isArray((row as { service_price_line_items?: unknown }).service_price_line_items)
-          ? (row as { service_price_line_items: Array<{ description?: string; amount?: number; commissionable?: boolean }> }).service_price_line_items
-          : [],
-        // Transfer
-        pickupLocation: row.pickup_location ?? null,
-        dropoffLocation: row.dropoff_location ?? null,
-        pickupTime: row.pickup_time ?? null,
-        estimatedDuration: row.estimated_duration ?? null,
-        linkedFlightId: row.linked_flight_id ?? null,
-        airportServiceFlow: row.airport_service_flow ?? null,
-        transferRoutes: Array.isArray(row.transfer_routes) ? row.transfer_routes : [],
-        transferMode: row.transfer_mode ?? null,
-        vehicleClass: row.vehicle_class ?? null,
-        driverName: row.driver_name ?? null,
-        driverPhone: row.driver_phone ?? null,
-        driverNotes: row.driver_notes ?? null,
-        pricingPerClient: Array.isArray((s as { pricing_per_client?: unknown }).pricing_per_client) ? (s as { pricing_per_client: unknown[] }).pricing_per_client : null,
-        // Amendment fields (change/cancellation)
-        parentServiceId: (row as { parent_service_id?: string | null }).parent_service_id ?? null,
-        serviceType: (row as { service_type?: string | null }).service_type ?? "original",
-        ancillaryType: (row as { ancillary_type?: string | null }).ancillary_type ?? null,
-        cancellationFee: (row as { cancellation_fee?: number | null }).cancellation_fee != null ? parseFloat(String((row as { cancellation_fee?: number }).cancellation_fee)) : null,
-        refundAmount: (row as { refund_amount?: number | null }).refund_amount != null ? parseFloat(String((row as { refund_amount?: number }).refund_amount)) : null,
-        changeFee: (row as { change_fee?: number | null }).change_fee != null ? parseFloat(String((row as { change_fee?: number }).change_fee)) : null,
-        cancellationRefundType: (row as { cancellation_refund_type?: string | null }).cancellation_refund_type ?? null,
-      };
-    });
+    const byId = rows.reduce(
+      (acc, svc) => {
+        acc[String(svc.id)] = svc as {
+          supplier_name?: string | null;
+          supplier_party_id?: string | null;
+          parent_service_id?: string | null;
+          service_type?: string | null;
+        };
+        return acc;
+      },
+      {} as Record<string, { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null }>
+    );
+    const mappedServices = rows.map((s) =>
+      mapOrderServiceRowToListApiItem(s as Record<string, unknown>, {
+        travellerIds: travellerMap[String(s.id)] || [],
+        categoryMap,
+        contactOverridesMap,
+        byId,
+      })
+    );
 
     return NextResponse.json({ services: mappedServices });
   } catch (error: unknown) {

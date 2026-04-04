@@ -7,7 +7,7 @@
  * - UI
  */
 
-import { aiQuickPrompt } from "../client";
+import { aiQuickPrompt, aiJSON } from "../client";
 
 export type SupportedLanguage = 
   | "en" // English
@@ -38,15 +38,67 @@ const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   ar: "Arabic",
 };
 
+/** ISO codes used by invoice email language picker (plus generic translate). */
+const EXTENDED_LANG_NAMES: Record<string, string> = {
+  ...LANGUAGE_NAMES,
+  lt: "Lithuanian",
+  et: "Estonian",
+  pl: "Polish",
+  hu: "Hungarian",
+};
+
+/**
+ * Translate invoice / reminder email subject + HTML body while preserving markup.
+ * Used by POST /api/ai task "translate" when the client sends JSON { subject, message }.
+ */
+export async function translateEmailSubjectAndBody(
+  subject: string,
+  messageHtml: string,
+  targetLanguageCode: string
+): Promise<{ subject: string; message: string } | null> {
+  const code = targetLanguageCode.trim().toLowerCase();
+  if (code === "en") {
+    return { subject, message: messageHtml };
+  }
+  const langName = EXTENDED_LANG_NAMES[code];
+  if (!langName) {
+    return null;
+  }
+
+  const systemPrompt = `You translate outbound business email fields for a travel agency.
+Target language: ${langName}. Translate all human-readable text fully into ${langName}.
+Rules:
+- "subject": natural professional email subject line in ${langName}.
+- "message": translate only visible text; keep every HTML tag, attribute, class, inline style, link href, and image src unchanged. Preserve paragraph and block structure (p, br, div, lists, tables, etc.). Do not summarize or shorten the body.
+Return a single JSON object with exactly two string properties: "subject" and "message".`;
+
+  const payload = JSON.stringify({ subject, message: messageHtml });
+  const result = await aiJSON<{ subject: string; message: string }>(
+    `Translate both fields in this JSON to ${langName}. Reply with JSON only, same keys. Input:\n${payload}`,
+    systemPrompt
+  );
+
+  if (!result.success || !result.data) {
+    return null;
+  }
+  const s = result.data.subject;
+  const m = result.data.message;
+  if (typeof s !== "string" || typeof m !== "string" || !m.trim()) {
+    return null;
+  }
+  return { subject: s, message: m };
+}
+
 /**
  * Translate text
  */
 export async function translateText(
   text: string,
-  targetLanguage: SupportedLanguage,
+  targetLanguage: string,
   context?: string
 ): Promise<{ success: boolean; translation?: string; error?: string }> {
-  const langName = LANGUAGE_NAMES[targetLanguage];
+  const langName =
+    EXTENDED_LANG_NAMES[targetLanguage.trim().toLowerCase()] || targetLanguage;
   
   const systemPrompt = `You are a professional translator for a travel agency.
 Translate the text to ${langName}.

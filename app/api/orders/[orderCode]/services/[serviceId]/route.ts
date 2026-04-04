@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getApiUser } from "@/lib/auth/getApiUser";
+import { mapOrderServiceRowToListApiItem, type OrderServiceListMapById } from "@/lib/orders/mapOrderServiceRowToListApi";
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
@@ -31,19 +33,26 @@ async function syncOrderDatesFromServices(orderId: string) {
 
 /**
  * GET /api/orders/[orderCode]/services/[serviceId]
- * Fetch a single service with full details (flight_segments, baggage, cabin_class, etc.)
+ * Full row (SELECT *) mapped to the same shape as list GET — for Edit modal (ORDER_PAGE_PERF Step 2b).
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ orderCode: string; serviceId: string }> }
 ) {
   try {
+    const apiUser = await getApiUser(request);
+    if (!apiUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { companyId } = apiUser;
+
     const { orderCode, serviceId } = await params;
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .select("id, company_id")
       .eq("order_code", orderCode)
+      .eq("company_id", companyId)
       .single();
 
     if (orderError || !order) {
@@ -55,11 +64,14 @@ export async function GET(
       .select("*")
       .eq("id", serviceId)
       .eq("order_id", order.id)
+      .eq("company_id", companyId)
       .single();
 
     if (error || !s) {
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
     }
+
+    const rowRecord = s as Record<string, unknown>;
 
     const { data: serviceTravellers } = await supabaseAdmin
       .from("order_service_travellers")
@@ -68,61 +80,70 @@ export async function GET(
 
     const travellerIds = (serviceTravellers || []).map((st: { traveller_id: string }) => st.traveller_id);
 
-    const row = s as Record<string, unknown>;
-    const service = {
-      id: s.id,
-      category: s.category || "",
-      serviceName: s.service_name,
-      dateFrom: s.service_date_from,
-      dateTo: s.service_date_to,
-      supplierPartyId: s.supplier_party_id,
-      supplierName: s.supplier_name || "",
-      airlineChannel: s.airline_channel || false,
-      airlineChannelSupplierId: s.airline_channel_supplier_id || null,
-      airlineChannelSupplierName: s.airline_channel_supplier_name || "",
-      clientPartyId: s.client_party_id,
-      clientName: s.client_name || "",
-      payerPartyId: s.payer_party_id,
-      payerName: s.payer_name || "",
-      servicePrice: parseFloat(String(s.service_price || "0")),
-      clientPrice: parseFloat(String(s.client_price || "0")),
-      resStatus: s.res_status || "booked",
-      refNr: s.ref_nr || "",
-      ticketNr: s.ticket_nr || "",
-      travellerIds,
-      flightSegments: Array.isArray(row.flight_segments) ? row.flight_segments : [],
-      ticketNumbers: Array.isArray(row.ticket_numbers) ? row.ticket_numbers : [],
-      boardingPasses: Array.isArray(row.boarding_passes) ? row.boarding_passes : [],
-      baggage: row.baggage ?? "",
-      cabinClass: row.cabin_class ?? "economy",
-      pricingPerClient: Array.isArray(row.pricing_per_client) ? row.pricing_per_client : null,
-      invoice_id: row.invoice_id ?? null,
-      splitGroupId: row.split_group_id ?? null,
-      // Amendment fields (change/cancellation)
-      parentServiceId: row.parent_service_id ?? null,
-      serviceType: row.service_type ?? "original",
-      ancillaryType: row.ancillary_type ?? null,
-      cancellationFee: row.cancellation_fee != null ? parseFloat(String(row.cancellation_fee)) : null,
-      refundAmount: row.refund_amount != null ? parseFloat(String(row.refund_amount)) : null,
-      changeFee: row.change_fee != null ? parseFloat(String(row.change_fee)) : null,
-      cancellationRefundType: (row as { cancellation_refund_type?: string | null }).cancellation_refund_type ?? null,
-      referralIncludeInCommission:
-        (row as { referral_include_in_commission?: boolean | null }).referral_include_in_commission !== false,
-      referralCommissionPercentOverride: (() => {
-        const v = (row as { referral_commission_percent_override?: number | string | null })
-          .referral_commission_percent_override;
-        if (v == null || v === "") return null;
-        const n = parseFloat(String(v));
-        return Number.isFinite(n) ? n : null;
-      })(),
-      referralCommissionFixedAmount: (() => {
-        const v = (row as { referral_commission_fixed_amount?: number | string | null })
-          .referral_commission_fixed_amount;
-        if (v == null || v === "") return null;
-        const n = parseFloat(String(v));
-        return Number.isFinite(n) ? n : null;
-      })(),
+    let categoryMap: Record<string, { type: string; vat_rate: number }> = {};
+    const catId = rowRecord.category_id as string | null | undefined;
+    if (catId) {
+      const { data: cat } = await supabaseAdmin
+        .from("travel_service_categories")
+        .select("id, type, vat_rate")
+        .eq("id", catId)
+        .single();
+      if (cat) {
+        categoryMap[cat.id] = { type: cat.type, vat_rate: cat.vat_rate };
+      }
+    }
+
+    let contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }> = {};
+    const hotelHid = rowRecord.hotel_hid as number | null | undefined;
+    if (hotelHid != null) {
+      const { data: ov } = await supabaseAdmin
+        .from("hotel_contact_overrides")
+        .select("hotel_hid, address, phone, email")
+        .eq("company_id", companyId)
+        .eq("hotel_hid", hotelHid)
+        .maybeSingle();
+      if (ov) {
+        contactOverridesMap[hotelHid] = {
+          address: ov.address?.trim() || undefined,
+          phone: ov.phone?.trim() || undefined,
+          email: ov.email?.trim() || undefined,
+        };
+      }
+    }
+
+    const byId: OrderServiceListMapById = {
+      [String(rowRecord.id)]: {
+        supplier_name: rowRecord.supplier_name as string | null,
+        supplier_party_id: rowRecord.supplier_party_id as string | null,
+        parent_service_id: rowRecord.parent_service_id as string | null,
+        service_type: rowRecord.service_type as string | null,
+      },
     };
+    const parentId = rowRecord.parent_service_id as string | null | undefined;
+    if (rowRecord.service_type === "cancellation" && parentId) {
+      const { data: parent } = await supabaseAdmin
+        .from("order_services")
+        .select("id, supplier_name, supplier_party_id, parent_service_id, service_type")
+        .eq("id", parentId)
+        .eq("order_id", order.id)
+        .maybeSingle();
+      if (parent) {
+        const p = parent as Record<string, unknown>;
+        byId[String(p.id)] = {
+          supplier_name: p.supplier_name as string | null,
+          supplier_party_id: p.supplier_party_id as string | null,
+          parent_service_id: p.parent_service_id as string | null,
+          service_type: p.service_type as string | null,
+        };
+      }
+    }
+
+    const service = mapOrderServiceRowToListApiItem(rowRecord, {
+      travellerIds,
+      categoryMap,
+      contactOverridesMap,
+      byId,
+    });
 
     return NextResponse.json({ service });
   } catch (err) {
@@ -171,6 +192,13 @@ export async function PATCH(
 
     if (body.service_name !== undefined) updates.service_name = body.service_name;
     if (body.category !== undefined) updates.category = body.category;
+    if (body.category_id !== undefined) {
+      updates.category_id = body.category_id === "" ? null : body.category_id;
+    }
+    if (body.vat_rate !== undefined) {
+      const vr = Number(body.vat_rate);
+      updates.vat_rate = Number.isFinite(vr) ? Math.round(vr) : 0;
+    }
     if (body.service_price !== undefined) updates.service_price = body.service_price;
     if (body.service_currency !== undefined) updates.service_currency = body.service_currency || "EUR";
     if (body.serviceCurrency !== undefined) updates.service_currency = body.serviceCurrency || "EUR";

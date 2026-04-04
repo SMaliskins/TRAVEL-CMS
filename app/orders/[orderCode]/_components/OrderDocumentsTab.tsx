@@ -1,28 +1,20 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { formatDateDDMMYYYY, parseDisplayToIso } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import { FileUp, FileText, Download, Trash2, Eye, Pencil, Check, X } from "lucide-react";
+import {
+  fetchOrderDocuments,
+  orderPageQueryKeys,
+  type OrderDocumentListRow,
+} from "@/lib/orders/orderPageQueries";
 
-interface OrderDocument {
-  id: string;
-  document_type: string;
-  file_name: string;
-  file_path: string;
-  file_size?: number;
-  mime_type?: string | null;
-  created_at: string;
-  download_url?: string | null;
-  amount?: number | null;
-  currency?: string | null;
-  invoice_number?: string | null;
-  supplier_name?: string | null;
-  invoice_date?: string | null;
-}
+type OrderDocument = OrderDocumentListRow;
 
 interface ParsedInvoice {
   supplier?: string;
@@ -39,10 +31,22 @@ interface Props {
 export default function OrderDocumentsTab({ orderCode }: Props) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
-  const [documents, setDocuments] = useState<OrderDocument[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const docsQueryKey = orderPageQueryKeys.documents(orderCode);
+  const {
+    data: documents = [],
+    isPending: loading,
+    error: queryLoadError,
+    isError: loadFailed,
+  } = useQuery({
+    queryKey: docsQueryKey,
+    queryFn: () => fetchOrderDocuments(orderCode),
+    enabled: Boolean(orderCode),
+  });
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayError =
+    error || (loadFailed && queryLoadError instanceof Error ? queryLoadError.message : null);
   const [previewDoc, setPreviewDoc] = useState<OrderDocument | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [attemptedParse, setAttemptedParse] = useState<Set<string>>(new Set());
@@ -50,35 +54,6 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<OrderDocument>>({});
   const [docDropActive, setDocDropActive] = useState(false);
-
-  const loadDocuments = useCallback(async () => {
-    if (!orderCode) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/documents`, {
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setDocuments(json.documents || []);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setError(res.status === 503 ? "Database connection failed. Please try again later." : (err.error || "Failed to load documents"));
-        setDocuments([]);
-      }
-    } catch (e) {
-      console.error("Load documents error:", e);
-      setError("Failed to load documents");
-    } finally {
-      setLoading(false);
-    }
-  }, [orderCode]);
-
-  useEffect(() => {
-    loadDocuments();
-  }, [loadDocuments]);
 
   const parseDocument = useCallback(async (doc: OrderDocument): Promise<void> => {
     const mime = (doc.mime_type || doc.file_name || "").toLowerCase();
@@ -111,7 +86,9 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         });
 
         if (patchRes.ok) {
-          setDocuments((prev) => prev.map((d) => (d.id === doc.id ? { ...d, ...updatePayload } : d)));
+          queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) =>
+            (prev ?? []).map((d) => (d.id === doc.id ? { ...d, ...updatePayload } : d))
+          );
         }
       }
     } catch {
@@ -124,7 +101,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
       });
       setAttemptedParse((prev) => new Set(prev).add(doc.id));
     }
-  }, [orderCode]);
+  }, [orderCode, queryClient, docsQueryKey]);
 
   // Parse existing documents on load (e.g. uploaded before, or page refresh)
   useEffect(() => {
@@ -164,7 +141,9 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         body: JSON.stringify(editForm),
       });
       if (res.ok) {
-        setDocuments(prev => prev.map(d => d.id === docId ? { ...d, ...editForm } : d));
+        queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) =>
+          (prev ?? []).map((d) => (d.id === docId ? { ...d, ...editForm } : d))
+        );
       } else {
         setError("Failed to save document details.");
       }
@@ -228,8 +207,8 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         });
         if (res.ok) {
           const json = await res.json();
-          const newDoc = json.document;
-          setDocuments((prev) => [newDoc, ...prev]);
+          const newDoc = json.document as OrderDocument;
+          queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) => [newDoc, ...(prev ?? [])]);
           const mime = (newDoc.mime_type || newDoc.file_name || "").toLowerCase();
           const isPdf = mime.includes("pdf");
           const isImage = /\.(png|jpg|jpeg|webp)$/i.test(newDoc.file_name || "") ||
@@ -250,7 +229,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         setUploading(false);
       }
     },
-    [orderCode, compressImage, parseDocument]
+    [orderCode, compressImage, parseDocument, queryClient, docsQueryKey]
   );
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -293,7 +272,9 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
       if (res.ok) {
-        setDocuments((prev) => prev.filter((d) => d.id !== docId));
+        queryClient.setQueryData<OrderDocument[]>(docsQueryKey, (prev) =>
+          (prev ?? []).filter((d) => d.id !== docId)
+        );
       } else {
         setError("Failed to delete");
       }
@@ -345,8 +326,8 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
         </label>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      {displayError && (
+        <div className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{displayError}</div>
       )}
 
       {loading ? (
