@@ -14,11 +14,29 @@ export const ORDER_COMMUNICATIONS_PAGE_SIZE = 40;
 /** Clients Data tab + idle prefetch: avoid refetch while user switches tabs on the same order. */
 export const ORDER_CLIENTS_DATA_STALE_MS = 60_000;
 
+/** Invoices & Payments tab — first page + prefetch after bootstrap. */
+export const ORDER_INVOICES_LIST_PAGE_SIZE = 30;
+export const ORDER_INVOICES_STALE_MS = 60_000;
+
+export type OrderInvoicesPaymentSummary = {
+  totalPaid: number;
+  linkedToInvoices: number;
+  deposit: number;
+};
+
+export type OrderInvoicesQueryResult = {
+  invoices: unknown[];
+  paymentSummary: OrderInvoicesPaymentSummary | null;
+  pagination: { page: number; pageSize: number; total: number } | null;
+};
+
 export const orderPageQueryKeys = {
   services: (orderCode: string) => ["order-services", orderCode] as const,
   documents: (orderCode: string, page: number) => ["order-documents", orderCode, page] as const,
   communications: (orderCode: string, page: number) => ["order-communications", orderCode, page] as const,
   clientsDataParties: (orderCode: string) => ["order-clients-data-parties", orderCode] as const,
+  invoices: (orderCode: string, page: number, pageSize: number) =>
+    ["order-invoices", orderCode, page, pageSize] as const,
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -160,4 +178,44 @@ export async function fetchOrderClientsDataParties(orderCode: string): Promise<C
     throw new Error(metaJson.error || "Failed to load");
   }
   return metaJson;
+}
+
+export async function fetchOrderInvoicesPage(
+  orderCode: string,
+  page: number,
+  pageSize: number = ORDER_INVOICES_LIST_PAGE_SIZE
+): Promise<OrderInvoicesQueryResult> {
+  const headers = await authHeaders();
+  const response = await fetch(
+    `/api/orders/${encodeURIComponent(orderCode)}/invoices?page=${page}&pageSize=${pageSize}`,
+    {
+      credentials: "include",
+      headers,
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    let rawMsg = typeof (errorData as { error?: string }).error === "string" ? (errorData as { error: string }).error : "";
+    if (/fetch failed|TypeError|ECONNREFUSED|ETIMEDOUT/i.test(rawMsg)) {
+      rawMsg = "Database connection failed. Please try again later.";
+    } else if (!rawMsg || /^[{}[\]]+$/.test(rawMsg.trim())) {
+      rawMsg =
+        response.status === 503
+          ? "Database connection failed. Please try again later."
+          : response.status === 404
+            ? "Order not found."
+            : `Failed to load invoices (${response.status})`;
+    }
+    throw new Error(rawMsg);
+  }
+  const data = (await response.json()) as {
+    invoices?: unknown[];
+    paymentSummary?: OrderInvoicesPaymentSummary | null;
+    pagination?: { page: number; pageSize: number; total: number };
+  };
+  return {
+    invoices: data.invoices ?? [],
+    paymentSummary: data.paymentSummary ?? null,
+    pagination: data.pagination ?? null,
+  };
 }

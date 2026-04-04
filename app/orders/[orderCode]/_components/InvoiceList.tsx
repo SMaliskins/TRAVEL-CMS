@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
 import ContentModal from "@/components/ContentModal";
@@ -22,8 +23,12 @@ import {
   type PaymentReminderContext,
 } from "@/lib/invoices/paymentReminderEmail";
 import { INVOICE_EMAIL_PDF_FOOTER_HTML } from "@/lib/invoices/invoiceEmailTemplate";
-
-const INVOICE_LIST_PAGE_SIZE = 30;
+import {
+  fetchOrderInvoicesPage,
+  orderPageQueryKeys,
+  ORDER_INVOICES_LIST_PAGE_SIZE,
+  ORDER_INVOICES_STALE_MS,
+} from "@/lib/orders/orderPageQueries";
 
 interface Invoice {
   id: string;
@@ -83,20 +88,28 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
   const lang = prefs.language;
   const userRole = useCurrentUserRole();
   const isFinance = userRole === "finance" || userRole === "admin";
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [emailStatuses, setEmailStatuses] = useState<Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>>({});
   const [reminderStatuses, setReminderStatuses] = useState<Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }>>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [openActionsInvoiceId, setOpenActionsInvoiceId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [hideCancelled, setHideCancelled] = useState(true);
-  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [invoiceListPage, setInvoiceListPage] = useState(1);
-  const [invoicePagination, setInvoicePagination] = useState<{
-    page: number;
-    pageSize: number;
-    total: number;
-  } | null>(null);
+  const {
+    data: invoicesQueryData,
+    isPending,
+    isError,
+    error: invoicesQueryError,
+    refetch: refetchInvoices,
+  } = useQuery({
+    queryKey: orderPageQueryKeys.invoices(orderCode, invoiceListPage, ORDER_INVOICES_LIST_PAGE_SIZE),
+    queryFn: () => fetchOrderInvoicesPage(orderCode, invoiceListPage, ORDER_INVOICES_LIST_PAGE_SIZE),
+    enabled: Boolean(orderCode),
+    staleTime: ORDER_INVOICES_STALE_MS,
+  });
+  const invoices = (invoicesQueryData?.invoices ?? []) as Invoice[];
+  const paymentSummary: PaymentSummary | null = invoicesQueryData?.paymentSummary ?? null;
+  const invoicePagination = invoicesQueryData?.pagination ?? null;
+  const loading = isPending && !invoicesQueryData;
   const { showToast } = useToast();
   const [cancelConfirm, setCancelConfirm] = useState<{ invoiceId: string; message: string } | null>(null);
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
@@ -177,49 +190,20 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     unit_price: "",
   });
 
-  const loadInvoices = useCallback(async (): Promise<Invoice[]> => {
-    try {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        `/api/orders/${encodeURIComponent(orderCode)}/invoices?page=${invoiceListPage}&pageSize=${INVOICE_LIST_PAGE_SIZE}`,
-        {
-          credentials: "include",
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        let rawMsg = typeof errorData?.error === "string" ? errorData.error : "";
-        // Treat Supabase fetch/network errors as connection failure
-        if (/fetch failed|TypeError|ECONNREFUSED|ETIMEDOUT/i.test(rawMsg)) {
-          rawMsg = "Database connection failed. Please try again later.";
-        } else if (!rawMsg || /^[{}[\]]+$/.test(rawMsg.trim())) {
-          rawMsg = response.status === 503
-            ? "Database connection failed. Please try again later."
-            : response.status === 404
-              ? "Order not found."
-              : `Failed to load invoices (${response.status})`;
-        }
-        console.error("Failed to load invoices:", { status: response.status, statusText: response.statusText, error: errorData });
-        throw new Error(rawMsg);
-      }
-      const data = await response.json();
-      const list = data.invoices || [];
-      setInvoices(list);
-      setPaymentSummary(data.paymentSummary || null);
-      setInvoicePagination(data.pagination ?? null);
-      return list;
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Unknown error";
-      console.error("Error loading invoices:", error);
-      showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load invoices: ${msg}`);
-      setInvoicePagination(null);
-      return [];
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!isError || !invoicesQueryError) return;
+    const msg =
+      invoicesQueryError instanceof Error ? invoicesQueryError.message : "Unknown error";
+    showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load invoices: ${msg}`);
+  }, [isError, invoicesQueryError, showToast]);
+
+  const reloadInvoices = useCallback(async (): Promise<Invoice[]> => {
+    const result = await refetchInvoices();
+    if (result.error) {
+      throw result.error instanceof Error ? result.error : new Error(String(result.error));
     }
-  }, [orderCode, invoiceListPage, showToast]);
+    return (result.data?.invoices ?? []) as Invoice[];
+  }, [refetchInvoices]);
 
   const loadEmailStatuses = useCallback(
     async (invoiceIds: string[]) => {
@@ -279,10 +263,6 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     [orderCode]
   );
 
-  useEffect(() => {
-    void loadInvoices();
-  }, [loadInvoices]);
-
   const invoiceIdsKey = useMemo(() => [...invoices].map((i) => i.id).sort().join(","), [invoices]);
 
   useEffect(() => {
@@ -332,7 +312,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ processed: true }),
       });
-      if (res.ok) loadInvoices();
+      if (res.ok) void refetchInvoices();
     } catch (e) {
       console.error("Process error:", e);
     }
@@ -928,7 +908,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
 
       showToast("success", "Invoice email sent successfully!");
       setEmailModal(null);
-      const list = await loadInvoices();
+      const list = await reloadInvoices();
       void loadEmailStatuses(list.map((i) => i.id));
     } catch (error: any) {
       console.error('Error sending email:', error);
@@ -1316,7 +1296,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       showToast("success", t(lang, "invoices.reminderSentToast"));
       setReminderModal(null);
       setReminderRecipients([]);
-      const listAfterReminder = await loadInvoices();
+      const listAfterReminder = await reloadInvoices();
       void loadEmailStatuses(listAfterReminder.map((i) => i.id));
     } catch (e: unknown) {
       showToast("error", e instanceof Error ? e.message : "Failed to send reminder");
@@ -1360,7 +1340,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         ? `Invoice cancelled. Payment €${moved.toFixed(2)} moved to order deposit. Services unlocked.`
         : 'Invoice cancelled. Services unlocked.';
       showToast("success", successMsg);
-      loadInvoices();
+      void refetchInvoices();
       onInvoiceChanged?.();
     } catch (error) {
       console.error('Error cancelling invoice:', error);
@@ -1432,7 +1412,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         }
       }
       showToast("success", "Invoice updated");
-      const list = await loadInvoices();
+      const list = await reloadInvoices();
       const updated = list.find((i) => i.id === invId);
       if (updated) {
         setEditingLinesInvoice(updated);
@@ -1496,7 +1476,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
       }
       showToast("success", "Line added");
       setAddLineForm({ service_name: "", service_client: "", service_date_from: "", service_date_to: "", quantity: 1, unit_price: "" });
-      const list = await loadInvoices();
+      const list = await reloadInvoices();
       const updated = list.find((i) => i.id === editingLinesInvoice.id);
       if (updated) {
         setEditingLinesInvoice(updated);
@@ -1538,7 +1518,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
         throw new Error(err.error || "Failed to remove line");
       }
       showToast("success", "Line removed");
-      const list = await loadInvoices();
+      const list = await reloadInvoices();
       const updated = list.find((i) => i.id === editingLinesInvoice.id);
       if (updated) {
         setEditingLinesInvoice(updated);

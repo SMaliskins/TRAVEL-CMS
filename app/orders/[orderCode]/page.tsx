@@ -4,9 +4,12 @@ import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchOrderClientsDataParties,
+  fetchOrderInvoicesPage,
   fetchOrderServicesList,
   orderPageQueryKeys,
   ORDER_CLIENTS_DATA_STALE_MS,
+  ORDER_INVOICES_LIST_PAGE_SIZE,
+  ORDER_INVOICES_STALE_MS,
 } from "@/lib/orders/orderPageQueries";
 import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -900,6 +903,15 @@ export default function OrderPage({
               queryKey: orderPageQueryKeys.clientsDataParties(orderCodeFromUrl),
               queryFn: () => fetchOrderClientsDataParties(orderCodeFromUrl),
               staleTime: ORDER_CLIENTS_DATA_STALE_MS,
+            })
+            .catch(() => {
+              /* tab will refetch on open */
+            });
+          void queryClient
+            .prefetchQuery({
+              queryKey: orderPageQueryKeys.invoices(orderCodeFromUrl, 1, ORDER_INVOICES_LIST_PAGE_SIZE),
+              queryFn: () => fetchOrderInvoicesPage(orderCodeFromUrl, 1, ORDER_INVOICES_LIST_PAGE_SIZE),
+              staleTime: ORDER_INVOICES_STALE_MS,
             })
             .catch(() => {
               /* tab will refetch on open */
