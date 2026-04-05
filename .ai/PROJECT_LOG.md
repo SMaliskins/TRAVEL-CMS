@@ -5,6 +5,83 @@
 
 ---
 
+## [2026-04-01] CW — A2: orders list economics RPC + parallel fetch
+
+**Task:** `migrations/add_orders_list_service_economics_rpc.sql` — `orders_list_service_economics`, category/VAT helpers aligned with `computeServiceLineEconomics`. `GET /api/orders` calls RPC in `Promise.all`; `computeServiceStatsFromServices` fallback; guard empty `order_ids` for `.in` / RPC.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK. **Deploy:** run SQL migration on Supabase.
+
+---
+
+## [2026-04-01] CW — A1.3: orders `search_text` + list API ilike
+
+**Task:** Migration `migrations/add_orders_search_text.sql` — column `orders.search_text`, `refresh_order_search_text(uuid)`, triggers (orders, order_travellers, order_services, order_service_travellers, party, party_person), pg_trgm index, backfill. `ordersListTextSearchOrClause` adds `search_text.ilike`.
+**Status:** SUCCESS
+**Agent:** Code Writer + DB (SQL file)
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK. **Deploy:** run migration on Supabase.
+
+---
+
+## [2026-04-01] CW — A4: orders list `useInfiniteQuery` + Step 6 note
+
+**Task:** Replace manual `extraOrders` + `fetchOrdersListPage` append with `useInfiniteQuery` (`ordersListQueryKeys.listInfinite`, `getNextPageParam` from API pagination). **Step 6:** `GET .../documents` already uses `createSignedUrls` batch + per-file fallback — no code change.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — A3.3: orders list — deferred filter state
+
+**Task:** `app/orders/page.tsx` — `useDeferredValue(searchState)` for `filterOrders` + derived memos; keep `listSearch` / RQ from immediate `searchState.queryText` for `skipClientQueryTextMatch` + API key.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — A3.2: orders calendar — index orders by ISO day
+
+**Task:** `app/orders/page.tsx` — replace per-cell `filteredOrders.filter` with `Map<iso, OrderRow[]>` built when `viewMode === "calendar"`; cells O(1) lookup; max 800 days per order span.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — A3.1: orders list — defer world cities load
+
+**Task:** `app/orders/page.tsx` — do not `requestIdleCallback(loadWorldCities)` on mount; load extended cities only once the list has ≥1 order, then bump flag map. `lib/data/cities.ts` — `ensureWorldCitiesLoaded()` single-flight.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — C1: ORDER_PAGE_PERF_SPEC sync with repo
+
+**Task:** Align `ORDER_PAGE_PERF_SPEC.md` with `ORDER_PERF_REMAINING_PLAN.md` / code: status table (Steps 1–7, L1–L5); Step 3 deferred narrow `SELECT`; Part 2 list backend/frontend bullets + List Steps 1–5 status lines.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** Documentation only; no code change.
+
+---
+
 ## [2026-04-06] CW — Order lookup: select(*) + eq-per-candidate (fix global 404)
 
 **Task:** `fetchOrderRowByRouteParam` — use `select("*")` instead of narrow column list (prod DB may lack a column → every lookup errored). Keep per-candidate `.eq("order_code")` loop (not `.in`) for codes containing `/`.

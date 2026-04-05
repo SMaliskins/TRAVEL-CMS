@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -18,7 +18,7 @@ import { useTabs } from "@/contexts/TabsContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { getCityByName, loadWorldCities } from "@/lib/data/cities";
+import { getCityByName, ensureWorldCitiesLoaded } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
@@ -118,6 +118,41 @@ function parseIsoToParts(raw: string): { year: string; month: string; day: strin
   const d = parseInt(day, 10);
   if (m < 1 || m > 12 || d < 1 || d > 31) return null;
   return { year, month: month.padStart(2, "0"), day: day.padStart(2, "0") };
+}
+
+const MAX_ISO_DAYS_PER_ORDER_FOR_CALENDAR = 800;
+
+/** Next calendar day as YYYY-MM-DD (UTC date math; valid ISO dates compare lexicographically). */
+function addOneCalendarDayIso(iso: string): string | null {
+  const parts = parseIsoToParts(iso);
+  if (!parts) return null;
+  const y = parseInt(parts.year, 10);
+  const m = parseInt(parts.month, 10);
+  const d = parseInt(parts.day, 10);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/** Map each YYYY-MM-DD in [datesFrom, datesTo] to orders whose trip spans that day (for calendar grid). */
+function buildOrdersOverlappingByIsoDay(orders: OrderRow[]): Map<string, OrderRow[]> {
+  const map = new Map<string, OrderRow[]>();
+  for (const o of orders) {
+    const from = o.datesFrom?.slice(0, 10);
+    const to = o.datesTo?.slice(0, 10);
+    if (!from || !to || from > to) continue;
+    if (!parseIsoToParts(from) || !parseIsoToParts(to)) continue;
+    let cur = from;
+    for (let guard = 0; guard < MAX_ISO_DAYS_PER_ORDER_FOR_CALENDAR; guard++) {
+      if (cur > to) break;
+      const list = map.get(cur);
+      if (list) list.push(o);
+      else map.set(cur, [o]);
+      if (cur === to) break;
+      const next = addOneCalendarDayIso(cur);
+      if (!next || next <= cur) break;
+      cur = next;
+    }
+  }
+  return map;
 }
 
 // Build orders tree structure (timezone-safe: uses date string parts, not Date)
@@ -465,17 +500,28 @@ export default function OrdersPage() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
+  const deferredSearchState = useDeferredValue(searchState);
   const listSearch = searchState.queryText.trim();
 
   const {
-    data: listData,
+    data: listInfiniteData,
     isPending: listQueryPending,
     isError: listQueryIsError,
     error: listQueryErr,
     refetch: refetchOrdersList,
-  } = useQuery({
-    queryKey: ordersListQueryKeys.firstPage(ORDERS_LIST_PAGE_SIZE, listSearch),
-    queryFn: () => fetchOrdersListPage(1, ORDERS_LIST_PAGE_SIZE, listSearch),
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ordersListQueryKeys.listInfinite(ORDERS_LIST_PAGE_SIZE, listSearch),
+    queryFn: ({ pageParam }) =>
+      fetchOrdersListPage(pageParam, ORDERS_LIST_PAGE_SIZE, listSearch),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const p = lastPage.pagination;
+      if (!p || p.page >= p.totalPages) return undefined;
+      return p.page + 1;
+    },
     staleTime: ORDERS_LIST_STALE_MS,
     gcTime: 5 * 60_000,
   });
@@ -487,37 +533,36 @@ export default function OrdersPage() {
         ? String(listQueryErr)
         : null;
 
-  const [extraOrders, setExtraOrders] = useState<OrderRow[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string; initials: string }[]>([]);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [pagination, setPagination] = useState<{ page: number; total: number; totalPages: number } | null>(null);
 
   useEffect(() => {
-    if (listData?.agents?.length) {
-      setAgents((prev) => {
-        const merged = new Map(prev.map((a) => [a.id, a]));
-        listData.agents!.forEach((a) => merged.set(a.id, a));
-        return Array.from(merged.values());
-      });
-    }
-  }, [listData?.agents]);
+    const pages = listInfiniteData?.pages;
+    if (!pages?.length) return;
+    setAgents((prev) => {
+      const merged = new Map(prev.map((a) => [a.id, a]));
+      for (const page of pages) {
+        (page.agents || []).forEach((a) => merged.set(a.id, a));
+      }
+      return Array.from(merged.values());
+    });
+  }, [listInfiniteData?.pages]);
 
-  useEffect(() => {
-    if (listData?.pagination) {
-      setPagination(listData.pagination);
-    }
-  }, [listData?.pagination]);
-
-  useEffect(() => {
-    setExtraOrders([]);
-  }, [listSearch]);
+  const pagination = useMemo(() => {
+    const pages = listInfiniteData?.pages;
+    if (!pages?.length) return null;
+    const last = pages[pages.length - 1].pagination;
+    return last
+      ? { page: last.page, total: last.total, totalPages: last.totalPages }
+      : null;
+  }, [listInfiniteData?.pages]);
 
   const orders = useMemo(
-    () => [...((listData?.orders as OrderRow[]) ?? []), ...extraOrders],
-    [listData?.orders, extraOrders]
+    () =>
+      listInfiniteData?.pages.flatMap((p) => (p.orders as OrderRow[]) ?? []) ?? [],
+    [listInfiniteData?.pages]
   );
 
-  const isLoading = listQueryPending && !listData;
+  const isLoading = listQueryPending && !listInfiniteData;
   const [semanticOrderCodes, setSemanticOrderCodes] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     loadExpandedFromStorage()
@@ -531,6 +576,10 @@ export default function OrdersPage() {
   const DEBOUNCE_MS = 180;
   useEffect(() => () => { if (surnameDebounceRef.current) clearTimeout(surnameDebounceRef.current); }, []);
 
+  /** Bumps after extended world cities JSON loads so flag lookups re-run (A3.1). */
+  const [worldCitiesEpoch, setWorldCitiesEpoch] = useState(0);
+  const worldCitiesLoadOnceRef = useRef(false);
+
   const countriesFlagsMap = useMemo(() => {
     const map = new Map<string, React.ReactNode>();
     orders.forEach(order => {
@@ -539,32 +588,7 @@ export default function OrdersPage() {
       }
     });
     return map;
-  }, [orders]);
-
-  const fetchNextPage = useCallback(async () => {
-    if (!pagination || pagination.page >= pagination.totalPages) return;
-    setIsLoadingMore(true);
-    try {
-      const data = await fetchOrdersListPage(pagination.page + 1, ORDERS_LIST_PAGE_SIZE, listSearch);
-      setExtraOrders((e) => [...e, ...((data.orders as OrderRow[]) ?? [])]);
-      setAgents((prev) => {
-        const merged = new Map(prev.map((a) => [a.id, a]));
-        (data.agents || []).forEach((a) => merged.set(a.id, a));
-        return Array.from(merged.values());
-      });
-      if (data.pagination) {
-        setPagination({
-          page: data.pagination.page,
-          total: data.pagination.total,
-          totalPages: data.pagination.totalPages,
-        });
-      }
-    } catch (error) {
-      console.error("Failed to fetch orders:", error);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [pagination, listSearch]);
+  }, [orders, worldCitiesEpoch]);
 
   // Single init effect: store → URL params → subscribe → defer world cities
   useEffect(() => {
@@ -615,15 +639,20 @@ export default function OrdersPage() {
       setSearchState({ ...next });
     });
 
-    const ric = (window as any).requestIdleCallback;
-    if (ric) {
-      ric(() => loadWorldCities());
-    } else {
-      setTimeout(() => loadWorldCities(), 100);
-    }
-
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (orders.length === 0 || worldCitiesLoadOnceRef.current) return;
+    worldCitiesLoadOnceRef.current = true;
+    let cancelled = false;
+    ensureWorldCitiesLoaded().then(() => {
+      if (!cancelled) setWorldCitiesEpoch((e) => e + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [orders.length]);
 
   // Debounced semantic search when queryText changes
   useEffect(() => {
@@ -660,11 +689,11 @@ export default function OrdersPage() {
 
   // Filter orders based on search state
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, searchState, {
+    return filterOrders(orders, deferredSearchState, {
       semanticOrderCodes,
       skipClientQueryTextMatch: listSearch.length > 0,
     });
-  }, [orders, searchState, semanticOrderCodes, listSearch]);
+  }, [orders, deferredSearchState, semanticOrderCodes, listSearch]);
 
   // Build tree from filtered orders
   const tree = useMemo(() => buildOrdersTree(filteredOrders, dateGroupMode), [filteredOrders, dateGroupMode]);
@@ -835,6 +864,11 @@ export default function OrdersPage() {
     }
   };
 
+  const ordersOverlappingByIsoDay = useMemo(() => {
+    if (viewMode !== "calendar") return new Map<string, OrderRow[]>();
+    return buildOrdersOverlappingByIsoDay(filteredOrders);
+  }, [filteredOrders, viewMode]);
+
   const calendarOrders = useMemo(() => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
@@ -850,14 +884,11 @@ export default function OrdersPage() {
       const d = new Date(calStart);
       d.setDate(d.getDate() + i);
       const iso = d.toISOString().slice(0, 10);
-      const dayOrders = filteredOrders.filter(o => {
-        if (!o.datesFrom || !o.datesTo) return false;
-        return o.datesFrom.slice(0, 10) <= iso && o.datesTo.slice(0, 10) >= iso;
-      });
+      const dayOrders = ordersOverlappingByIsoDay.get(iso) ?? [];
       days.push({ date: d, orders: dayOrders, isCurrentMonth: d.getMonth() === month });
     }
     return days;
-  }, [calendarDate, filteredOrders]);
+  }, [calendarDate, ordersOverlappingByIsoDay]);
 
   const calMonthLabel = calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" });
 
@@ -909,7 +940,6 @@ export default function OrdersPage() {
             <p className="text-red-700">{loadError}</p>
             <button
               onClick={() => {
-                setExtraOrders([]);
                 void refetchOrdersList();
               }}
               className="mt-2 text-sm text-red-600 underline hover:text-red-800"
@@ -1601,17 +1631,17 @@ export default function OrdersPage() {
         )}
 
         {/* Load more */}
-        {pagination && pagination.page < pagination.totalPages && (
+        {hasNextPage && pagination && (
           <div className="flex items-center justify-center py-4 gap-3">
             <span className="text-xs text-gray-600">
               {t(lang, "orders.showing")} {orders.length} {t(lang, "orders.of")} {pagination.total}
             </span>
             <button
               onClick={() => void fetchNextPage()}
-              disabled={isLoadingMore}
+              disabled={isFetchingNextPage}
               className="w-full sm:w-auto px-6 py-3 sm:py-2 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition"
             >
-              {isLoadingMore ? `${t(lang, "orders.loading")}...` : t(lang, "orders.loadMore")}
+              {isFetchingNextPage ? `${t(lang, "orders.loading")}...` : t(lang, "orders.loadMore")}
             </button>
           </div>
         )}

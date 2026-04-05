@@ -61,7 +61,10 @@ function chunkIds<T>(ids: T[], chunkSize: number): T[][] {
   return out;
 }
 
-/** PostgREST `.or()` fragment: order_code ILIKE OR client_display_name ILIKE. Null if nothing to filter. */
+/**
+ * PostgREST `.or()` fragment: order_code, client_display_name, search_text (A1.3 denormalized blob).
+ * Requires migration `migrations/add_orders_search_text.sql` on the database.
+ */
 function ordersListTextSearchOrClause(raw: string): string | null {
   const core = raw
     .trim()
@@ -71,7 +74,7 @@ function ordersListTextSearchOrClause(raw: string): string | null {
   if (!core) return null;
   const esc = core.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
   const p = `%${esc}%`;
-  return `order_code.ilike.${p},client_display_name.ilike.${p}`;
+  return `order_code.ilike.${p},client_display_name.ilike.${p},search_text.ilike.${p}`;
 }
 
 const ORDER_TRAVELLERS_LABEL_SELECT = `order_id,
@@ -197,6 +200,34 @@ async function collectTravellerSearchLabelsByOrder(
   return out;
 }
 
+/** Fallback when DB RPC `orders_list_service_economics` is missing or errors (must match SQL). */
+function computeServiceStatsFromServices(services: any[]): {
+  amount: number;
+  profit: number;
+  vat: number;
+} {
+  const signed = (s: any, field: "client_price" | "service_price") => {
+    const v = Number(s[field]) || 0;
+    return s.service_type === "cancellation" ? -Math.abs(v) : v;
+  };
+  const amount = services.reduce((sum: number, s: any) => sum + signed(s, "client_price"), 0);
+  let profit = 0;
+  let vat = 0;
+  services.forEach((s: any) => {
+    const econ = computeServiceLineEconomics({
+      client_price: s.client_price,
+      service_price: s.service_price,
+      service_type: s.service_type,
+      category: s.category,
+      commission_amount: s.commission_amount,
+      vat_rate: s.vat_rate,
+    });
+    profit += econ.profitNetOfVat;
+    vat += econ.vatOnMargin;
+  });
+  return { amount, profit, vat };
+}
+
 export async function GET(request: NextRequest) {
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -268,45 +299,61 @@ export async function GET(request: NextRequest) {
     // Run all sub-queries in parallel
     const ownerIds = [...new Set((orders || []).map((o: any) => o.owner_user_id || o.manager_user_id).filter(Boolean))];
 
-    const [servicesResult, ownerProfilesResult, invoicesResult, referralResult, paymentsResult] =
-      await Promise.all([
-        supabaseAdmin
-          .from("order_services")
-          .select(
-            "id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount"
-          )
-          .eq("company_id", companyId)
-          .in("order_id", orderIds),
-        ownerIds.length > 0
-          ? supabaseAdmin
-              .from("user_profiles")
-              .select("id, first_name, last_name")
-              .in("id", ownerIds)
-          : Promise.resolve({ data: [] as { id: string; first_name: string | null; last_name: string | null }[] }),
-        supabaseAdmin
-          .from("invoices")
-          .select("id, order_id, status, total, due_date, final_payment_date")
-          .eq("company_id", companyId)
-          .in("order_id", orderIds)
-          .neq("status", "cancelled"),
-        orderIds.length > 0
-          ? supabaseAdmin
-              .from("referral_accrual_line")
-              .select("order_id, commission_amount")
-              .eq("company_id", companyId)
-              .in("order_id", orderIds)
-              .in("status", ["planned", "accrued"])
-          : Promise.resolve({ data: [] as { order_id: string; commission_amount?: number | string | null }[] }),
-        orderIds.length > 0
-          ? supabaseAdmin
-              .from("payments")
-              .select("order_id, processing_fee")
-              .eq("company_id", companyId)
-              .in("order_id", orderIds)
-              .neq("status", "cancelled")
-              .gt("processing_fee", 0)
-          : Promise.resolve({ data: [] as { order_id: string; processing_fee: number | string }[] }),
-      ]);
+    const [
+      servicesResult,
+      ownerProfilesResult,
+      invoicesResult,
+      referralResult,
+      paymentsResult,
+      econRpcResult,
+    ] = await Promise.all([
+      orderIds.length === 0
+        ? Promise.resolve({ data: [] as any[], error: null })
+        : supabaseAdmin
+            .from("order_services")
+            .select(
+              "id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount"
+            )
+            .eq("company_id", companyId)
+            .in("order_id", orderIds),
+      ownerIds.length > 0
+        ? supabaseAdmin
+            .from("user_profiles")
+            .select("id, first_name, last_name")
+            .in("id", ownerIds)
+        : Promise.resolve({ data: [] as { id: string; first_name: string | null; last_name: string | null }[] }),
+      orderIds.length === 0
+        ? Promise.resolve({ data: [] as any[], error: null })
+        : supabaseAdmin
+            .from("invoices")
+            .select("id, order_id, status, total, due_date, final_payment_date")
+            .eq("company_id", companyId)
+            .in("order_id", orderIds)
+            .neq("status", "cancelled"),
+      orderIds.length > 0
+        ? supabaseAdmin
+            .from("referral_accrual_line")
+            .select("order_id, commission_amount")
+            .eq("company_id", companyId)
+            .in("order_id", orderIds)
+            .in("status", ["planned", "accrued"])
+        : Promise.resolve({ data: [] as { order_id: string; commission_amount?: number | string | null }[] }),
+      orderIds.length > 0
+        ? supabaseAdmin
+            .from("payments")
+            .select("order_id, processing_fee")
+            .eq("company_id", companyId)
+            .in("order_id", orderIds)
+            .neq("status", "cancelled")
+            .gt("processing_fee", 0)
+        : Promise.resolve({ data: [] as { order_id: string; processing_fee: number | string }[] }),
+      orderIds.length > 0
+        ? supabaseAdmin.rpc("orders_list_service_economics", {
+            p_company_id: companyId,
+            p_order_ids: orderIds,
+          })
+        : Promise.resolve({ data: [] as unknown[], error: null }),
+    ]);
 
     const servicesData = servicesResult.data || [];
     const invoicesData = invoicesResult.data || [];
@@ -343,9 +390,39 @@ export async function GET(request: NextRequest) {
       dueDate: string | null;
     }>();
     
-    // Build service stats (amount, profit, vat) — profit за вычетом VAT
+    // Service stats (amount, profit net of VAT, VAT on margin) — A2: Postgres RPC when available
     const serviceStats = new Map<string, { amount: number; profit: number; vat: number }>();
-    
+    if (orderIds.length > 0) {
+      const econErr = (econRpcResult as { error?: { message?: string } | null }).error;
+      const econRows = (econRpcResult as { data?: unknown }).data;
+      if (!econErr && Array.isArray(econRows)) {
+        for (const row of econRows as {
+          order_id: string;
+          amount_sum?: unknown;
+          profit_sum?: unknown;
+          vat_sum?: unknown;
+        }[]) {
+          serviceStats.set(row.order_id, {
+            amount: Number(row.amount_sum) || 0,
+            profit: Number(row.profit_sum) || 0,
+            vat: Number(row.vat_sum) || 0,
+          });
+        }
+        for (const oid of orderIds) {
+          if (!serviceStats.has(oid)) {
+            serviceStats.set(oid, { amount: 0, profit: 0, vat: 0 });
+          }
+        }
+      } else {
+        if (econErr?.message) {
+          console.warn("[Orders] orders_list_service_economics RPC failed, using JS:", econErr.message);
+        }
+        for (const oid of orderIds) {
+          serviceStats.set(oid, computeServiceStatsFromServices(servicesByOrder.get(oid) || []));
+        }
+      }
+    }
+
     orderIds.forEach((orderId: string) => {
       const services = servicesByOrder.get(orderId) || [];
       const invoices = invoicesByOrder.get(orderId) || [];
@@ -355,29 +432,6 @@ export async function GET(request: NextRequest) {
       const invoicedServices = activeServices.filter((s: any) => s.invoice_id).length;
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
-
-      // Amount & profit: include ALL services (incl. cancelled); cancellation = negative
-      const signed = (s: any, field: "client_price" | "service_price") => {
-        const v = Number(s[field]) || 0;
-        return s.service_type === "cancellation" ? -Math.abs(v) : v;
-      };
-      const amount = services.reduce((sum: number, s: any) => sum + signed(s, "client_price"), 0);
-      let profit = 0;
-      let vat = 0;
-      services.forEach((s: any) => {
-        const econ = computeServiceLineEconomics({
-          client_price: s.client_price,
-          service_price: s.service_price,
-          service_type: s.service_type,
-          category: s.category,
-          commission_amount: s.commission_amount,
-          vat_rate: s.vat_rate,
-        });
-        profit += econ.profitNetOfVat;
-        vat += econ.vatOnMargin;
-      });
-
-      serviceStats.set(orderId, { amount, profit, vat });
 
       const allInvoicesPaid =
         invoices.length > 0 && invoices.every((inv: any) => inv.status === "paid");

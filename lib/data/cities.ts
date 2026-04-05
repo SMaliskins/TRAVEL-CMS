@@ -84,6 +84,17 @@ export async function loadWorldCities(): Promise<void> {
   await Promise.all(promises);
 }
 
+let worldCitiesEnsurePromise: Promise<void> | null = null;
+
+/** Deduplicate concurrent loads; safe to call from many components. */
+export function ensureWorldCitiesLoaded(): Promise<void> {
+  if (worldCitiesEnsurePromise) return worldCitiesEnsurePromise;
+  worldCitiesEnsurePromise = loadWorldCities().finally(() => {
+    worldCitiesEnsurePromise = null;
+  });
+  return worldCitiesEnsurePromise;
+}
+
 function getAllCities(): City[] {
   const existingKeys = new Set(
     CITIES.map((c) => `${normalizeCityNameForKey(c.name)}|${(c.countryCode || "").toUpperCase()}`)

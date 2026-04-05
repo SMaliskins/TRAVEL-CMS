@@ -1,5 +1,5 @@
 /**
- * ORDER_PAGE_PERF_SPEC Part 2 L4: React Query cache for /orders list (instant back from order detail).
+ * ORDER_PAGE_PERF_SPEC Part 2 L4: React Query infinite list for /orders (cache + load-more).
  */
 
 import { supabase } from "@/lib/supabaseClient";
@@ -8,8 +8,9 @@ export const ORDERS_LIST_PAGE_SIZE = 50;
 export const ORDERS_LIST_STALE_MS = 30_000;
 
 export const ordersListQueryKeys = {
-  firstPage: (pageSize: number, search: string) =>
-    ["orders-list", "p1", pageSize, search] as const,
+  /** useInfiniteQuery: pageParam = API page number (1-based) */
+  listInfinite: (pageSize: number, search: string) =>
+    ["orders-list", "infinite", pageSize, search] as const,
 };
 
 async function authHeaders(): Promise<Record<string, string>> {

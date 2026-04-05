@@ -5,6 +5,22 @@
 
 ---
 
+## Status sync (2026-04-01)
+
+| Area | Status |
+|------|--------|
+| **Order Steps 1–3** | Done (dynamic tabs, narrow services list + detail route, bootstrap). |
+| **Step 3 — `orders` row SELECT** | **Open / deferred:** canonical lookup uses `select("*")` in `lib/orders/orderFromRouteParam.ts` (avoids 404 when prod schema lacks a column). `ORDER_ROW_DETAIL_SELECT` in `lib/orders/orderRowSelect.ts` reserved for re-enable after DB audit. |
+| **Step 4** | Partial — RQ used for services, invoices, documents, communications, clients data; some `invoiceRefetchTrigger` / keys remain. |
+| **Steps 5–7** | Open (defer cities, batch doc signed URLs, parallelize legacy GET path — much work moved to bootstrap). |
+| **List L1** | **Partial** — server `ilike` + pagination + client wiring; full surname/payer/service name search over all rows → future `search_text` / DB. |
+| **List L2** | Open (profit in DB). |
+| **List L3** | **Done** — post-queries parallelized (`referral_accrual_line`, `payments`, traveller labels in `Promise.all`). |
+| **List L4** | **Partial** — first page `useQuery`, `staleTime: 30s`, load-more; key includes search string. |
+| **List L5** | Open (flags/cities, calendar index, debounce). |
+
+---
+
 ## Current State: Why It's Slow
 
 The order detail page (`app/orders/[orderCode]/page.tsx`) has **two layers of problems**:
@@ -123,8 +139,7 @@ Fields that are **safely removable** from list SELECT (only used in edit modal, 
 
 **What remains:**
 
-- Both `bootstrap/route.ts` (line ~33-35) and `GET /api/orders/[orderCode]/route.ts` (line 36) still use `select("*")` on the `orders` table. Replace with an explicit column list matching what `buildExpandedOrderAndInvoiceSummary` + the page header actually need.
-- This is a safe, low-risk change: enumerate the fields used by `OrderPageHeaderE`, date pickers, status badge, client display, and the bootstrap summary builder.
+- Narrow `SELECT` on `orders` for bootstrap + `GET /api/orders/[orderCode]`: **deferred** — explicit list exists as `ORDER_ROW_DETAIL_SELECT` (`lib/orders/orderRowSelect.ts`), but shared lookup `fetchOrderRowByRouteParam` uses `select("*")` so environments with older schemas do not return 404 for every order. Re-enable narrow select after production column verification.
 
 ---
 
@@ -343,38 +358,23 @@ Target: order page loads in < 1s, tab switching feels instant.
 
 #### Backend (API) Layer
 
-1. **Search disables pagination** — when `search` param is present, `range()` is NOT applied (`if (!search)`). The API loads ALL orders for the company, then filters in-memory. For 500+ orders this is 200KB+ before filtering even starts.
+1. **Search + pagination** — **Fixed:** `search` uses server `ilike` (`order_code`, `client_display_name`) with `range()`; client sends debounced text. **Open (L1):** finding orders by traveller surname, payer, or arbitrary service text across the dataset still needs `search_text` / RPC (or equivalent), not only the narrow `ilike` fields.
 
-2. **Search triggers 4+ extra DB round-trips** — after loading all orders, the search path runs:
-   - `order_services` query (client_name, payer_name per order) — chunked in 400s
-   - `collectTravellerSearchLabelsByOrder()` — which itself does:
-     - `order_travellers` + `party` join (chunked)
-     - `order_services` → `order_service_travellers` → `party` (3 sequential chunked queries)
-   - Total: 5-8 extra DB queries just for search name resolution
+2. **Per-page workload** — For the current page’s `order_ids`, the API loads `order_services` (narrow columns), owner profiles, invoices, `referral_accrual_line`, and `payments` in one **`Promise.all`** (`app/api/orders/route.ts`). **Then** `collectTravellerSearchLabelsByOrder()` runs (chunked internally) to merge traveller labels into list maps — still one sequential phase after the parallel batch.
 
-3. **Client-side profit recalculation** — the API fetches ALL `order_services` for ALL orders on the page (line 253), then runs `computeServiceLineEconomics()` per service line in JS to calculate profit, VAT, referral commission. This is O(orders × services) in application code instead of one DB aggregation.
+3. **Client-side profit recalculation** — For those page rows, `order_services` rows are aggregated in JS with `computeServiceLineEconomics()` per line (profit, VAT). **Open (L2):** move summaries to DB if this becomes hot.
 
-4. **4 sequential post-queries after main fetch** — after the primary orders query, the API runs:
-   - `order_services` (for profit calc + invoice stats)
-   - `user_profiles` (owner names)
-   - `invoices` (invoice statistics)
-   - `referral_accrual_line` (referral commissions) — sequential, NOT in the Promise.all
-   - `payments` (processing fees) — sequential, NOT in the Promise.all
-   - `collectTravellerSearchLabelsByOrder()` — sequential, for list display
-
-   Only the first three are in `Promise.all`. The last three run sequentially after.
-
-5. **No server-side search** — Supabase `ilike` / `textSearch` is not used. The entire search is JS `matchesSearch()` on client_display_name, order_code, and service client names loaded in bulk.
+4. **Historical note (pre-fix search)** — When search loaded all orders, the path could issue many extra chunked queries for services + travellers. That bulk path is gone for normal paginated + `search` requests.
 
 #### Frontend Layer
 
-6. **`loadWorldCities()` on orders list page** — `app/orders/page.tsx` line 14 imports `getCityByName, loadWorldCities` and calls it on mount to resolve country flags from city names. This is a ~150KB dataset loaded eagerly.
+5. **`loadWorldCities()` on orders list page** — `app/orders/page.tsx` imports `getCityByName, loadWorldCities` and loads the dataset on mount for country flags from city names (~150KB). **Open (L5):** defer / lazy-load.
 
-7. **Calendar view: O(n × 42 cells)** — the calendar iterates all filtered orders against every visible day cell. With 200 orders × 42 cells = 8400 comparisons per render.
+6. **Calendar view: O(n × 42 cells)** — calendar compares filtered orders to every visible day cell. **Open (L5):** index by date.
 
-8. **Tree view rebuilt on every filter change** — `buildOrdersTree()` groups orders into Year→Month→Day hierarchy, recalculated on every filter/search keystroke without memoization.
+7. **Tree view rebuilt on every filter change** — `buildOrdersTree()` recalculates hierarchy on filter/search without memoization.
 
-9. **No data caching** — navigating to an order detail and pressing Back re-fetches the entire orders list from scratch.
+8. **List caching** — **Partial (L4):** first page uses React Query (`staleTime` ~30s) and load-more; Back navigation still depends on cache lifetime and keys (search included in query key).
 
 ---
 
@@ -382,9 +382,11 @@ Target: order page loads in < 1s, tab switching feels instant.
 
 #### List Step 1: Move search to server-side with `ilike` / `or()` filter
 
+**Status:** **Partial** — `ordersListTextSearchOrClause` + pagination + client debounce are in place. Full cross-field search (travellers, payers, all service text) → still **List L1** / `search_text` below.
+
 **File:** `app/api/orders/route.ts`
 
-Replace the in-memory search with Supabase filters:
+Replace the in-memory search with Supabase filters (reference — largely implemented):
 
 ```typescript
 if (search) {
@@ -407,9 +409,11 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS search_text TEXT;
 -- Updated by trigger on order_travellers, order_services, order_service_travellers
 ```
 
-**Expected impact:** Eliminates 5-8 extra DB queries during search. Pagination always works. Response time drops from 2-5s to <300ms.
+**Expected impact:** Pagination always works; narrow `ilike` avoids full-table scan for text search. Deep name search still needs DB support.
 
 #### List Step 2: Move profit/VAT calculation to DB
+
+**Status:** **Open** (L2).
 
 **File:** `app/api/orders/route.ts`
 
@@ -432,22 +436,17 @@ This replaces fetching ALL services + running `computeServiceLineEconomics()` pe
 
 #### List Step 3: Parallelize ALL post-queries
 
+**Status:** **Partial** — `referral_accrual_line` and `payments` are in the same `Promise.all` as services, profiles, and invoices. `collectTravellerSearchLabelsByOrder()` still runs **after** that batch (uses `order_ids` + service ids from the first result).
+
 **File:** `app/api/orders/route.ts`
 
-Move `referral_accrual_line`, `payments` (processing fees), and `collectTravellerSearchLabelsByOrder()` into the existing `Promise.all`:
+Optional next step: refactor so traveller label collection can start in parallel with the first batch (e.g. split queries that do not depend on `servicesResult`), or keep as-is if latency is acceptable.
 
-```typescript
-const [servicesResult, ownerProfilesResult, invoicesResult, refRows, feeRows, travellerLabels] = await Promise.all([
-  // ... existing 3 ...
-  supabaseAdmin.from("referral_accrual_line")...,
-  supabaseAdmin.from("payments")...,
-  collectTravellerSearchLabelsByOrder(...),
-]);
-```
-
-**Expected impact:** 3 sequential queries become parallel. Saves 200-500ms.
+**Expected impact:** Already gained for referral + fees; further gain only if traveller phase is parallelized.
 
 #### List Step 4: Cache orders list with React Query
+
+**Status:** **Partial** — first page + load-more use RQ; `queryKey` includes search; `staleTime` ~30s (see `ordersListQueries` / page).
 
 **File:** `app/orders/page.tsx`
 
@@ -465,6 +464,8 @@ const { data, isPending } = useQuery({
 **Benefits:** Back button from order detail → instant list from cache. Filter changes within 30s don't re-fetch.
 
 #### List Step 5: Defer flag resolution / memoize tree
+
+**Status:** **Open** (L5).
 
 **File:** `app/orders/page.tsx`
 
