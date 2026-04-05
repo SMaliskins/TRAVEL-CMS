@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-04-06] CW — Order lookup: select(*) + eq-per-candidate (fix global 404)
+
+**Task:** `fetchOrderRowByRouteParam` — use `select("*")` instead of narrow column list (prod DB may lack a column → every lookup errored). Keep per-candidate `.eq("order_code")` loop (not `.in`) for codes containing `/`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-06] CW — order_code lookup: hyphen legacy in DB
+
+**Task:** Extend `orderCodeLookupCandidates` with `0146/26-SM` → `0146-26-SM` variants so rows stored with hyphen match.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-06] CW — Order route param resolution + check-ins service_date_from OR
 
 **Task:** `lib/orders/orderFromRouteParam.ts` — decode/slug/case candidates for `order_code`; bootstrap, order GET/PATCH/DELETE, services list `getOrderId`, documents verify, communications GET, invoices GET/POST. `slugToOrderCode` no longer corrupts canonical codes with `/`. Check-ins SQL also OR `service_date_from` in [today, cap].
