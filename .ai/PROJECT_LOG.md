@@ -5,6 +5,17 @@
 
 ---
 
+## [2026-04-04] CW — Orders list Part 2: traveller labels parallel + search dedupe + React Query L4
+
+**Task:** `GET /api/orders` — parallel chunk batches in `collectTravellerSearchLabelsByOrder`; parallel `order_services` name chunks in search path; reuse traveller map after search (no second collect); L4 `useQuery` for first page with `staleTime: 30_000` + `lib/orders/ordersListQueries.ts`; load-more still manual append.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-04] CW — Invoices & Payments tab: lighter summary fetch + parallel invoice aggregates
 
 **Task:** Tab felt slow: `OrderPaymentsList` called full `GET .../invoices` (all rows + items) only for `paymentSummary`; `InvoiceList` blocked second network on communications for email/reminder columns immediately after invoices.

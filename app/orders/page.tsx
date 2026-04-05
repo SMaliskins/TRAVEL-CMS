@@ -1,8 +1,15 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  fetchOrdersListPage,
+  ordersListQueryKeys,
+  ORDERS_LIST_PAGE_SIZE,
+  ORDERS_LIST_STALE_MS,
+} from "@/lib/orders/ordersListQueries";
 import ordersSearchStore from "@/lib/stores/ordersSearchStore";
 import { filterOrders } from "@/lib/stores/filterOrders";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
@@ -457,12 +464,53 @@ export default function OrdersPage() {
   const { openTab } = useTabs();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
-  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const {
+    data: listData,
+    isPending: listQueryPending,
+    isError: listQueryIsError,
+    error: listQueryErr,
+    refetch: refetchOrdersList,
+  } = useQuery({
+    queryKey: ordersListQueryKeys.firstPage(ORDERS_LIST_PAGE_SIZE),
+    queryFn: () => fetchOrdersListPage(1, ORDERS_LIST_PAGE_SIZE),
+    staleTime: ORDERS_LIST_STALE_MS,
+    gcTime: 5 * 60_000,
+  });
+
+  const loadError =
+    listQueryIsError && listQueryErr instanceof Error
+      ? listQueryErr.message
+      : listQueryIsError
+        ? String(listQueryErr)
+        : null;
+
+  const [extraOrders, setExtraOrders] = useState<OrderRow[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string; initials: string }[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<{ page: number; total: number; totalPages: number } | null>(null);
+
+  useEffect(() => {
+    if (listData?.agents?.length) {
+      setAgents((prev) => {
+        const merged = new Map(prev.map((a) => [a.id, a]));
+        listData.agents!.forEach((a) => merged.set(a.id, a));
+        return Array.from(merged.values());
+      });
+    }
+  }, [listData?.agents]);
+
+  useEffect(() => {
+    if (listData?.pagination) {
+      setPagination(listData.pagination);
+    }
+  }, [listData?.pagination]);
+
+  const orders = useMemo(
+    () => [...((listData?.orders as OrderRow[]) ?? []), ...extraOrders],
+    [listData?.orders, extraOrders]
+  );
+
+  const isLoading = listQueryPending && !listData;
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
   const [semanticOrderCodes, setSemanticOrderCodes] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
@@ -487,58 +535,30 @@ export default function OrdersPage() {
     return map;
   }, [orders]);
 
-  // Fetch orders from API
-  const fetchOrders = useCallback(async (page = 1, append = false) => {
+  const fetchNextPage = useCallback(async () => {
+    if (!pagination || pagination.page >= pagination.totalPages) return;
+    setIsLoadingMore(true);
     try {
-      if (append) {
-        setIsLoadingMore(true);
-      } else {
-        setIsLoading(true);
-      }
-      setLoadError(null);
-
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token || null;
-
-      const response = await fetch(`/api/orders?page=${page}&pageSize=50`, {
-        headers: {
-          ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
-        },
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (append) {
-        setOrders(prev => [...prev, ...(data.orders || [])]);
-      } else {
-        setOrders(data.orders || []);
-      }
-      setAgents(prev => {
-        const merged = new Map(prev.map(a => [a.id, a]));
-        (data.agents || []).forEach((a: { id: string; name: string; initials: string }) => merged.set(a.id, a));
+      const data = await fetchOrdersListPage(pagination.page + 1, ORDERS_LIST_PAGE_SIZE);
+      setExtraOrders((e) => [...e, ...((data.orders as OrderRow[]) ?? [])]);
+      setAgents((prev) => {
+        const merged = new Map(prev.map((a) => [a.id, a]));
+        (data.agents || []).forEach((a) => merged.set(a.id, a));
         return Array.from(merged.values());
       });
       if (data.pagination) {
-        setPagination({ page: data.pagination.page, total: data.pagination.total, totalPages: data.pagination.totalPages });
+        setPagination({
+          page: data.pagination.page,
+          total: data.pagination.total,
+          totalPages: data.pagination.totalPages,
+        });
       }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
-      setLoadError(error instanceof Error ? error.message : t(lang, "orders.loadError"));
     } finally {
-      setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, []);
-
-  // Load orders on mount
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  }, [pagination]);
 
   // Single init effect: store → URL params → subscribe → defer world cities
   useEffect(() => {
@@ -880,7 +900,8 @@ export default function OrdersPage() {
             <p className="text-red-700">{loadError}</p>
             <button
               onClick={() => {
-                void fetchOrders();
+                setExtraOrders([]);
+                void refetchOrdersList();
               }}
               className="mt-2 text-sm text-red-600 underline hover:text-red-800"
             >
@@ -1577,7 +1598,7 @@ export default function OrdersPage() {
               {t(lang, "orders.showing")} {orders.length} {t(lang, "orders.of")} {pagination.total}
             </span>
             <button
-              onClick={() => fetchOrders(pagination.page + 1, true)}
+              onClick={() => void fetchNextPage()}
               disabled={isLoadingMore}
               className="w-full sm:w-auto px-6 py-3 sm:py-2 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition"
             >

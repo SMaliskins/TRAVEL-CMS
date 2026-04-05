@@ -50,9 +50,29 @@ function mergeOrderNameMaps(target: Map<string, string[]>, source: Map<string, s
   }
 }
 
+const TRAVELLER_LABEL_CHUNK = 400;
+
+function chunkIds<T>(ids: T[], chunkSize: number): T[][] {
+  if (ids.length === 0) return [];
+  if (ids.length <= chunkSize) return [ids];
+  const out: T[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    out.push(ids.slice(i, i + chunkSize));
+  }
+  return out;
+}
+
+const ORDER_TRAVELLERS_LABEL_SELECT = `order_id,
+         party:party_id (
+           display_name,
+           status,
+           party_person ( first_name, last_name )
+         )`;
+
 /**
  * Display names for order_travellers + parties linked via order_service_travellers (service users).
  * Used for Orders list text / surname search.
+ * Chunks run in parallel (Promise.all); order_travellers and order_services mini-fetch run in parallel when both needed.
  */
 async function collectTravellerSearchLabelsByOrder(
   supabase: SupabaseClient,
@@ -62,24 +82,35 @@ async function collectTravellerSearchLabelsByOrder(
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (orderIds.length === 0) return out;
-  const chunkSize = 400;
 
-  for (let i = 0; i < orderIds.length; i += chunkSize) {
-    const chunk = orderIds.slice(i, i + chunkSize);
-    const { data: otRows } = await supabase
-      .from("order_travellers")
-      .select(
-        `order_id,
-         party:party_id (
-           display_name,
-           status,
-           party_person ( first_name, last_name )
-         )`
+  const orderChunks = chunkIds(orderIds, TRAVELLER_LABEL_CHUNK);
+  const needSvcMini = !serviceRows || serviceRows.length === 0;
+
+  const [otChunkResults, svcMiniChunkResults] = await Promise.all([
+    Promise.all(
+      orderChunks.map((chunk) =>
+        supabase
+          .from("order_travellers")
+          .select(ORDER_TRAVELLERS_LABEL_SELECT)
+          .eq("company_id", companyId)
+          .in("order_id", chunk)
       )
-      .eq("company_id", companyId)
-      .in("order_id", chunk);
+    ),
+    needSvcMini
+      ? Promise.all(
+          orderChunks.map((chunk) =>
+            supabase
+              .from("order_services")
+              .select("id, order_id")
+              .eq("company_id", companyId)
+              .in("order_id", chunk)
+          )
+        )
+      : Promise.resolve([] as { data: unknown; error: unknown }[]),
+  ]);
 
-    for (const row of otRows || []) {
+  for (const res of otChunkResults) {
+    for (const row of res.data || []) {
       const rec = row as { order_id: string; party: unknown };
       const partyRaw = rec.party;
       const party = Array.isArray(partyRaw) ? partyRaw[0] : partyRaw;
@@ -94,13 +125,8 @@ async function collectTravellerSearchLabelsByOrder(
   let svcRows = serviceRows;
   if (!svcRows || svcRows.length === 0) {
     svcRows = [];
-    for (let j = 0; j < orderIds.length; j += chunkSize) {
-      const { data: svcMini } = await supabase
-        .from("order_services")
-        .select("id, order_id")
-        .eq("company_id", companyId)
-        .in("order_id", orderIds.slice(j, j + chunkSize));
-      svcRows.push(...((svcMini || []) as { id: string; order_id: string }[]));
+    for (const res of svcMiniChunkResults) {
+      svcRows.push(...((res.data || []) as { id: string; order_id: string }[]));
     }
   }
 
@@ -109,25 +135,38 @@ async function collectTravellerSearchLabelsByOrder(
     if (r.id) serviceIdToOrderId.set(r.id, r.order_id);
   }
   const serviceIds = [...serviceIdToOrderId.keys()];
+  const serviceIdChunks = chunkIds(serviceIds, TRAVELLER_LABEL_CHUNK);
+
+  const ostChunkResults = await Promise.all(
+    serviceIdChunks.map((chunk) =>
+      supabase
+        .from("order_service_travellers")
+        .select("traveller_id, service_id")
+        .eq("company_id", companyId)
+        .in("service_id", chunk)
+    )
+  );
+
   const allOst: { traveller_id: string; service_id: string }[] = [];
-  for (let j = 0; j < serviceIds.length; j += chunkSize) {
-    const { data: ost } = await supabase
-      .from("order_service_travellers")
-      .select("traveller_id, service_id")
-      .eq("company_id", companyId)
-      .in("service_id", serviceIds.slice(j, j + chunkSize));
-    allOst.push(...((ost || []) as { traveller_id: string; service_id: string }[]));
+  for (const res of ostChunkResults) {
+    allOst.push(...((res.data || []) as { traveller_id: string; service_id: string }[]));
   }
 
   const partyIds = [...new Set(allOst.map((r) => r.traveller_id).filter(Boolean))];
+  const partyChunks = chunkIds(partyIds, TRAVELLER_LABEL_CHUNK);
+
+  const partyChunkResults = await Promise.all(
+    partyChunks.map((chunk) =>
+      supabase
+        .from("party")
+        .select("id, display_name, status, party_person(first_name, last_name)")
+        .in("id", chunk)
+    )
+  );
+
   const partyLabelById = new Map<string, string>();
-  for (let j = 0; j < partyIds.length; j += chunkSize) {
-    const chunk = partyIds.slice(j, j + chunkSize);
-    const { data: parties } = await supabase
-      .from("party")
-      .select("id, display_name, status, party_person(first_name, last_name)")
-      .in("id", chunk);
-    for (const p of parties || []) {
+  for (const res of partyChunkResults) {
+    for (const p of res.data || []) {
       const row = p as { id: string; status?: string | null } & PartySearchShape;
       if (row.status && row.status !== "active") continue;
       const label = buildPartySearchLabel(row);
@@ -207,20 +246,26 @@ export async function GET(request: NextRequest) {
 
     // In-memory search: order code, lead client, service line client_name / payer_name, travellers
     let orders = allOrders || [];
+    /** Reused below to avoid a second collectTravellerSearchLabelsByOrder when search ran (same request). */
+    let travellerLabelsFromSearch: Map<string, string[]> | null = null;
     if (search) {
       const patterns = getSearchPatterns(search);
       const preOrders = allOrders || [];
       const allOrderIds = preOrders.map((o: any) => o.id as string);
       const searchNamesByOrder = new Map<string, string[]>();
       const nameChunk = 400;
-      for (let i = 0; i < allOrderIds.length; i += nameChunk) {
-        const chunk = allOrderIds.slice(i, i + nameChunk);
-        const { data: nameRows } = await supabaseAdmin
-          .from("order_services")
-          .select("order_id, client_name, payer_name")
-          .eq("company_id", companyId)
-          .in("order_id", chunk);
-        for (const row of nameRows || []) {
+      const nameChunks = chunkIds(allOrderIds, nameChunk);
+      const nameChunkResults = await Promise.all(
+        nameChunks.map((chunk) =>
+          supabaseAdmin
+            .from("order_services")
+            .select("order_id, client_name, payer_name")
+            .eq("company_id", companyId)
+            .in("order_id", chunk)
+        )
+      );
+      for (const res of nameChunkResults) {
+        for (const row of res.data || []) {
           const r = row as { order_id: string; client_name?: string | null; payer_name?: string | null };
           for (const field of ["client_name", "payer_name"] as const) {
             const name = String(r[field] || "").trim();
@@ -229,13 +274,13 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-      const travellerNames = await collectTravellerSearchLabelsByOrder(
+      travellerLabelsFromSearch = await collectTravellerSearchLabelsByOrder(
         supabaseAdmin,
         companyId,
         allOrderIds,
         null
       );
-      mergeOrderNameMaps(searchNamesByOrder, travellerNames);
+      mergeOrderNameMaps(searchNamesByOrder, travellerLabelsFromSearch);
       orders = preOrders.filter(
         (o: any) =>
           matchesSearch(o.order_code, patterns) ||
@@ -421,16 +466,26 @@ export async function GET(request: NextRequest) {
       serviceClientNamesMap.set(s.order_id, list);
     });
 
-    const travellerLabelsForList = await collectTravellerSearchLabelsByOrder(
-      supabaseAdmin,
-      companyId,
-      orderIds,
-      servicesData.length > 0
-        ? (servicesData as { id: string; order_id: string }[])
-            .map((s) => ({ id: s.id, order_id: s.order_id }))
-            .filter((r) => r.id)
-        : null
-    );
+    const travellerLabelsForList =
+      search && travellerLabelsFromSearch
+        ? (() => {
+            const sub = new Map<string, string[]>();
+            for (const id of orderIds) {
+              const arr = travellerLabelsFromSearch!.get(id);
+              if (arr && arr.length > 0) sub.set(id, arr);
+            }
+            return sub;
+          })()
+        : await collectTravellerSearchLabelsByOrder(
+            supabaseAdmin,
+            companyId,
+            orderIds,
+            servicesData.length > 0
+              ? (servicesData as { id: string; order_id: string }[])
+                  .map((s) => ({ id: s.id, order_id: s.order_id }))
+                  .filter((r) => r.id)
+              : null
+          );
     mergeOrderNameMaps(serviceClientNamesMap, travellerLabelsForList);
 
     // Derive order dates from services when missing: date_from = min(service_date_from), date_to = max(service_date_to)
