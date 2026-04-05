@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-04-01] CW — Dashboard Flight Check-in: load services by segment dates
+
+**Task:** `GET /api/dashboard/checkins` — stop excluding multi-leg flights where `service_date_to` is beyond the 7-day window; SQL uses `service_date_to >= today` and `(service_date_from is null OR service_date_from <= end of window)`; per service require `min` future segment departure within `now..now+7d`; each listed segment still capped to that window.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Orders list A1 + order row B1 (ilike search + explicit select)
+
+**Task:** `GET /api/orders` — `search` trims to server `ilike` on `order_code` + `client_display_name`, always paginated (`range`); client passes debounced `queryText` as `search`, RQ key includes it, load-more uses same param; `filterOrders` skips client query-text match when server search active. Bootstrap + `GET /api/orders/[code]` — `ORDER_ROW_DETAIL_SELECT` instead of `select("*")`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-04] CW — Orders list Part 2: traveller labels parallel + search dedupe + React Query L4
 
 **Task:** `GET /api/orders` — parallel chunk batches in `collectTravellerSearchLabelsByOrder`; parallel `order_services` name chunks in search path; reuse traveller map after search (no second collect); L4 `useQuery` for first page with `staleTime: 30_000` + `lib/orders/ordersListQueries.ts`; load-more still manual append.

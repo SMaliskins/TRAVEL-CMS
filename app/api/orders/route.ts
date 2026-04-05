@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
 
@@ -60,6 +59,19 @@ function chunkIds<T>(ids: T[], chunkSize: number): T[][] {
     out.push(ids.slice(i, i + chunkSize));
   }
   return out;
+}
+
+/** PostgREST `.or()` fragment: order_code ILIKE OR client_display_name ILIKE. Null if nothing to filter. */
+function ordersListTextSearchOrClause(raw: string): string | null {
+  const core = raw
+    .trim()
+    .replace(/[%,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!core) return null;
+  const esc = core.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+  const p = `%${esc}%`;
+  return `order_code.ilike.${p},client_display_name.ilike.${p}`;
 }
 
 const ORDER_TRAVELLERS_LABEL_SELECT = `order_id,
@@ -205,7 +217,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const orderType = searchParams.get("order_type");
-    const search = searchParams.get("search");
+    const searchRaw = searchParams.get("search");
+    const searchTrim = (searchRaw || "").trim();
     const page = parseInt(searchParams.get("page") || "1") || 1;
     const pageSize = Math.min(parseInt(searchParams.get("pageSize") || "200") || 200, 500);
 
@@ -228,11 +241,14 @@ export async function GET(request: NextRequest) {
       query = query.eq("order_type", orderType);
     }
 
-    // Apply pagination unless searching (search needs all records for in-memory filter)
-    if (!search) {
-      const from = (page - 1) * pageSize;
-      query = query.range(from, from + pageSize - 1);
+    // Text search: server-side ilike on order_code + client_display_name (paginated; no full-table load)
+    const textSearchOr = searchTrim ? ordersListTextSearchOrClause(searchTrim) : null;
+    if (textSearchOr) {
+      query = query.or(textSearchOr);
     }
+
+    const from = (page - 1) * pageSize;
+    query = query.range(from, from + pageSize - 1);
 
     const { data: allOrders, error, count: totalCount } = await query;
 
@@ -244,50 +260,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // In-memory search: order code, lead client, service line client_name / payer_name, travellers
-    let orders = allOrders || [];
-    /** Reused below to avoid a second collectTravellerSearchLabelsByOrder when search ran (same request). */
-    let travellerLabelsFromSearch: Map<string, string[]> | null = null;
-    if (search) {
-      const patterns = getSearchPatterns(search);
-      const preOrders = allOrders || [];
-      const allOrderIds = preOrders.map((o: any) => o.id as string);
-      const searchNamesByOrder = new Map<string, string[]>();
-      const nameChunk = 400;
-      const nameChunks = chunkIds(allOrderIds, nameChunk);
-      const nameChunkResults = await Promise.all(
-        nameChunks.map((chunk) =>
-          supabaseAdmin
-            .from("order_services")
-            .select("order_id, client_name, payer_name")
-            .eq("company_id", companyId)
-            .in("order_id", chunk)
-        )
-      );
-      for (const res of nameChunkResults) {
-        for (const row of res.data || []) {
-          const r = row as { order_id: string; client_name?: string | null; payer_name?: string | null };
-          for (const field of ["client_name", "payer_name"] as const) {
-            const name = String(r[field] || "").trim();
-            if (!name) continue;
-            pushUniqueOrderName(searchNamesByOrder, r.order_id, name);
-          }
-        }
-      }
-      travellerLabelsFromSearch = await collectTravellerSearchLabelsByOrder(
-        supabaseAdmin,
-        companyId,
-        allOrderIds,
-        null
-      );
-      mergeOrderNameMaps(searchNamesByOrder, travellerLabelsFromSearch);
-      orders = preOrders.filter(
-        (o: any) =>
-          matchesSearch(o.order_code, patterns) ||
-          matchesSearch(o.client_display_name, patterns) ||
-          (searchNamesByOrder.get(o.id) || []).some((c) => matchesSearch(c, patterns))
-      );
-    }
+    const orders = allOrders || [];
 
     // Get invoice statistics for all orders
     const orderIds = orders.map((o: any) => o.id);
@@ -466,26 +439,16 @@ export async function GET(request: NextRequest) {
       serviceClientNamesMap.set(s.order_id, list);
     });
 
-    const travellerLabelsForList =
-      search && travellerLabelsFromSearch
-        ? (() => {
-            const sub = new Map<string, string[]>();
-            for (const id of orderIds) {
-              const arr = travellerLabelsFromSearch!.get(id);
-              if (arr && arr.length > 0) sub.set(id, arr);
-            }
-            return sub;
-          })()
-        : await collectTravellerSearchLabelsByOrder(
-            supabaseAdmin,
-            companyId,
-            orderIds,
-            servicesData.length > 0
-              ? (servicesData as { id: string; order_id: string }[])
-                  .map((s) => ({ id: s.id, order_id: s.order_id }))
-                  .filter((r) => r.id)
-              : null
-          );
+    const travellerLabelsForList = await collectTravellerSearchLabelsByOrder(
+      supabaseAdmin,
+      companyId,
+      orderIds,
+      servicesData.length > 0
+        ? (servicesData as { id: string; order_id: string }[])
+            .map((s) => ({ id: s.id, order_id: s.order_id }))
+            .filter((r) => r.id)
+        : null
+    );
     mergeOrderNameMaps(serviceClientNamesMap, travellerLabelsForList);
 
     // Derive order dates from services when missing: date_from = min(service_date_from), date_to = max(service_date_to)
@@ -609,14 +572,15 @@ export async function GET(request: NextRequest) {
       initials: name.split(" ").map(w => w[0]).join("").toUpperCase(),
     }));
 
+    const total = totalCount ?? transformedOrders.length;
     return NextResponse.json({
       orders: transformedOrders,
       agents,
       pagination: {
         page,
         pageSize,
-        total: totalCount ?? transformedOrders.length,
-        totalPages: Math.ceil((totalCount ?? transformedOrders.length) / pageSize),
+        total,
+        totalPages: pageSize > 0 ? Math.ceil(total / pageSize) : 0,
       },
     });
   } catch (error: unknown) {

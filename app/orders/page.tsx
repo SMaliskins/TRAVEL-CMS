@@ -464,6 +464,9 @@ export default function OrdersPage() {
   const { openTab } = useTabs();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
+  const listSearch = searchState.queryText.trim();
+
   const {
     data: listData,
     isPending: listQueryPending,
@@ -471,8 +474,8 @@ export default function OrdersPage() {
     error: listQueryErr,
     refetch: refetchOrdersList,
   } = useQuery({
-    queryKey: ordersListQueryKeys.firstPage(ORDERS_LIST_PAGE_SIZE),
-    queryFn: () => fetchOrdersListPage(1, ORDERS_LIST_PAGE_SIZE),
+    queryKey: ordersListQueryKeys.firstPage(ORDERS_LIST_PAGE_SIZE, listSearch),
+    queryFn: () => fetchOrdersListPage(1, ORDERS_LIST_PAGE_SIZE, listSearch),
     staleTime: ORDERS_LIST_STALE_MS,
     gcTime: 5 * 60_000,
   });
@@ -505,13 +508,16 @@ export default function OrdersPage() {
     }
   }, [listData?.pagination]);
 
+  useEffect(() => {
+    setExtraOrders([]);
+  }, [listSearch]);
+
   const orders = useMemo(
     () => [...((listData?.orders as OrderRow[]) ?? []), ...extraOrders],
     [listData?.orders, extraOrders]
   );
 
   const isLoading = listQueryPending && !listData;
-  const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
   const [semanticOrderCodes, setSemanticOrderCodes] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     loadExpandedFromStorage()
@@ -539,7 +545,7 @@ export default function OrdersPage() {
     if (!pagination || pagination.page >= pagination.totalPages) return;
     setIsLoadingMore(true);
     try {
-      const data = await fetchOrdersListPage(pagination.page + 1, ORDERS_LIST_PAGE_SIZE);
+      const data = await fetchOrdersListPage(pagination.page + 1, ORDERS_LIST_PAGE_SIZE, listSearch);
       setExtraOrders((e) => [...e, ...((data.orders as OrderRow[]) ?? [])]);
       setAgents((prev) => {
         const merged = new Map(prev.map((a) => [a.id, a]));
@@ -558,7 +564,7 @@ export default function OrdersPage() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [pagination]);
+  }, [pagination, listSearch]);
 
   // Single init effect: store → URL params → subscribe → defer world cities
   useEffect(() => {
@@ -654,8 +660,11 @@ export default function OrdersPage() {
 
   // Filter orders based on search state
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, searchState, { semanticOrderCodes });
-  }, [orders, searchState, semanticOrderCodes]);
+    return filterOrders(orders, searchState, {
+      semanticOrderCodes,
+      skipClientQueryTextMatch: listSearch.length > 0,
+    });
+  }, [orders, searchState, semanticOrderCodes, listSearch]);
 
   // Build tree from filtered orders
   const tree = useMemo(() => buildOrdersTree(filteredOrders, dateGroupMode), [filteredOrders, dateGroupMode]);

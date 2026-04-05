@@ -8,7 +8,8 @@ export const ORDERS_LIST_PAGE_SIZE = 50;
 export const ORDERS_LIST_STALE_MS = 30_000;
 
 export const ordersListQueryKeys = {
-  firstPage: (pageSize: number) => ["orders-list", "p1", pageSize] as const,
+  firstPage: (pageSize: number, search: string) =>
+    ["orders-list", "p1", pageSize, search] as const,
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -35,10 +36,17 @@ export type OrdersListFetchResult = {
 
 export async function fetchOrdersListPage(
   page: number,
-  pageSize: number = ORDERS_LIST_PAGE_SIZE
+  pageSize: number = ORDERS_LIST_PAGE_SIZE,
+  search: string = ""
 ): Promise<OrdersListFetchResult> {
   const headers = await authHeaders();
-  const response = await fetch(`/api/orders?page=${page}&pageSize=${pageSize}`, {
+  const q = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  const t = search.trim();
+  if (t) q.set("search", t);
+  const response = await fetch(`/api/orders?${q.toString()}`, {
     headers,
     credentials: "include",
   });

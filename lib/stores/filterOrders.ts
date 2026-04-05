@@ -36,6 +36,11 @@ export interface OrderRow {
 export interface FilterOrdersOptions {
   /** Order codes from semantic search - when provided with queryText, include these orders even if text doesn't match */
   semanticOrderCodes?: string[];
+  /**
+   * When true, the list API already narrowed rows with `search` (ilike on order code + lead client name).
+   * Skip client-side queryText matching to avoid stripping valid server rows (fuzzy rules differ).
+   */
+  skipClientQueryTextMatch?: boolean;
 }
 
 /**
@@ -46,7 +51,7 @@ export function filterOrders(
   searchState: OrdersSearchState,
   options?: FilterOrdersOptions
 ): OrderRow[] {
-  const { semanticOrderCodes = [] } = options || {};
+  const { semanticOrderCodes = [], skipClientQueryTextMatch = false } = options || {};
   const semanticSet = new Set(semanticOrderCodes);
 
   // Pre-compute search patterns once (expensive)
@@ -57,7 +62,7 @@ export function filterOrders(
   return orders.filter((order) => {
     // Query text search (case-insensitive, searches in orderId, client name, refNr if exists)
     // When semanticOrderCodes provided, also include orders whose orderId is in that set
-    if (searchState.queryText) {
+    if (searchState.queryText && !skipClientQueryTextMatch) {
       const query = searchState.queryText.trim();
       const matchesOrderId = matchesLooseTextQuery(order.orderId, query, { fuzzy: false });
       const matchesClient = matchesLooseTextQuery(order.client, query);

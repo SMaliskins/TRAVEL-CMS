@@ -4,6 +4,7 @@ import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 import { buildExpandedOrderAndInvoiceSummary } from "@/lib/orders/orderPageBootstrap";
+import { ORDER_ROW_DETAIL_SELECT } from "@/lib/orders/orderRowSelect";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -33,7 +34,7 @@ export async function GET(
     // Fetch order by order_code
     const { data: order, error } = await supabaseAdmin
       .from("orders")
-      .select("*")
+      .select(ORDER_ROW_DETAIL_SELECT)
       .eq("company_id", companyId)
       .eq("order_code", orderCode)
       .single();
@@ -44,7 +45,7 @@ export async function GET(
 
     const { order: expanded } = await buildExpandedOrderAndInvoiceSummary(
       supabaseAdmin,
-      order as Record<string, unknown>,
+      order as unknown as Record<string, unknown>,
       companyId,
       apiUser
     );

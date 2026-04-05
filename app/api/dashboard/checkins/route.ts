@@ -20,6 +20,31 @@ interface TicketEntry {
   ticketNumber?: string;
 }
 
+function segmentDepartureTime(seg: FlightSegment): Date | null {
+  if (!seg.departureDate) return null;
+  const depStr = seg.departureTimeScheduled
+    ? `${seg.departureDate}T${seg.departureTimeScheduled}`
+    : `${seg.departureDate}T00:00`;
+  const d = new Date(depStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Earliest valid segment departure at or after `notBefore` (for overlap with check-in window). */
+function minSegmentDepartureOnOrAfter(
+  segments: FlightSegment[] | null,
+  notBefore: Date
+): Date | null {
+  if (!segments?.length) return null;
+  let best: Date | null = null;
+  for (const seg of segments) {
+    if (!seg.flightNumber) continue;
+    const d = segmentDepartureTime(seg);
+    if (!d || d.getTime() < notBefore.getTime()) continue;
+    if (!best || d.getTime() < best.getTime()) best = d;
+  }
+  return best;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const apiUser = await getApiUser(request);
@@ -30,18 +55,25 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     const maxLookahead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const todayStr = now.toISOString().split("T")[0];
+    const maxDateStr = maxLookahead.toISOString().split("T")[0];
 
+    // Include flight services that can still have a segment in the 7-day window.
+    // Previously we required service_date_to <= maxDate, which dropped multi-leg trips
+    // whose last segment was weeks later. Now: service end not before today, and
+    // service start (if set) on or before last day of window — then we filter by real segment dates.
     const { data: services, error: svcError } = await supabaseAdmin
       .from("order_services")
       .select(`
         id, ref_nr, flight_segments, ticket_numbers, client_name, supplier_name,
+        service_date_from, service_date_to,
         orders!inner(order_code, company_id)
       `)
       .eq("orders.company_id", companyId)
       .in("category", ["Flight", "Air Ticket"])
       .in("res_status", ["confirmed", "ticketed"])
-      .gte("service_date_to", now.toISOString().split("T")[0])
-      .lte("service_date_to", maxLookahead.toISOString().split("T")[0]);
+      .gte("service_date_to", todayStr)
+      .or(`service_date_from.is.null,service_date_from.lte.${maxDateStr}`);
 
     if (svcError) {
       console.error("[Dashboard Checkins] Query error:", svcError);
@@ -65,6 +97,9 @@ export async function GET(request: NextRequest) {
       const segments = svc.flight_segments as FlightSegment[] | null;
       if (!segments || segments.length === 0) continue;
 
+      const minUpcoming = minSegmentDepartureOnOrAfter(segments, now);
+      if (!minUpcoming || minUpcoming.getTime() > maxLookahead.getTime()) continue;
+
       const tickets = svc.ticket_numbers as TicketEntry[] | null;
       const orderRaw = svc.orders;
       const order = Array.isArray(orderRaw) ? orderRaw[0] : orderRaw;
@@ -73,11 +108,12 @@ export async function GET(request: NextRequest) {
       for (const seg of segments) {
         if (!seg.flightNumber || !seg.departureDate) continue;
 
+        const depTime = segmentDepartureTime(seg);
+        if (!depTime || depTime < now || depTime > maxLookahead) continue;
+
         const depStr = seg.departureTimeScheduled
           ? `${seg.departureDate}T${seg.departureTimeScheduled}`
           : `${seg.departureDate}T00:00`;
-        const depTime = new Date(depStr);
-        if (isNaN(depTime.getTime()) || depTime < now) continue;
 
         const match = seg.flightNumber.match(/^([A-Z]{2})/i);
         const airlineCode = match ? match[1].toUpperCase() : null;

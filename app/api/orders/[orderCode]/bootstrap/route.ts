@@ -5,6 +5,7 @@ import {
   buildExpandedOrderAndInvoiceSummary,
   loadFormattedTravellersForOrder,
 } from "@/lib/orders/orderPageBootstrap";
+import { ORDER_ROW_DETAIL_SELECT } from "@/lib/orders/orderRowSelect";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key";
@@ -32,7 +33,7 @@ export async function GET(
 
     const { data: orderRow, error } = await supabaseAdmin
       .from("orders")
-      .select("*")
+      .select(ORDER_ROW_DETAIL_SELECT)
       .eq("company_id", companyId)
       .eq("order_code", orderCode)
       .single();
@@ -41,7 +42,7 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const orderRecord = orderRow as Record<string, unknown>;
+    const orderRecord = orderRow as unknown as Record<string, unknown>;
 
     const [expanded, travellers] = await Promise.all([
       buildExpandedOrderAndInvoiceSummary(supabaseAdmin, orderRecord, companyId, apiUser),
