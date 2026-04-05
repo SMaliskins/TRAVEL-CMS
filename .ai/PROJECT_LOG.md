@@ -5,6 +5,17 @@
 
 ---
 
+## [2026-04-06] CW — Order route param resolution + check-ins service_date_from OR
+
+**Task:** `lib/orders/orderFromRouteParam.ts` — decode/slug/case candidates for `order_code`; bootstrap, order GET/PATCH/DELETE, services list `getOrderId`, documents verify, communications GET, invoices GET/POST. `slugToOrderCode` no longer corrupts canonical codes with `/`. Check-ins SQL also OR `service_date_from` in [today, cap].
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-01] CW — Dashboard Flight Check-in: load services by segment dates
 
 **Task:** `GET /api/dashboard/checkins` — stop excluding multi-leg flights where `service_date_to` is beyond the 7-day window; SQL uses `service_date_to >= today` and `(service_date_from is null OR service_date_from <= end of window)`; per service require `min` future segment departure within `now..now+7d`; each listed segment still capped to that window.

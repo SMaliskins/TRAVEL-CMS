@@ -5,7 +5,7 @@ import {
   buildExpandedOrderAndInvoiceSummary,
   loadFormattedTravellersForOrder,
 } from "@/lib/orders/orderPageBootstrap";
-import { ORDER_ROW_DETAIL_SELECT } from "@/lib/orders/orderRowSelect";
+import { fetchOrderRowByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key";
@@ -29,24 +29,19 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { companyId } = apiUser;
-    const { orderCode } = await params;
+    const { orderCode: orderCodeParam } = await params;
 
-    const { data: orderRow, error } = await supabaseAdmin
-      .from("orders")
-      .select(ORDER_ROW_DETAIL_SELECT)
-      .eq("company_id", companyId)
-      .eq("order_code", orderCode)
-      .single();
-
-    if (error || !orderRow) {
+    const found = await fetchOrderRowByRouteParam(supabaseAdmin, companyId, orderCodeParam);
+    if (!found) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const orderRecord = orderRow as unknown as Record<string, unknown>;
+    const orderRecord = found.row as unknown as Record<string, unknown>;
+    const canonicalCode = found.order_code;
 
     const [expanded, travellers] = await Promise.all([
       buildExpandedOrderAndInvoiceSummary(supabaseAdmin, orderRecord, companyId, apiUser),
-      loadFormattedTravellersForOrder(supabaseAdmin, companyId, orderCode, {
+      loadFormattedTravellersForOrder(supabaseAdmin, companyId, canonicalCode, {
         id: orderRecord.id as string,
         client_party_id: (orderRecord.client_party_id as string | null | undefined) ?? null,
       }),

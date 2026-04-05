@@ -20,12 +20,38 @@ interface TicketEntry {
   ticketNumber?: string;
 }
 
+/** Normalize HH:mm or HH:mm:ss for ISO datetime. */
+function normalizeTimePart(t: string): string {
+  const s = t.trim();
+  if (/^\d{1,2}:\d{2}$/.test(s)) return `${s}:00`;
+  return s;
+}
+
+/**
+ * Parse segment departure; supports YYYY-MM-DD and DD.MM.YYYY (common in UI / imports).
+ */
 function segmentDepartureTime(seg: FlightSegment): Date | null {
-  if (!seg.departureDate) return null;
-  const depStr = seg.departureTimeScheduled
-    ? `${seg.departureDate}T${seg.departureTimeScheduled}`
-    : `${seg.departureDate}T00:00`;
-  const d = new Date(depStr);
+  const raw = (seg.departureDate || "").trim();
+  if (!raw) return null;
+
+  let isoDay: string;
+  const dmy = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(raw);
+  if (dmy) {
+    const dd = dmy[1].padStart(2, "0");
+    const mm = dmy[2].padStart(2, "0");
+    isoDay = `${dmy[3]}-${mm}-${dd}`;
+  } else if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    isoDay = raw.slice(0, 10);
+  } else {
+    const fallback = new Date(raw);
+    return isNaN(fallback.getTime()) ? null : fallback;
+  }
+
+  const timeRaw = (seg.departureTimeScheduled || "").trim();
+  const iso = timeRaw
+    ? `${isoDay}T${normalizeTimePart(timeRaw)}`
+    : `${isoDay}T00:00`;
+  const d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -37,7 +63,7 @@ function minSegmentDepartureOnOrAfter(
   if (!segments?.length) return null;
   let best: Date | null = null;
   for (const seg of segments) {
-    if (!seg.flightNumber) continue;
+    if (!String(seg.flightNumber || "").trim()) continue;
     const d = segmentDepartureTime(seg);
     if (!d || d.getTime() < notBefore.getTime()) continue;
     if (!best || d.getTime() < best.getTime()) best = d;
@@ -56,12 +82,13 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const maxLookahead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const todayStr = now.toISOString().split("T")[0];
-    const maxDateStr = maxLookahead.toISOString().split("T")[0];
+    const capDate = new Date(now.getTime() + 366 * 24 * 60 * 60 * 1000);
+    const capStr = capDate.toISOString().split("T")[0];
 
-    // Include flight services that can still have a segment in the 7-day window.
-    // Previously we required service_date_to <= maxDate, which dropped multi-leg trips
-    // whose last segment was weeks later. Now: service end not before today, and
-    // service start (if set) on or before last day of window — then we filter by real segment dates.
+    // Pull flight rows that may still contain a segment in the check-in window.
+    // - Include booked/confirmed/ticketed/changed.
+    // - service_date_to in [today, cap] OR null OR service_date_from in [today, cap] (covers bad service_date_to).
+    // Final narrowing is by parsed flight_segments dates (7-day window).
     const { data: services, error: svcError } = await supabaseAdmin
       .from("order_services")
       .select(`
@@ -71,9 +98,10 @@ export async function GET(request: NextRequest) {
       `)
       .eq("orders.company_id", companyId)
       .in("category", ["Flight", "Air Ticket"])
-      .in("res_status", ["confirmed", "ticketed"])
-      .gte("service_date_to", todayStr)
-      .or(`service_date_from.is.null,service_date_from.lte.${maxDateStr}`);
+      .in("res_status", ["booked", "confirmed", "ticketed", "changed"])
+      .or(
+        `and(service_date_to.gte.${todayStr},service_date_to.lte.${capStr}),service_date_to.is.null,and(service_date_from.gte.${todayStr},service_date_from.lte.${capStr})`
+      );
 
     if (svcError) {
       console.error("[Dashboard Checkins] Query error:", svcError);
@@ -111,9 +139,19 @@ export async function GET(request: NextRequest) {
         const depTime = segmentDepartureTime(seg);
         if (!depTime || depTime < now || depTime > maxLookahead) continue;
 
+        const rawDate = (seg.departureDate || "").trim();
+        let isoForDisplay: string;
+        const dmy = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(rawDate);
+        if (dmy) {
+          isoForDisplay = `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+        } else if (/^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+          isoForDisplay = rawDate.slice(0, 10);
+        } else {
+          isoForDisplay = rawDate;
+        }
         const depStr = seg.departureTimeScheduled
-          ? `${seg.departureDate}T${seg.departureTimeScheduled}`
-          : `${seg.departureDate}T00:00`;
+          ? `${isoForDisplay}T${normalizeTimePart(seg.departureTimeScheduled)}`
+          : `${isoForDisplay}T00:00`;
 
         const match = seg.flightNumber.match(/^([A-Z]{2})/i);
         const airlineCode = match ? match[1].toUpperCase() : null;

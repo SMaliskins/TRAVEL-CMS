@@ -4,7 +4,7 @@ import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 import { buildExpandedOrderAndInvoiceSummary } from "@/lib/orders/orderPageBootstrap";
-import { ORDER_ROW_DETAIL_SELECT } from "@/lib/orders/orderRowSelect";
+import { fetchOrderRowByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -19,7 +19,7 @@ export async function GET(
   { params }: { params: Promise<{ orderCode: string }> }
 ) {
   try {
-    const { orderCode } = await params;
+    const { orderCode: orderCodeParam } = await params;
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
@@ -31,21 +31,14 @@ export async function GET(
     }
     const { companyId } = apiUser;
 
-    // Fetch order by order_code
-    const { data: order, error } = await supabaseAdmin
-      .from("orders")
-      .select(ORDER_ROW_DETAIL_SELECT)
-      .eq("company_id", companyId)
-      .eq("order_code", orderCode)
-      .single();
-
-    if (error || !order) {
+    const found = await fetchOrderRowByRouteParam(supabaseAdmin, companyId, orderCodeParam);
+    if (!found) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
     const { order: expanded } = await buildExpandedOrderAndInvoiceSummary(
       supabaseAdmin,
-      order as unknown as Record<string, unknown>,
+      found.row as unknown as Record<string, unknown>,
       companyId,
       apiUser
     );
@@ -63,7 +56,7 @@ export async function PATCH(
   { params }: { params: Promise<{ orderCode: string }> }
 ) {
   try {
-    const { orderCode } = await params;
+    const { orderCode: orderCodeParam } = await params;
     const body = await request.json();
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -75,6 +68,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { companyId } = apiUser;
+
+    const resolvedOrder = await fetchOrderRowByRouteParam(supabaseAdmin, companyId, orderCodeParam);
+    if (!resolvedOrder) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+    const canonicalCode = resolvedOrder.order_code;
 
     // Build update payload - only allow certain fields
     const allowedFields = [
@@ -156,16 +155,16 @@ export async function PATCH(
       .from("orders")
       .select("id, client_party_id, status, date_from, date_to, countries_cities")
       .eq("company_id", companyId)
-      .eq("order_code", orderCode)
+      .eq("order_code", canonicalCode)
       .single();
 
     // Update order
-    console.log("Updating order:", orderCode, "with data:", updateData);
+    console.log("Updating order:", canonicalCode, "with data:", updateData);
     const { data: order, error } = await supabaseAdmin
       .from("orders")
       .update(updateData)
       .eq("company_id", companyId)
-      .eq("order_code", orderCode)
+      .eq("order_code", canonicalCode)
       .select()
       .single();
 
@@ -217,7 +216,7 @@ export async function PATCH(
 
       const bodyText = `${dest}\n${blocks.join("\n")}`;
 
-      console.log("[Push] Notification for", orderCode, ":", bodyText);
+      console.log("[Push] Notification for", canonicalCode, ":", bodyText);
 
       sendPushToClient(order.client_party_id, {
         title: "Trip updated",
@@ -258,7 +257,7 @@ export async function DELETE(
   { params }: { params: Promise<{ orderCode: string }> }
 ) {
   try {
-    const { orderCode } = await params;
+    const { orderCode: orderCodeParam } = await params;
     const body = await request.json();
 
     const apiUser = await getApiUser(request);
@@ -274,16 +273,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Incorrect password" }, { status: 403 });
     }
 
-    const { data: order, error: findErr } = await supabaseAdmin
-      .from("orders")
-      .select("id, order_code")
-      .eq("company_id", apiUser.companyId)
-      .eq("order_code", orderCode)
-      .single();
-
-    if (findErr || !order) {
+    const found = await fetchOrderRowByRouteParam(supabaseAdmin, apiUser.companyId, orderCodeParam);
+    if (!found) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+    const order = { id: found.row.id as string, order_code: found.order_code };
 
     // 1. Delete invoices first (CASCADE removes invoice_items, freeing order_services FK)
     const { error: invErr } = await supabaseAdmin
@@ -307,9 +301,9 @@ export async function DELETE(
       return NextResponse.json({ error: `Failed to delete order: ${delErr.message}` }, { status: 500 });
     }
 
-    console.log(`[Order DELETE] Order ${orderCode} (${order.id}) deleted by user ${apiUser.userId}`);
+    console.log(`[Order DELETE] Order ${order.order_code} (${order.id}) deleted by user ${apiUser.userId}`);
 
-    return NextResponse.json({ success: true, orderCode });
+    return NextResponse.json({ success: true, orderCode: order.order_code });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Order DELETE error:", errorMsg);

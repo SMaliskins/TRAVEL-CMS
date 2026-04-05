@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { fetchOrderRowByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 const BUCKET_NAME = "order-documents";
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
@@ -8,16 +9,23 @@ const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/jpg"
 const ALLOWED_EXT = ["pdf", "png", "jpg", "jpeg", "webp"];
 
 async function getOrderAndVerify(
-  orderCode: string,
+  orderCodeParam: string,
   companyId: string | null
 ): Promise<{ orderId: string; companyId: string } | { error: Response }> {
-  const code = decodeURIComponent(orderCode);
-  let order: { id: string; company_id: string } | null = null;
-  let error: { message?: string } | null = null;
+  if (!companyId) {
+    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
   try {
-    const res = await supabaseAdmin.from("orders").select("id, company_id").eq("order_code", code).single();
-    order = res.data;
-    error = res.error;
+    const found = await fetchOrderRowByRouteParam(supabaseAdmin, companyId, orderCodeParam);
+    if (!found) {
+      return { error: NextResponse.json({ error: "Order not found" }, { status: 404 }) };
+    }
+    const id = found.row.id as string;
+    const cid = found.row.company_id as string;
+    if (cid !== companyId) {
+      return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+    return { orderId: id, companyId: cid };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(msg)) {
@@ -25,16 +33,6 @@ async function getOrderAndVerify(
     }
     throw e;
   }
-  if (error || !order) {
-    const isNetwork = /fetch failed|ECONNREFUSED|ETIMEDOUT|network|TypeError/i.test(error?.message || "");
-    if (isNetwork) {
-      return { error: NextResponse.json({ error: "Database connection failed. Please try again later." }, { status: 503 }) };
-    }
-    return { error: NextResponse.json({ error: "Order not found" }, { status: 404 }) };
-  }
-  if (companyId && order.company_id !== companyId)
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  return { orderId: order.id, companyId: order.company_id };
 }
 
 export async function GET(

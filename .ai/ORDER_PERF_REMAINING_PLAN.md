@@ -15,9 +15,9 @@ Synced with `ORDER_PAGE_PERF_SPEC.md` and current codebase state (2026-04).
 
 1. Pass search text to API (or align URL/store with API): `ilike` on `order_code`, `client_display_name` (and any safe indexed fields).
 2. Always apply `range()` / `page` + `pageSize` when search is active.
-3. For traveller / payer / service-line name matches: either  
-   - **`orders.search_text`** (or similar) maintained by triggers on `order_travellers`, `order_services`, `order_service_travellers`, **or**  
-   - RPC / materialized path — coordinate with DB Specialist (RLS, migration).
+3. For traveller / payer / service-line name matches: either
+  - `**orders.search_text`** (or similar) maintained by triggers on `order_travellers`, `order_services`, `order_service_travellers`, **or**  
+  - RPC / materialized path — coordinate with DB Specialist (RLS, migration).
 
 **Verify:** Large company (500+ orders): response size and latency; search still finds surname/payer cases per product rules.
 
@@ -111,15 +111,17 @@ When A1 or A2 ships with user-visible speedup, add a line to `.ai/RELEASE_LOG.md
 
 ## Suggested timeline (rough)
 
-| Phase | Item | Effort |
-|-------|------|--------|
-| A | A1 L1 | 0.5–1.5 d (without triggers); +0.5–1 d with `search_text` + triggers |
-| A | A2 L2 | 1–1.5 d (with DB review) |
-| A | A3 L5 | 0.5–1 d |
-| A | A4 | 0.25–0.5 d |
-| B | B1–B3 | 0.5–1 d total |
-| B | B4 | 0.25–0.5 d |
-| C | C1–C2 | ad hoc |
+
+| Phase | Item  | Effort                                                               |
+| ----- | ----- | -------------------------------------------------------------------- |
+| A     | A1 L1 | 0.5–1.5 d (without triggers); +0.5–1 d with `search_text` + triggers |
+| A     | A2 L2 | 1–1.5 d (with DB review)                                             |
+| A     | A3 L5 | 0.5–1 d                                                              |
+| A     | A4    | 0.25–0.5 d                                                           |
+| B     | B1–B3 | 0.5–1 d total                                                        |
+| B     | B4    | 0.25–0.5 d                                                           |
+| C     | C1–C2 | ad hoc                                                               |
+
 
 ---
 

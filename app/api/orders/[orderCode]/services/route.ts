@@ -5,6 +5,7 @@ import { mapOrderServiceRowToListApiItem } from "@/lib/orders/mapOrderServiceRow
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
+import { fetchOrderIdByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -39,14 +40,8 @@ async function syncOrderDatesFromServices(orderId: string) {
   }
 }
 
-async function getOrderId(orderCode: string, companyId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("orders")
-    .select("id")
-    .eq("order_code", orderCode)
-    .eq("company_id", companyId)
-    .single();
-  return data?.id || null;
+async function getOrderId(orderCodeParam: string, companyId: string): Promise<string | null> {
+  return fetchOrderIdByRouteParam(supabaseAdmin, companyId, orderCodeParam);
 }
 
 function fireReferralSync(orderId: string, companyId: string) {

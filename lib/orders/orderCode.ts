@@ -5,15 +5,15 @@ export function orderCodeToSlug(orderCode: string): string {
 }
 
 export function slugToOrderCode(slug: string): string {
+  const s = slug.trim();
+  // Already canonical from API path (e.g. decoded 0146/26-SM) — do not corrupt with replace("-", "/")
+  if (s.includes("/")) return s;
   // "0040-25-sm" → "0040/25-SM"
-  // Pattern: "XXXX-YY-XX" where first "-" should become "/"
-  // Match pattern: digits-dash-digits-dash-letters
-  const match = slug.match(/^(\d+)-(\d+)-([a-z]+)$/i);
+  const match = s.match(/^(\d+)-(\d+)-([a-z0-9]+)$/i);
   if (match) {
     const [, seq, year, initials] = match;
     return `${seq}/${year}-${initials.toUpperCase()}`;
   }
-  // Fallback: replace first "-" with "/" and uppercase
-  return slug.replace("-", "/").toUpperCase();
+  return s.replace("-", "/").toUpperCase();
 }
 

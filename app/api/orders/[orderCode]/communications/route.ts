@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { fetchOrderRowByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -10,23 +11,15 @@ export async function GET(
 ) {
   try {
     const { orderCode: rawCode } = await params;
-    const orderCode = decodeURIComponent(rawCode);
 
     const apiUser = await getApiUser(request);
     if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data: order, error: orderError } = await supabaseAdmin
-      .from("orders")
-      .select("id, company_id")
-      .eq("order_code", orderCode)
-      .single();
-
-    if (orderError || !order) {
+    const found = await fetchOrderRowByRouteParam(supabaseAdmin, apiUser.companyId, rawCode);
+    if (!found) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
-    if (order.company_id !== apiUser.companyId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const order = { id: found.row.id as string, company_id: apiUser.companyId };
 
     const { searchParams } = new URL(request.url);
     const invoiceIdsRaw = searchParams.get("invoiceIds");

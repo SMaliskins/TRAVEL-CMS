@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { fetchOrderIdentityByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 /** Payments linked to active invoices + totals (used for list rows and paymentSummary). */
 async function buildInvoicePaymentAggregates(orderId: string): Promise<
@@ -62,62 +63,32 @@ export async function GET(
 ) {
   try {
     const { orderCode: rawOrderCode } = await params;
-    const orderCode = decodeURIComponent(rawOrderCode);
-    
-    if (!orderCode) {
-      return NextResponse.json(
-        { error: "Order code is required" },
-        { status: 400 }
-      );
+
+    if (!rawOrderCode?.trim()) {
+      return NextResponse.json({ error: "Order code is required" }, { status: 400 });
     }
-    
+
     const { searchParams } = new URL(request.url);
     const getNextNumber = searchParams.get('nextNumber') === 'true';
     const countParam = searchParams.get('count');
     const count = countParam ? Math.min(Math.max(1, parseInt(countParam, 10)), 100) : 1;
 
-    // Get order ID from order_code
     let order: { id: string; company_id: string } | null = null;
-    let orderError: { message?: string; code?: string } | null = null;
+    let orderCode = "";
     try {
-      const result = await supabaseAdmin
-        .from("orders")
-        .select("id, company_id")
-        .eq("order_code", orderCode)
-        .single();
-      order = result.data;
-      orderError = result.error;
+      const identity = await fetchOrderIdentityByRouteParam(supabaseAdmin, rawOrderCode);
+      if (!identity) {
+        console.error("[Invoices API] Order not found for param:", rawOrderCode);
+        return NextResponse.json({ error: "Order not found", orderCode: rawOrderCode }, { status: 404 });
+      }
+      order = { id: identity.id, company_id: identity.company_id };
+      orderCode = identity.order_code;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[Invoices API] Supabase connection error:", msg);
       return NextResponse.json(
-        { error: "Database connection failed. Please check Supabase configuration and network.", orderCode },
+        { error: "Database connection failed. Please check Supabase configuration and network.", orderCode: rawOrderCode },
         { status: 503 }
-      );
-    }
-
-    if (orderError) {
-      const isNetworkError = /fetch failed|ECONNREFUSED|ETIMEDOUT|network/i.test(orderError.message || "");
-      if (isNetworkError) {
-        console.error("[Invoices API] Supabase network error:", orderError.message);
-        return NextResponse.json(
-          { error: "Database connection failed. Please check your network and Supabase status.", orderCode },
-          { status: 503 }
-        );
-      }
-      console.error("[Invoices API] Error finding order:", orderError);
-      console.error("[Invoices API] Order code searched:", orderCode);
-      return NextResponse.json(
-        { error: "Order not found", orderCode },
-        { status: 404 }
-      );
-    }
-    
-    if (!order) {
-      console.error("[Invoices API] Order not found for code:", orderCode);
-      return NextResponse.json(
-        { error: "Order not found", orderCode },
-        { status: 404 }
       );
     }
 
@@ -151,8 +122,8 @@ export async function GET(
       }
 
       const currentYear = new Date().getFullYear().toString().slice(-2);
-      const parts = orderCode.split("-");
-      const orderNumRaw = parts[0] ? parseInt(parts[0], 10) : 0;
+      const seqPart = orderCode.includes("/") ? orderCode.split("/")[0]! : orderCode.split("-")[0]!;
+      const orderNumRaw = seqPart ? parseInt(seqPart, 10) : 0;
       const orderNum3 = isNaN(orderNumRaw) ? "001" : String(Math.max(0, orderNumRaw)).padStart(3, "0").slice(-3);
       const prefix = `${orderNum3}${currentYear}`;
 
@@ -398,7 +369,6 @@ export async function POST(
 ) {
   try {
     const { orderCode: rawOrderCode } = await params;
-    const orderCode = decodeURIComponent(rawOrderCode);
     const body = await request.json();
 
     const {
@@ -446,19 +416,11 @@ export async function POST(
       );
     }
 
-    // Get order ID and company_id
-    const { data: order, error: orderError } = await supabaseAdmin
-      .from("orders")
-      .select("id, company_id")
-      .eq("order_code", orderCode)
-      .single();
-
-    if (orderError || !order) {
-      return NextResponse.json(
-        { error: "Order not found" },
-        { status: 404 }
-      );
+    const identity = await fetchOrderIdentityByRouteParam(supabaseAdmin, rawOrderCode);
+    if (!identity) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
+    const order = { id: identity.id, company_id: identity.company_id };
 
     // Service IDs to link: linked_service_ids (all originally selected) when provided, else derive from items
     const fromItems = items.filter((s: any) => s.service_id != null && s.service_id !== "").map((s: any) => s.service_id);
