@@ -5,6 +5,39 @@
 
 ---
 
+## [2026-04-01] CW — B2: invalidate finance tab caches instead of remount
+
+**Task:** Remove `invoiceRefetchTrigger` + React `key` remount on `InvoiceList` / `OrderPaymentsList`; `onFinanceDataChanged` → `invalidateQueries` for invoices (prefix), payments, services; `fetchOrderInvoicePaymentSummaryOnly` for header `linkedToInvoices`; bootstrap `useEffect` deps no longer include invoice trigger; `OrderPaymentsList` mutations call `onChanged` only (parent invalidates).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Finance tab first frame: warm InvoiceList + OrderPaymentsList chunks
+
+**Task:** `requestIdleCallback` (fallback `setTimeout`) after `order.id` loads; `onPointerEnter` on finance tab triggers same dynamic `import()` so chunks are often ready before click.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Order page: Invoices & Payments perf (payments prefetch + React Query)
+
+**Task:** Prefetch `GET /api/finances/payments?orderId=` after bootstrap; `OrderPaymentsList` uses shared `useQuery` key + staleTime; drop redundant `summaryOnly` fetch on tab mount (use `linkedToInvoicesHint` + refresh after mutations).
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-01] CW — A2: orders list economics RPC + parallel fetch
 
 **Task:** `migrations/add_orders_list_service_economics_rpc.sql` — `orders_list_service_economics`, category/VAT helpers aligned with `computeServiceLineEconomics`. `GET /api/orders` calls RPC in `Promise.all`; `computeServiceStatsFromServices` fallback; guard empty `order_ids` for `.in` / RPC.

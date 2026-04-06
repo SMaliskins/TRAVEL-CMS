@@ -18,6 +18,9 @@ export const ORDER_CLIENTS_DATA_STALE_MS = 60_000;
 export const ORDER_INVOICES_LIST_PAGE_SIZE = 30;
 export const ORDER_INVOICES_STALE_MS = 60_000;
 
+/** Payments block on same tab — prefetch after bootstrap (shared key with OrderPaymentsList). */
+export const ORDER_PAYMENTS_STALE_MS = 60_000;
+
 export type OrderInvoicesPaymentSummary = {
   totalPaid: number;
   linkedToInvoices: number;
@@ -37,6 +40,7 @@ export const orderPageQueryKeys = {
   clientsDataParties: (orderCode: string) => ["order-clients-data-parties", orderCode] as const,
   invoices: (orderCode: string, page: number, pageSize: number) =>
     ["order-invoices", orderCode, page, pageSize] as const,
+  payments: (orderId: string) => ["order-payments", orderId] as const,
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -218,4 +222,63 @@ export async function fetchOrderInvoicesPage(
     paymentSummary: data.paymentSummary ?? null,
     pagination: data.pagination ?? null,
   };
+}
+
+/** Lightweight `paymentSummary` only (header overpayment + payments foot row). */
+export async function fetchOrderInvoicePaymentSummaryOnly(
+  orderCode: string
+): Promise<OrderInvoicesPaymentSummary | null> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/orders/${encodeURIComponent(orderCode)}/invoices?summaryOnly=1`,
+    { headers, credentials: "include" }
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { paymentSummary?: OrderInvoicesPaymentSummary | null };
+  return data.paymentSummary ?? null;
+}
+
+/** Row shape for `GET /api/finances/payments?orderId=` (OrderPaymentsList). */
+export type OrderPaymentListRow = {
+  id: string;
+  order_id: string;
+  order_code?: string;
+  invoice_id: string | null;
+  method: string;
+  amount: number;
+  currency: string;
+  paid_at: string;
+  payer_name: string | null;
+  payer_party_id: string | null;
+  note: string | null;
+  entered_by_name?: string | null;
+  account_id?: string | null;
+  account_name?: string | null;
+  status?: string;
+  processor?: string | null;
+  processing_fee?: number | null;
+};
+
+export async function fetchOrderPaymentsByOrderId(orderId: string): Promise<OrderPaymentListRow[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`/api/finances/payments?orderId=${encodeURIComponent(orderId)}`, {
+    headers,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const errData = (await res.json().catch(() => ({}))) as { error?: string };
+    let rawMsg = typeof errData.error === "string" ? errData.error : "";
+    if (/fetch failed|TypeError|ECONNREFUSED|ETIMEDOUT/i.test(rawMsg)) {
+      rawMsg = "Database connection failed. Please try again later.";
+    } else if (!rawMsg) {
+      rawMsg =
+        res.status === 503
+          ? "Database connection failed. Please try again later."
+          : `Failed to load payments (${res.status})`;
+    }
+    throw new Error(rawMsg);
+  }
+  const data = (await res.json()) as { data?: OrderPaymentListRow[] };
+  const rows = data.data ?? [];
+  return rows.filter((p) => p.order_id === orderId);
 }

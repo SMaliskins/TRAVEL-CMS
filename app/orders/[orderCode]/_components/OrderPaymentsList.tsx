@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react";
+import React, { useEffect, useState, useImperativeHandle, forwardRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  fetchOrderPaymentsByOrderId,
+  orderPageQueryKeys,
+  ORDER_PAYMENTS_STALE_MS,
+} from "@/lib/orders/orderPageQueries";
 import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
@@ -65,9 +71,7 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
   const userRole = useCurrentUserRole();
   const canEditOrDeletePayments = canModifyFinancePayments(userRole);
   const { showToast } = useToast();
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [linkedToInvoices, setLinkedToInvoices] = useState(() => linkedToInvoicesHint);
-  const [loading, setLoading] = useState(true);
   const [editPayment, setEditPayment] = useState<EditPaymentData | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [hideCancelled, setHideCancelled] = useState(true);
@@ -75,56 +79,30 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
 
   useImperativeHandle(ref, () => ({ triggerAddPayment: () => setShowAddModal(true) }), []);
 
-  const loadPayments = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/finances/payments?orderId=${encodeURIComponent(orderId)}`, {
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const msg = errData.error || `Failed to load payments (${res.status})`;
-        showToast("error", msg);
-        return;
-      }
-      const data = await res.json();
-      const orderPayments = (data.data || []).filter((p: Payment) => p.order_id === orderId);
-      setPayments(orderPayments);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load payments";
-      console.error("Error loading payments:", err);
-      showToast("error", msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [orderId, showToast]);
+  const {
+    data: paymentsData,
+    isPending,
+    isError,
+    error: paymentsQueryError,
+  } = useQuery({
+    queryKey: orderPageQueryKeys.payments(orderId),
+    queryFn: () => fetchOrderPaymentsByOrderId(orderId),
+    enabled: Boolean(orderId),
+    staleTime: ORDER_PAYMENTS_STALE_MS,
+  });
+  const payments = (paymentsData ?? []) as Payment[];
+  const loading = isPending && paymentsData === undefined;
 
   useEffect(() => {
     setLinkedToInvoices(linkedToInvoicesHint);
   }, [linkedToInvoicesHint]);
 
-  const loadPaymentSummary = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        `/api/orders/${encodeURIComponent(orderCode)}/invoices?summaryOnly=1`,
-        {
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        }
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      const linked = Number(data?.paymentSummary?.linkedToInvoices) || 0;
-      setLinkedToInvoices(linked);
-    } catch {
-      // ignore
-    }
-  }, [orderCode]);
-
   useEffect(() => {
-    loadPayments();
-    loadPaymentSummary();
-  }, [loadPayments, loadPaymentSummary]);
+    if (!isError || !paymentsQueryError) return;
+    const msg =
+      paymentsQueryError instanceof Error ? paymentsQueryError.message : "Unknown error";
+    showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load payments: ${msg}`);
+  }, [isError, paymentsQueryError, showToast]);
 
   const formatCurrency = (amount: number, currency = "EUR") =>
     `€${Math.abs(Number(amount)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -164,8 +142,6 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
         const errData = await res.json().catch(() => ({}));
         throw new Error((errData as { message?: string }).message || (errData as { error?: string }).error || "Failed to cancel");
       }
-      loadPayments();
-      loadPaymentSummary();
       onChanged?.();
     } catch (err) {
       console.error("Error cancelling payment:", err);
@@ -229,7 +205,6 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
         onClose={() => setShowAddModal(false)}
         onCreated={() => {
           setShowAddModal(false);
-          loadPayments();
           onChanged?.();
         }}
         preselectedOrderId={orderId}
@@ -389,8 +364,6 @@ const OrderPaymentsList = forwardRef<OrderPaymentsListHandle, OrderPaymentsListP
         onCreated={() => {
           setShowAddModal(false);
           setEditPayment(null);
-          loadPayments();
-          loadPaymentSummary();
           onChanged?.();
         }}
         preselectedOrderId={orderId}

@@ -89,7 +89,7 @@ Synced with `ORDER_PAGE_PERF_SPEC.md` and current codebase state (**2026-04-01**
 
 ---
 
-### B2. Tab data: invalidate instead of full remount (spec Step 4 “ideal”)
+### B2. Tab data: invalidate instead of full remount (spec Step 4 “ideal”) — **done (2026-04-01)**
 
 **Do:** Where `invoiceRefetchTrigger` + `key={...}` force remount, prefer:
 
@@ -97,6 +97,8 @@ Synced with `ORDER_PAGE_PERF_SPEC.md` and current codebase state (**2026-04-01**
 - Keep remount only where ref/API contract requires a clean state
 
 **Goal:** Fewer duplicate fetches and less state reset.
+
+**Implemented:** `app/orders/[orderCode]/page.tsx` — `onFinanceDataChanged` invalidates `order-invoices` (prefix), `order-payments`, `order-services`; `fetchOrderInvoicePaymentSummaryOnly` refreshes header `linkedToInvoices`; bootstrap effect no longer depends on invoice trigger; `InvoiceList` / `OrderPaymentsList` keys removed. `OrderPaymentsList` relies on parent callback + query invalidation for refresh after payment mutations.
 
 ---
 

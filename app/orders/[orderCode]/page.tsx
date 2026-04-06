@@ -4,12 +4,15 @@ import { useState, useEffect, useMemo, useCallback, useRef, type Dispatch, type 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchOrderClientsDataParties,
+  fetchOrderInvoicePaymentSummaryOnly,
   fetchOrderInvoicesPage,
+  fetchOrderPaymentsByOrderId,
   fetchOrderServicesList,
   orderPageQueryKeys,
   ORDER_CLIENTS_DATA_STALE_MS,
   ORDER_INVOICES_LIST_PAGE_SIZE,
   ORDER_INVOICES_STALE_MS,
+  ORDER_PAYMENTS_STALE_MS,
 } from "@/lib/orders/orderPageQueries";
 import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -222,7 +225,6 @@ export default function OrderPage({
   const [showInvoiceCreator, setShowInvoiceCreator] = useState(false);
   const [invoiceServices, setInvoiceServices] = useState<any[]>([]);
   const [invoiceServicesByPayer, setInvoiceServicesByPayer] = useState<Map<string, any[]>>(new Map());
-  const [invoiceRefetchTrigger, setInvoiceRefetchTrigger] = useState(0);
   const [linkedToInvoices, setLinkedToInvoices] = useState(0);
   const [showOrderSource, setShowOrderSource] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -275,19 +277,51 @@ export default function OrderPage({
     [orderCodeFromUrl, orderCode, queryClient]
   );
 
-  const invServicesSync = useRef<{ code: string; t: number }>({ code: "", t: -1 });
+  /** Finance tab: preload heavy dynamic chunks so first open skips long parse after skeleton. */
+  const warmFinanceTabChunks = useCallback(() => {
+    void import("./_components/InvoiceList");
+    void import("./_components/OrderPaymentsList");
+  }, []);
+
   useEffect(() => {
-    const c = orderCodeFromUrl || orderCode;
-    if (!c) return;
-    const prev = invServicesSync.current;
-    if (prev.code !== c) {
-      invServicesSync.current = { code: c, t: invoiceRefetchTrigger };
-      return;
+    if (!order?.id) return;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      warmFinanceTabChunks();
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      idleId = requestIdleCallback(run, { timeout: 4000 });
+    } else {
+      timeoutId = setTimeout(run, 300);
     }
-    if (prev.t === invoiceRefetchTrigger) return;
-    invServicesSync.current = { code: c, t: invoiceRefetchTrigger };
-    void queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.services(c) });
-  }, [invoiceRefetchTrigger, orderCodeFromUrl, orderCode, queryClient]);
+    return () => {
+      if (idleId !== undefined && typeof cancelIdleCallback !== "undefined") {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, [order?.id, warmFinanceTabChunks]);
+
+  const refreshLinkedToInvoicesFromServer = useCallback(async () => {
+    const code = orderCodeFromUrl || orderCode;
+    if (!code) return;
+    const summary = await fetchOrderInvoicePaymentSummaryOnly(code);
+    if (summary != null) {
+      setLinkedToInvoices(Number(summary.linkedToInvoices) || 0);
+    }
+  }, [orderCodeFromUrl, orderCode]);
+
+  /** B2: invalidate tab caches instead of remounting InvoiceList / OrderPaymentsList. */
+  const onFinanceDataChanged = useCallback(() => {
+    const code = orderCodeFromUrl || orderCode;
+    const oid = order?.id;
+    if (!code || !oid) return;
+    void queryClient.invalidateQueries({ queryKey: ["order-invoices", code] });
+    void queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.payments(oid) });
+    void queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.services(code) });
+    void refreshLinkedToInvoicesFromServer();
+  }, [orderCodeFromUrl, orderCode, order?.id, queryClient, refreshLinkedToInvoicesFromServer]);
 
   const clientPickerPrioritizedParties = useMemo(
     () =>
@@ -916,6 +950,18 @@ export default function OrderPage({
             .catch(() => {
               /* tab will refetch on open */
             });
+          const bootstrapOrderId = (data.order as { id?: string } | undefined)?.id;
+          if (bootstrapOrderId) {
+            void queryClient
+              .prefetchQuery({
+                queryKey: orderPageQueryKeys.payments(bootstrapOrderId),
+                queryFn: () => fetchOrderPaymentsByOrderId(bootstrapOrderId),
+                staleTime: ORDER_PAYMENTS_STALE_MS,
+              })
+              .catch(() => {
+                /* tab will refetch on open */
+              });
+          }
         } else if (response.status === 404) {
           setError(t(lang, "order.notFound"));
         } else {
@@ -932,7 +978,7 @@ export default function OrderPage({
       }
     })();
     return () => { cancelled = true; };
-  }, [orderCodeFromUrl, lang, invoiceRefetchTrigger, queryClient]);
+  }, [orderCodeFromUrl, lang, queryClient]);
 
   // Update order status
   const handleStatusChange = async (newStatus: OrderStatus) => {
@@ -1916,6 +1962,10 @@ export default function OrderPage({
                 return (
                   <button
                     key={tab}
+                    type="button"
+                    onPointerEnter={() => {
+                      if (tab === "finance" && order?.id) warmFinanceTabChunks();
+                    }}
                     onClick={() => setActiveTab(tab)}
                     className={`shrink-0 whitespace-nowrap rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium transition-colors ${
                       isActive
@@ -2122,19 +2172,18 @@ export default function OrderPage({
                       setShowInvoiceCreator(false);
                       setInvoiceServices([]);
                       setInvoiceServicesByPayer(new Map());
-                      setInvoiceRefetchTrigger(prev => prev + 1);
+                      onFinanceDataChanged();
                     }}
                   />
                 ) : (
                   <InvoiceList
                     orderCode={effectiveOrderCode}
-                    key={`${effectiveOrderCode}-${invoiceRefetchTrigger}`}
                     orderAmountTotal={order?.amount_total ?? 0}
                     onCreateNew={() => {
                       setActiveTab("client");
                       showToast("error", "Please select services from the table and click 'Issue Invoice'");
                     }}
-                    onInvoiceChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
+                    onInvoiceChanged={onFinanceDataChanged}
                   />
                 )}
               </div>
@@ -2142,12 +2191,11 @@ export default function OrderPage({
                 <div className="rounded-lg bg-white p-4 sm:p-6 shadow-sm">
                   <OrderPaymentsList
                     ref={paymentsListRef}
-                    key={`payments-${invoiceRefetchTrigger}`}
                     orderCode={effectiveOrderCode}
                     orderId={order.id}
                     orderAmountTotal={order.amount_total}
                     linkedToInvoicesHint={linkedToInvoices}
-                    onChanged={() => setInvoiceRefetchTrigger(prev => prev + 1)}
+                    onChanged={onFinanceDataChanged}
                   />
                 </div>
               )}
