@@ -205,6 +205,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     useEffect(() => {
       if (saveSuccess && dirtyFields.size > 0) {
         setSavedFields(new Set(dirtyFields));
+        setClientAppPassword(""); // Clear password field after save
         // Clear saved fields after animation completes (1 second for faster animation)
         const timer = setTimeout(() => {
           setSavedFields(new Set());
@@ -399,6 +400,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [referralSettlementAmount, setReferralSettlementAmount] = useState("");
     const [referralSettlementNote, setReferralSettlementNote] = useState("");
     const [referralSettlementSubmitting, setReferralSettlementSubmitting] = useState(false);
+    const [clientAppPassword, setClientAppPassword] = useState("");
 
     // Corporate accounts (Company) / Loyalty cards (Person)
     const [corporateAccounts, setCorporateAccounts] = useState<CorporateAccount[]>(
@@ -986,6 +988,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
       if (roles.includes("client")) {
         formData.showReferralInApp = showReferralInApp;
+      }
+
+      if (clientAppPassword.length >= 8) {
+        formData.clientAppPassword = clientAppPassword;
       }
 
       // Corporate accounts / Loyalty cards / Bank accounts
@@ -2855,6 +2861,36 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         />
                       </div>
                     </div>
+
+                    {/* Client app password */}
+                    <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
+                      <h3 className="text-sm font-semibold text-gray-800 mb-1">Client app login</h3>
+                      <p className="text-xs text-gray-500 mb-2">
+                        {record?.hasClientAppAccount
+                          ? "Account exists. Enter a new password to reset it."
+                          : "No app account yet. Set a password to create one (min 8 characters)."}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={clientAppPassword}
+                          onChange={(e) => {
+                            setClientAppPassword(e.target.value);
+                            if (e.target.value.length >= 8) markFieldDirty("clientAppPassword");
+                          }}
+                          placeholder="New password (min 8 chars)"
+                          className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          autoComplete="off"
+                        />
+                        {clientAppPassword.length > 0 && clientAppPassword.length < 8 && (
+                          <span className="text-xs text-red-500">Min 8 characters</span>
+                        )}
+                        {clientAppPassword.length >= 8 && (
+                          <span className="text-xs text-green-600">Will be saved on Save</span>
+                        )}
+                      </div>
+                    </div>
+
                     <h3 className="text-sm font-semibold text-gray-800 mb-2">Rates by category</h3>
                     <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                       {availableCategories.length === 0 ? (

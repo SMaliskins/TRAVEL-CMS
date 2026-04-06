@@ -8,6 +8,7 @@ import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { normalizePersonDobToIso } from "@/utils/dateFormat";
+import bcrypt from "bcryptjs";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -149,7 +150,7 @@ export async function GET(
     }
 
     // Fetch related data in parallel
-    const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData] = await Promise.all([
+    const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData, clientProfileData] = await Promise.all([
       supabaseAdmin
         .from("party_person")
         .select("*")
@@ -184,6 +185,11 @@ export async function GET(
         .from("referral_party_category_rate")
         .select("category_id, rate_kind, rate_value")
         .eq("party_id", id),
+      supabaseAdmin
+        .from("client_profiles")
+        .select("id")
+        .eq("crm_client_id", id)
+        .maybeSingle(),
     ]);
 
     // Log any errors but continue (maybeSingle allows null)
@@ -226,6 +232,8 @@ export async function GET(
       created_at: party.created_at,
       updated_at: party.updated_at,
     });
+
+    record.hasClientAppAccount = !!clientProfileData.data;
 
     await resolveAuditDisplayNames(record);
 
@@ -840,6 +848,33 @@ export async function PUT(
       }
     }
 
+    // Update client app password (bcrypt hash → client_profiles.password_hash)
+    if (typeof updates.clientAppPassword === "string" && updates.clientAppPassword.length >= 8) {
+      const passwordHash = await bcrypt.hash(updates.clientAppPassword, 12);
+      const { data: existingProfile } = await supabaseAdmin
+        .from("client_profiles")
+        .select("id")
+        .eq("crm_client_id", id)
+        .maybeSingle();
+
+      if (existingProfile) {
+        const { error: pwErr } = await supabaseAdmin
+          .from("client_profiles")
+          .update({ password_hash: passwordHash })
+          .eq("crm_client_id", id);
+        if (pwErr) {
+          console.error("[Directory PUT] client_profiles password update:", pwErr);
+        }
+      } else {
+        const { error: insertErr } = await supabaseAdmin
+          .from("client_profiles")
+          .insert({ crm_client_id: id, password_hash: passwordHash });
+        if (insertErr) {
+          console.error("[Directory PUT] client_profiles insert:", insertErr);
+        }
+      }
+    }
+
     // Fetch updated record
     const { data: updatedParty, error: fetchError } = await supabaseAdmin
       .from("party")
@@ -869,7 +904,7 @@ export async function PUT(
     }
 
     // Rebuild record with updated data
-    const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData] = await Promise.all([
+    const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData, clientProfileData] = await Promise.all([
       supabaseAdmin.from("party_person").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("party_company").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("client_party").select("party_id, show_referral_in_app").eq("party_id", id).maybeSingle(),
@@ -877,6 +912,7 @@ export async function PUT(
       supabaseAdmin.from("subagents").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("referral_party").select("party_id, default_currency, notes").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("referral_party_category_rate").select("category_id, rate_kind, rate_value").eq("party_id", id),
+      supabaseAdmin.from("client_profiles").select("id").eq("crm_client_id", id).maybeSingle(),
     ]);
 
     const record = buildDirectoryRecord({
@@ -899,6 +935,8 @@ export async function PUT(
       created_at: updatedParty.created_at,
       updated_at: updatedParty.updated_at,
     });
+
+    record.hasClientAppAccount = !!clientProfileData.data;
 
     await resolveAuditDisplayNames(record);
 
