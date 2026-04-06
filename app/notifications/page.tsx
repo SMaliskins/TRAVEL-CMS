@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
+import { staffNotificationsRootQueryKey } from "@/lib/notifications/staffNotificationsQuery";
+import { useStaffNotificationsFullQuery } from "@/hooks/useStaffNotificationsFullQuery";
 import { useUser } from "@/contexts/UserContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { Bell, Rocket, Plane, AlertTriangle, CreditCard, CheckCircle2, Filter, ChevronDown, ChevronUp, Sparkles, Wrench, X, ArrowLeft, ArrowRight, Image as ImageIcon } from "lucide-react";
@@ -12,7 +15,7 @@ interface Notification {
   title: string;
   message: string;
   link: string | null;
-  ref_id: string;
+  ref_id?: string;
   read: boolean;
   created_at: string;
 }
@@ -92,12 +95,17 @@ const RELEASE_EMOJIS = [
 ] as const;
 
 export default function NotificationsPage() {
+  const queryClient = useQueryClient();
   const { profile } = useUser();
   const { prefs } = useUserPreferences();
   const lang = prefs.language || "en";
 
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    data: notifPayload,
+    isPending: notifListPending,
+  } = useStaffNotificationsFullQuery();
+  const notifications = (notifPayload?.notifications ?? []) as Notification[];
+  const isLoading = notifListPending && !notifPayload;
   const [activeSection, setActiveSection] = useState<Section>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [releaseCache, setReleaseCache] = useState<Record<string, ReleaseData>>({});
@@ -105,27 +113,6 @@ export default function NotificationsPage() {
   const [expandedItemIdx, setExpandedItemIdx] = useState<number | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [reactionLoading, setReactionLoading] = useState<string | null>(null);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-
-      const res = await fetch("/api/notifications/staff?limit=200", { headers, credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setNotifications(data.notifications || []);
-    } catch {
-      // silent
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -248,7 +235,7 @@ export default function NotificationsPage() {
         credentials: "include",
         body: JSON.stringify({ ids }),
       });
-      setNotifications((prev) => prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
+      void queryClient.invalidateQueries({ queryKey: staffNotificationsRootQueryKey });
     } catch {
       // silent
     }
@@ -266,7 +253,7 @@ export default function NotificationsPage() {
         credentials: "include",
         body: JSON.stringify({ markAllRead: true }),
       });
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      void queryClient.invalidateQueries({ queryKey: staffNotificationsRootQueryKey });
     } catch {
       // silent
     }

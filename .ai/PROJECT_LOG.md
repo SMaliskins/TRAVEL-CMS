@@ -5,6 +5,39 @@
 
 ---
 
+## [2026-04-01] CW — Notifications page: React Query full list (limit 200)
+
+**Task:** `staffNotificationsFullQueryKey` + `fetchStaffNotificationsFull` + `useStaffNotificationsFullQuery`; `/notifications` uses shared cache; PATCH invalidates `staffNotificationsRootQueryKey` (toolbar + full); TopBar uses same root key for invalidation.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Order perf п.2: staff notifications React Query + root QueryClient
+
+**Task:** `ReactQueryProvider` in `layout-client-wrapper.tsx` (shared app-wide); `orders/layout` no longer nests a second provider. `lib/notifications/staffNotificationsQuery.ts` + `useStaffNotificationsToolbarQuery` — one `GET .../staff?limit=50`, `refetchInterval` 60s; `TopBar` + `DashboardNotifications` share cache; `notifications/page` invalidates toolbar key after PATCH.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Order perf п.1: CurrentUserContext (single /api/users/me)
+
+**Task:** `contexts/CurrentUserContext.tsx` — one `fetch("/api/users/me")` + one `onAuthStateChange`; `CurrentUserProvider` in `layout-client-wrapper.tsx`; `useCurrentUser` + `useCurrentUserRole`; migrate all app imports from deleted `hooks/useCurrentUserRole.ts`.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-01] CW — B2: invalidate finance tab caches instead of remount
 
 **Task:** Remove `invoiceRefetchTrigger` + React `key` remount on `InvoiceList` / `OrderPaymentsList`; `onFinanceDataChanged` → `invalidateQueries` for invoices (prefix), payments, services; `fetchOrderInvoicePaymentSummaryOnly` for header `linkedToInvoices`; bootstrap `useEffect` deps no longer include invoice trigger; `OrderPaymentsList` mutations call `onChanged` only (parent invalidates).

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
@@ -11,16 +12,9 @@ import { useUser } from "@/contexts/UserContext";
 import { useCompanyLogo } from "@/contexts/CompanySettingsContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { THEME_SCHEMES } from "@/lib/themeSchemes";
-
-interface StaffNotification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  link: string | null;
-  read: boolean;
-  created_at: string;
-}
+import { useStaffNotificationsToolbarQuery } from "@/hooks/useStaffNotificationsToolbarQuery";
+import { staffNotificationsRootQueryKey } from "@/lib/notifications/staffNotificationsQuery";
+import type { StaffNotificationRow } from "@/lib/notifications/staffNotificationsQuery";
 
 function localizedText(text: string, lang: string): string {
   if (text.startsWith("{")) {
@@ -68,8 +62,6 @@ export default function TopBar() {
   const [themeOpen, setThemeOpen] = useState(false);
   const themeRef = useRef<HTMLDivElement>(null);
   const { scheme, setColorScheme, isClient: themeReady } = useColorScheme();
-  const [notifications, setNotifications] = useState<StaffNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifBtnRef = useRef<HTMLButtonElement>(null);
@@ -81,6 +73,13 @@ export default function TopBar() {
   const companyLogo = useCompanyLogo();
   const [gitCommitSha, setGitCommitSha] = useState<string>("");
   const shortCommitSha = gitCommitSha ? gitCommitSha.slice(0, 7) : "";
+  const queryClient = useQueryClient();
+  const {
+    data: notifPayload,
+    refetch: refetchStaffNotifications,
+  } = useStaffNotificationsToolbarQuery();
+  const notifications = notifPayload?.notifications ?? [];
+  const unreadCount = notifPayload?.unreadCount ?? 0;
 
   // Always read commit SHA from server to avoid stale inlined env values.
   useEffect(() => {
@@ -105,47 +104,9 @@ export default function TopBar() {
     fetchCommitSha();
   }, []);
 
-  // ── Notifications ──
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-
-      const res = await fetch("/api/notifications/staff", { headers, credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount ?? 0);
-    } catch {
-      // silent
-    }
-  }, []);
-
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-
-      const res = await fetch("/api/notifications/staff?unreadCount=true", { headers, credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setUnreadCount(data.unreadCount ?? 0);
-    } catch {
-      // silent
-    }
-  }, []);
-
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 60_000);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
-
-  useEffect(() => {
-    if (notifOpen) fetchNotifications();
-  }, [notifOpen, fetchNotifications]);
+    if (notifOpen) void refetchStaffNotifications();
+  }, [notifOpen, refetchStaffNotifications]);
 
   const handleMarkAllRead = async () => {
     try {
@@ -159,14 +120,13 @@ export default function TopBar() {
         credentials: "include",
         body: JSON.stringify({ markAllRead: true }),
       });
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
+      void queryClient.invalidateQueries({ queryKey: staffNotificationsRootQueryKey });
     } catch {
       // silent
     }
   };
 
-  const handleNotifClick = async (n: StaffNotification) => {
+  const handleNotifClick = async (n: StaffNotificationRow) => {
     if (!n.read) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -179,8 +139,7 @@ export default function TopBar() {
           credentials: "include",
           body: JSON.stringify({ ids: [n.id] }),
         });
-        setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
-        setUnreadCount((c) => Math.max(0, c - 1));
+        void queryClient.invalidateQueries({ queryKey: staffNotificationsRootQueryKey });
       } catch {
         // silent
       }

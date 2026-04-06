@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import StatisticCard, { CardPeriodType } from "@/components/dashboard/StatisticCard";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 

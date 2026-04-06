@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useStaffNotificationsToolbarQuery } from "@/hooks/useStaffNotificationsToolbarQuery";
 import { ExternalLink } from "lucide-react";
 
 interface Notification {
@@ -52,29 +51,9 @@ function timeAgo(dateStr: string, lang: string): string {
 export default function DashboardNotifications() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language || "en";
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-
-      const res = await fetch("/api/notifications/staff?limit=5", { headers, credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setNotifications(data.notifications || []);
-    } catch {
-      // silent
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+  const { data: payload, isPending } = useStaffNotificationsToolbarQuery();
+  const notifications = (payload?.notifications ?? []) as Notification[];
+  const isLoading = isPending && !payload;
 
   const headerLabel = { en: "Notifications", ru: "Уведомления", lv: "Paziņojumi" };
   const viewAllLabel = { en: "View all", ru: "Все", lv: "Visi" };

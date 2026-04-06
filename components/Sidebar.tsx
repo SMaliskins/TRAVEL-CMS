@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useSidebar, type SidebarMode } from "@/hooks/useSidebar";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { roleHasPermission } from "@/lib/auth/permissions";
 import { t } from "@/lib/i18n";

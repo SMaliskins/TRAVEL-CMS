@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {

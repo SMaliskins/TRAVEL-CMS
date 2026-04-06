@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
 import { Upload, Pencil, Trash2, X, FileText } from "lucide-react";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";

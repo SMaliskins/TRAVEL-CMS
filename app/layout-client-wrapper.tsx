@@ -4,6 +4,8 @@ import { useEffect, useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/hooks/useSidebar";
 import { UserProvider } from "@/contexts/UserContext";
+import { CurrentUserProvider } from "@/contexts/CurrentUserContext";
+import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import { TabsProvider } from "@/contexts/TabsContext";
 import { ModalOverlayProvider } from "@/contexts/ModalOverlayContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
@@ -72,14 +74,18 @@ export default function LayoutClientWrapper({
 
   return (
     <UserProvider>
-      <CompanySettingsProvider>
-        <ThemeInitializer />
-        <NavigationHistoryProvider>
-          <TabsProvider>
-            <ModalOverlayProvider>{children}</ModalOverlayProvider>
-          </TabsProvider>
-        </NavigationHistoryProvider>
-      </CompanySettingsProvider>
+      <CurrentUserProvider>
+        <ReactQueryProvider>
+          <CompanySettingsProvider>
+            <ThemeInitializer />
+            <NavigationHistoryProvider>
+              <TabsProvider>
+                <ModalOverlayProvider>{children}</ModalOverlayProvider>
+              </TabsProvider>
+            </NavigationHistoryProvider>
+          </CompanySettingsProvider>
+        </ReactQueryProvider>
+      </CurrentUserProvider>
     </UserProvider>
   );
 }

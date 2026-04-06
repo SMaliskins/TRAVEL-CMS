@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 
 const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), { ssr: false });
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 import { setGlobalDateFormat, DateFormatPattern } from "@/utils/dateFormat";
 import BankAccountsManager from "./_components/BankAccountsManager";

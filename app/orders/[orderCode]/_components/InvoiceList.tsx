@@ -14,7 +14,7 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import { CheckCheck, CheckCircle, ExternalLink, Eye, FileDown, Globe, Loader2, Mail, Pencil, Plus, Send, Trash2, X, XCircle, Bell } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { supabase } from "@/lib/supabaseClient";
 import { INVOICE_LANGUAGE_OPTIONS, getInvoiceLanguageLabel } from "@/lib/invoiceLanguages";
 import {

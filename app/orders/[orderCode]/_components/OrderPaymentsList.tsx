@@ -11,7 +11,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/contexts/ToastContext";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
 import { Pencil, Ban, Landmark, Banknote, CreditCard, Printer } from "lucide-react";

@@ -15,7 +15,7 @@ import { formatPhoneForDisplay } from "@/utils/phone";
 import "../hotels-booking/modern-booking.css";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import DirectoryClientPopup from "@/components/directory/DirectoryClientPopup";
 
 // Role colors for badges

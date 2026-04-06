@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Brain, Mail } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
 
 const SETTINGS_SECTIONS = [

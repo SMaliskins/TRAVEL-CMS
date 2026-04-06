@@ -8,7 +8,7 @@ import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import AddPaymentModal, { type EditPaymentData } from "./_components/AddPaymentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
 import { Landmark, Banknote, CreditCard, Trash2, Pencil, Printer } from "lucide-react";

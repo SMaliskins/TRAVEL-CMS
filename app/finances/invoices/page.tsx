@@ -8,7 +8,7 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
 import { ArrowDown, ArrowUp, ArrowUpDown, FileDown, CheckCircle, Search, Send, CheckCheck, Eye, ExternalLink, X } from "lucide-react";
 import ConfirmModal from "@/components/ConfirmModal";

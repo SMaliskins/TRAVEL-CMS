@@ -63,7 +63,7 @@ import { getCityByName, countryCodeToFlag, loadWorldCities, ISO_TO_COUNTRY, COUN
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
-import { useCurrentUserRole } from "@/hooks/useCurrentUserRole";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { useEscapeKey } from "@/lib/hooks/useEscapeKey";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { resolvePublicMediaUrl } from "@/lib/resolvePublicMediaUrl";
