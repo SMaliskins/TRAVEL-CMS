@@ -1,7 +1,16 @@
 import { NextRequest } from 'next/server'
-import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { authenticateReferralPortalCredentials } from '@/lib/client-auth/resolvePartyForReferralLogin'
 import { signAccessToken, signRefreshToken, hashToken } from '@/lib/client-auth/jwt'
+import {
+  assertSameOriginForWebSession,
+  serializeClientCookie,
+  shouldSetWebSessionCookies,
+  ACCESS_MAX_AGE_SEC,
+  REFRESH_MAX_AGE_SEC,
+  CLIENT_ACCESS_COOKIE,
+  CLIENT_REFRESH_COOKIE,
+} from '@/lib/client-auth/web-session'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,35 +19,16 @@ export async function POST(req: NextRequest) {
       return Response.json({ data: null, error: 'VALIDATION_ERROR' }, { status: 400 })
     }
 
-    const email = body.email.toLowerCase().trim()
-
-    // Find CRM party by email
-    const { data: party } = await supabaseAdmin
-      .from('party')
-      .select('id, email')
-      .eq('email', email)
-      .single()
-
-    if (!party) {
+    const auth = await authenticateReferralPortalCredentials(
+      supabaseAdmin,
+      body.email,
+      body.password
+    )
+    if (!auth) {
       return Response.json({ data: null, error: 'Invalid credentials' }, { status: 401 })
     }
 
-    // Find client profile
-    const { data: profile } = await supabaseAdmin
-      .from('client_profiles')
-      .select('id, crm_client_id, password_hash')
-      .eq('crm_client_id', party.id)
-      .single()
-
-    if (!profile) {
-      return Response.json({ data: null, error: 'Invalid credentials' }, { status: 401 })
-    }
-
-    // Verify password
-    const valid = await bcrypt.compare(body.password, profile.password_hash)
-    if (!valid) {
-      return Response.json({ data: null, error: 'Invalid credentials' }, { status: 401 })
-    }
+    const profile = { id: auth.profileId, crm_client_id: auth.crmClientId }
 
     // Issue tokens
     const tokenPayload = { clientId: profile.id, crmClientId: profile.crm_client_id, sub: profile.id }
@@ -56,7 +46,19 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', profile.id)
 
-    return Response.json({ data: { accessToken, refreshToken, clientId: profile.id }, error: null })
+    const res = Response.json({ data: { accessToken, refreshToken, clientId: profile.id }, error: null })
+
+    if (shouldSetWebSessionCookies(req)) {
+      try {
+        assertSameOriginForWebSession(req)
+      } catch {
+        return Response.json({ data: null, error: 'FORBIDDEN' }, { status: 403 })
+      }
+      res.headers.append('Set-Cookie', serializeClientCookie(CLIENT_ACCESS_COOKIE, accessToken, ACCESS_MAX_AGE_SEC))
+      res.headers.append('Set-Cookie', serializeClientCookie(CLIENT_REFRESH_COOKIE, refreshToken, REFRESH_MAX_AGE_SEC))
+    }
+
+    return res
   } catch (err) {
     console.error('Login error:', err)
     return Response.json({ data: null, error: 'INTERNAL_ERROR' }, { status: 500 })

@@ -44,10 +44,9 @@ async function getOrderId(orderCodeParam: string, companyId: string): Promise<st
   return fetchOrderIdByRouteParam(supabaseAdmin, companyId, orderCodeParam);
 }
 
-function fireReferralSync(orderId: string, companyId: string) {
-  syncOrderReferralAccruals(supabaseAdmin, orderId, companyId).catch((e) =>
-    console.warn("[services] syncOrderReferralAccruals:", e)
-  );
+async function runReferralSync(orderId: string, companyId: string) {
+  const r = await syncOrderReferralAccruals(supabaseAdmin, orderId, companyId);
+  if (!r.ok) console.warn("[services] syncOrderReferralAccruals:", r.error);
 }
 
 /**
@@ -76,6 +75,8 @@ const ORDER_SERVICES_LIST_COLUMNS = [
   "res_status",
   "ref_nr",
   "ticket_nr",
+  "ticket_numbers",
+  "boarding_passes",
   "vat_rate",
   "service_currency",
   "service_price_foreign",
@@ -343,7 +344,7 @@ export async function POST(
             );
           }
           syncOrderDatesFromServices(orderId).catch(() => {});
-          fireReferralSync(orderId, companyId);
+          await runReferralSync(orderId, companyId);
           return NextResponse.json({ service: { id: inserted.id, serviceType: "cancellation", parentServiceId: orig.id } });
         }
         console.error("Clone service insert error:", insertErr);
@@ -361,7 +362,7 @@ export async function POST(
         );
       }
       syncOrderDatesFromServices(orderId).catch(() => {});
-      fireReferralSync(orderId, companyId);
+      await runReferralSync(orderId, companyId);
       upsertOrderServiceEmbedding(inserted.id as string).catch((e) => console.warn("[POST clone] upsertOrderServiceEmbedding:", e));
       return NextResponse.json({ service: { id: inserted.id, serviceType: "cancellation", parentServiceId: orig.id } });
     }
@@ -514,7 +515,7 @@ export async function POST(
         if (minError) {
           return NextResponse.json({ error: "Failed to create service" }, { status: 500 });
         }
-        fireReferralSync(orderId, companyId);
+        await runReferralSync(orderId, companyId);
         return NextResponse.json({ 
           service: { id: minService.id, ...body },
           warning: "Some columns not available - run migration"
@@ -566,7 +567,7 @@ export async function POST(
     upsertOrderServiceEmbedding(service.id).catch((e) => console.warn("[POST services] upsertOrderServiceEmbedding:", e));
 
     syncOrderDatesFromServices(orderId).catch(() => {});
-    fireReferralSync(orderId, companyId);
+    await runReferralSync(orderId, companyId);
 
     const { data: orderForPush } = await supabaseAdmin
       .from("orders")

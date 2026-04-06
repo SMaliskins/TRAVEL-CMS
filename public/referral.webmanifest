@@ -1,0 +1,19 @@
+{
+  "name": "Referral partner",
+  "short_name": "Referral",
+  "description": "Referral balances, commission lines, and settlements",
+  "start_url": "/referral",
+  "scope": "/referral",
+  "display": "standalone",
+  "background_color": "#f0f4f8",
+  "theme_color": "#1a3a5c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/globe.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { computeReferralPlannedAccruedFromServices } from "@/lib/referral/computeReferralTotalsFromOrderServices";
+import { syncReferralAccrualsForOrdersMissingLines } from "@/lib/referral/syncReferralAccrualsForOrdersMissingLines";
 
 function addAmounts(
   target: Record<string, number>,
@@ -61,22 +63,16 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const { data: refRow } = await supabaseAdmin
-      .from("referral_party")
-      .select("party_id")
-      .eq("party_id", partyId)
-      .maybeSingle();
+    const { data: orderRowsForHeal } = await supabaseAdmin
+      .from("orders")
+      .select("id")
+      .eq("company_id", apiUser.companyId)
+      .eq("referral_party_id", partyId)
+      .order("updated_at", { ascending: false })
+      .limit(80);
 
-    if (!refRow) {
-      return NextResponse.json({
-        data: {
-          plannedByCurrency: {},
-          accruedByCurrency: {},
-          settledByCurrency: {},
-          availableByCurrency: {},
-        },
-      });
-    }
+    const healOrderIds = (orderRowsForHeal || []).map((o) => o.id as string);
+    await syncReferralAccrualsForOrdersMissingLines(supabaseAdmin, apiUser.companyId, healOrderIds);
 
     const [plannedRes, accruedRes, settledRes] = await Promise.all([
       supabaseAdmin
@@ -109,6 +105,44 @@ export async function GET(
     addAmounts(plannedByCurrency, plannedRes.error ? null : plannedRes.data);
     addAmounts(accruedByCurrency, accruedRes.error ? null : accruedRes.data);
     addSettlementAmounts(settledByCurrency, settledRes.error ? null : settledRes.data);
+
+    const sumAbs = (rec: Record<string, number>) =>
+      Object.values(rec).reduce((a, b) => a + Math.abs(b), 0);
+
+    if (
+      sumAbs(plannedByCurrency) < 1e-9 &&
+      sumAbs(accruedByCurrency) < 1e-9 &&
+      healOrderIds.length > 0
+    ) {
+      let livePlanned = 0;
+      let liveAccrued = 0;
+      const CHUNK = 8;
+      for (let i = 0; i < healOrderIds.length; i += CHUNK) {
+        const chunk = healOrderIds.slice(i, i + CHUNK);
+        const results = await Promise.all(
+          chunk.map((oid) =>
+            computeReferralPlannedAccruedFromServices(
+              supabaseAdmin,
+              oid,
+              apiUser.companyId,
+              partyId
+            )
+          )
+        );
+        for (const r of results) {
+          if (!r) continue;
+          livePlanned += r.planned;
+          liveAccrued += r.accrued;
+        }
+      }
+      const eur = "EUR";
+      if (Math.abs(livePlanned) > 1e-9) {
+        plannedByCurrency[eur] = (plannedByCurrency[eur] || 0) + Math.round(livePlanned * 100) / 100;
+      }
+      if (Math.abs(liveAccrued) > 1e-9) {
+        accruedByCurrency[eur] = (accruedByCurrency[eur] || 0) + Math.round(liveAccrued * 100) / 100;
+      }
+    }
 
     return NextResponse.json({
       data: {

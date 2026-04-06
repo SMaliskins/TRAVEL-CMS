@@ -7,9 +7,14 @@ import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import TabBar from "./TabBar";
 
-function isExternalApp(pathname: string | null): boolean {
+/** CRM shell and Supabase session are not used — own layout / client-app cookies */
+function bypassCrmAuth(pathname: string | null): boolean {
   if (!pathname) return false;
-  return pathname.startsWith("/superadmin") || pathname.startsWith("/map");
+  return (
+    pathname.startsWith("/superadmin") ||
+    pathname.startsWith("/map") ||
+    pathname.startsWith("/referral")
+  );
 }
 
 function isPublicPath(pathname: string | null): boolean {
@@ -23,10 +28,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const externalApp = isExternalApp(pathname);
+  const skipCrm = bypassCrmAuth(pathname);
 
   useEffect(() => {
-    if (externalApp) {
+    if (skipCrm) {
       setIsLoading(false);
       return;
     }
@@ -103,7 +108,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (externalApp) return;
+        if (skipCrm) return;
         if (event === "SIGNED_OUT") {
           setIsAuthenticated(false);
           if (!publicPath) {
@@ -121,9 +126,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [pathname, router, externalApp]);
+  }, [pathname, router, skipCrm]);
 
-  if (externalApp) {
+  if (skipCrm) {
     return <>{children}</>;
   }
 

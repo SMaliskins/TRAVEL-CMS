@@ -17,6 +17,7 @@ import {
 import { useRouter, useSearchParams, usePathname, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { slugToOrderCode } from "@/lib/orders/orderCode";
+import { REFERRAL_FLUSH_PENDING_EVENT } from "@/lib/referral/referralFlushEvents";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import OrderStatusBadge, { getEffectiveStatus } from "@/components/OrderStatusBadge";
@@ -753,6 +754,10 @@ export default function OrderPage({
           if (data.order) {
             setOrder((p) => (p ? { ...p, ...data.order } : p));
           }
+          const rs = data.referralSync as { ok?: boolean; error?: string } | undefined;
+          if (rs && rs.ok === false && rs.error) {
+            showToast("error", `Referral sync failed: ${rs.error}`);
+          }
         } else {
           setOrder((p) => (p ? { ...p, ...prev } : p));
         }
@@ -763,7 +768,7 @@ export default function OrderPage({
         setIsSavingField(false);
       }
     },
-    [order, orderCode]
+    [order, orderCode, showToast]
   );
 
   const saveReferralConfirmed = useCallback(
@@ -778,6 +783,19 @@ export default function OrderPage({
       setOrder((p) => (p ? { ...p, referral_commission_confirmed: checked } : p));
       setIsSavingField(true);
       try {
+        await new Promise<void>((resolve) => {
+          let finished = false;
+          const done = () => {
+            if (finished) return;
+            finished = true;
+            resolve();
+          };
+          window.dispatchEvent(
+            new CustomEvent(REFERRAL_FLUSH_PENDING_EVENT, { detail: { done } })
+          );
+          window.setTimeout(done, 2000);
+        });
+
         const { data: { session } } = await supabase.auth.getSession();
         const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}`, {
           method: "PATCH",
@@ -792,6 +810,21 @@ export default function OrderPage({
           if (data.order) {
             setOrder((p) => (p ? { ...p, ...data.order } : p));
           }
+          const rs = data.referralSync as { ok?: boolean; error?: string; linesWritten?: number } | undefined;
+          if (rs && rs.ok === false && rs.error) {
+            showToast("error", `Referral sync failed: ${rs.error}`);
+          } else if (
+            rs &&
+            rs.ok &&
+            rs.linesWritten === 0 &&
+            order.referral_party_id &&
+            checked
+          ) {
+            showToast(
+              "warning",
+              "Referral sync wrote no commission lines. On the Referral tab, ensure Ref is on and %/fixed is saved (wait after typing), or set a category rate on the partner."
+            );
+          }
         } else {
           setOrder((p) => (p ? { ...p, ...prev } : p));
         }
@@ -802,7 +835,7 @@ export default function OrderPage({
         setIsSavingField(false);
       }
     },
-    [order, orderCode]
+    [order, orderCode, showToast]
   );
 
   const saveItinerary = async () => {

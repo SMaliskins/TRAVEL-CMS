@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { computeReferralPlannedAccruedFromServices } from "@/lib/referral/computeReferralTotalsFromOrderServices";
+import {
+  rerunReferralAccrualSyncForOrders,
+  syncReferralAccrualsForOrdersMissingLines,
+} from "@/lib/referral/syncReferralAccrualsForOrdersMissingLines";
 
 /**
  * GET — orders attributed to this referral party + planned/accrued commission per order.
@@ -32,17 +37,6 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const { data: refRow } = await supabaseAdmin
-      .from("referral_party")
-      .select("party_id")
-      .eq("party_id", partyId)
-      .eq("company_id", apiUser.companyId)
-      .maybeSingle();
-
-    if (!refRow) {
-      return NextResponse.json({ orders: [] });
-    }
-
     const { data: orderRows, error: ordErr } = await supabaseAdmin
       .from("orders")
       .select("id, order_code, date_to, referral_commission_confirmed, updated_at")
@@ -62,29 +56,84 @@ export async function GET(
       return NextResponse.json({ orders: [] });
     }
 
-    const { data: lineRows, error: lineErr } = await supabaseAdmin
-      .from("referral_accrual_line")
-      .select("order_id, status, commission_amount")
-      .eq("company_id", apiUser.companyId)
-      .in("order_id", orderIds)
-      .in("status", ["planned", "accrued"]);
+    await syncReferralAccrualsForOrdersMissingLines(supabaseAdmin, apiUser.companyId, orderIds);
 
-    if (lineErr) {
-      console.error("[referral-orders] lines", lineErr);
-      return NextResponse.json({ error: lineErr.message }, { status: 500 });
+    const loadLineSums = async () => {
+      const { data: lineRows, error: lineErr } = await supabaseAdmin
+        .from("referral_accrual_line")
+        .select("order_id, status, commission_amount")
+        .eq("company_id", apiUser.companyId)
+        .in("order_id", orderIds)
+        .in("status", ["planned", "accrued"]);
+
+      if (lineErr) {
+        return { error: lineErr.message as string, sums: null };
+      }
+
+      const next = new Map<string, { planned: number; accrued: number }>();
+      for (const oid of orderIds) {
+        next.set(oid, { planned: 0, accrued: 0 });
+      }
+      for (const r of lineRows || []) {
+        const row = r as { order_id: string; status: string; commission_amount?: number | string | null };
+        const cur = next.get(row.order_id);
+        if (!cur) continue;
+        const amt = Number(row.commission_amount) || 0;
+        if (row.status === "planned") cur.planned += amt;
+        else if (row.status === "accrued") cur.accrued += amt;
+      }
+      return { error: null as string | null, sums: next };
+    };
+
+    let sumsRes = await loadLineSums();
+    if (sumsRes.error || !sumsRes.sums) {
+      console.error("[referral-orders] lines", sumsRes.error);
+      return NextResponse.json({ error: sumsRes.error || "Lines query failed" }, { status: 500 });
+    }
+    let sums = sumsRes.sums;
+
+    const confirmedZero = ords
+      .filter((o) => {
+        if (o.referral_commission_confirmed !== true) return false;
+        const id = o.id as string;
+        const s = sums.get(id) || { planned: 0, accrued: 0 };
+        return Math.abs(s.planned + s.accrued) < 1e-9;
+      })
+      .map((o) => o.id as string);
+
+    if (confirmedZero.length > 0) {
+      await rerunReferralAccrualSyncForOrders(supabaseAdmin, apiUser.companyId, confirmedZero);
+      sumsRes = await loadLineSums();
+      if (sumsRes.error || !sumsRes.sums) {
+        console.error("[referral-orders] lines after resync", sumsRes.error);
+        return NextResponse.json({ error: sumsRes.error || "Lines query failed" }, { status: 500 });
+      }
+      sums = sumsRes.sums;
     }
 
-    const sums = new Map<string, { planned: number; accrued: number }>();
-    for (const oid of orderIds) {
-      sums.set(oid, { planned: 0, accrued: 0 });
-    }
-    for (const r of lineRows || []) {
-      const row = r as { order_id: string; status: string; commission_amount?: number | string | null };
-      const cur = sums.get(row.order_id);
-      if (!cur) continue;
-      const amt = Number(row.commission_amount) || 0;
-      if (row.status === "planned") cur.planned += amt;
-      else if (row.status === "accrued") cur.accrued += amt;
+    /** If accrual rows are still empty, show the same totals as the order Referral tab (live from order_services). */
+    const FALLBACK_CHUNK = 8;
+    const needLiveTotals = orderIds.filter((id) => {
+      const s = sums.get(id) || { planned: 0, accrued: 0 };
+      return Math.abs(s.planned + s.accrued) < 1e-9;
+    });
+    for (let i = 0; i < needLiveTotals.length; i += FALLBACK_CHUNK) {
+      const chunk = needLiveTotals.slice(i, i + FALLBACK_CHUNK);
+      const results = await Promise.all(
+        chunk.map((oid) =>
+          computeReferralPlannedAccruedFromServices(
+            supabaseAdmin,
+            oid,
+            apiUser.companyId,
+            partyId
+          )
+        )
+      );
+      for (let j = 0; j < chunk.length; j++) {
+        const live = results[j];
+        if (!live) continue;
+        sums.set(chunk[j]!, live);
+      }
     }
 
     const today = new Date().toISOString().slice(0, 10);

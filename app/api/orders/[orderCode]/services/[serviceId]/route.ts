@@ -384,9 +384,14 @@ export async function PATCH(
 
     syncOrderDatesFromServices(order.id).catch(() => {});
 
-    syncOrderReferralAccruals(supabaseAdmin, order.id, order.company_id as string).catch((e) =>
-      console.warn("[PATCH service] syncOrderReferralAccruals:", e)
+    const referralSync = await syncOrderReferralAccruals(
+      supabaseAdmin,
+      order.id,
+      order.company_id as string
     );
+    if (!referralSync.ok) {
+      console.error("[PATCH service] syncOrderReferralAccruals:", referralSync.error);
+    }
 
     const { data: orderForPush } = await supabaseAdmin
       .from("orders")
@@ -453,7 +458,7 @@ export async function PATCH(
       }).catch((e: unknown) => console.error("[Push] fire-and-forget:", e));
     }
 
-    return NextResponse.json({ service });
+    return NextResponse.json({ service, referralSync });
   } catch (err) {
     console.error("PATCH service error:", err);
     return NextResponse.json(
@@ -522,9 +527,14 @@ export async function DELETE(
 
     syncOrderDatesFromServices(order.id).catch(() => {});
 
-    syncOrderReferralAccruals(supabaseAdmin, order.id, order.company_id as string).catch((e) =>
-      console.warn("[DELETE service] syncOrderReferralAccruals:", e)
+    const referralSync = await syncOrderReferralAccruals(
+      supabaseAdmin,
+      order.id,
+      order.company_id as string
     );
+    if (!referralSync.ok) {
+      console.warn("[DELETE service] syncOrderReferralAccruals:", referralSync.error);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { t } from "@/lib/i18n";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
 import { useToast } from "@/contexts/ToastContext";
+import { REFERRAL_FLUSH_PENDING_EVENT } from "@/lib/referral/referralFlushEvents";
 
 type ApiService = Record<string, unknown>;
 
@@ -44,21 +45,41 @@ function parseDraftDecimal(
 }
 
 /**
- * Live estimate: if % is set (draft or saved), use profit (ex VAT) × %; otherwise use fixed.
- * Lets you type % while fixed is still in the field — Est follows % until you save (then PATCH clears the other).
+ * Live estimate: % × profit or fixed. Profit base must match the "Profit (net)" column (after processing fees).
  */
 function estimatedReferralAmount(
+  profitNetAfterFees: number,
   r: Row,
   draftPct: Record<string, string>,
   draftFixed: Record<string, string>
 ): number | null {
   const pct = parseDraftDecimal(draftPct[r.id], r.pctOverride);
   if (pct != null) {
-    return Math.round(r.profitNet * (pct / 100) * 100) / 100;
+    return Math.round(profitNetAfterFees * (pct / 100) * 100) / 100;
   }
   const fixed = parseDraftDecimal(draftFixed[r.id], r.fixedOverride);
   if (fixed != null) return fixed;
   return null;
+}
+
+/** Per-line estimate when Ref is on (same math as table Est.). */
+function lineReferralEstimate(
+  r: Row,
+  draftPct: Record<string, string>,
+  draftFixed: Record<string, string>,
+  totalMargin: number,
+  totalProcessingFees: number
+): number | null {
+  if (!r.include) return null;
+  const feeShare =
+    totalMargin > 0 && totalProcessingFees > 0
+      ? Math.round(totalProcessingFees * (Math.max(r.marginGross, 0) / totalMargin) * 100) / 100
+      : 0;
+  const adjustedMargin = r.marginGross - feeShare;
+  const ratio = r.marginGross > 0 ? adjustedMargin / r.marginGross : 1;
+  const adjustedVat = Math.round(r.vatOnMargin * ratio * 100) / 100;
+  const adjustedProfitNet = Math.round((adjustedMargin - adjustedVat) * 100) / 100;
+  return estimatedReferralAmount(adjustedProfitNet, r, draftPct, draftFixed);
 }
 
 function mapService(raw: ApiService): Row {
@@ -171,6 +192,83 @@ export default function OrderReferralServicesPanel({
     void load();
   }, [load, referralPartyId]);
 
+  const flushPendingRowWrites = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    let anyError: string | null = null;
+    for (const r of rows) {
+      const pctKey = `pct-${r.id}`;
+      const fixKey = `fix-${r.id}`;
+      const hadTimer = Boolean(timers.current[pctKey] || timers.current[fixKey]);
+      const hadDraft = draftPct[r.id] !== undefined || draftFixed[r.id] !== undefined;
+      if (!hadTimer && !hadDraft) continue;
+
+      if (timers.current[pctKey]) {
+        clearTimeout(timers.current[pctKey]);
+        delete timers.current[pctKey];
+      }
+      if (timers.current[fixKey]) {
+        clearTimeout(timers.current[fixKey]);
+        delete timers.current[fixKey];
+      }
+
+      const pctStr = draftPct[r.id] !== undefined ? draftPct[r.id] : r.pctOverride != null ? String(r.pctOverride) : "";
+      const fixStr = draftFixed[r.id] !== undefined ? draftFixed[r.id] : r.fixedOverride != null ? String(r.fixedOverride) : "";
+      const pctTrim = pctStr.trim().replace(",", ".");
+      const fixTrim = fixStr.trim().replace(",", ".");
+      const pctNum = pctTrim === "" ? null : parseFloat(pctTrim);
+      const fixNum = fixTrim === "" ? null : parseFloat(fixTrim);
+      if (pctTrim !== "" && !Number.isFinite(pctNum)) continue;
+      if (fixTrim !== "" && !Number.isFinite(fixNum)) continue;
+
+      const body: Record<string, unknown> =
+        fixNum != null
+          ? { referralCommissionFixedAmount: fixNum, referralCommissionPercentOverride: null }
+          : { referralCommissionPercentOverride: pctNum, referralCommissionFixedAmount: null };
+
+      try {
+        const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${r.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          referralSync?: { ok?: boolean; error?: string };
+        };
+        if (!res.ok) {
+          anyError = data.error || `Save failed (${res.status})`;
+        } else if (data.referralSync?.ok === false && data.referralSync.error) {
+          anyError = data.referralSync.error;
+        }
+      } catch {
+        anyError = "Network error while saving referral fields";
+      }
+    }
+    if (anyError) showToast("error", anyError);
+    await load();
+  }, [rows, draftPct, draftFixed, orderCode, load, showToast]);
+
+  useEffect(() => {
+    const onFlush = (e: Event) => {
+      const done = (e as CustomEvent<{ done?: () => void }>).detail?.done;
+      void (async () => {
+        try {
+          await flushPendingRowWrites();
+        } finally {
+          done?.();
+        }
+      })();
+    };
+    window.addEventListener(REFERRAL_FLUSH_PENDING_EVENT, onFlush);
+    return () => window.removeEventListener(REFERRAL_FLUSH_PENDING_EVENT, onFlush);
+  }, [flushPendingRowWrites]);
+
   const persist = useCallback(
     async (serviceId: string, body: Record<string, unknown>) => {
       try {
@@ -203,6 +301,10 @@ export default function OrderReferralServicesPanel({
           showToast("error", msg);
           return;
         }
+        const rs = data as { referralSync?: { ok?: boolean; error?: string } };
+        if (rs.referralSync?.ok === false && rs.referralSync.error) {
+          showToast("error", `Referral sync failed: ${rs.referralSync.error}`);
+        }
         await load();
       } catch {
         showToast("error", "Network error while saving");
@@ -211,6 +313,36 @@ export default function OrderReferralServicesPanel({
     },
     [orderCode, load, showToast]
   );
+
+  const persistPctNow = (serviceId: string, raw: string) => {
+    const k = `pct-${serviceId}`;
+    if (timers.current[k]) {
+      clearTimeout(timers.current[k]);
+      delete timers.current[k];
+    }
+    const trimmed = raw.trim().replace(",", ".");
+    const num = trimmed === "" ? null : parseFloat(trimmed);
+    if (trimmed !== "" && !Number.isFinite(num)) return;
+    void persist(serviceId, {
+      referralCommissionPercentOverride: num,
+      referralCommissionFixedAmount: num != null ? null : undefined,
+    });
+  };
+
+  const persistFixedNow = (serviceId: string, raw: string) => {
+    const k = `fix-${serviceId}`;
+    if (timers.current[k]) {
+      clearTimeout(timers.current[k]);
+      delete timers.current[k];
+    }
+    const trimmed = raw.trim().replace(",", ".");
+    const num = trimmed === "" ? null : parseFloat(trimmed);
+    if (trimmed !== "" && !Number.isFinite(num)) return;
+    void persist(serviceId, {
+      referralCommissionFixedAmount: num,
+      referralCommissionPercentOverride: num != null ? null : undefined,
+    });
+  };
 
   const schedulePct = (serviceId: string, raw: string) => {
     const prev = timers.current[`pct-${serviceId}`];
@@ -242,6 +374,16 @@ export default function OrderReferralServicesPanel({
     }, 500);
   };
 
+  const referralPartnerOrderTotal = useMemo(() => {
+    const totalMargin = rows.reduce((s, r) => s + Math.max(r.marginGross, 0), 0);
+    let sum = 0;
+    for (const r of rows) {
+      const est = lineReferralEstimate(r, draftPct, draftFixed, totalMargin, totalProcessingFees);
+      if (est != null) sum += est;
+    }
+    return Math.round(sum * 100) / 100;
+  }, [rows, draftPct, draftFixed, totalProcessingFees]);
+
   if (!referralPartyId) {
     return (
       <p className="text-sm text-gray-500">{t(lang, "order.referralServicesNeedPartner")}</p>
@@ -263,6 +405,19 @@ export default function OrderReferralServicesPanel({
         </button>
       </div>
       <p className="text-xs text-gray-500 mb-3">{t(lang, "order.referralServicesHint")}</p>
+
+      <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/90 px-4 py-3 shadow-sm">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/80">
+          {t(lang, "order.referralOrderTotalLabel")}
+        </div>
+        <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-emerald-950">
+          {formatMoney(referralPartnerOrderTotal)}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-snug text-emerald-900/75">
+          {t(lang, "order.referralOrderTotalHint")}
+        </p>
+      </div>
+
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="w-full min-w-[1260px] border-collapse text-left text-xs">
           <thead>
@@ -290,14 +445,15 @@ export default function OrderReferralServicesPanel({
             {(() => {
               const totalMargin = rows.reduce((s, r) => s + Math.max(r.marginGross, 0), 0);
               return rows.map((r) => {
-                const feeShare = totalMargin > 0 && totalProcessingFees > 0
-                  ? Math.round(totalProcessingFees * (Math.max(r.marginGross, 0) / totalMargin) * 100) / 100
-                  : 0;
+                const feeShare =
+                  totalMargin > 0 && totalProcessingFees > 0
+                    ? Math.round(totalProcessingFees * (Math.max(r.marginGross, 0) / totalMargin) * 100) / 100
+                    : 0;
                 const adjustedMargin = r.marginGross - feeShare;
                 const ratio = r.marginGross > 0 ? adjustedMargin / r.marginGross : 1;
                 const adjustedVat = Math.round(r.vatOnMargin * ratio * 100) / 100;
                 const adjustedProfitNet = Math.round((adjustedMargin - adjustedVat) * 100) / 100;
-                const est = estimatedReferralAmount(r, draftPct, draftFixed);
+                const est = lineReferralEstimate(r, draftPct, draftFixed, totalMargin, totalProcessingFees);
                 return (
               <tr key={r.id} className="hover:bg-gray-50/80">
                 <td className="px-2 py-1.5 text-gray-700">{r.category}</td>
@@ -347,6 +503,15 @@ export default function OrderReferralServicesPanel({
                       setDraftPct((d) => ({ ...d, [r.id]: v }));
                       schedulePct(r.id, v);
                     }}
+                    onBlur={() => {
+                      const raw =
+                        draftPct[r.id] !== undefined
+                          ? draftPct[r.id]
+                          : r.pctOverride != null
+                            ? String(r.pctOverride)
+                            : "";
+                      persistPctNow(r.id, raw);
+                    }}
                   />
                 </td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-gray-700" title={t(lang, "order.referralColEstHint")}>
@@ -370,6 +535,15 @@ export default function OrderReferralServicesPanel({
                       const v = e.target.value;
                       setDraftFixed((d) => ({ ...d, [r.id]: v }));
                       scheduleFixed(r.id, v);
+                    }}
+                    onBlur={() => {
+                      const raw =
+                        draftFixed[r.id] !== undefined
+                          ? draftFixed[r.id]
+                          : r.fixedOverride != null
+                            ? String(r.fixedOverride)
+                            : "";
+                      persistFixedNow(r.id, raw);
                     }}
                   />
                 </td>

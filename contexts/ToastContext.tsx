@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
-export type ToastType = "success" | "error";
+export type ToastType = "success" | "error" | "warning";
 
 export interface ToastMessage {
   type: ToastType;
@@ -48,7 +48,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <div
           className="fixed left-0 right-0 top-0 z-[200] flex items-center justify-center px-4 py-3 shadow-lg sm:left-4 sm:right-auto sm:top-4 sm:max-w-sm sm:rounded-lg"
           style={{
-            backgroundColor: toast.type === "success" ? "#059669" : "#dc2626",
+            backgroundColor:
+              toast.type === "success"
+                ? "#059669"
+                : toast.type === "warning"
+                  ? "#d97706"
+                  : "#dc2626",
             color: "#fff",
           }}
           role="status"
@@ -56,7 +61,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         >
           <div className="flex min-w-0 flex-1 items-center justify-between gap-3 sm:flex-initial">
             <span className="text-sm font-medium">
-              {toast.type === "success" ? "✓ " : "! "}
+              {toast.type === "success" ? "✓ " : toast.type === "warning" ? "⚠ " : "! "}
               {toast.message}
             </span>
             <button

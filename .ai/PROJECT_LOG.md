@@ -5,6 +5,39 @@
 
 ---
 
+## [2026-04-01] CW — Itinerary +BP: WhatsApp / URI drag fallback
+
+**Task:** `collectDroppedFilesAsync` — DownloadURL, text/uri-list, plain URL, DataTransferItem string; `dataTransferMayContainFiles` includes uri-list/DownloadURL; alert if still empty.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Itinerary +BP: PDF drag-drop upload
+
+**Task:** Fix boarding pass drop on +BP when `dataTransfer.files` is empty (use `items`/`getAsFile`), set `dropEffect`, suppress stray click after drop.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Результат:** `collectDroppedFiles` + `isExternalFileDrag` + `dropEffect="copy"`; `suppressBpDropClickRef` blocks post-drop click; `npx tsc --noEmit` OK.
+
+---
+
+## [2026-04-01] CW — Itinerary +BP drag follow-up (WebKit + overflow)
+
+**Task:** `onDragEnter` + `dataTransferMayContainFiles` (items + pdf MIME); `items` first in `collectDroppedFiles`; sync file read then async upload; remove `overflow-hidden` on `OrderServicesBlock` vertical wrapper so itinerary drop works in Safari.
+**Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Результат:** `npx tsc --noEmit` OK.
+
+---
+
 ## [2026-04-01] CW — Notifications page: React Query full list (limit 200)
 
 **Task:** `staffNotificationsFullQueryKey` + `fetchStaffNotificationsFull` + `useStaffNotificationsFullQuery`; `/notifications` uses shared cache; PATCH invalidates `staffNotificationsRootQueryKey` (toolbar + full); TopBar uses same root key for invalidation.

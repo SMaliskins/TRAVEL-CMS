@@ -21,8 +21,11 @@ import { ValidationIcon } from "@/components/ValidationIcon";
 import PassportDetailsInput, { PassportData } from "@/components/PassportDetailsInput";
 import CompanyDocParser from "@/components/CompanyDocParser";
 import CompanyContactsSection from "@/components/CompanyContactsSection";
+import DirectoryReferralOrdersList from "@/components/directory/DirectoryReferralOrdersList";
 import SingleDatePicker from "@/components/SingleDatePicker";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 import { formatPhoneForDisplay, normalizePhoneForSave } from "@/utils/phone";
 import { formatDateDDMMYYYY, normalizePersonDobToIso } from "@/utils/dateFormat";
 import { formatNameForDb } from "@/utils/nameFormat";
@@ -129,6 +132,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     { record, mode, onSubmit, onCancel, onValidationChange, onDirtyChange, onAvatarChange, onDocumentsChange, saveSuccess = false },
     ref
   ) {
+    const { prefs } = useUserPreferences();
+    const lang = prefs.language;
+
     const formRef = React.useRef<HTMLFormElement>(null);
     const subagentSectionRef = React.useRef<HTMLDivElement>(null);
     const referralSectionRef = React.useRef<HTMLDivElement>(null);
@@ -260,6 +266,11 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       record?.type || "person"
     );
     const [showReferralInApp, setShowReferralInApp] = useState(() => record?.showReferralInApp === true);
+
+    const [clientAppPassword, setClientAppPassword] = useState("");
+    const [clientAppPasswordConfirm, setClientAppPasswordConfirm] = useState("");
+    const [clientAppPasswordBusy, setClientAppPasswordBusy] = useState(false);
+    const [clientAppPasswordMsg, setClientAppPasswordMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
     // Person fields
     const [firstName, setFirstName] = useState(() => formatNameForDb(record?.firstName || ""));
@@ -1252,6 +1263,121 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             </span>
                           </span>
                         </label>
+                      </div>
+                    )}
+                    {mode === "edit" &&
+                      record?.id &&
+                      (roles.includes("client") || roles.includes("referral")) && (
+                      <div className="mt-4 max-w-lg rounded-lg border border-gray-200 bg-gray-50/90 p-4">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {t(lang, "directory.clientAppPasswordTitle")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-600 leading-snug">
+                          {t(lang, "directory.clientAppPasswordHint")}
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          <label className="block text-xs font-medium text-gray-700">
+                            {t(lang, "directory.clientAppPasswordLabel")}
+                            <input
+                              type="password"
+                              autoComplete="new-password"
+                              value={clientAppPassword}
+                              onChange={(e) => {
+                                setClientAppPassword(e.target.value);
+                                setClientAppPasswordMsg(null);
+                              }}
+                              className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                            />
+                          </label>
+                          <label className="block text-xs font-medium text-gray-700">
+                            {t(lang, "directory.clientAppPasswordConfirm")}
+                            <input
+                              type="password"
+                              autoComplete="new-password"
+                              value={clientAppPasswordConfirm}
+                              onChange={(e) => {
+                                setClientAppPasswordConfirm(e.target.value);
+                                setClientAppPasswordMsg(null);
+                              }}
+                              className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                            />
+                          </label>
+                        </div>
+                        {clientAppPasswordMsg ? (
+                          <p
+                            className={
+                              clientAppPasswordMsg.type === "ok"
+                                ? "mt-2 text-xs text-green-800"
+                                : "mt-2 text-xs text-red-700"
+                            }
+                            role="status"
+                          >
+                            {clientAppPasswordMsg.text}
+                          </p>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={clientAppPasswordBusy}
+                          onClick={async () => {
+                            setClientAppPasswordMsg(null);
+                            if (!email.trim()) {
+                              setClientAppPasswordMsg({
+                                type: "err",
+                                text: t(lang, "directory.clientAppPasswordEmailRequired"),
+                              });
+                              return;
+                            }
+                            if (clientAppPassword.length < 8) {
+                              setClientAppPasswordMsg({
+                                type: "err",
+                                text: t(lang, "directory.clientAppPasswordTooShort"),
+                              });
+                              return;
+                            }
+                            if (clientAppPassword !== clientAppPasswordConfirm) {
+                              setClientAppPasswordMsg({
+                                type: "err",
+                                text: t(lang, "directory.clientAppPasswordMismatch"),
+                              });
+                              return;
+                            }
+                            setClientAppPasswordBusy(true);
+                            try {
+                              const res = await fetchWithAuth(
+                                `/api/directory/${encodeURIComponent(record.id)}/client-app-password`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ password: clientAppPassword }),
+                                }
+                              );
+                              const j = await res.json().catch(() => ({}));
+                              if (!res.ok) {
+                                const errText =
+                                  j?.message ||
+                                  j?.error ||
+                                  (res.status === 400 ? "Validation error" : "Request failed");
+                                setClientAppPasswordMsg({ type: "err", text: String(errText) });
+                                return;
+                              }
+                              setClientAppPasswordMsg({
+                                type: "ok",
+                                text: t(lang, "directory.clientAppPasswordSuccess"),
+                              });
+                              setClientAppPassword("");
+                              setClientAppPasswordConfirm("");
+                            } catch {
+                              setClientAppPasswordMsg({ type: "err", text: "Request failed" });
+                            } finally {
+                              setClientAppPasswordBusy(false);
+                            }
+                          }}
+                          className="mt-3 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                        >
+                          {clientAppPasswordBusy
+                            ? t(lang, "directory.clientAppPasswordSaving")
+                            : t(lang, "directory.clientAppPasswordSave")}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -2691,6 +2817,13 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       Accrued totals appear after trips end and calculation is confirmed on the order. Order linking and
                       accrual sync are configured separately.
                     </p>
+                    {mode === "edit" && record?.id ? (
+                      <DirectoryReferralOrdersList
+                        directoryId={record.id}
+                        active={isReferral}
+                        className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                      />
+                    ) : null}
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-4">
                       <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">Default currency</label>

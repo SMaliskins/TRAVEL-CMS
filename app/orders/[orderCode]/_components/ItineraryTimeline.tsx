@@ -72,6 +72,164 @@ function formatBaggageTooltip(baggage: string): string {
   }
 }
 
+/** Safari/WebKit need dragenter + dragover preventDefault; types vary by source (Finder, Chrome PDF tab, Firefox). */
+function dataTransferMayContainFiles(dataTransfer: DataTransfer): boolean {
+  const types = Array.from(dataTransfer.types ?? []);
+  if (types.includes("Files") || types.includes("application/x-moz-file")) return true;
+  if (types.some((t) => t === "application/pdf" || t.endsWith("/pdf"))) return true;
+  // WhatsApp Desktop / some Electron apps: drag as URI list or Chromium DownloadURL, not as File list
+  if (types.includes("text/uri-list") || types.includes("DownloadURL")) return true;
+  const items = dataTransfer.items;
+  if (items?.length) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file") return true;
+      if (item.kind === "string" && item.type === "text/uri-list") return true;
+    }
+  }
+  return false;
+}
+
+function isFetchableUrl(s: string): boolean {
+  return (
+    s.startsWith("https://") ||
+    s.startsWith("http://") ||
+    s.startsWith("data:") ||
+    s.startsWith("blob:")
+  );
+}
+
+function guessFileNameFromUrl(url: string): string {
+  try {
+    if (url.startsWith("data:") || url.startsWith("blob:")) return "file";
+    const u = new URL(url);
+    const seg = u.pathname.split("/").filter(Boolean).pop();
+    if (seg) return decodeURIComponent(seg.split("?")[0]) || "file";
+  } catch {
+    /* ignore */
+  }
+  return "file";
+}
+
+/** Chromium drag type: mime:filename:url (URL may contain colons). */
+function parseChromiumDownloadUrl(raw: string): { mime: string; fileName: string; url: string } | null {
+  if (!raw) return null;
+  const idx = raw.indexOf(":");
+  if (idx < 0) return null;
+  const mime = raw.slice(0, idx);
+  const rest = raw.slice(idx + 1);
+  const idx2 = rest.indexOf(":");
+  if (idx2 < 0) return null;
+  const fileName = rest.slice(0, idx2);
+  const url = rest.slice(idx2 + 1);
+  if (!url || !isFetchableUrl(url)) return null;
+  return { mime: mime || "application/octet-stream", fileName: fileName || "file", url };
+}
+
+async function fetchUrlToFile(url: string, fileName: string, fallbackMime: string): Promise<File | null> {
+  try {
+    const res = await fetch(url, { mode: "cors", credentials: "omit", cache: "no-store" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const name = fileName || guessFileNameFromUrl(url);
+    return new File([blob], name, { type: blob.type || fallbackMime });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Snapshot all sync-readable data from DataTransfer before any await.
+ * DataTransfer is cleared by the browser after the synchronous drop handler returns.
+ */
+interface DroppedDataSnapshot {
+  files: File[];
+  downloadUrl: string;
+  uriList: string;
+  plainText: string;
+  stringItems: Array<{ type: string; value: string }>;
+}
+
+function snapshotDataTransfer(dataTransfer: DataTransfer): DroppedDataSnapshot {
+  // Sync file collection
+  const files: File[] = [];
+  const items = dataTransfer.items;
+  if (items?.length) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file") {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+  }
+  if (files.length === 0 && dataTransfer.files?.length) {
+    files.push(...Array.from(dataTransfer.files));
+  }
+
+  // Sync string collection
+  const downloadUrl = dataTransfer.getData("DownloadURL") || "";
+  const uriList = dataTransfer.getData("text/uri-list") || "";
+  const plainText = dataTransfer.getData("text/plain") || "";
+
+  // String items need async getAsString; capture references before DT is cleared
+  const stringItemRefs: Array<{ type: string; getAsString: (cb: (s: string) => void) => void }> = [];
+  if (items?.length) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "string" && (item.type === "text/uri-list" || item.type === "text/plain")) {
+        stringItemRefs.push({ type: item.type, getAsString: item.getAsString.bind(item) });
+      }
+    }
+  }
+
+  // Resolve string items synchronously via callback (they are populated before return in most browsers)
+  const stringItems: Array<{ type: string; value: string }> = [];
+  for (const ref of stringItemRefs) {
+    ref.getAsString((s) => {
+      stringItems.push({ type: ref.type, value: s || "" });
+    });
+  }
+
+  return { files, downloadUrl, uriList, plainText, stringItems };
+}
+
+async function resolveDroppedFiles(snap: DroppedDataSnapshot): Promise<File[]> {
+  if (snap.files.length > 0) return snap.files;
+
+  const parsedDu = parseChromiumDownloadUrl(snap.downloadUrl);
+  if (parsedDu) {
+    const f = await fetchUrlToFile(parsedDu.url, parsedDu.fileName, parsedDu.mime);
+    if (f) return [f];
+  }
+
+  if (snap.uriList) {
+    const first = snap.uriList
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => isFetchableUrl(l));
+    if (first) {
+      const f = await fetchUrlToFile(first, guessFileNameFromUrl(first), "application/octet-stream");
+      if (f) return [f];
+    }
+  }
+
+  if (snap.plainText && isFetchableUrl(snap.plainText.trim())) {
+    const f = await fetchUrlToFile(snap.plainText.trim(), guessFileNameFromUrl(snap.plainText.trim()), "application/octet-stream");
+    if (f) return [f];
+  }
+
+  for (const si of snap.stringItems) {
+    const line = si.value.trim().split(/\r?\n/)[0];
+    if (line && isFetchableUrl(line)) {
+      const f = await fetchUrlToFile(line, guessFileNameFromUrl(line), "application/octet-stream");
+      if (f) return [f];
+    }
+  }
+
+  return [];
+}
+
 /** Package Tour transfer label: skip itinerary cards when user entered only a dash (ASCII/Unicode) or spaces. */
 function tourPackageTransferShouldRender(transferType: string | null | undefined): boolean {
   if (transferType == null) return false;
@@ -1023,7 +1181,24 @@ export default function ItineraryTimeline({
   const [bpMenuServiceId, setBpMenuServiceId] = useState<string | null>(null);
   const [dragOverBpEventId, setDragOverBpEventId] = useState<string | null>(null);
   const bpFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** Browsers may fire a click after drop; avoid opening the file picker. */
+  const suppressBpDropClickRef = useRef(false);
   const bpMenuRef = useRef<HTMLDivElement>(null);
+
+  // Prevent browser from navigating to dropped files (opens PDF in new tab by default)
+  useEffect(() => {
+    const stopDefault = (e: DragEvent) => {
+      if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes("Files")) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("dragover", stopDefault);
+    document.addEventListener("drop", stopDefault);
+    return () => {
+      document.removeEventListener("dragover", stopDefault);
+      document.removeEventListener("drop", stopDefault);
+    };
+  }, []);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (bpMenuRef.current && !bpMenuRef.current.contains(e.target as Node)) setBpMenuServiceId(null);
@@ -1520,31 +1695,53 @@ export default function ItineraryTimeline({
                                   const isDragOver = dragOverBpEventId === event.id;
                                   return (
                                     <div
-                                      onClick={() => bpFileInputRefs.current[event.id]?.click()}
+                                      onClick={() => {
+                                        if (suppressBpDropClickRef.current) return;
+                                        bpFileInputRefs.current[event.id]?.click();
+                                      }}
+                                      onDragEnter={(e) => {
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect = "copy";
+                                        if (dataTransferMayContainFiles(e.dataTransfer)) setDragOverBpEventId(event.id);
+                                      }}
                                       onDragOver={(e) => {
                                         e.preventDefault();
-                                        e.stopPropagation();
-                                        if (e.dataTransfer.types.includes("Files")) setDragOverBpEventId(event.id);
+                                        e.dataTransfer.dropEffect = "copy";
+                                        if (dataTransferMayContainFiles(e.dataTransfer)) setDragOverBpEventId(event.id);
                                       }}
                                       onDragLeave={(e) => {
                                         e.preventDefault();
-                                        e.stopPropagation();
                                         if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverBpEventId(null);
                                       }}
-                                      onDrop={async (e) => {
+                                      onDrop={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         setDragOverBpEventId(null);
-                                        const files = Array.from(e.dataTransfer.files || []);
-                                        if (!onUploadBoardingPass || !event.serviceId || files.length === 0 || clientIds.length === 0) return;
-                                        setUploadingServiceId(event.serviceId);
-                                        try {
-                                          for (let i = 0; i < files.length; i++) {
-                                            await onUploadBoardingPass(event.serviceId, files[i], clientIds[i % clientIds.length], event.flightNumber || "");
+                                        if (!onUploadBoardingPass || !event.serviceId || clientIds.length === 0) return;
+                                        suppressBpDropClickRef.current = true;
+                                        window.setTimeout(() => { suppressBpDropClickRef.current = false; }, 0);
+                                        const serviceId = event.serviceId;
+                                        const flightNr = event.flightNumber || "";
+                                        // Snapshot DataTransfer synchronously — browser clears it after this handler returns
+                                        const snap = snapshotDataTransfer(e.dataTransfer);
+                                        void (async () => {
+                                          const files = await resolveDroppedFiles(snap);
+                                          if (files.length === 0) {
+                                            alert(
+                                              "Could not read the dropped file. Save it to your computer first, then drag from the folder or click +BP."
+                                            );
+                                            return;
                                           }
-                                        } finally {
-                                          setUploadingServiceId(null);
-                                        }
+                                          setUploadingServiceId(serviceId);
+                                          try {
+                                            for (let i = 0; i < files.length; i++) {
+                                              const clientId = clientIds[i % clientIds.length];
+                                              await onUploadBoardingPass(serviceId, files[i], clientId, flightNr);
+                                            }
+                                          } finally {
+                                            setUploadingServiceId(null);
+                                          }
+                                        })();
                                       }}
                                       className={`cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm font-medium transition-all border-2 ${
                                         isDragOver

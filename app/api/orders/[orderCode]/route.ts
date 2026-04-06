@@ -226,9 +226,10 @@ export async function PATCH(
       }).catch((e: unknown) => console.error("[Push] fire-and-forget error:", e));
     }
 
-    syncOrderReferralAccruals(supabaseAdmin, order.id, companyId).catch((e) =>
-      console.warn("[Order PATCH] syncOrderReferralAccruals:", e)
-    );
+    const referralSync = await syncOrderReferralAccruals(supabaseAdmin, order.id, companyId);
+    if (!referralSync.ok) {
+      console.error("[Order PATCH] syncOrderReferralAccruals failed:", referralSync.error);
+    }
 
     let referral_party_display_name: string | null = null;
     if (order.referral_party_id) {
@@ -242,6 +243,7 @@ export async function PATCH(
 
     return NextResponse.json({
       order: { ...order, referral_party_display_name },
+      referralSync,
     });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";

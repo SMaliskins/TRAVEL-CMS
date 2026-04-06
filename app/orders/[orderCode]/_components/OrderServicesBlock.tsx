@@ -2443,8 +2443,8 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           animation: services-row-in 0.35s ease-out forwards;
         }
       `}</style>
-      {/* Vertical layout: Services on top, Itinerary + Map below */}
-      <div className="space-y-4 overflow-hidden">
+      {/* Vertical layout: Services on top, Itinerary + Map below — no overflow-hidden: breaks file drop on itinerary (WebKit) */}
+      <div className="space-y-4">
         {/* Services table — skeleton when loading; Itinerary block always rendered below */}
         {isLoading ? servicesTableContent : (
         <>
@@ -3085,8 +3085,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                 formData.append("flightNumber", flightNumber);
                 try {
                   const response = await fetch(`/api/services/${serviceId}/boarding-passes`, { method: "POST", body: formData });
-                  if (response.ok) fetchServices();
-                  else {
+                  if (response.ok) {
+                    void fetchServices(true);
+                  } else {
                     const err = await response.json().catch(() => ({}));
                     alert(err.error || `Upload failed (${response.status})`);
                   }
@@ -3099,7 +3100,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
               onDeleteBoardingPass={async (serviceId, passId) => {
                 if (!confirm("Delete this boarding pass?")) return;
                 const response = await fetch(`/api/services/${serviceId}/boarding-passes?passId=${passId}`, { method: "DELETE" });
-                if (response.ok) fetchServices(); else alert("Failed to delete boarding pass");
+                if (response.ok) fetchServices(true); else alert("Failed to delete boarding pass");
               }}
               onEditService={(serviceId) => setEditServiceId(serviceId)}
               selectedBoardingPasses={selectedBoardingPasses}

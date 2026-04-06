@@ -40,6 +40,39 @@ type ServiceRow = {
   referral_commission_fixed_amount?: number | string | null;
 };
 
+/** Profit net of VAT after allocating card processing fees across lines — same idea as OrderReferralServicesPanel + orders list. */
+function profitNetByServiceIdAfterFees(
+  services: ServiceRow[],
+  totalProcessingFees: number
+): Map<string, number> {
+  const list = services.map((svc) => {
+    const econ = computeServiceLineEconomics({
+      client_price: svc.client_price,
+      service_price: svc.service_price,
+      service_type: svc.service_type,
+      category: svc.category,
+      commission_amount: svc.commission_amount,
+      vat_rate: svc.vat_rate,
+    });
+    return { id: svc.id, econ };
+  });
+  const totalMargin = list.reduce((sum, x) => sum + Math.max(x.econ.marginGross, 0), 0);
+  const map = new Map<string, number>();
+  for (const { id, econ } of list) {
+    const marginGross = econ.marginGross;
+    const feeShare =
+      totalMargin > 0 && totalProcessingFees > 0
+        ? Math.round(totalProcessingFees * (Math.max(marginGross, 0) / totalMargin) * 100) / 100
+        : 0;
+    const adjustedMargin = marginGross - feeShare;
+    const ratio = marginGross > 0 ? adjustedMargin / marginGross : 1;
+    const adjustedVat = Math.round(econ.vatOnMargin * ratio * 100) / 100;
+    const adjustedProfitNet = Math.round((adjustedMargin - adjustedVat) * 100) / 100;
+    map.set(id, adjustedProfitNet);
+  }
+  return map;
+}
+
 /**
  * Referral accrual lines: base = profit net of VAT (same as orders list profit per line).
  * Fixed amount per line wins over % override; % override wins over partner category rate.
@@ -48,7 +81,7 @@ export async function syncOrderReferralAccruals(
   supabase: SupabaseClient,
   orderId: string,
   companyId: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; linesWritten: number } | { ok: false; error: string }> {
   try {
     const { data: order, error: oErr } = await supabase
       .from("orders")
@@ -65,18 +98,32 @@ export async function syncOrderReferralAccruals(
 
     const referralId = order.referral_party_id as string | null;
     if (!referralId) {
-      return { ok: true };
+      return { ok: true, linesWritten: 0 };
     }
 
-    const { data: refRow } = await supabase
-      .from("referral_party")
-      .select("party_id")
-      .eq("party_id", referralId)
+    const { data: partyOk } = await supabase
+      .from("party")
+      .select("id")
+      .eq("id", referralId)
       .eq("company_id", companyId)
       .maybeSingle();
+    if (!partyOk) {
+      return { ok: true, linesWritten: 0 };
+    }
 
-    if (!refRow) {
-      return { ok: true };
+    const { error: rpUpsertErr } = await supabase.from("referral_party").upsert(
+      {
+        party_id: referralId,
+        company_id: companyId,
+        is_active: true,
+        default_currency: "EUR",
+        notes: null,
+      },
+      { onConflict: "party_id", ignoreDuplicates: true }
+    );
+    if (rpUpsertErr) {
+      console.error("[syncOrderReferralAccruals] referral_party upsert:", rpUpsertErr);
+      return { ok: false, error: rpUpsertErr.message };
     }
 
     const { data: rates } = await supabase
@@ -92,13 +139,27 @@ export async function syncOrderReferralAccruals(
       ])
     );
 
-    const { data: services } = await supabase
-      .from("order_services")
-      .select(
-        "id, category_id, category, client_price, service_price, currency, res_status, service_type, invoice_id, commission_amount, vat_rate, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount"
-      )
-      .eq("order_id", orderId)
-      .eq("company_id", companyId);
+    const [{ data: services }, { data: payRows }] = await Promise.all([
+      supabase
+        .from("order_services")
+        .select(
+          "id, category_id, category, client_price, service_price, currency, res_status, service_type, invoice_id, commission_amount, vat_rate, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount"
+        )
+        .eq("order_id", orderId)
+        .eq("company_id", companyId),
+      supabase
+        .from("payments")
+        .select("processing_fee")
+        .eq("order_id", orderId)
+        .eq("company_id", companyId)
+        .neq("status", "cancelled"),
+    ]);
+
+    const totalProcessingFees = (payRows || []).reduce(
+      (s, r) => s + (Number((r as { processing_fee?: unknown }).processing_fee) || 0),
+      0
+    );
+    const profitAfterFees = profitNetByServiceIdAfterFees((services || []) as ServiceRow[], totalProcessingFees);
 
     const { data: categoryRows } = await supabase
       .from("travel_service_categories")
@@ -124,15 +185,16 @@ export async function syncOrderReferralAccruals(
       const cancelled = String(svc.res_status || "") === "cancelled";
       if (cancelled && !svc.invoice_id) continue;
 
-      const econ = computeServiceLineEconomics({
-        client_price: svc.client_price,
-        service_price: svc.service_price,
-        service_type: svc.service_type,
-        category: svc.category,
-        commission_amount: svc.commission_amount,
-        vat_rate: svc.vat_rate,
-      });
-      const base = econ.profitNetOfVat;
+      const base =
+        profitAfterFees.get(svc.id) ??
+        computeServiceLineEconomics({
+          client_price: svc.client_price,
+          service_price: svc.service_price,
+          service_type: svc.service_type,
+          category: svc.category,
+          commission_amount: svc.commission_amount,
+          vat_rate: svc.vat_rate,
+        }).profitNetOfVat;
 
       const fixedRaw = svc.referral_commission_fixed_amount;
       const useFixed =
@@ -196,7 +258,7 @@ export async function syncOrderReferralAccruals(
       }
     }
 
-    return { ok: true };
+    return { ok: true, linesWritten: rows.length };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("[syncOrderReferralAccruals]", msg);
