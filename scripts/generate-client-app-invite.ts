@@ -7,12 +7,14 @@
  * party_uuid     = party.id in CRM (the influencer / client card)
  * agent UUID     = optional; auth.users.id that exists in public.profiles(user_id). If omitted, invitation has no inviter (DB stores NULL).
  *
- * CLIENT_JWT_INVITATION_SECRET must match the server (e.g. Vercel env + local .env.local).
+ * Signing matches the API: optional CLIENT_JWT_INVITATION_SECRET, else derived from SUPABASE_SERVICE_ROLE_KEY (same as CRM).
  */
 
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 import { SignJWT } from 'jose'
+import { deriveClientJwtKeyNode } from '../lib/client-auth/deriveClientJwtKeyNode'
+import { DUMMY_SERVICE_ROLE } from '../lib/client-auth/clientJwtPurpose'
 
 const DEV_FALLBACK = 'dev-invitation-secret-change-in-prod'
 
@@ -36,11 +38,15 @@ function loadEnvLocal() {
 
 function invitationSecret(): Uint8Array {
   const v = process.env.CLIENT_JWT_INVITATION_SECRET?.trim()
-  const secret = v && v !== DEV_FALLBACK ? v : DEV_FALLBACK
-  if (!v) {
-    console.warn('[invite] CLIENT_JWT_INVITATION_SECRET not set — using dev fallback (must match API server).')
+  if (v && v !== DEV_FALLBACK) {
+    return new TextEncoder().encode(v)
   }
-  return new TextEncoder().encode(secret)
+  const sr = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  if (sr && sr !== DUMMY_SERVICE_ROLE) {
+    return deriveClientJwtKeyNode('invitation', sr)
+  }
+  console.warn('[invite] No CLIENT_JWT_INVITATION_SECRET or SUPABASE_SERVICE_ROLE_KEY — using dev fallback (must match API server).')
+  return new TextEncoder().encode(DEV_FALLBACK)
 }
 
 async function main() {

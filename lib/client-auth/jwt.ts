@@ -1,55 +1,56 @@
 import { SignJWT, jwtVerify } from 'jose'
 import crypto from 'crypto'
+import { CLIENT_JWT_PURPOSE, DUMMY_SERVICE_ROLE, type ClientJwtPurpose } from './clientJwtPurpose'
+import { deriveClientJwtKeyNode } from './deriveClientJwtKeyNode'
 
 const DEV_ACCESS_FALLBACK = 'dev-access-secret-change-in-prod'
 const DEV_REFRESH_FALLBACK = 'dev-refresh-secret-change-in-prod'
 const DEV_INVITATION_FALLBACK = 'dev-invitation-secret-change-in-prod'
 
-function readJwtSecret(
-  envName: "CLIENT_JWT_ACCESS_SECRET" | "CLIENT_JWT_REFRESH_SECRET" | "CLIENT_JWT_INVITATION_SECRET",
+type JwtEnvName =
+  | 'CLIENT_JWT_ACCESS_SECRET'
+  | 'CLIENT_JWT_REFRESH_SECRET'
+  | 'CLIENT_JWT_INVITATION_SECRET'
+
+function signingKey(
+  envName: JwtEnvName,
   devFallback: string,
-  strict: boolean
-): string {
-  const value = process.env[envName]?.trim()
-  const isProd = process.env.NODE_ENV === 'production'
-
-  if (value && value !== devFallback) return value
-
-  if (isProd && strict) {
-    throw new Error(`[SECURITY] ${envName} must be set in production`)
+  purpose: ClientJwtPurpose
+): Uint8Array {
+  const explicit = process.env[envName]?.trim()
+  if (explicit && explicit !== devFallback) {
+    return new TextEncoder().encode(explicit)
   }
-
-  if (!value) {
+  const sr = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  if (sr && sr !== DUMMY_SERVICE_ROLE) {
+    return deriveClientJwtKeyNode(purpose, sr)
+  }
+  const isProd = process.env.NODE_ENV === 'production'
+  if (isProd) {
+    throw new Error(
+      `[SECURITY] Set ${envName} or ensure SUPABASE_SERVICE_ROLE_KEY is configured (same key as CRM server)`
+    )
+  }
+  if (!explicit) {
     console.warn(`[SECURITY] ${envName} is not set. Using development fallback secret.`)
   }
-
-  return devFallback
+  return new TextEncoder().encode(devFallback)
 }
 
-/** Production login/signing fails without real secrets; use to return 503 instead of a misleading 401/500. */
-export function isClientJwtConfiguredForProduction(): boolean {
-  if (process.env.NODE_ENV !== 'production') return true
-  const access = process.env.CLIENT_JWT_ACCESS_SECRET?.trim()
-  const refresh = process.env.CLIENT_JWT_REFRESH_SECRET?.trim()
-  if (!access || !refresh) return false
-  if (access === DEV_ACCESS_FALLBACK || refresh === DEV_REFRESH_FALLBACK) return false
-  return true
+function accessSecret(): Uint8Array {
+  return signingKey('CLIENT_JWT_ACCESS_SECRET', DEV_ACCESS_FALLBACK, 'access')
 }
-
-function accessSecret(strict = true): Uint8Array {
-  return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_ACCESS_SECRET', DEV_ACCESS_FALLBACK, strict))
+function refreshSecret(): Uint8Array {
+  return signingKey('CLIENT_JWT_REFRESH_SECRET', DEV_REFRESH_FALLBACK, 'refresh')
 }
-function refreshSecret(strict = true): Uint8Array {
-  return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_REFRESH_SECRET', DEV_REFRESH_FALLBACK, strict))
-}
-function invitationSecret(strict = true): Uint8Array {
-  return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_INVITATION_SECRET', DEV_INVITATION_FALLBACK, strict))
+function invitationSecret(): Uint8Array {
+  return signingKey('CLIENT_JWT_INVITATION_SECRET', DEV_INVITATION_FALLBACK, 'invitation')
 }
 
 export interface ClientTokenPayload {
-  clientId: string      // client_profiles.id
-  crmClientId: string   // client_profiles.crm_client_id → party.id
-  sub: string           // same as clientId
+  clientId: string // client_profiles.id
+  crmClientId: string // client_profiles.crm_client_id → party.id
+  sub: string // same as clientId
 }
 
 export async function signAccessToken(payload: ClientTokenPayload): Promise<string> {

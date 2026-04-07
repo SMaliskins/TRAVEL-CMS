@@ -511,7 +511,7 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.errorValidation": "Enter email and password.",
     "referralPortal.errorSignInFailed": "Sign in failed.",
     "referralPortal.errorServerMisconfigured":
-      "Sign-in is unavailable because the server is not fully configured (database access or auth secrets). Ask the site admin to set SUPABASE_SERVICE_ROLE_KEY, CLIENT_JWT_ACCESS_SECRET, and CLIENT_JWT_REFRESH_SECRET on the host.",
+      "Sign-in failed due to a server error. If it persists, the host may be missing the same Supabase service key used by the CRM.",
     "referralPortal.errorReferralDisabled": "Referral is not enabled for your account.",
     "referralPortal.errorLoadFailed": "Could not load referral data.",
     "referralPortal.noData": "No data",
@@ -1025,7 +1025,7 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.errorValidation": "Введите email и пароль.",
     "referralPortal.errorSignInFailed": "Не удалось войти.",
     "referralPortal.errorServerMisconfigured":
-      "Вход недоступен: на сервере не настроены доступ к базе или секреты авторизации. Попросите администратора задать SUPABASE_SERVICE_ROLE_KEY, CLIENT_JWT_ACCESS_SECRET и CLIENT_JWT_REFRESH_SECRET на хостинге.",
+      "Не удалось войти из‑за ошибки сервера. Если повторяется, на хостинге может не хватать того же ключа Supabase (service role), что и у CRM.",
     "referralPortal.errorReferralDisabled": "Раздел реферала не включён для вашего аккаунта.",
     "referralPortal.errorLoadFailed": "Не удалось загрузить данные.",
     "referralPortal.noData": "Нет данных",
@@ -1539,7 +1539,7 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.errorValidation": "Ievadiet e-pastu un paroli.",
     "referralPortal.errorSignInFailed": "Neizdevās pieslēgties.",
     "referralPortal.errorServerMisconfigured":
-      "Pieslēgties nevar: serveris nav pilnībā konfigurēts (datubāzes piekļuve vai autentifikācijas noslēpumi). Lūdzu, lūdziet administratoram iestatīt SUPABASE_SERVICE_ROLE_KEY, CLIENT_JWT_ACCESS_SECRET un CLIENT_JWT_REFRESH_SECRET uz hosta.",
+      "Pieslēgties neizdevās servera kļūdas dēļ. Ja atkārtojas, uz hosta var trūkt tā paša Supabase service role atslēgas kā CRM.",
     "referralPortal.errorReferralDisabled": "Ieteikuma sadaļa nav ieslēgta jūsu kontam.",
     "referralPortal.errorLoadFailed": "Neizdevās ielādēt datus.",
     "referralPortal.noData": "Nav datu",
