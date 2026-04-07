@@ -8,7 +8,6 @@ import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { normalizePersonDobToIso } from "@/utils/dateFormat";
-import bcrypt from "bcryptjs";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -844,33 +843,6 @@ export async function PUT(
           .eq("party_id", id);
         if (refAppErr) {
           console.error("[Directory PUT] client_party show_referral_in_app:", refAppErr);
-        }
-      }
-    }
-
-    // Update client app password (bcrypt hash → client_profiles.password_hash)
-    if (typeof updates.clientAppPassword === "string" && updates.clientAppPassword.length >= 8) {
-      const passwordHash = await bcrypt.hash(updates.clientAppPassword, 12);
-      const { data: existingProfile } = await supabaseAdmin
-        .from("client_profiles")
-        .select("id")
-        .eq("crm_client_id", id)
-        .maybeSingle();
-
-      if (existingProfile) {
-        const { error: pwErr } = await supabaseAdmin
-          .from("client_profiles")
-          .update({ password_hash: passwordHash })
-          .eq("crm_client_id", id);
-        if (pwErr) {
-          console.error("[Directory PUT] client_profiles password update:", pwErr);
-        }
-      } else {
-        const { error: insertErr } = await supabaseAdmin
-          .from("client_profiles")
-          .insert({ crm_client_id: id, password_hash: passwordHash });
-        if (insertErr) {
-          console.error("[Directory PUT] client_profiles insert:", insertErr);
         }
       }
     }
