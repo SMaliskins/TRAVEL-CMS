@@ -546,6 +546,14 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.partyType.client": "Client",
     "referralPortal.partyType.partner": "Partner",
     "referralPortal.partyType.referral": "Referral partner",
+    "referralPortal.walletTitle": "Phone wallet",
+    "referralPortal.walletSubtitle":
+      "Add a snapshot card to Apple Wallet or Google Wallet. Balances on the card update when your agency enables this feature; full details stay on this site.",
+    "referralPortal.addToAppleWallet": "Add to Apple Wallet",
+    "referralPortal.addToGoogleWallet": "Add to Google Wallet",
+    "referralPortal.walletComingSoon":
+      "Wallet passes are not active yet. Your agency will turn this on when Apple / Google credentials are configured.",
+    "referralPortal.walletError": "Could not start wallet setup. Try again or open this page from your phone.",
   },
   ru: {
     "profile.title": "Мой профиль",
@@ -1074,6 +1082,14 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.partyType.client": "Клиент",
     "referralPortal.partyType.partner": "Партнёр",
     "referralPortal.partyType.referral": "Реферальный партнёр",
+    "referralPortal.walletTitle": "Кошелёк в телефоне",
+    "referralPortal.walletSubtitle":
+      "Добавьте карточку-снимок в Apple Wallet или Google Wallet. Суммы на карточке будут обновляться, когда агентство подключит эту функцию; полные данные — только на этом сайте.",
+    "referralPortal.addToAppleWallet": "Добавить в Apple Wallet",
+    "referralPortal.addToGoogleWallet": "Добавить в Google Wallet",
+    "referralPortal.walletComingSoon":
+      "Пассы для кошелька пока не включены. Агентство подключит их после настройки Apple / Google.",
+    "referralPortal.walletError": "Не удалось начать добавление в кошелёк. Попробуйте снова или откройте страницу с телефона.",
   },
   lv: {
     "profile.title": "Mans profils",
@@ -1602,6 +1618,14 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.partyType.client": "Klients",
     "referralPortal.partyType.partner": "Partneris",
     "referralPortal.partyType.referral": "Ieteikuma partneris",
+    "referralPortal.walletTitle": "Maciņš tālrunī",
+    "referralPortal.walletSubtitle":
+      "Pievienojiet momentuzņēmuma karti Apple Wallet vai Google Wallet. Summas atjaunosies, kad aģentūra ieslēgs šo funkciju; pilna informācija paliek šajā vietnē.",
+    "referralPortal.addToAppleWallet": "Pievienot Apple Wallet",
+    "referralPortal.addToGoogleWallet": "Pievienot Google Wallet",
+    "referralPortal.walletComingSoon":
+      "Maka kartes vēl nav aktivizētas. Aģentūra tās ieslēgs pēc Apple / Google iestatīšanas.",
+    "referralPortal.walletError": "Neizdevās sākt pievienošanu makam. Mēģiniet vēlreiz vai atveriet lapu tālrunī.",
   },
 };
 

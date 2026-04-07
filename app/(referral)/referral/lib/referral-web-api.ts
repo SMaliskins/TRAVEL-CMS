@@ -2,6 +2,48 @@ import type { ReferralOverview } from './types'
 
 const BASE = '/api/client/v1'
 
+export type WalletPlatform = 'apple' | 'google'
+
+/** Returns whether a pass file was downloaded; `not_configured` when backend Phase B is not wired yet. */
+export async function requestWalletPass(
+  platform: WalletPlatform
+): Promise<'downloaded' | 'not_configured'> {
+  let res = await fetch(`${BASE}/referral/wallet-pass?platform=${platform}`, {
+    credentials: 'include',
+    cache: 'no-store',
+  })
+  if (res.status === 401) {
+    const ok = await tryRefresh()
+    if (!ok) {
+      throw new Error('UNAUTHORIZED')
+    }
+    res = await fetch(`${BASE}/referral/wallet-pass?platform=${platform}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+  }
+  const ct = res.headers.get('content-type') || ''
+  if (res.ok && ct.includes('application/vnd.apple.pkpass')) {
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'referral.pkpass'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    return 'downloaded'
+  }
+  if (res.status === 501) {
+    return 'not_configured'
+  }
+  if (res.status === 403) {
+    throw new Error('REFERRAL_APP_DISABLED')
+  }
+  throw new Error('LOAD_FAILED')
+}
+
 async function tryRefresh(): Promise<boolean> {
   const res = await fetch(`${BASE}/auth/refresh`, {
     method: 'POST',

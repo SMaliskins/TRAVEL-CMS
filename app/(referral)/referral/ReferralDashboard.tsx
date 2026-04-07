@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { formatDateLocale } from './lib/format-date'
 import type { ReferralOverview } from './lib/types'
-import { getReferralOverview, webLogout } from './lib/referral-web-api'
+import { getReferralOverview, requestWalletPass, webLogout } from './lib/referral-web-api'
 
 function money(amount: number, currency: string) {
   const n = Math.round(amount * 100) / 100
@@ -50,6 +50,24 @@ export function ReferralDashboard() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [walletHint, setWalletHint] = useState<string | null>(null)
+  const [walletLoading, setWalletLoading] = useState<'apple' | 'google' | null>(null)
+  const [walletEnv, setWalletEnv] = useState<{ isIOS: boolean; isAndroid: boolean }>({
+    isIOS: false,
+    isAndroid: false,
+  })
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    const ua = navigator.userAgent
+    const isIOS =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (typeof navigator.maxTouchPoints === 'number' &&
+        navigator.maxTouchPoints > 1 &&
+        /MacIntel/.test(navigator.platform))
+    const isAndroid = /Android/i.test(ua)
+    setWalletEnv({ isIOS, isAndroid })
+  }, [])
 
   const load = useCallback(async () => {
     setError(null)
@@ -102,6 +120,74 @@ export function ReferralDashboard() {
     const tr = t(lang, k)
     return tr === k ? raw : tr
   }
+
+  async function onAddToWallet(platform: 'apple' | 'google') {
+    setWalletHint(null)
+    setWalletLoading(platform)
+    try {
+      const r = await requestWalletPass(platform)
+      if (r === 'not_configured') {
+        setWalletHint(t(lang, 'referralPortal.walletComingSoon'))
+      }
+    } catch {
+      setWalletHint(t(lang, 'referralPortal.walletError'))
+    } finally {
+      setWalletLoading(null)
+    }
+  }
+
+  const walletButtons =
+    walletEnv.isAndroid && !walletEnv.isIOS ? (
+      <>
+        <button
+          type="button"
+          disabled={walletLoading !== null}
+          onClick={() => void onAddToWallet('google')}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
+        >
+          {walletLoading === 'google' ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+          ) : null}
+          {t(lang, 'referralPortal.addToGoogleWallet')}
+        </button>
+        <button
+          type="button"
+          disabled={walletLoading !== null}
+          onClick={() => void onAddToWallet('apple')}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-900 disabled:opacity-60"
+        >
+          {walletLoading === 'apple' ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          ) : null}
+          {t(lang, 'referralPortal.addToAppleWallet')}
+        </button>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          disabled={walletLoading !== null}
+          onClick={() => void onAddToWallet('apple')}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-900 disabled:opacity-60"
+        >
+          {walletLoading === 'apple' ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          ) : null}
+          {t(lang, 'referralPortal.addToAppleWallet')}
+        </button>
+        <button
+          type="button"
+          disabled={walletLoading !== null}
+          onClick={() => void onAddToWallet('google')}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
+        >
+          {walletLoading === 'google' ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+          ) : null}
+          {t(lang, 'referralPortal.addToGoogleWallet')}
+        </button>
+      </>
+    )
 
   if (loading && !data) {
     return (
@@ -229,6 +315,20 @@ export function ReferralDashboard() {
         <CurrencyTotals title={t(lang, 'referralPortal.accrued')} by={data.accruedByCurrency} />
         <CurrencyTotals title={t(lang, 'referralPortal.settled')} by={data.settledByCurrency} />
         <CurrencyTotals title={t(lang, 'referralPortal.available')} by={data.availableByCurrency} />
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-1 text-base font-bold text-[#1a3a5c]">{t(lang, 'referralPortal.walletTitle')}</h2>
+        <p className="mb-4 text-sm leading-relaxed text-slate-600">{t(lang, 'referralPortal.walletSubtitle')}</p>
+        <div className="flex flex-col gap-2">{walletButtons}</div>
+        {walletHint ? (
+          <p
+            className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200/80"
+            role="status"
+          >
+            {walletHint}
+          </p>
+        ) : null}
       </section>
 
       <h3 className="text-[15px] font-bold text-[#1a3a5c]">{t(lang, 'referralPortal.commissionLines')}</h3>
