@@ -98,9 +98,19 @@ export async function POST(
 
     const { data: existing } = await supabaseAdmin
       .from("client_profiles")
-      .select("id")
+      .select("id, password_hash")
       .eq("crm_client_id", partyId)
       .maybeSingle();
+
+    console.log("[client-app-password]", {
+      partyId,
+      email: emailNormalized,
+      existingProfileId: existing?.id ?? null,
+      existingHashPrefix: existing?.password_hash
+        ? String(existing.password_hash).substring(0, 7)
+        : null,
+      newHashPrefix: passwordHash.substring(0, 7),
+    });
 
     if (existing?.id) {
       const { error: updErr } = await supabaseAdmin
@@ -114,6 +124,7 @@ export async function POST(
         console.error("[client-app-password] update:", updErr);
         return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
       }
+      console.log("[client-app-password] updated password for profile:", existing.id);
     } else {
       const { error: insErr } = await supabaseAdmin.from("client_profiles").insert({
         crm_client_id: partyId,
@@ -125,6 +136,7 @@ export async function POST(
         console.error("[client-app-password] insert:", insErr);
         return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
       }
+      console.log("[client-app-password] created new profile for party:", partyId);
     }
 
     return NextResponse.json({ ok: true });
