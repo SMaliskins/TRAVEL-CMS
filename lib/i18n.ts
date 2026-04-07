@@ -510,6 +510,8 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
       "Browser blocked the login session (security check). Use the same host as in the address bar (only localhost or only 127.0.0.1), then try again.",
     "referralPortal.errorValidation": "Enter email and password.",
     "referralPortal.errorSignInFailed": "Sign in failed.",
+    "referralPortal.errorServerMisconfigured":
+      "Sign-in is unavailable because the server is not fully configured (database access or auth secrets). Ask the site admin to set SUPABASE_SERVICE_ROLE_KEY, CLIENT_JWT_ACCESS_SECRET, and CLIENT_JWT_REFRESH_SECRET on the host.",
     "referralPortal.errorReferralDisabled": "Referral is not enabled for your account.",
     "referralPortal.errorLoadFailed": "Could not load referral data.",
     "referralPortal.noData": "No data",
@@ -1022,6 +1024,8 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
       "Браузер не смог сохранить сессию (проверка безопасности). Откройте сайт с тем же хостом, что в адресной строке (только localhost или только 127.0.0.1), и попробуйте снова.",
     "referralPortal.errorValidation": "Введите email и пароль.",
     "referralPortal.errorSignInFailed": "Не удалось войти.",
+    "referralPortal.errorServerMisconfigured":
+      "Вход недоступен: на сервере не настроены доступ к базе или секреты авторизации. Попросите администратора задать SUPABASE_SERVICE_ROLE_KEY, CLIENT_JWT_ACCESS_SECRET и CLIENT_JWT_REFRESH_SECRET на хостинге.",
     "referralPortal.errorReferralDisabled": "Раздел реферала не включён для вашего аккаунта.",
     "referralPortal.errorLoadFailed": "Не удалось загрузить данные.",
     "referralPortal.noData": "Нет данных",
@@ -1534,6 +1538,8 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
       "Pārlūks neļāva izveidot sesiju. Izmantojiet to pašu adresi kā joslā (tikai localhost vai tikai 127.0.0.1) un mēģiniet vēlreiz.",
     "referralPortal.errorValidation": "Ievadiet e-pastu un paroli.",
     "referralPortal.errorSignInFailed": "Neizdevās pieslēgties.",
+    "referralPortal.errorServerMisconfigured":
+      "Pieslēgties nevar: serveris nav pilnībā konfigurēts (datubāzes piekļuve vai autentifikācijas noslēpumi). Lūdzu, lūdziet administratoram iestatīt SUPABASE_SERVICE_ROLE_KEY, CLIENT_JWT_ACCESS_SECRET un CLIENT_JWT_REFRESH_SECRET uz hosta.",
     "referralPortal.errorReferralDisabled": "Ieteikuma sadaļa nav ieslēgta jūsu kontam.",
     "referralPortal.errorLoadFailed": "Neizdevās ielādēt datus.",
     "referralPortal.noData": "Nav datu",

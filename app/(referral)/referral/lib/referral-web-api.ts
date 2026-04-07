@@ -26,13 +26,17 @@ export async function webLogin(email: string, password: string): Promise<{ clien
   })
   const json = await res.json().catch(() => null)
   if (!res.ok) {
-    const key =
-      json?.error === 'VALIDATION_ERROR'
-        ? 'referralPortal.errorValidation'
-        : json?.error === 'FORBIDDEN'
-          ? 'referralPortal.errorSessionBlocked'
-          : 'referralPortal.errorInvalidCredentials'
-    throw new Error(key)
+    const err = json?.error
+    if (err === 'VALIDATION_ERROR') throw new Error('referralPortal.errorValidation')
+    if (err === 'FORBIDDEN') throw new Error('referralPortal.errorSessionBlocked')
+    if (
+      res.status >= 500 ||
+      err === 'LOGIN_SERVER_MISCONFIGURED' ||
+      err === 'INTERNAL_ERROR'
+    ) {
+      throw new Error('referralPortal.errorServerMisconfigured')
+    }
+    throw new Error('referralPortal.errorInvalidCredentials')
   }
   return { clientId: json.data.clientId as string }
 }

@@ -40,6 +40,23 @@ export function shouldSetWebSessionCookies(req: NextRequest): boolean {
 }
 
 /**
+ * Public URL the browser uses (custom domain on Vercel/Cloudflare).
+ * `req.nextUrl.origin` in route handlers often stays on the deployment host, so CSRF checks
+ * against it fail while `Origin: https://gojotravels.com` is correct.
+ */
+export function publicSiteOrigin(req: NextRequest): string {
+  const trim = (s: string) => s.trim().replace(/\/$/, '')
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL
+  if (fromEnv) return trim(fromEnv)
+
+  const host = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const proto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https'
+  if (host) return `${proto}://${host}`
+
+  return req.nextUrl.origin
+}
+
+/**
  * State-changing requests from the browser with cookies should come from same origin (CSRF).
  * Skips when no Origin (e.g. some server-side calls) — those typically don't send session cookies.
  */
@@ -67,7 +84,10 @@ function sameOriginAllowingLoopbackAliases(a: string, b: string): boolean {
 export function assertSameOriginForWebSession(req: NextRequest): void {
   const origin = req.headers.get('origin')
   if (!origin) return
-  if (!sameOriginAllowingLoopbackAliases(origin, req.nextUrl.origin)) {
+  const publicOrigin = publicSiteOrigin(req)
+  const okPublic = sameOriginAllowingLoopbackAliases(origin, publicOrigin)
+  const okNext = sameOriginAllowingLoopbackAliases(origin, req.nextUrl.origin)
+  if (!okPublic && !okNext) {
     throw new Error('CSRF_ORIGIN')
   }
 }

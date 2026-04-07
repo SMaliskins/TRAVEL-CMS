@@ -26,6 +26,16 @@ function readJwtSecret(
   return devFallback
 }
 
+/** Production login/signing fails without real secrets; use to return 503 instead of a misleading 401/500. */
+export function isClientJwtConfiguredForProduction(): boolean {
+  if (process.env.NODE_ENV !== 'production') return true
+  const access = process.env.CLIENT_JWT_ACCESS_SECRET?.trim()
+  const refresh = process.env.CLIENT_JWT_REFRESH_SECRET?.trim()
+  if (!access || !refresh) return false
+  if (access === DEV_ACCESS_FALLBACK || refresh === DEV_REFRESH_FALLBACK) return false
+  return true
+}
+
 function accessSecret(strict = true): Uint8Array {
   return new TextEncoder().encode(readJwtSecret('CLIENT_JWT_ACCESS_SECRET', DEV_ACCESS_FALLBACK, strict))
 }

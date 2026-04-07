@@ -1,7 +1,12 @@
 import { NextRequest } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { supabaseAdmin, isServiceRoleKeySet } from '@/lib/supabaseAdmin'
 import { authenticateReferralPortalCredentials } from '@/lib/client-auth/resolvePartyForReferralLogin'
-import { signAccessToken, signRefreshToken, hashToken } from '@/lib/client-auth/jwt'
+import {
+  signAccessToken,
+  signRefreshToken,
+  hashToken,
+  isClientJwtConfiguredForProduction,
+} from '@/lib/client-auth/jwt'
 import {
   assertSameOriginForWebSession,
   serializeClientCookie,
@@ -17,6 +22,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null)
     if (!body || typeof body.email !== 'string' || typeof body.password !== 'string') {
       return Response.json({ data: null, error: 'VALIDATION_ERROR' }, { status: 400 })
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      if (!isServiceRoleKeySet() || !isClientJwtConfiguredForProduction()) {
+        return Response.json({ data: null, error: 'LOGIN_SERVER_MISCONFIGURED' }, { status: 503 })
+      }
     }
 
     const auth = await authenticateReferralPortalCredentials(

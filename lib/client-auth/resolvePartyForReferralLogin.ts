@@ -18,6 +18,19 @@ function emailVariants(emailRaw: string): string[] {
 
 type ProfileRow = { id: string; password_hash: string; crm_client_id: string };
 
+function passwordCompareCandidates(plain: string): string[] {
+  const trimmed = plain.trim();
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const s of [plain, trimmed]) {
+    if (s.length > 0 && !seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+    }
+  }
+  return out;
+}
+
 /**
  * Finds party ids that match this login email (party.email and party_person.email, all case variants).
  */
@@ -45,6 +58,19 @@ async function collectPartyIdsForEmail(supabase: SupabaseClient, emailRaw: strin
       continue;
     }
     for (const row of data || []) partyIds.add(row.party_id as string);
+  }
+
+  // Case-insensitive match when `=` found nothing (skip if pattern would use ILIKE wildcards).
+  const primary = variants[0];
+  if (partyIds.size === 0 && primary && !/[%_]/.test(primary)) {
+    const { data, error } = await supabase.from("party").select("id").ilike("email", primary);
+    if (!error) {
+      for (const row of data || []) partyIds.add(row.id as string);
+    }
+    const pp = await supabase.from("party_person").select("party_id").ilike("email", primary);
+    if (!pp.error) {
+      for (const row of pp.data || []) partyIds.add(row.party_id as string);
+    }
   }
 
   return [...partyIds];
@@ -82,13 +108,15 @@ export async function authenticateReferralPortalCredentials(
   if (withPwd.length === 0) return null;
 
   for (const p of withPwd) {
-    try {
-      const ok = await bcrypt.compare(plainPassword, p.password_hash);
-      if (ok) {
-        return { profileId: p.id, crmClientId: p.crm_client_id };
+    for (const candidate of passwordCompareCandidates(plainPassword)) {
+      try {
+        const ok = await bcrypt.compare(candidate, p.password_hash);
+        if (ok) {
+          return { profileId: p.id, crmClientId: p.crm_client_id };
+        }
+      } catch (e) {
+        console.warn("[referral login] bcrypt compare:", e);
       }
-    } catch (e) {
-      console.warn("[referral login] bcrypt compare:", e);
     }
   }
 
