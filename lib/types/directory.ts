@@ -165,4 +165,10 @@ export interface DirectoryRecord {
 
   /** Client role: show Referral section in mobile client app */
   showReferralInApp?: boolean;
+
+  /** Write-only: set client app password (bcrypt-hashed before storage) */
+  clientAppPassword?: string;
+
+  /** Read-only: whether client_profiles row exists for this party */
+  hasClientAppAccount?: boolean;
 }

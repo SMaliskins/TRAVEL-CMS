@@ -62,7 +62,10 @@ export async function authenticateReferralPortalCredentials(
   plainPassword: string
 ): Promise<{ profileId: string; crmClientId: string } | null> {
   const partyIds = await collectPartyIdsForEmail(supabase, emailRaw);
-  if (partyIds.length === 0) return null;
+  if (partyIds.length === 0) {
+    console.warn("[referral login] no party found for email:", emailRaw);
+    return null;
+  }
 
   const { data: profiles, error: pErr } = await supabase
     .from("client_profiles")
@@ -79,10 +82,19 @@ export async function authenticateReferralPortalCredentials(
       Boolean(p.id && p.crm_client_id && p.password_hash && String(p.password_hash).length > 0)
   );
 
-  if (withPwd.length === 0) return null;
+  if (withPwd.length === 0) {
+    console.warn("[referral login] no client_profiles with password for partyIds:", partyIds);
+    return null;
+  }
 
   for (const p of withPwd) {
     try {
+      const hashValue = String(p.password_hash);
+      const isBcrypt = hashValue.startsWith("$2a$") || hashValue.startsWith("$2b$") || hashValue.startsWith("$2y$");
+      if (!isBcrypt) {
+        console.error("[referral login] password_hash is NOT a bcrypt hash for profile:", p.id, "hash prefix:", hashValue.substring(0, 10));
+        continue;
+      }
       const ok = await bcrypt.compare(plainPassword, p.password_hash);
       if (ok) {
         return { profileId: p.id, crmClientId: p.crm_client_id };

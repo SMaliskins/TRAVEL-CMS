@@ -2855,6 +2855,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         />
                       </div>
                     </div>
+
                     <h3 className="text-sm font-semibold text-gray-800 mb-2">Rates by category</h3>
                     <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                       {availableCategories.length === 0 ? (
