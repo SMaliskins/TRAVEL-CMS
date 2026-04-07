@@ -1,7 +1,19 @@
+export interface ReferralPartnerProfile {
+  displayName: string
+  email: string | null
+  phone: string | null
+  firstName: string | null
+  lastName: string | null
+  partyType: string | null
+}
+
 export interface ReferralOverview {
   hasReferralRole: boolean
   referralActive: boolean
   defaultCurrency: string
+  agencyName: string | null
+  referralNotes: string | null
+  partnerProfile: ReferralPartnerProfile
   plannedByCurrency: Record<string, number>
   accruedByCurrency: Record<string, number>
   settledByCurrency: Record<string, number>

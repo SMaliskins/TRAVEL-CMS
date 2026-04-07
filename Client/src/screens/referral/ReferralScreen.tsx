@@ -115,6 +115,45 @@ export function ReferralScreen() {
       )}
 
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Your profile</Text>
+        <Text style={styles.profileName}>{data.partnerProfile.displayName}</Text>
+        {data.partnerProfile.email ? (
+          <View style={styles.profileRow}>
+            <Text style={styles.profileLabel}>Email</Text>
+            <Text style={styles.profileValue}>{data.partnerProfile.email}</Text>
+          </View>
+        ) : null}
+        {data.partnerProfile.phone ? (
+          <View style={styles.profileRow}>
+            <Text style={styles.profileLabel}>Phone</Text>
+            <Text style={styles.profileValue}>{data.partnerProfile.phone}</Text>
+          </View>
+        ) : null}
+        {data.partnerProfile.partyType ? (
+          <View style={styles.profileRow}>
+            <Text style={styles.profileLabel}>Account type</Text>
+            <Text style={styles.profileValue}>{data.partnerProfile.partyType}</Text>
+          </View>
+        ) : null}
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>Default currency</Text>
+          <Text style={styles.profileValue}>{data.defaultCurrency}</Text>
+        </View>
+        {data.agencyName ? (
+          <View style={styles.profileRow}>
+            <Text style={styles.profileLabel}>Agency</Text>
+            <Text style={styles.profileValue}>{data.agencyName}</Text>
+          </View>
+        ) : null}
+        {data.referralNotes ? (
+          <View style={styles.profileNotes}>
+            <Text style={styles.profileNotesTitle}>Note from the agency</Text>
+            <Text style={styles.profileNotesBody}>{data.referralNotes}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>Balances</Text>
         <CurrencyTotals title="Planned" by={data.plannedByCurrency} />
         <CurrencyTotals title="Accrued" by={data.accruedByCurrency} />
@@ -182,6 +221,18 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardTitle: { fontSize: 17, fontWeight: '700', color: '#1a3a5c', marginBottom: 10 },
+  profileName: { fontSize: 18, fontWeight: '600', color: '#1a3a5c', marginBottom: 10 },
+  profileRow: { marginBottom: 8 },
+  profileLabel: { fontSize: 12, fontWeight: '600', color: '#6b7c8f', marginBottom: 2 },
+  profileValue: { fontSize: 14, color: '#1a3a5c' },
+  profileNotes: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#f6f8fa',
+    borderRadius: 8,
+  },
+  profileNotesTitle: { fontSize: 11, fontWeight: '700', color: '#6b7c8f', textTransform: 'uppercase', marginBottom: 4 },
+  profileNotesBody: { fontSize: 14, color: '#1a3a5c', lineHeight: 20 },
   cardSectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7c8f', textTransform: 'uppercase', marginTop: 8, marginBottom: 4 },
   cardBlock: { marginBottom: 4 },
   cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },

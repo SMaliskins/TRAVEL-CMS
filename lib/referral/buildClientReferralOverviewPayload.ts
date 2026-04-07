@@ -31,10 +31,24 @@ function availableByCurrency(accrued: Record<string, number>, settled: Record<st
   return out;
 }
 
+export type ReferralPartnerProfile = {
+  displayName: string;
+  email: string | null;
+  phone: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  partyType: string | null;
+};
+
 export type ClientReferralOverviewPayload = {
   hasReferralRole: boolean;
   referralActive: boolean;
   defaultCurrency: string;
+  /** Travel agency (tenant) name — same company as the CRM. */
+  agencyName: string | null;
+  /** From referral_party.notes (optional text the agency saved for this partner). */
+  referralNotes: string | null;
+  partnerProfile: ReferralPartnerProfile;
   plannedByCurrency: Record<string, number>;
   accruedByCurrency: Record<string, number>;
   settledByCurrency: Record<string, number>;
@@ -58,6 +72,40 @@ export type ClientReferralOverviewPayload = {
   }>;
 };
 
+function buildPartnerProfile(
+  party: {
+    display_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    party_type?: string | null;
+    party_person?: Array<{
+      first_name?: string | null;
+      last_name?: string | null;
+      email?: string | null;
+    }> | null;
+  } | null
+): ReferralPartnerProfile {
+  const pp = party?.party_person?.[0];
+  const firstName = pp?.first_name != null ? String(pp.first_name).trim() || null : null;
+  const lastName = pp?.last_name != null ? String(pp.last_name).trim() || null : null;
+  const fromPerson = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const display =
+    (party?.display_name && String(party.display_name).trim()) ||
+    fromPerson ||
+    (party?.email && String(party.email).trim()) ||
+    "—";
+  const emailParty = party?.email != null ? String(party.email).trim() || null : null;
+  const emailPerson = pp?.email != null ? String(pp.email).trim() || null : null;
+  return {
+    displayName: display,
+    email: emailParty || emailPerson,
+    phone: party?.phone != null ? String(party.phone).trim() || null : null,
+    firstName,
+    lastName,
+    partyType: party?.party_type != null ? String(party.party_type).trim() || null : null,
+  };
+}
+
 /**
  * Loads balances + lines for /referral (client API). Caller may run heal first when lines are empty.
  */
@@ -66,12 +114,31 @@ export async function buildClientReferralOverviewPayload(
   partyId: string,
   companyId: string
 ): Promise<ClientReferralOverviewPayload> {
-  const { data: refMeta } = await supabase
-    .from("referral_party")
-    .select("party_id, default_currency, is_active")
-    .eq("party_id", partyId)
-    .eq("company_id", companyId)
-    .maybeSingle();
+  const [{ data: refMeta }, { data: partyRow }, { data: companyRow }] = await Promise.all([
+    supabase
+      .from("referral_party")
+      .select("party_id, default_currency, is_active, notes")
+      .eq("party_id", partyId)
+      .eq("company_id", companyId)
+      .maybeSingle(),
+    supabase
+      .from("party")
+      .select(
+        "display_name, email, phone, party_type, party_person ( first_name, last_name, email )"
+      )
+      .eq("id", partyId)
+      .eq("company_id", companyId)
+      .maybeSingle(),
+    supabase.from("companies").select("name").eq("id", companyId).maybeSingle(),
+  ]);
+
+  const partnerProfile = buildPartnerProfile(partyRow);
+  const agencyName =
+    companyRow?.name != null && String(companyRow.name).trim()
+      ? String(companyRow.name).trim()
+      : null;
+  const referralNotes =
+    refMeta?.notes != null && String(refMeta.notes).trim() ? String(refMeta.notes).trim() : null;
 
   const [plannedRes, accruedRes, settledRes, linesRes, recentSettlements] = await Promise.all([
     supabase
@@ -168,6 +235,9 @@ export async function buildClientReferralOverviewPayload(
     hasReferralRole: !!refMeta || filledFromLiveOrders,
     referralActive: refMeta?.is_active !== false,
     defaultCurrency: refMeta?.default_currency || "EUR",
+    agencyName,
+    referralNotes,
+    partnerProfile,
     plannedByCurrency: finalPlanned,
     accruedByCurrency: finalAccrued,
     settledByCurrency,

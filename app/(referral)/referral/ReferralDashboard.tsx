@@ -96,6 +96,13 @@ export function ReferralDashboard() {
     return t(lang, 'referralPortal.statusPlanned')
   }
 
+  function partnerTypeLabel(raw: string | null) {
+    if (!raw) return null
+    const k = `referralPortal.partyType.${raw.toLowerCase().replace(/\s+/g, '_')}` as const
+    const tr = t(lang, k)
+    return tr === k ? raw : tr
+  }
+
   if (loading && !data) {
     return (
       <div className="flex justify-center py-20">
@@ -172,6 +179,49 @@ export function ReferralDashboard() {
           {t(lang, 'referralPortal.bannerInactive')}
         </div>
       )}
+
+      <section className="rounded-xl border border-[#e8eef4] bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-[#1a3a5c]">{t(lang, 'referralPortal.profileTitle')}</h2>
+        <p className="text-lg font-semibold text-[#1a3a5c]">{data.partnerProfile.displayName}</p>
+        <dl className="mt-3 space-y-2 text-sm">
+          {data.partnerProfile.email ? (
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+              <dt className="shrink-0 font-medium text-slate-500">{t(lang, 'referralPortal.labelEmail')}</dt>
+              <dd className="break-all text-slate-800">{data.partnerProfile.email}</dd>
+            </div>
+          ) : null}
+          {data.partnerProfile.phone ? (
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+              <dt className="shrink-0 font-medium text-slate-500">{t(lang, 'referralPortal.labelPhone')}</dt>
+              <dd className="text-slate-800">{data.partnerProfile.phone}</dd>
+            </div>
+          ) : null}
+          {data.partnerProfile.partyType ? (
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+              <dt className="shrink-0 font-medium text-slate-500">{t(lang, 'referralPortal.labelAccountType')}</dt>
+              <dd className="text-slate-800">{partnerTypeLabel(data.partnerProfile.partyType)}</dd>
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+            <dt className="shrink-0 font-medium text-slate-500">{t(lang, 'referralPortal.labelDefaultCurrency')}</dt>
+            <dd className="text-slate-800">{data.defaultCurrency}</dd>
+          </div>
+          {data.agencyName ? (
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+              <dt className="shrink-0 font-medium text-slate-500">{t(lang, 'referralPortal.labelAgency')}</dt>
+              <dd className="text-slate-800">{data.agencyName}</dd>
+            </div>
+          ) : null}
+          {data.referralNotes ? (
+            <div className="mt-2 rounded-md bg-slate-50 px-3 py-2">
+              <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                {t(lang, 'referralPortal.labelReferralNotes')}
+              </dt>
+              <dd className="mt-1 whitespace-pre-wrap text-slate-800">{data.referralNotes}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-base font-bold text-[#1a3a5c]">{t(lang, 'referralPortal.balances')}</h2>
