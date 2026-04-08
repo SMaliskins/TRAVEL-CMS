@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { CITIES, getCityByName, type City } from "@/lib/data/cities";
 
 const CITY_COORDS: Record<string, [number, number]> = {
   "london": [51.5074, -0.1278],
@@ -160,6 +161,72 @@ const CITY_COORDS: Record<string, [number, number]> = {
   "amman": [31.9454, 35.9284],
 };
 
+/** Locale / alternate spellings → canonical name in `CITIES` */
+const MAP_CITY_ALIASES: Record<string, string> = {
+  wien: "Vienna",
+  roma: "Rome",
+  münchen: "Munich",
+  munchen: "Munich",
+  muenchen: "Munich",
+  köln: "Cologne",
+  koln: "Cologne",
+  kraków: "Krakow",
+  krakow: "Krakow",
+};
+
+function countryHintMatchesCityCountry(countryHint: string, cityCountry: string): boolean {
+  const hint = countryHint.toLowerCase().trim();
+  const c = cityCountry.toLowerCase().trim();
+  if (!hint || !c) return true;
+  return c.includes(hint) || hint.includes(c.slice(0, Math.min(5, c.length)));
+}
+
+function geocodeCity(cityName: string, countryHint?: string): [number, number] | null {
+  const trimmed = cityName.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+
+  if (CITY_COORDS[lower]) return CITY_COORDS[lower];
+  for (const [key, coords] of Object.entries(CITY_COORDS)) {
+    if (lower.includes(key) || key.includes(lower)) return coords;
+  }
+
+  const canonicalName = MAP_CITY_ALIASES[lower] || trimmed;
+  let resolved = getCityByName(canonicalName);
+  if (resolved && countryHint && !countryHintMatchesCityCountry(countryHint, resolved.country)) {
+    const sameName = CITIES.filter(
+      (c: City) => c.name.toLowerCase() === resolved!.name.toLowerCase()
+    );
+    resolved =
+      sameName.find((c: City) => countryHintMatchesCityCountry(countryHint, c.country)) ?? undefined;
+  }
+  if (!resolved) {
+    resolved = getCityByName(trimmed);
+    if (resolved && countryHint && !countryHintMatchesCityCountry(countryHint, resolved.country)) {
+      const sameName = CITIES.filter(
+        (c: City) => c.name.toLowerCase() === trimmed.toLowerCase()
+      );
+      resolved =
+        sameName.find((c: City) => countryHintMatchesCityCountry(countryHint, c.country)) ?? undefined;
+    }
+  }
+  if (resolved) return [resolved.lat, resolved.lng];
+
+  const hint = countryHint?.toLowerCase().trim() || "";
+  const matches = CITIES.filter((c: City) => {
+    const cn = c.name.toLowerCase();
+    if (!(cn === lower || cn.includes(lower) || lower.includes(cn))) return false;
+    if (!hint) return true;
+    return countryHintMatchesCityCountry(hint, c.country);
+  });
+  if (matches.length === 1) return [matches[0].lat, matches[0].lng];
+  const exact = matches.find((c: City) => c.name.toLowerCase() === lower);
+  if (exact) return [exact.lat, exact.lng];
+  if (matches.length > 1) return [matches[0].lat, matches[0].lng];
+
+  return null;
+}
+
 function parseDestination(raw: string): { city: string; country: string } {
   // New format: "origin:Riga, Latvia|Antalya, Turkey|return:Riga, Latvia"
   if (raw.includes("|")) {
@@ -180,16 +247,6 @@ function parseDestination(raw: string): { city: string; country: string } {
     return { city: parts[0], country: parts[1] };
   }
   return { city: parts[0] || "", country: "" };
-}
-
-function geocodeCity(cityName: string): [number, number] | null {
-  const lower = cityName.toLowerCase().trim();
-  if (CITY_COORDS[lower]) return CITY_COORDS[lower];
-
-  for (const [key, coords] of Object.entries(CITY_COORDS)) {
-    if (lower.includes(key) || key.includes(lower)) return coords;
-  }
-  return null;
 }
 
 type OrderTravellerPartyRow = {
@@ -213,15 +270,11 @@ export async function GET(request: NextRequest) {
     const isOwnScope = scope === "own";
 
     const today = new Date().toISOString().slice(0, 10);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentStr = thirtyDaysAgo.toISOString().slice(0, 10);
 
     let mapQ = supabaseAdmin
       .from("orders")
       .select("id, order_code, client_display_name, countries_cities, date_from, date_to, status, owner_user_id, manager_user_id")
-      .eq("company_id", companyId)
-      .or(`date_to.gte.${recentStr},date_from.gte.${recentStr}`);
+      .eq("company_id", companyId);
     if (isOwnScope) {
       mapQ = mapQ.or(`owner_user_id.eq.${userId},manager_user_id.eq.${userId}`);
     }
@@ -280,7 +333,7 @@ export async function GET(request: NextRequest) {
       const { city, country } = parseDestination(raw);
       if (!city) continue;
 
-      const coords = geocodeCity(city);
+      const coords = geocodeCity(city, country);
       if (!coords) continue;
 
       let status: "upcoming" | "in-progress" | "completed";

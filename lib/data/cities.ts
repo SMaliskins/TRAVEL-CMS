@@ -488,6 +488,9 @@ export const CITIES: City[] = [
   { name: "Siem Reap", country: "Cambodia", countryCode: "KH", lat: 13.3671, lng: 103.8448, iataCode: "REP" },
   { name: "Phnom Penh", country: "Cambodia", countryCode: "KH", lat: 11.5564, lng: 104.9282, iataCode: "PNH" },
   
+  // Mongolia
+  { name: "Ulaanbaatar", country: "Mongolia", countryCode: "MN", lat: 47.8864, lng: 106.9057, iataCode: "ULN" },
+
   // Nepal
   { name: "Kathmandu", country: "Nepal", countryCode: "NP", lat: 27.7172, lng: 85.3240, iataCode: "KTM" },
   

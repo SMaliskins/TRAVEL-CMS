@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-04-06 12:00] CODE_WRITER — DASH-MAP: Dashboard map show all orders + geocode
+
+**Task:** DASH-MAP | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `TouristsMap`: show `completed` trips with checkbox "Past / completed" (default on); gray dot in popup
+- `GET /api/dashboard/map`: removed 30-day order filter; geocode falls back to `CITIES` + aliases (e.g. Wien→Vienna) + country hint
+- `lib/data/cities`: added Ulaanbaatar (Mongolia)
+
+**Результат:** `npx tsc --noEmit` OK
+**Next Step:** QA on dashboard map (Mongolia, Burgas, Austria orders)
+
+---
+
 ## [2026-04-08 10:53] CODE_WRITER — O7-IMPL: Latvian invoice title spelling fix
 
 **Task:** O7-IMPL | **Status:** SUCCESS

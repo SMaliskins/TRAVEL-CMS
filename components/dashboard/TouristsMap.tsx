@@ -265,24 +265,28 @@ export default function TouristsMap({
     }
   }, []);
 
-  const activeLocations = locations.filter(
-    (loc) => loc.status === "upcoming" || loc.status === "in-progress"
-  );
+  /** All locations returned by the API (upcoming, in-progress, completed). */
+  const mapLocations = locations.filter((loc) => {
+    const s = loc.status;
+    return s === "upcoming" || s === "in-progress" || s === "completed";
+  });
 
   const [showUpcoming, setShowUpcoming] = useState(true);
   const [showInProgress, setShowInProgress] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(true);
   const [upcomingPreset, setUpcomingPreset] = useState<UpcomingDatePreset>("all");
 
   const visibleLocations = useMemo(() => {
-    return activeLocations.filter((loc) => {
+    return mapLocations.filter((loc) => {
       if (loc.status === "in-progress") return showInProgress;
       if (loc.status === "upcoming") {
         if (!showUpcoming) return false;
         return upcomingMatchesDatePreset(loc.dateFrom, upcomingPreset);
       }
+      if (loc.status === "completed") return showCompleted;
       return false;
     });
-  }, [activeLocations, showUpcoming, showInProgress, upcomingPreset]);
+  }, [mapLocations, showUpcoming, showInProgress, showCompleted, upcomingPreset]);
 
   const cityGroups = useMemo(() => {
     const map = new Map<string, CityGroup>();
@@ -318,7 +322,7 @@ export default function TouristsMap({
     return m;
   }, [cityGroups]);
 
-  const noDataAtAll = !activeLocations || activeLocations.length === 0;
+  const noDataAtAll = !mapLocations || mapLocations.length === 0;
 
   const boundsArr = cityGroups.map((g) => g.location);
   const avgLat =
@@ -330,8 +334,9 @@ export default function TouristsMap({
       ? boundsArr.reduce((s, l) => s + l[1], 0) / boundsArr.length
       : 10;
 
-  const upcomingCount = sumHeadcounts(visibleLocations.filter((l) => l.status === "upcoming"));
-  const inProgressCount = sumHeadcounts(visibleLocations.filter((l) => l.status === "in-progress"));
+  const upcomingCount = sumHeadcounts(mapLocations.filter((l) => l.status === "upcoming"));
+  const inProgressCount = sumHeadcounts(mapLocations.filter((l) => l.status === "in-progress"));
+  const completedCount = sumHeadcounts(mapLocations.filter((l) => l.status === "completed"));
 
   if (noDataAtAll) {
     return (
@@ -340,7 +345,7 @@ export default function TouristsMap({
           {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
         </h3>
         <div className="flex h-96 items-center justify-center text-base text-gray-500">
-          No active travelers currently
+          No orders with destinations to show on the map
         </div>
       </div>
     );
@@ -379,6 +384,18 @@ export default function TouristsMap({
               In progress ({inProgressCount})
             </span>
           </label>
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-gray-400" />
+              Past / completed ({completedCount})
+            </span>
+          </label>
           <span className="hidden h-5 w-px bg-gray-200 sm:block" aria-hidden />
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-600">Upcoming trips start:</span>
@@ -412,7 +429,7 @@ export default function TouristsMap({
       <div className="h-96 w-full overflow-hidden rounded-xl border border-black/5 shadow-inner relative">
         {filteredEmpty ? (
           <div className="flex h-full items-center justify-center bg-gray-50/80 px-4 text-center text-sm text-gray-600">
-            No travelers match the current filters. Turn on a status or widen the upcoming date range.
+            No travelers match the current filters. Turn on a status (including Past / completed) or widen the upcoming date range.
           </div>
         ) : (
           <MapContainer
@@ -465,7 +482,11 @@ export default function TouristsMap({
                             <div key={t.id} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
                               <span
                                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                  t.status === "in-progress" ? "bg-emerald-500" : "bg-blue-500"
+                                  t.status === "in-progress"
+                                    ? "bg-emerald-500"
+                                    : t.status === "completed"
+                                      ? "bg-gray-400"
+                                      : "bg-blue-500"
                                 }`}
                               />
                               <span className="text-xs text-gray-500 shrink-0 w-[60px]">
