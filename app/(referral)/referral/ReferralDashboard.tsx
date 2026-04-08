@@ -136,59 +136,6 @@ export function ReferralDashboard() {
     }
   }
 
-  const walletButtons =
-    walletEnv.isAndroid && !walletEnv.isIOS ? (
-      <>
-        <button
-          type="button"
-          disabled={walletLoading !== null}
-          onClick={() => void onAddToWallet('google')}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
-        >
-          {walletLoading === 'google' ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
-          ) : null}
-          {t(lang, 'referralPortal.addToGoogleWallet')}
-        </button>
-        <button
-          type="button"
-          disabled={walletLoading !== null}
-          onClick={() => void onAddToWallet('apple')}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-900 disabled:opacity-60"
-        >
-          {walletLoading === 'apple' ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-          ) : null}
-          {t(lang, 'referralPortal.addToAppleWallet')}
-        </button>
-      </>
-    ) : (
-      <>
-        <button
-          type="button"
-          disabled={walletLoading !== null}
-          onClick={() => void onAddToWallet('apple')}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-900 disabled:opacity-60"
-        >
-          {walletLoading === 'apple' ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-          ) : null}
-          {t(lang, 'referralPortal.addToAppleWallet')}
-        </button>
-        <button
-          type="button"
-          disabled={walletLoading !== null}
-          onClick={() => void onAddToWallet('google')}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-60"
-        >
-          {walletLoading === 'google' ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
-          ) : null}
-          {t(lang, 'referralPortal.addToGoogleWallet')}
-        </button>
-      </>
-    )
-
   if (loading && !data) {
     return (
       <div className="flex justify-center py-20">
@@ -315,12 +262,56 @@ export function ReferralDashboard() {
         <CurrencyTotals title={t(lang, 'referralPortal.accrued')} by={data.accruedByCurrency} />
         <CurrencyTotals title={t(lang, 'referralPortal.settled')} by={data.settledByCurrency} />
         <CurrencyTotals title={t(lang, 'referralPortal.available')} by={data.availableByCurrency} />
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-1 text-base font-bold text-[#1a3a5c]">{t(lang, 'referralPortal.walletTitle')}</h2>
-        <p className="mb-4 text-sm leading-relaxed text-slate-600">{t(lang, 'referralPortal.walletSubtitle')}</p>
-        <div className="flex flex-col gap-2">{walletButtons}</div>
+        <div
+          className={`mt-4 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-4 ${
+            walletEnv.isAndroid && !walletEnv.isIOS ? 'flex-row-reverse justify-end' : ''
+          }`}
+        >
+          <button
+            type="button"
+            disabled={walletLoading !== null}
+            onClick={() => void onAddToWallet('apple')}
+            className="relative rounded-md p-0 transition-opacity hover:opacity-90 disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a3a5c] focus-visible:ring-offset-2"
+            aria-label={t(lang, 'referralPortal.addToAppleWallet')}
+          >
+            <img
+              src="/referral/add-to-apple-wallet.png"
+              alt=""
+              className="h-11 w-auto max-h-12 max-w-[min(100%,220px)] object-contain object-left"
+              decoding="async"
+            />
+            {walletLoading === 'apple' ? (
+              <span className="absolute inset-0 flex items-center justify-center rounded-md bg-white/75">
+                <span
+                  className="h-5 w-5 animate-spin rounded-full border-2 border-[#1a3a5c] border-t-transparent"
+                  aria-hidden
+                />
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            disabled={walletLoading !== null}
+            onClick={() => void onAddToWallet('google')}
+            className="relative rounded-md p-0 transition-opacity hover:opacity-90 disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a3a5c] focus-visible:ring-offset-2"
+            aria-label={t(lang, 'referralPortal.addToGoogleWallet')}
+          >
+            <img
+              src="/referral/add-to-google-wallet.png"
+              alt=""
+              className="h-11 w-auto max-h-12 max-w-[min(100%,220px)] object-contain object-left"
+              decoding="async"
+            />
+            {walletLoading === 'google' ? (
+              <span className="absolute inset-0 flex items-center justify-center rounded-md bg-white/75">
+                <span
+                  className="h-5 w-5 animate-spin rounded-full border-2 border-[#1a3a5c] border-t-transparent"
+                  aria-hidden
+                />
+              </span>
+            ) : null}
+          </button>
+        </div>
         {walletHint ? (
           <p
             className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200/80"

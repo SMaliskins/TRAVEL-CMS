@@ -546,9 +546,6 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.partyType.client": "Client",
     "referralPortal.partyType.partner": "Partner",
     "referralPortal.partyType.referral": "Referral partner",
-    "referralPortal.walletTitle": "Phone wallet",
-    "referralPortal.walletSubtitle":
-      "Add a snapshot card to Apple Wallet or Google Wallet. Balances on the card update when your agency enables this feature; full details stay on this site.",
     "referralPortal.addToAppleWallet": "Add to Apple Wallet",
     "referralPortal.addToGoogleWallet": "Add to Google Wallet",
     "referralPortal.walletComingSoon":
@@ -1082,9 +1079,6 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.partyType.client": "Клиент",
     "referralPortal.partyType.partner": "Партнёр",
     "referralPortal.partyType.referral": "Реферальный партнёр",
-    "referralPortal.walletTitle": "Кошелёк в телефоне",
-    "referralPortal.walletSubtitle":
-      "Добавьте карточку-снимок в Apple Wallet или Google Wallet. Суммы на карточке будут обновляться, когда агентство подключит эту функцию; полные данные — только на этом сайте.",
     "referralPortal.addToAppleWallet": "Добавить в Apple Wallet",
     "referralPortal.addToGoogleWallet": "Добавить в Google Wallet",
     "referralPortal.walletComingSoon":
@@ -1618,9 +1612,6 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.partyType.client": "Klients",
     "referralPortal.partyType.partner": "Partneris",
     "referralPortal.partyType.referral": "Ieteikuma partneris",
-    "referralPortal.walletTitle": "Maciņš tālrunī",
-    "referralPortal.walletSubtitle":
-      "Pievienojiet momentuzņēmuma karti Apple Wallet vai Google Wallet. Summas atjaunosies, kad aģentūra ieslēgs šo funkciju; pilna informācija paliek šajā vietnē.",
     "referralPortal.addToAppleWallet": "Pievienot Apple Wallet",
     "referralPortal.addToGoogleWallet": "Pievienot Google Wallet",
     "referralPortal.walletComingSoon":
