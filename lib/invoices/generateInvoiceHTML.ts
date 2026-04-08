@@ -57,7 +57,7 @@ const INVOICE_LABELS: Record<string, Record<string, string>> = {
     summaVardiem: "Amount in words",
   },
   lv: {
-    invoice: "RĒKINS",
+    invoice: "RĒĶINS",
     creditNote: "KRĒDITNOTA",
     refundCredit: "Atgriezums / Kredīts",
     date: "Datums",

@@ -5,6 +5,37 @@
 
 ---
 
+## [2026-04-08 10:53] CODE_WRITER — O7-IMPL: Latvian invoice title spelling fix
+
+**Task:** O7-IMPL | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Updated Latvian invoice label in `lib/invoices/generateInvoiceHTML.ts`
+- Fixed typo `RĒKINS` → `RĒĶINS` (correct Latvian spelling)
+- Verified no remaining `RĒKINS` occurrences in `/lib`
+
+**Результат:** Latvian invoice title now renders as `RĒĶINS`.
+**Next Step:** QA visual check on generated Latvian invoice
+
+---
+
+## [2026-04-08 10:53] CODE_WRITER — O7-IMPL: Latvian invoice title typo fix
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Checked invoice localization labels in invoice HTML generator
+- Confirmed Latvian title typo: `RĒKINS` should be `RĒĶINS`
+
+**Результат:** In progress
+**Next Step:** Apply label fix and verify references
+
+---
+
 ## [2026-04-08 08:52] CODE_WRITER — O7-IMPL: Mobile Payment Date picker touch fix
 
 **Task:** O7-IMPL | **Status:** START
