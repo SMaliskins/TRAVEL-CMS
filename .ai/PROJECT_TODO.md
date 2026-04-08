@@ -83,7 +83,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 |----|------|------|-------|--------|--------|-------|
 | O7 | Finance | Payment form in Finance tab | DB → CODE WRITER → QA | TODO | - | Amount, type (bank/cash/card), date, payer, invoice link |
 | O8 | Finance | Invoice creation with service selection | DB → CODE WRITER → QA | DONE | feature/x | ✅ OD6 completed |
-| **O7-IMPL** | **Finance** | **Payment System: DB + API + UI** | **DB→CW→QA** | **IN_QA** | **feature/x** | **Deposit receipt print document implemented; ready for QA** |
+| **O7-IMPL** | **Finance** | **Payment System: DB + API + UI** | **DB→CW→QA** | **IN_QA** | **cursor/mobile-payment-date-picker-fix-9a96** | **[08.04 08:54] Mobile fix: Payment Date calendar tap restored on phone (native date input overlay)** |
 | **O8-IMPL** | **Finance** | **Email System: Send Invoice + Track** | **CW→QA** | **TODO** | **-** | **🔴 HIGH: email service, template, API, delivery tracking** |
 | FN1 | Finance | Edit Invoice button + handlers | CW→QA | DONE | feature/x | [11.01] ✅ Phase 1 complete |
 
