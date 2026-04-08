@@ -72,33 +72,48 @@ export type ClientReferralOverviewPayload = {
   }>;
 };
 
+function friendlyLabelFromEmail(email: string): string | null {
+  const at = email.indexOf("@");
+  if (at <= 0) return null;
+  const local = email.slice(0, at).replace(/[._]+/g, " ").trim();
+  return local.length > 0 ? local : null;
+}
+
 function buildPartnerProfile(
   party: {
     display_name?: string | null;
     email?: string | null;
     phone?: string | null;
     party_type?: string | null;
-    party_person?: Array<{
-      first_name?: string | null;
-      last_name?: string | null;
-      email?: string | null;
-    }> | null;
-  } | null
+  } | null,
+  person: {
+    first_name?: string | null;
+    last_name?: string | null;
+    email?: string | null;
+  } | null,
+  companyParty: { company_name?: string | null } | null
 ): ReferralPartnerProfile {
-  const pp = party?.party_person?.[0];
-  const firstName = pp?.first_name != null ? String(pp.first_name).trim() || null : null;
-  const lastName = pp?.last_name != null ? String(pp.last_name).trim() || null : null;
+  const firstName =
+    person?.first_name != null ? String(person.first_name).trim() || null : null;
+  const lastName =
+    person?.last_name != null ? String(person.last_name).trim() || null : null;
   const fromPerson = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const companyName =
+    companyParty?.company_name != null ? String(companyParty.company_name).trim() || null : null;
+  const emailParty = party?.email != null ? String(party.email).trim() || null : null;
+  const emailPerson = person?.email != null ? String(person.email).trim() || null : null;
+  const anyEmail = emailParty || emailPerson;
   const display =
     (party?.display_name && String(party.display_name).trim()) ||
     fromPerson ||
-    (party?.email && String(party.email).trim()) ||
+    companyName ||
+    emailParty ||
+    emailPerson ||
+    (anyEmail ? friendlyLabelFromEmail(anyEmail) : null) ||
     "—";
-  const emailParty = party?.email != null ? String(party.email).trim() || null : null;
-  const emailPerson = pp?.email != null ? String(pp.email).trim() || null : null;
   return {
     displayName: display,
-    email: emailParty || emailPerson,
+    email: anyEmail,
     phone: party?.phone != null ? String(party.phone).trim() || null : null,
     firstName,
     lastName,
@@ -114,7 +129,13 @@ export async function buildClientReferralOverviewPayload(
   partyId: string,
   companyId: string
 ): Promise<ClientReferralOverviewPayload> {
-  const [{ data: refMeta }, { data: partyRow }, { data: companyRow }] = await Promise.all([
+  const [
+    { data: refMeta },
+    partyRes,
+    { data: personRow, error: personErr },
+    { data: partyCompanyRow, error: pcErr },
+    { data: companyRow },
+  ] = await Promise.all([
     supabase
       .from("referral_party")
       .select("party_id, default_currency, is_active, notes")
@@ -123,16 +144,39 @@ export async function buildClientReferralOverviewPayload(
       .maybeSingle(),
     supabase
       .from("party")
-      .select(
-        "display_name, email, phone, party_type, party_person ( first_name, last_name, email )"
-      )
+      .select("display_name, email, phone, party_type")
       .eq("id", partyId)
       .eq("company_id", companyId)
+      .maybeSingle(),
+    supabase
+      .from("party_person")
+      .select("first_name, last_name, email")
+      .eq("party_id", partyId)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("party_company")
+      .select("company_name")
+      .eq("party_id", partyId)
       .maybeSingle(),
     supabase.from("companies").select("name").eq("id", companyId).maybeSingle(),
   ]);
 
-  const partnerProfile = buildPartnerProfile(partyRow);
+  if (partyRes.error) {
+    console.warn("[referral overview] party row:", partyRes.error.message);
+  }
+  if (personErr && !/column|schema cache/i.test(personErr.message)) {
+    console.warn("[referral overview] party_person:", personErr.message);
+  }
+  if (pcErr && !/column|schema cache|relation/i.test(pcErr.message)) {
+    console.warn("[referral overview] party_company:", pcErr.message);
+  }
+
+  const partnerProfile = buildPartnerProfile(
+    partyRes.data,
+    personErr ? null : personRow,
+    pcErr ? null : partyCompanyRow
+  );
   const agencyName =
     companyRow?.name != null && String(companyRow.name).trim()
       ? String(companyRow.name).trim()
