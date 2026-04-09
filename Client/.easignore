@@ -1,0 +1,7 @@
+# Shrink EAS Build upload (see https://docs.expo.dev/build-reference/easignore/)
+.git
+*.log
+npm-debug.*
+.DS_Store
+CLAUDE.md
+docs

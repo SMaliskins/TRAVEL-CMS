@@ -1,75 +1,136 @@
-# Production client app (install on phone, no dev machine)
+# Production client app (store-grade)
 
-The Expo app does **not** talk to your laptop. It calls whatever URL is baked in at **build time** as `EXPO_PUBLIC_API_URL` (see `src/api/client.ts`). For referral users to use the app anytime, you need:
+The Expo app does **not** talk to your laptop. It calls whatever URL is baked in at **build time** as `EXPO_PUBLIC_API_URL` (see `src/api/client.ts`). For users to run the app anytime, you need:
 
-1. **A always-on backend** — the same Travel CMS Next.js deployment you use in production (e.g. Vercel), with HTTPS, **not** `http://localhost:3000`.
-2. **Native binaries built with that URL** — EAS Build (Expo Application Services), not `expo start` on USB.
-3. **Distribution** — TestFlight / App Store (iOS) and internal testing or Play Store (Android), or enterprise MDM if applicable.
+1. **Always-on backend** — Travel CMS Next.js in production (e.g. Vercel), **HTTPS**, not `http://localhost:3000`.
+2. **Native binaries from EAS Build** — not `expo start` over USB.
+3. **Distribution** — TestFlight / App Store (iOS) and internal testing or Play Store (Android).
+
+Configuration lives in **`app.config.ts`** (not `app.json`). EAS Update is enabled automatically once a valid Expo project UUID is set (see below).
+
+---
 
 ## 1. Deploy the web app
 
-- Deploy the repo’s Next.js app to your host (commonly Vercel).
-- Confirm in a browser: `https://YOUR_DOMAIN/api/health` or any public API route returns OK.
-- Supabase and env vars must be configured on the host exactly as for production (same as when the site works for your team).
+- Deploy the Next.js app; confirm `https://YOUR_DOMAIN/api/health` (or another public route) responds.
+- Supabase and env vars on the host must match production.
 
-That URL root (no trailing slash) is your `EXPO_PUBLIC_API_URL`.
+Use that origin **without a trailing slash** as `EXPO_PUBLIC_API_URL`.
 
-## 2. Expo / EAS project
+---
 
-1. Install: `npm i -g eas-cli`
-2. Log in: `eas login`
-3. In `Client/`: `eas init` — links `app.json` `extra.eas.projectId` and updates `updates.url` if you use EAS Update.
-4. In [expo.dev](https://expo.dev) → your project → **Environment variables**, create:
+## 2. Accounts and legal (do this early)
+
+### Apple (App Store / TestFlight)
+
+- Enrol in the [Apple Developer Program](https://developer.apple.com/programs/) (annual fee).
+- **Organization** accounts may need **D-U-N-S** and legal entity verification (can take days).
+- In [App Store Connect](https://appstoreconnect.apple.com/): create the app record (bundle id must match `app.config.ts` → `ios.bundleIdentifier`, currently `com.mytravelconcierge.app`).
+- Complete **Agreements, Tax, and Banking** or TestFlight external testing will block.
+- **App Privacy** / data collection declarations must match what the app and API actually do.
+- **Export compliance** (encryption): answer the questionnaire when submitting; most apps qualify for standard exemptions.
+
+### Google Play
+
+- One-time [Play Console](https://play.google.com/console) registration fee.
+- Create the app; package name must match `android.package` (`com.mytravelconcierge.app`).
+- **Data safety** form, content rating, target API level — required before production.
+- For `eas submit`, create a **Google Play service account** JSON with release permissions; store the file **only** on secure machines (path referenced in `eas.json` is gitignored).
+
+### Operational
+
+- Public **privacy policy URL** (often required for store review and OAuth if you add it later).
+- Support / contact email visible in store listings.
+
+---
+
+## 3. Expo / EAS project
+
+1. `npm i -g eas-cli`
+2. `eas login`
+3. From **`Client/`**: `npm run eas:init` (or `eas init`) — links the project and can set the project UUID in Expo.
+4. Set **`EXPO_PUBLIC_EAS_PROJECT_ID`** in [expo.dev](https://expo.dev) → Project → **Environment variables** to your project UUID (optional if the id is already valid in config after `eas init`). When the UUID is valid, **`app.config.ts`** enables `updates.url` for EAS Update.
+
+5. In the same place, add variables and attach them to **each build profile** you use:
 
    | Name | Purpose |
    |------|--------|
-   | `EXPO_PUBLIC_API_URL` | `https://YOUR_DOMAIN` (production CMS) |
-   | `EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY` | Optional: `1` for influencer-only UI builds |
+   | `EXPO_PUBLIC_API_URL` | `https://YOUR_DOMAIN` (production CMS root) |
+   | `EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY` | Optional `1` for influencer-only UI (or use `referral` profile below) |
 
-   Assign them to the **build profiles** you use (`preview`, `production`, etc.).
+   `EXPO_PUBLIC_*` values are inlined at build time; they are not secret.
 
-   `EXPO_PUBLIC_*` variables are inlined into the JS bundle at build time; they are not “runtime secrets”.
+---
 
-## 3. Build installable apps
+## 4. Build profiles (`eas.json`)
 
-From `Client/`:
+| Profile | Use |
+|--------|-----|
+| `development` | Dev client, internal |
+| `preview` | APK / internal iOS, channel `preview` — QA before store |
+| `production` | **AAB** (Android) + iOS store pipeline, channel `production`, `autoIncrement` |
+| `referral` | Same as production + `EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY=1`, channel `referral` |
+
+Commands (from `Client/`):
 
 ```bash
-# iOS + Android, store-ready (after credentials are set up)
-eas build --profile production --platform all
+npm run build:preview
+npm run build:production
+npm run build:referral
 ```
 
-- **Preview / internal**: `eas build --profile preview` (good for testers before store review).
-- Do **not** rely on `Client/.env` for cloud builds unless you use a supported workflow; prefer Expo dashboard variables.
+Prefer **Expo dashboard env vars** for cloud builds; do not assume `Client/.env` is uploaded unless you use a supported workflow.
 
-After the build, EAS gives you **IPA** / **APK** or **AAB** links. Testers install those — no computer server required.
+---
 
-## 4. Submit to stores (optional but “normal” distribution)
+## 5. Submit to stores
 
-- **iOS**: Apple Developer Program, App Store Connect app record, then `eas submit --platform ios` (configure `eas.json` `submit` or use prompts).
-- **Android**: Play Console, signing key, then `eas submit --platform android`.
+1. Fill real values in `eas.json` → `submit.production` (Apple ID, **numeric** ASC App ID, Team ID) or pass flags interactively the first time.
+2. Place `google-services-key.json` in `Client/` (gitignored) for Android submit.
+3. After a successful production build:
 
-Replace placeholder Apple / Play IDs in `eas.json` with your real values when you are ready to submit.
+```bash
+npm run submit:ios
+npm run submit:android
+```
 
-## 5. Referral-only build for influencers
+`track: internal` (Android) is set for safer first uploads; change to `production` when ready.
 
-Same app, different bundle configuration:
+---
 
-- Set `EXPO_PUBLIC_CLIENT_APP_REFERRAL_ONLY=1` for a dedicated EAS **build profile** (e.g. `referral`) and run `eas build --profile referral`.
-- Or ship one app and control visibility via directory flags + API; the env flag is for a **minimal** client surface before the full app is ready.
+## 6. OTA updates (EAS Update)
 
-## 6. OTA updates (optional)
+After a valid project UUID and channel-aligned builds:
 
-`app.json` may reference EAS Update. After `eas update`, already-installed apps can load new JS without a new store version, within compatibility rules. Native changes still need a new store build.
+```bash
+npm run update:preview
+npm run update:production
+npm run update:referral
+```
+
+Only JS/asset changes; native modules or permission changes need a new store build.
+
+---
+
+## 7. Local development
+
+Copy `.env.example` → `.env.local` (gitignored) for `EXPO_PUBLIC_API_URL` when running `expo start` against a tunneled or staging API.
+
+---
 
 ## Checklist
 
-- [ ] Production Next.js URL is live and client API routes work with real auth.
-- [ ] `EXPO_PUBLIC_API_URL` in EAS matches that URL (no trailing slash).
-- [ ] `eas build` completed; APK/IPA/AAB installed on a physical device **off Wi-Fi that depended on dev machine** (e.g. cellular) — confirms no localhost dependency.
-- [ ] Store or TestFlight/Internal testing configured for referral users.
+- [ ] Production CMS URL live; client API auth works from a browser or HTTP client.
+- [ ] Apple Developer + App Store Connect app id matches bundle id.
+- [ ] Play Console app + signing + service account for submit.
+- [ ] `EXPO_PUBLIC_API_URL` set on **every** EAS profile you build.
+- [ ] `eas build` artifact installed on a **cellular** device (no dependency on dev machine).
+- [ ] Privacy policy and store metadata prepared.
+
+---
 
 ## Troubleshooting
 
-- **Login fails / “Network Error”**: wrong `EXPO_PUBLIC_API_URL`, or device cannot reach your host (firewall, wrong env on EAS profile).
-- **Works on Wi-Fi at office only**: API might still point to an internal IP — use the public HTTPS domain only.
+- **Network Error / login fails**: wrong `EXPO_PUBLIC_API_URL`, or device cannot reach the host.
+- **EAS Update does nothing**: UUID missing or invalid → set `EXPO_PUBLIC_EAS_PROJECT_ID` or run `eas init`; build must use the same **channel** as `eas update`.
+- **Submit fails (iOS)**: unsigned agreements, wrong Team ID, or ASC App ID not matching the app record.

@@ -172,18 +172,42 @@ export async function GET(
       (inv) => inv.due_date && inv.due_date < today && !["paid", "cancelled", "replaced"].includes(String(inv.status))
     );
 
-    // 7. Payments (where party is payer)
-    const { data: paymentsData, error: paymentsError } = await supabaseAdmin
+    // 7. Payments attributed to this payer:
+    //    - payer_party_id matches (explicit link from Add Payment / PartySelect)
+    //    - OR payment is tied to an invoice whose payer_party_id matches (common when
+    //      payer_name was entered as text only and payer_party_id stayed null)
+    const invoiceIdsForParty = invoicesList.map((inv) => inv.id).filter(Boolean);
+
+    const { data: paymentsByPayer, error: paymentsByPayerError } = await supabaseAdmin
       .from("payments")
-      .select("amount")
+      .select("id, amount")
       .eq("payer_party_id", partyId)
       .eq("status", "active");
 
-    if (paymentsError) {
-      console.error("[Stats API] Payments error:", paymentsError);
+    if (paymentsByPayerError) {
+      console.error("[Stats API] Payments (by payer_party_id) error:", paymentsByPayerError);
     }
 
-    const paymentsTotal = (paymentsData ?? []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    let paymentsByInvoice: { id: string; amount: number | string | null }[] = [];
+    if (invoiceIdsForParty.length > 0) {
+      const { data: byInv, error: paymentsByInvError } = await supabaseAdmin
+        .from("payments")
+        .select("id, amount")
+        .in("invoice_id", invoiceIdsForParty)
+        .eq("status", "active");
+      if (paymentsByInvError) {
+        console.error("[Stats API] Payments (by invoice_id) error:", paymentsByInvError);
+      } else {
+        paymentsByInvoice = byInv ?? [];
+      }
+    }
+
+    const paymentRowById = new Map<string, number>();
+    for (const p of [...(paymentsByPayer ?? []), ...paymentsByInvoice]) {
+      if (!p?.id) continue;
+      paymentRowById.set(p.id, Number(p.amount) || 0);
+    }
+    const paymentsTotal = Array.from(paymentRowById.values()).reduce((sum, a) => sum + a, 0);
     const balance = invoicesTotal - paymentsTotal;
     // partial = partially paid (some received, some still owed); unpaid = nothing paid
     const paymentStatus =

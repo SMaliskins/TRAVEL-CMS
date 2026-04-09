@@ -6,7 +6,16 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "eas:init": "eas init",
+    "build:preview": "eas build --profile preview --platform all",
+    "build:production": "eas build --profile production --platform all",
+    "build:referral": "eas build --profile referral --platform all",
+    "submit:ios": "eas submit --platform ios --profile production --latest",
+    "submit:android": "eas submit --platform android --profile production --latest",
+    "update:preview": "eas update --channel preview",
+    "update:production": "eas update --channel production",
+    "update:referral": "eas update --channel referral"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

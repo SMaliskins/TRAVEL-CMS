@@ -44,7 +44,7 @@ function CurrencyTotals({
 
 export function ReferralDashboard() {
   const router = useRouter()
-  const { prefs } = useUserPreferences()
+  const { prefs } = useUserPreferences('referral')
   const lang = prefs.language
   const [data, setData] = useState<ReferralOverview | null>(null)
   const [loading, setLoading] = useState(true)
@@ -351,10 +351,6 @@ export function ReferralDashboard() {
                   {t(lang, 'referralPortal.orderPrefix')} {line.orderCode}
                 </p>
               ) : null}
-              <p className="mt-1 text-xs text-slate-500">
-                {t(lang, 'referralPortal.basePrefix')} {money(line.baseAmount, line.currency)} ·{' '}
-                {formatDateLocale(lang, line.createdAt)}
-              </p>
             </li>
           ))}
         </ul>

@@ -2,13 +2,14 @@
 
 import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { t } from '@/lib/i18n'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { hasReferralSession, webLogin } from '../lib/referral-web-api'
 
 export function ReferralLoginForm() {
   const router = useRouter()
-  const { prefs } = useUserPreferences()
+  const { prefs } = useUserPreferences('referral')
   const lang = prefs.language
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -107,6 +108,14 @@ export function ReferralLoginForm() {
             {error}
           </p>
         ) : null}
+        <div className="text-right">
+          <Link
+            href="/referral/forgot-password"
+            className="text-xs font-medium text-[#1a3a5c] underline hover:text-[#152f4d]"
+          >
+            {t(lang, 'referralPortal.forgotPassword')}
+          </Link>
+        </div>
         <button
           type="submit"
           disabled={loading}

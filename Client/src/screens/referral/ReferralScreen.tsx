@@ -174,7 +174,6 @@ export function ReferralScreen() {
               </Text>
             </View>
             {line.orderCode ? <Text style={styles.lineMeta}>Order {line.orderCode}</Text> : null}
-            <Text style={styles.lineMeta}>Base {money(line.baseAmount, line.currency)} · {formatDate(line.createdAt)}</Text>
           </View>
         ))
       )}

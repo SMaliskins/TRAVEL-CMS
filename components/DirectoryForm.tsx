@@ -32,6 +32,7 @@ import { formatNameForDb } from "@/utils/nameFormat";
 import { getSearchPatterns, matchesSearch } from "@/lib/directory/searchNormalize";
 import { BANK_LIST } from "@/lib/constants/banks";
 import { Check, X, Plus, PanelLeft, Columns } from "lucide-react";
+import PartySelect from "@/components/PartySelect";
 
 function referralRatesMapFromRecord(record: DirectoryRecord | undefined): Record<string, { kind: ReferralRateKind; value: number }> {
   const m: Record<string, { kind: ReferralRateKind; value: number }> = {};
@@ -266,6 +267,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       record?.type || "person"
     );
     const [showReferralInApp, setShowReferralInApp] = useState(() => record?.showReferralInApp === true);
+    const [defaultReferralPartyId, setDefaultReferralPartyId] = useState<string | null>(
+      () => record?.defaultReferralPartyId ?? null
+    );
+    const [defaultReferralPartyDisplayName, setDefaultReferralPartyDisplayName] = useState(
+      () => record?.defaultReferralPartyDisplayName ?? ""
+    );
 
     const [clientAppPassword, setClientAppPassword] = useState("");
     const [clientAppPasswordConfirm, setClientAppPasswordConfirm] = useState("");
@@ -574,8 +581,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         setReferralCurrency(record.referralExtras?.defaultCurrency ?? "EUR");
         setReferralRatesByCat(referralRatesMapFromRecord(record));
         setShowReferralInApp(record.showReferralInApp === true);
+        setDefaultReferralPartyId(record.defaultReferralPartyId ?? null);
+        setDefaultReferralPartyDisplayName(record.defaultReferralPartyDisplayName ?? "");
       } else if (mode === "create") {
         dobRef.current = undefined;
+        setDefaultReferralPartyId(null);
+        setDefaultReferralPartyDisplayName("");
         // Reset passport fields in create mode
         setPassportData({
           passportNumber: undefined,
@@ -653,6 +664,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         corporateAccounts: record.corporateAccounts,
         loyaltyCards: record.loyaltyCards,
         showReferralInApp: record.showReferralInApp ?? false,
+        defaultReferralPartyId: record.defaultReferralPartyId ?? null,
       };
     };
 
@@ -668,7 +680,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           companyName.trim() !== "" ||
           phone.trim() !== "" ||
           email.trim() !== "" ||
-          roles.length > 0
+          roles.length > 0 ||
+          !!defaultReferralPartyId
         );
       }
 
@@ -719,6 +732,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
       if (roles.includes("client")) {
         if (showReferralInApp !== !!(initialValues.showReferralInApp ?? false)) {
+          return true;
+        }
+        if ((defaultReferralPartyId || null) !== (initialValues.defaultReferralPartyId ?? null)) {
           return true;
         }
       }
@@ -986,6 +1002,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
       if (roles.includes("client")) {
         formData.showReferralInApp = showReferralInApp;
+        formData.defaultReferralPartyId = defaultReferralPartyId;
       }
 
       // Corporate accounts / Loyalty cards / Bank accounts
@@ -1263,6 +1280,31 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                             </span>
                           </span>
                         </label>
+                      </div>
+                    )}
+                    {roles.includes("client") && (
+                      <div className="mt-3 space-y-2 max-w-lg border-t border-gray-200 pt-3">
+                        <div className="text-xs font-semibold text-gray-800">
+                          {t(lang, "directory.defaultReferralTitle")}
+                        </div>
+                        <p className="text-xs text-gray-500 leading-snug">
+                          {t(lang, "directory.defaultReferralHint")}
+                        </p>
+                        <PartySelect
+                          roleFilter="referral"
+                          value={defaultReferralPartyId}
+                          initialDisplayName={defaultReferralPartyDisplayName}
+                          onChange={(pid, displayName) => {
+                            setDefaultReferralPartyId(pid);
+                            setDefaultReferralPartyDisplayName(displayName);
+                            markFieldDirty("defaultReferralPartyId");
+                          }}
+                        />
+                        <p className="text-[11px] text-gray-500">
+                          {record?.clientLastTravelDate
+                            ? `${t(lang, "directory.defaultReferralLastTripPrefix")} ${formatDateDDMMYYYY(record.clientLastTravelDate)}`
+                            : t(lang, "directory.defaultReferralLastTripNone")}
+                        </p>
                       </div>
                     )}
                     {mode === "edit" &&

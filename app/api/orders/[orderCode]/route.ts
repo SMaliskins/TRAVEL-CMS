@@ -5,6 +5,7 @@ import { getApiUser } from "@/lib/auth/getApiUser";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 import { buildExpandedOrderAndInvoiceSummary } from "@/lib/orders/orderPageBootstrap";
 import { fetchOrderRowByRouteParam } from "@/lib/orders/orderFromRouteParam";
+import { resolveDefaultReferralPartyIdForClient } from "@/lib/referral/clientDefaultReferralParty";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -157,6 +158,22 @@ export async function PATCH(
       .eq("company_id", companyId)
       .eq("order_code", canonicalCode)
       .single();
+
+    if (
+      updateData.client_party_id &&
+      body.referral_party_id === undefined &&
+      oldOrder &&
+      String(updateData.client_party_id) !== String(oldOrder.client_party_id ?? "")
+    ) {
+      const refId = await resolveDefaultReferralPartyIdForClient(
+        supabaseAdmin,
+        companyId,
+        updateData.client_party_id as string
+      );
+      if (refId) {
+        updateData.referral_party_id = refId;
+      }
+    }
 
     // Update order
     console.log("Updating order:", canonicalCode, "with data:", updateData);

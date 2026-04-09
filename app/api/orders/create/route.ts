@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { resolveDefaultReferralPartyIdForClient } from "@/lib/referral/clientDefaultReferralParty";
 
 // Placeholder URLs for build-time (replaced at runtime)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
@@ -170,6 +171,15 @@ export async function POST(request: NextRequest) {
     }
     if (body.return) {
       payload.date_to = body.return;
+    }
+
+    const defaultRef = await resolveDefaultReferralPartyIdForClient(
+      supabaseAdmin,
+      companyId,
+      body.clientPartyId
+    );
+    if (defaultRef) {
+      payload.referral_party_id = defaultRef;
     }
 
     // Insert order with retry logic for missing columns

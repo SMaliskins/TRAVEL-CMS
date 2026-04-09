@@ -8,6 +8,11 @@ import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { normalizePersonDobToIso } from "@/utils/dateFormat";
+import {
+  getClientLastTravelActivityDate,
+  maybeClearStaleClientDefaultReferral,
+  assertValidDefaultReferralParty,
+} from "@/lib/referral/clientDefaultReferralParty";
 
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
@@ -162,7 +167,7 @@ export async function GET(
         .maybeSingle(),
       supabaseAdmin
         .from("client_party")
-        .select("party_id, show_referral_in_app")
+        .select("party_id, show_referral_in_app, default_referral_party_id")
         .eq("party_id", id)
         .maybeSingle(),
       supabaseAdmin
@@ -195,12 +200,43 @@ export async function GET(
     if (referralData.error) console.warn("[Directory GET] Error fetching referral_party:", referralData.error);
     if (referralRatesData.error) console.warn("[Directory GET] Error fetching referral_party_category_rate:", referralRatesData.error);
 
-    // Debug: Log fetched data
+    let clientPartyRow = clientData.data;
+    if (clientPartyRow && party.company_id) {
+      const { cleared } = await maybeClearStaleClientDefaultReferral(
+        supabaseAdmin,
+        party.company_id as string,
+        id
+      );
+      if (cleared) {
+        const { data: cpFresh } = await supabaseAdmin
+          .from("client_party")
+          .select("party_id, show_referral_in_app, default_referral_party_id")
+          .eq("party_id", id)
+          .maybeSingle();
+        if (cpFresh) clientPartyRow = cpFresh;
+      }
+    }
+
+    let defaultReferralPartyDisplayName: string | undefined;
+    if (clientPartyRow?.default_referral_party_id) {
+      const { data: drParty } = await supabaseAdmin
+        .from("party")
+        .select("display_name")
+        .eq("id", clientPartyRow.default_referral_party_id as string)
+        .maybeSingle();
+      defaultReferralPartyDisplayName = drParty?.display_name ?? undefined;
+    }
+
+    const clientLastTravelDate =
+      clientPartyRow && party.company_id
+        ? await getClientLastTravelActivityDate(supabaseAdmin, party.company_id as string, id)
+        : null;
+
     console.log("[Directory GET] Fetched data for party:", id, {
       party: party ? { id: party.id, display_name: party.display_name, company_id: party.company_id } : null,
       personData: personData.data,
       companyData: companyData.data,
-      clientData: clientData.data ? { party_id: clientData.data.party_id } : null,
+      clientData: clientPartyRow ? { party_id: clientPartyRow.party_id } : null,
       supplierData: supplierData.data,
       subagentData: subagentData.data,
       userCompanyId,
@@ -210,8 +246,11 @@ export async function GET(
       ...party,
       ...personData.data,
       ...companyData.data,
-      is_client: !!clientData.data,
-      show_referral_in_app: clientData.data?.show_referral_in_app,
+      is_client: !!clientPartyRow,
+      show_referral_in_app: clientPartyRow?.show_referral_in_app,
+      default_referral_party_id: clientPartyRow?.default_referral_party_id,
+      default_referral_party_display_name: defaultReferralPartyDisplayName,
+      client_last_travel_date: clientLastTravelDate,
       is_supplier: !!supplierData.data,
       is_subagent: !!subagentData.data,
       is_referral: !!referralData.data,
@@ -698,6 +737,12 @@ export async function PUT(
       const partyTypeForClient = updates.type || "person";
       const clientType = partyTypeForClient === "company" ? "company" : "person";
 
+      const { data: prevClientParty } = await supabaseAdmin
+        .from("client_party")
+        .select("show_referral_in_app, default_referral_party_id")
+        .eq("party_id", id)
+        .maybeSingle();
+
       // Remove all existing roles
       const [clientDeleteResult, partnerDeleteResult, subagentDeleteResult, referralDeleteResult] = await Promise.all([
         supabaseAdmin.from("client_party").delete().eq("party_id", id),
@@ -722,10 +767,27 @@ export async function PUT(
 
       // Add new roles
       if (updates.roles.includes("client")) {
+        const showRef =
+          updates.showReferralInApp !== undefined
+            ? !!updates.showReferralInApp
+            : !!prevClientParty?.show_referral_in_app;
+        let defaultRef: string | null =
+          updates.defaultReferralPartyId !== undefined
+            ? updates.defaultReferralPartyId || null
+            : (prevClientParty?.default_referral_party_id as string | null) ?? null;
+        if (defaultRef) {
+          const ok = await assertValidDefaultReferralParty(
+            supabaseAdmin,
+            existingParty.company_id as string,
+            defaultRef
+          );
+          if (!ok) defaultRef = null;
+        }
         const { error: clientError } = await supabaseAdmin.from("client_party").insert({
           party_id: id,
           client_type: clientType,
-          show_referral_in_app: updates.showReferralInApp === true,
+          show_referral_in_app: showRef,
+          default_referral_party_id: defaultRef,
         });
         if (clientError) {
           console.error("Error inserting client_party:", {
@@ -840,6 +902,37 @@ export async function PUT(
       }
     }
 
+    if (updates.defaultReferralPartyId !== undefined) {
+      const { data: cp } = await supabaseAdmin.from("client_party").select("party_id").eq("party_id", id).maybeSingle();
+      if (cp) {
+        const rid = updates.defaultReferralPartyId;
+        if (rid === null || rid === "") {
+          const { error: clrErr } = await supabaseAdmin
+            .from("client_party")
+            .update({ default_referral_party_id: null })
+            .eq("party_id", id);
+          if (clrErr) console.error("[Directory PUT] clear default_referral_party_id:", clrErr);
+        } else {
+          const ok = await assertValidDefaultReferralParty(
+            supabaseAdmin,
+            existingParty.company_id as string,
+            rid
+          );
+          if (!ok) {
+            return NextResponse.json(
+              { error: "Selected party must have the Referral role for your company" },
+              { status: 400 }
+            );
+          }
+          const { error: refErr } = await supabaseAdmin
+            .from("client_party")
+            .update({ default_referral_party_id: rid })
+            .eq("party_id", id);
+          if (refErr) console.error("[Directory PUT] default_referral_party_id:", refErr);
+        }
+      }
+    }
+
     // Fetch updated record
     const { data: updatedParty, error: fetchError } = await supabaseAdmin
       .from("party")
@@ -872,19 +965,54 @@ export async function PUT(
     const [personData, companyData, clientData, supplierData, subagentData, referralData, referralRatesData] = await Promise.all([
       supabaseAdmin.from("party_person").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("party_company").select("*").eq("party_id", id).maybeSingle(),
-      supabaseAdmin.from("client_party").select("party_id, show_referral_in_app").eq("party_id", id).maybeSingle(),
+      supabaseAdmin.from("client_party").select("party_id, show_referral_in_app, default_referral_party_id").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("partner_party").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("subagents").select("*").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("referral_party").select("party_id, default_currency, notes").eq("party_id", id).maybeSingle(),
       supabaseAdmin.from("referral_party_category_rate").select("category_id, rate_kind, rate_value").eq("party_id", id),
     ]);
 
+    let clientPartyRowPut = clientData.data;
+    if (clientPartyRowPut && updatedParty.company_id) {
+      const { cleared } = await maybeClearStaleClientDefaultReferral(
+        supabaseAdmin,
+        updatedParty.company_id as string,
+        id
+      );
+      if (cleared) {
+        const { data: cpFresh } = await supabaseAdmin
+          .from("client_party")
+          .select("party_id, show_referral_in_app, default_referral_party_id")
+          .eq("party_id", id)
+          .maybeSingle();
+        if (cpFresh) clientPartyRowPut = cpFresh;
+      }
+    }
+
+    let defaultReferralPartyDisplayNamePut: string | undefined;
+    if (clientPartyRowPut?.default_referral_party_id) {
+      const { data: drParty } = await supabaseAdmin
+        .from("party")
+        .select("display_name")
+        .eq("id", clientPartyRowPut.default_referral_party_id as string)
+        .maybeSingle();
+      defaultReferralPartyDisplayNamePut = drParty?.display_name ?? undefined;
+    }
+
+    const clientLastTravelDatePut =
+      clientPartyRowPut && updatedParty.company_id
+        ? await getClientLastTravelActivityDate(supabaseAdmin, updatedParty.company_id as string, id)
+        : null;
+
     const record = buildDirectoryRecord({
       ...updatedParty,
       ...personData.data,
       ...companyData.data,
-      is_client: !!clientData.data,
-      show_referral_in_app: clientData.data?.show_referral_in_app,
+      is_client: !!clientPartyRowPut,
+      show_referral_in_app: clientPartyRowPut?.show_referral_in_app,
+      default_referral_party_id: clientPartyRowPut?.default_referral_party_id,
+      default_referral_party_display_name: defaultReferralPartyDisplayNamePut,
+      client_last_travel_date: clientLastTravelDatePut,
       is_supplier: !!supplierData.data,
       is_subagent: !!subagentData.data,
       is_referral: !!referralData.data,

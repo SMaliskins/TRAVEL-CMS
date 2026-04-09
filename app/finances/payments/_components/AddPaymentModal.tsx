@@ -531,7 +531,17 @@ export default function AddPaymentModal({
                       const amountToSuggest = typeof inv.remaining === "number" && inv.remaining >= 0
                         ? inv.remaining
                         : (isCred ? Math.abs(inv.total ?? 0) : inv.total);
-                      if (amountToSuggest != null && !amount.trim()) setAmount(String(amountToSuggest));
+                      if (amountToSuggest != null) {
+                        const debt = selectedOrder?.amount_debt ?? 0;
+                        const current = parseFloat(String(amount).replace(",", "."));
+                        const stillDefaultOrderDebt =
+                          debt > 0 &&
+                          !isNaN(current) &&
+                          Math.abs(current - debt) < 0.005;
+                        if (!amount.trim() || stillDefaultOrderDebt) {
+                          setAmount(String(amountToSuggest));
+                        }
+                      }
                     }
                     if (inv?.payer_name) {
                       setPayerName(inv.payer_name);

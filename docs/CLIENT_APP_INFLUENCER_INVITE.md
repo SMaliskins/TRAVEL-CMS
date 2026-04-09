@@ -77,7 +77,7 @@ npx tsx scripts/generate-client-app-invite.ts <PARTY_UUID> [AGENT_AUTH_USER_UUID
 
 ## E. Deep link
 
-Схема приложения: **`mytravelconcierge`** (`Client/app.json`).
+Схема приложения: **`mytravelconcierge`** (`Client/app.config.ts`).
 
 Пример:
 

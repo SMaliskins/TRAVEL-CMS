@@ -73,8 +73,8 @@ travel-cms/
 │       │   └── calculator.ts   # MLM commission calculation
 │       └── mcp/
 │           └── server.ts       # MCP server definition
-└── mobile/                     # React Native Expo app
-    ├── app.json
+└── mobile/                     # React Native Expo app (see repo `Client/`)
+    ├── app.config.ts
     ├── package.json
     └── src/
         ├── navigation/

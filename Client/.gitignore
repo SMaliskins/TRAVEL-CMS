@@ -11,3 +11,6 @@ npm-debug.*
 web-build/
 .env.local
 .env.production
+.env
+google-services-key.json
+play-store*.json

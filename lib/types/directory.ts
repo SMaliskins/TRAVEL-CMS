@@ -165,4 +165,10 @@ export interface DirectoryRecord {
 
   /** Client role: show Referral section in mobile client app */
   showReferralInApp?: boolean;
+
+  /** Client role: auto-apply this referral partner on new orders (cleared after idle travel window) */
+  defaultReferralPartyId?: string | null;
+  defaultReferralPartyDisplayName?: string;
+  /** Latest date_from/date_to among non-cancelled orders for this client (YYYY-MM-DD) */
+  clientLastTravelDate?: string | null;
 }

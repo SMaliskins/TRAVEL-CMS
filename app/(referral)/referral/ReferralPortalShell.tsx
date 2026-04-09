@@ -8,7 +8,7 @@ import { useEffect } from 'react'
 const LANGS: UILang[] = ['en', 'ru', 'lv']
 
 export function ReferralPortalShell({ children }: { children: React.ReactNode }) {
-  const { prefs, updatePrefs, isMounted } = useUserPreferences()
+  const { prefs, updatePrefs, isMounted } = useUserPreferences('referral')
 
   useEffect(() => {
     document.documentElement.lang = prefs.language === 'lv' ? 'lv' : prefs.language === 'ru' ? 'ru' : 'en'

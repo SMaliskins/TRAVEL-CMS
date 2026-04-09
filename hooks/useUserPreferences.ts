@@ -16,23 +16,42 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   language: "en",
 };
 
-const STORAGE_KEY = "travelcms.user.preferences";
+/**
+ * `app` — staff CMS (TopBar, orders, etc.).
+ * `referral` — /referral web portal only, so language is not shared with other users on the same browser.
+ */
+export type UserPreferencesScope = "app" | "referral";
 
-export function useUserPreferences() {
+const STORAGE_KEYS: Record<UserPreferencesScope, string> = {
+  app: "travelcms.user.preferences",
+  referral: "travelcms.referral.portal.preferences",
+};
+
+const PREFS_CHANGED_EVENTS: Record<UserPreferencesScope, string> = {
+  app: "travelcms:prefs-changed",
+  referral: "travelcms:referral-prefs-changed",
+};
+
+export function useUserPreferences(scope: UserPreferencesScope = "app") {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [isMounted, setIsMounted] = useState(false);
+
+  const storageKey = STORAGE_KEYS[scope];
+  const changedEvent = PREFS_CHANGED_EVENTS[scope];
 
   // Load preferences from localStorage after mount
   useEffect(() => {
     setIsMounted(true);
-    
+
     const loadPrefs = () => {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(storageKey);
         if (stored) {
           const parsed = JSON.parse(stored);
           // Merge with defaults to handle missing fields
           setPrefs({ ...DEFAULT_PREFERENCES, ...parsed });
+        } else {
+          setPrefs(DEFAULT_PREFERENCES);
         }
       } catch (e) {
         console.error("Failed to load user preferences from localStorage", e);
@@ -43,7 +62,7 @@ export function useUserPreferences() {
 
     // Listen for storage events (changes from other tabs/windows)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
+      if (e.key === storageKey && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           setPrefs({ ...DEFAULT_PREFERENCES, ...parsed });
@@ -55,43 +74,43 @@ export function useUserPreferences() {
 
     window.addEventListener("storage", handleStorageChange);
 
-    // Also listen for custom events from same window (for immediate updates)
-    // Use setTimeout to defer state update until after render phase to avoid React warning
-    const handlePrefsChange = (e: CustomEvent) => {
-      if (e.detail) {
+    // Same-window updates (only this scope’s event)
+    const handlePrefsChange = (e: Event) => {
+      const ce = e as CustomEvent<UserPreferences>;
+      if (ce.detail) {
         setTimeout(() => {
-          setPrefs({ ...DEFAULT_PREFERENCES, ...e.detail });
+          setPrefs({ ...DEFAULT_PREFERENCES, ...ce.detail });
         }, 0);
       }
     };
 
-    window.addEventListener("travelcms:prefs-changed" as any, handlePrefsChange);
+    window.addEventListener(changedEvent, handlePrefsChange);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("travelcms:prefs-changed" as any, handlePrefsChange);
+      window.removeEventListener(changedEvent, handlePrefsChange);
     };
-  }, []);
+  }, [storageKey, changedEvent]);
 
   // Update preferences and save to localStorage
-  const updatePrefs = useCallback((partial: Partial<UserPreferences>) => {
-    setPrefs((prevPrefs) => {
-      const newPrefs = { ...prevPrefs, ...partial };
-      
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newPrefs));
-        
-        // Dispatch custom event for same-window updates
-        window.dispatchEvent(
-          new CustomEvent("travelcms:prefs-changed", { detail: newPrefs })
-        );
-      } catch (e) {
-        console.error("Failed to save user preferences to localStorage", e);
-      }
-      
-      return newPrefs;
-    });
-  }, []);
+  const updatePrefs = useCallback(
+    (partial: Partial<UserPreferences>) => {
+      setPrefs((prevPrefs) => {
+        const newPrefs = { ...prevPrefs, ...partial };
+
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(newPrefs));
+
+          window.dispatchEvent(new CustomEvent(changedEvent, { detail: newPrefs }));
+        } catch (e) {
+          console.error("Failed to save user preferences to localStorage", e);
+        }
+
+        return newPrefs;
+      });
+    },
+    [storageKey, changedEvent]
+  );
 
   return {
     prefs,

@@ -150,6 +150,15 @@ export function buildDirectoryRecord(row: any): DirectoryRecord {
 
   if (row.is_client) {
     record.showReferralInApp = !!row.show_referral_in_app;
+    if (row.default_referral_party_id !== undefined) {
+      record.defaultReferralPartyId = row.default_referral_party_id || null;
+    }
+    if (row.default_referral_party_display_name !== undefined) {
+      record.defaultReferralPartyDisplayName = row.default_referral_party_display_name || undefined;
+    }
+    if (row.client_last_travel_date !== undefined) {
+      record.clientLastTravelDate = row.client_last_travel_date ?? null;
+    }
   }
 
   return record;

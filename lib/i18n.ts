@@ -1,6 +1,6 @@
 /**
  * UI strings for interface language (My Profile > Language).
- * Use with useUserPreferences().prefs.language.
+ * Use with useUserPreferences().prefs.language (staff) or useUserPreferences("referral") on /referral.
  * When adding new features, add strings here for en/ru/lv.
  */
 
@@ -84,6 +84,11 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.clientAppPasswordMismatch": "Passwords do not match.",
     "directory.clientAppPasswordEmailRequired": "Add an email to this card before setting a password.",
     "directory.clientAppPasswordTooShort": "Password must be at least 8 characters.",
+    "directory.defaultReferralTitle": "Default referral partner (auto on new orders)",
+    "directory.defaultReferralHint":
+      "New orders for this client get this referral on the order unless you change it there. If they have no non-cancelled trip activity for 2 years, the link is cleared automatically.",
+    "directory.defaultReferralLastTripPrefix": "Last trip activity:",
+    "directory.defaultReferralLastTripNone": "No trip dates on non-cancelled orders yet — idle rule applies once there is history.",
     "sidebar.expanded": "Expanded",
     "sidebar.collapsed": "Collapsed",
     "sidebar.expandOnHover": "Expand on hover",
@@ -551,6 +556,25 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.walletComingSoon":
       "Wallet passes are not active yet. Your agency will turn this on when Apple / Google credentials are configured.",
     "referralPortal.walletError": "Could not start wallet setup. Try again or open this page from your phone.",
+    "referralPortal.forgotPassword": "Forgot password?",
+    "referralPortal.forgotTitle": "Reset password",
+    "referralPortal.forgotSubtitle": "Enter the email from your agency profile. We will send a link to set a new password.",
+    "referralPortal.sendResetLink": "Send reset link",
+    "referralPortal.sendingReset": "Sending…",
+    "referralPortal.forgotSuccess": "Check your email. We sent you a link to reset your password.",
+    "referralPortal.forgotSpamHint": "If you do not see the email, check your spam folder.",
+    "referralPortal.backToReferralLogin": "Back to sign in",
+    "referralPortal.resetTitle": "Set new password",
+    "referralPortal.resetSubtitle": "Choose a password at least 8 characters long.",
+    "referralPortal.newPassword": "New password",
+    "referralPortal.confirmNewPassword": "Confirm new password",
+    "referralPortal.updatePassword": "Update password",
+    "referralPortal.resetSuccess": "Password updated. Redirecting to sign in…",
+    "referralPortal.resetNoToken": "Use the link from your email to reset your password.",
+    "referralPortal.resetNoTokenHint": "The link may have expired. Request a new one.",
+    "referralPortal.requestNewResetLink": "Request new reset link",
+    "referralPortal.errorPasswordTooShort": "Password must be at least 8 characters.",
+    "referralPortal.errorPasswordMismatch": "Passwords do not match.",
   },
   ru: {
     "profile.title": "Мой профиль",
@@ -625,6 +649,11 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.clientAppPasswordMismatch": "Пароли не совпадают.",
     "directory.clientAppPasswordEmailRequired": "Сначала укажите email в карточке.",
     "directory.clientAppPasswordTooShort": "Пароль не короче 8 символов.",
+    "directory.defaultReferralTitle": "Реферал по умолчанию (авто в новых заказах)",
+    "directory.defaultReferralHint":
+      "В новых заказах с этим клиентом на заказ подставится этот реферал, пока вы не смените его в заказе. Если по неотменённым заказам нет поездок 2 года — привязка снимается автоматически.",
+    "directory.defaultReferralLastTripPrefix": "Последняя активность по поездкам:",
+    "directory.defaultReferralLastTripNone": "Пока нет дат по неотменённым заказам — правило «2 года» заработает, когда появится история.",
     "sidebar.expanded": "Развёрнуто",
     "sidebar.collapsed": "Свёрнуто",
     "sidebar.expandOnHover": "Разворачивать при наведении",
@@ -1084,6 +1113,25 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.walletComingSoon":
       "Пассы для кошелька пока не включены. Агентство подключит их после настройки Apple / Google.",
     "referralPortal.walletError": "Не удалось начать добавление в кошелёк. Попробуйте снова или откройте страницу с телефона.",
+    "referralPortal.forgotPassword": "Забыли пароль?",
+    "referralPortal.forgotTitle": "Сброс пароля",
+    "referralPortal.forgotSubtitle": "Укажите email из карточки в справочнике агентства — пришлём ссылку для нового пароля.",
+    "referralPortal.sendResetLink": "Отправить ссылку",
+    "referralPortal.sendingReset": "Отправка…",
+    "referralPortal.forgotSuccess": "Проверьте почту — мы отправили ссылку для сброса пароля.",
+    "referralPortal.forgotSpamHint": "Если письма нет, загляните в спам.",
+    "referralPortal.backToReferralLogin": "Назад ко входу",
+    "referralPortal.resetTitle": "Новый пароль",
+    "referralPortal.resetSubtitle": "Пароль не короче 8 символов.",
+    "referralPortal.newPassword": "Новый пароль",
+    "referralPortal.confirmNewPassword": "Подтвердите пароль",
+    "referralPortal.updatePassword": "Сохранить пароль",
+    "referralPortal.resetSuccess": "Пароль обновлён. Переход ко входу…",
+    "referralPortal.resetNoToken": "Откройте ссылку из письма для сброса пароля.",
+    "referralPortal.resetNoTokenHint": "Ссылка могла устареть — запросите новую.",
+    "referralPortal.requestNewResetLink": "Запросить новую ссылку",
+    "referralPortal.errorPasswordTooShort": "Пароль не короче 8 символов.",
+    "referralPortal.errorPasswordMismatch": "Пароли не совпадают.",
   },
   lv: {
     "profile.title": "Mans profils",
@@ -1158,6 +1206,11 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.clientAppPasswordMismatch": "Paroles nesakrīt.",
     "directory.clientAppPasswordEmailRequired": "Vispirms norādiet e-pastu kartītē.",
     "directory.clientAppPasswordTooShort": "Parolei jābūt vismaz 8 rakstzīmēm.",
+    "directory.defaultReferralTitle": "Noklusējuma ieteikuma partneris (auto jaunos pasūtījumos)",
+    "directory.defaultReferralHint":
+      "Jauniem pasūtījumiem ar šo klientu pasūtījumā tiek iestatīts šis ieteikums, ja to nemaināt pasūtījumā. Ja 2 gadus nav braucienu ar neatceltiem pasūtījumiem, saite tiek noņemta automātiski.",
+    "directory.defaultReferralLastTripPrefix": "Pēdējā aktivitāte pēc braucieniem:",
+    "directory.defaultReferralLastTripNone": "Vēl nav datumu — «2 gadu» noteikums sāks darboties, kad būs vēsture.",
     "sidebar.expanded": "Izvērsts",
     "sidebar.collapsed": "Sakļauts",
     "sidebar.expandOnHover": "Izvērst pie novietošanas",
@@ -1617,6 +1670,26 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "referralPortal.walletComingSoon":
       "Maka kartes vēl nav aktivizētas. Aģentūra tās ieslēgs pēc Apple / Google iestatīšanas.",
     "referralPortal.walletError": "Neizdevās sākt pievienošanu makam. Mēģiniet vēlreiz vai atveriet lapu tālrunī.",
+    "referralPortal.forgotPassword": "Aizmirsi paroli?",
+    "referralPortal.forgotTitle": "Paroles atjaunošana",
+    "referralPortal.forgotSubtitle":
+      "Ievadiet e-pastu no aģentūras kartītes — nosūtīsim saiti jaunai parolei.",
+    "referralPortal.sendResetLink": "Nosūtīt saiti",
+    "referralPortal.sendingReset": "Nosūta…",
+    "referralPortal.forgotSuccess": "Pārbaudiet e-pastu — nosūtījām saiti paroles maiņai.",
+    "referralPortal.forgotSpamHint": "Ja vēstules nav, paskatieties mapi «Nevēlamie».",
+    "referralPortal.backToReferralLogin": "Atpakaļ uz pieslēgšanos",
+    "referralPortal.resetTitle": "Jaunā parole",
+    "referralPortal.resetSubtitle": "Parolei jābūt vismaz 8 rakstzīmēm.",
+    "referralPortal.newPassword": "Jaunā parole",
+    "referralPortal.confirmNewPassword": "Apstiprināt paroli",
+    "referralPortal.updatePassword": "Saglabāt paroli",
+    "referralPortal.resetSuccess": "Parole atjaunināta. Novirza uz pieslēgšanos…",
+    "referralPortal.resetNoToken": "Lai mainītu paroli, izmantojiet saiti no e-pasta.",
+    "referralPortal.resetNoTokenHint": "Saite var būt novecojusi — pieprasiet jaunu.",
+    "referralPortal.requestNewResetLink": "Pieprasīt jaunu saiti",
+    "referralPortal.errorPasswordTooShort": "Parolei jābūt vismaz 8 rakstzīmēm.",
+    "referralPortal.errorPasswordMismatch": "Paroles nesakrīt.",
   },
 };
 
@@ -1627,7 +1700,7 @@ function normalizeLang(lang: string): UILang {
 
 /**
  * Get UI string by key for the given language.
- * Use from components that have access to useUserPreferences().prefs.language.
+ * Use from components that have access to useUserPreferences() or useUserPreferences("referral").prefs.language.
  */
 export function t(lang: string, key: string): string {
   const L = normalizeLang(lang);

@@ -5,6 +5,7 @@ import { getApiUser } from "@/lib/auth/getApiUser";
 import { upsertPartyEmbedding } from "@/lib/embeddings/upsert";
 import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
+import { assertValidDefaultReferralParty } from "@/lib/referral/clientDefaultReferralParty";
 
 export async function POST(request: NextRequest) {
   try {
@@ -328,10 +329,16 @@ export async function POST(request: NextRequest) {
       
       // Determine client_type from party_type
       const clientType = partyCheck.party_type === "company" ? "company" : "person";
+      let defaultRefId: string | null = (data.defaultReferralPartyId as string | null | undefined) || null;
+      if (defaultRefId) {
+        const ok = await assertValidDefaultReferralParty(supabaseAdmin, companyId, defaultRefId);
+        if (!ok) defaultRefId = null;
+      }
       const { error: clientError } = await supabaseAdmin.from("client_party").insert({
         party_id: partyId,
         client_type: clientType,
         show_referral_in_app: data.showReferralInApp === true,
+        default_referral_party_id: defaultRefId,
       });
       if (clientError) {
         console.error("Error creating client_party:", {
