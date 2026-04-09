@@ -10,7 +10,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  if (pathname === '/referral/login') {
+  const referralPublicPaths = new Set([
+    '/referral/login',
+    '/referral/forgot-password',
+    '/referral/reset-password',
+  ])
+  if (referralPublicPaths.has(pathname)) {
     return NextResponse.next()
   }
 
