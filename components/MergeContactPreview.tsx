@@ -69,7 +69,8 @@ export function MergeContactPreviewCard({
         <div className="min-w-0 flex-1 space-y-0.5 text-sm text-gray-800">
           <div className="font-semibold text-gray-900">{name}</div>
           <div className="text-xs text-gray-500 capitalize">
-            {record.type} · {(record.roles || []).join(", ") || "—"}
+            {record.type} ·{" "}
+            {(record.roles || []).filter((r) => r !== "referral").join(", ") || "—"}
           </div>
           {record.email ? (
             <div>

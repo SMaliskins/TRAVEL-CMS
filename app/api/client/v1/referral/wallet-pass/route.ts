@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthenticatedClient, unauthorizedResponse } from "@/lib/client-auth/middleware";
+import { isReferralPortalFeatureAllowed } from "@/lib/referral/referralPortalAccess";
 
 /**
  * Phase B: will return .pkpass (Apple) or redirect to Google Wallet JWT flow.
@@ -26,13 +27,22 @@ export async function GET(req: NextRequest) {
 
     const partyId = profile.crm_client_id as string;
 
-    const { data: cp } = await supabaseAdmin
-      .from("client_party")
-      .select("show_referral_in_app")
-      .eq("party_id", partyId)
-      .maybeSingle();
+    const { data: party, error: partyErr } = await supabaseAdmin
+      .from("party")
+      .select("id, company_id")
+      .eq("id", partyId)
+      .single();
 
-    if (!cp?.show_referral_in_app) {
+    if (partyErr || !party) {
+      return Response.json({ data: null, error: "NOT_FOUND" }, { status: 404 });
+    }
+
+    const portalOk = await isReferralPortalFeatureAllowed(
+      supabaseAdmin,
+      partyId,
+      party.company_id as string
+    );
+    if (!portalOk) {
       return Response.json({ data: null, error: "REFERRAL_APP_DISABLED" }, { status: 403 });
     }
 

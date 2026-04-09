@@ -73,6 +73,9 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.referralTripEnd": "Trip ends",
     "directory.referralBecomesAccruedHint":
       "Planned amounts move to active on the partner’s balance after the client’s trip end date and once commission is confirmed on the order. This is not a payout.",
+    "directory.mainDetailsTabMain": "Main",
+    "directory.mainDetailsTabReferral": "Referral",
+    "directory.mainDetailsTabsAria": "Main details sections",
     "directory.clientAppPasswordTitle": "Client app & referral portal password",
     "directory.clientAppPasswordHint":
       "Sets login password for /referral and the mobile app (same email as this card). Min. 8 characters. Saving invalidates existing app sessions.",
@@ -638,6 +641,9 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.referralTripEnd": "Окончание поездки",
     "directory.referralBecomesAccruedHint":
       "Плановые суммы переходят в активные на балансе партнёра после даты окончания поездки клиента и подтверждения комиссии в заявке. Это не выплата.",
+    "directory.mainDetailsTabMain": "Основное",
+    "directory.mainDetailsTabReferral": "Реферал",
+    "directory.mainDetailsTabsAria": "Разделы основных данных",
     "directory.clientAppPasswordTitle": "Пароль для приложения и портала реферала",
     "directory.clientAppPasswordHint":
       "Задаёт пароль для входа на /referral и в мобильном приложении (тот же email, что в карточке). Минимум 8 символов. После сохранения старые сессии в приложении сбрасываются.",
@@ -1195,6 +1201,9 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.referralTripEnd": "Ceļojuma beigas",
     "directory.referralBecomesAccruedHint":
       "Plānotās summas kļūst aktīvas partnera bilancē pēc klienta ceļojuma beigu datuma un kad pieteikumā apstiprināta komisija. Tas nav izmaksa.",
+    "directory.mainDetailsTabMain": "Galvenā",
+    "directory.mainDetailsTabReferral": "Ieteikums",
+    "directory.mainDetailsTabsAria": "Galveno datu sadaļas",
     "directory.clientAppPasswordTitle": "Parole lietotnei un ieteikuma portālam",
     "directory.clientAppPasswordHint":
       "Iestata paroli /referral un mobilajai lietotnei (tas pats e-pasts kā kartītē). Vismaz 8 rakstzīmes. Pēc saglabāšanas vecās sesijas lietotnē tiek atceltas.",

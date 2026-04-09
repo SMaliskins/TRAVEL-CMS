@@ -145,6 +145,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     
     // Active tab state for Statistics section
     const [activeTab, setActiveTab] = useState<"statistics" | "clientScore">("statistics");
+
+    /** Main details card: Main vs Referral (only when Referral role is checked) */
+    const [directoryMainTab, setDirectoryMainTab] = useState<"main" | "referral">("main");
     
     // Statistics state
     const [stats, setStats] = useState<{
@@ -260,6 +263,12 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
       document.addEventListener('visibilitychange', handleVisibilityChange);
       return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [activeTab, roles, fetchStats]);
+
+    useEffect(() => {
+      if (!roles.includes("referral") && directoryMainTab === "referral") {
+        setDirectoryMainTab("main");
+      }
+    }, [roles, directoryMainTab]);
 
     // Client type selection (for Client role only)
     // Initialize from record.type if available, to preserve Type when adding Client role
@@ -850,22 +859,29 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           // Clear highlight after 1.2 seconds
           setTimeout(() => setHighlightedSection(null), 1200);
         }
-        if (role === "referral" && referralSectionRef.current) {
-          const rect = referralSectionRef.current.getBoundingClientRect();
-          const isVisible =
-            rect.top >= 0 &&
-            rect.left >= 0 &&
-            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-            rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+        if (role === "referral") {
+          setDirectoryMainTab("referral");
           setHighlightedSection("referral");
-          if (!isVisible) {
-            requestAnimationFrame(() => {
-              referralSectionRef.current?.scrollIntoView({
+          const scrollToReferral = () => {
+            const el = referralSectionRef.current;
+            if (!el) {
+              requestAnimationFrame(scrollToReferral);
+              return;
+            }
+            const rect = el.getBoundingClientRect();
+            const isVisible =
+              rect.top >= 0 &&
+              rect.left >= 0 &&
+              rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+              rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+            if (!isVisible) {
+              el.scrollIntoView({
                 behavior: "smooth",
                 block: "start",
               });
-            });
-          }
+            }
+          };
+          requestAnimationFrame(() => requestAnimationFrame(scrollToReferral));
           setTimeout(() => setHighlightedSection(null), 1200);
         }
       }
@@ -1175,7 +1191,39 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-12">
           {/* Left: Main Details (2/3 width) */}
           <div className={`lg:col-span-6 group rounded-2xl bg-white/80 backdrop-blur-xl p-4 md:p-6 lg:p-7 shadow-[0_1px_3px_0_rgba(0,0,0,0.06),0_1px_2px_-1px_rgba(0,0,0,0.04)] border border-gray-100/50 transition-all duration-300 hover:shadow-md ${saveSuccess && dirtyFields.size > 0 ? "main-details-saved" : ""}`}>
-            <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Main details</h2>
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold tracking-tight text-gray-900">Main details</h2>
+              {roles.includes("referral") ? (
+                <nav
+                  className="flex w-fit gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1"
+                  aria-label={t(lang, "directory.mainDetailsTabsAria")}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryMainTab("main")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      directoryMainTab === "main"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {t(lang, "directory.mainDetailsTabMain")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryMainTab("referral")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      directoryMainTab === "referral"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {t(lang, "directory.mainDetailsTabReferral")}
+                  </button>
+                </nav>
+              ) : null}
+            </div>
+            {directoryMainTab === "main" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               {/* Type and Roles in one row - labels on top, options below */}
               {/* Always show in edit mode, or in create mode if not client, or if client */}
@@ -1261,55 +1309,10 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         </label>
                       ))}
                     </div>
-                    {roles.includes("client") && (
-                      <div className="mt-2 space-y-1 max-w-lg">
-                        <label className="flex cursor-pointer items-start gap-2">
-                          <input
-                            type="checkbox"
-                            checked={showReferralInApp}
-                            onChange={(e) => {
-                              setShowReferralInApp(e.target.checked);
-                              markFieldDirty("showReferralInApp");
-                            }}
-                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-gray-300 text-black focus:ring-2 focus:ring-black focus:ring-offset-1 focus:ring-offset-white cursor-pointer"
-                          />
-                          <span className="text-xs font-medium text-gray-800 leading-snug">
-                            Show referral section in client app
-                            <span className="block font-normal text-gray-500 mt-0.5">
-                              Mobile app users see commission overview when this is on and the contact has the Referral role with rates.
-                            </span>
-                          </span>
-                        </label>
-                      </div>
-                    )}
-                    {roles.includes("client") && (
-                      <div className="mt-3 space-y-2 max-w-lg border-t border-gray-200 pt-3">
-                        <div className="text-xs font-semibold text-gray-800">
-                          {t(lang, "directory.defaultReferralTitle")}
-                        </div>
-                        <p className="text-xs text-gray-500 leading-snug">
-                          {t(lang, "directory.defaultReferralHint")}
-                        </p>
-                        <PartySelect
-                          roleFilter="referral"
-                          value={defaultReferralPartyId}
-                          initialDisplayName={defaultReferralPartyDisplayName}
-                          onChange={(pid, displayName) => {
-                            setDefaultReferralPartyId(pid);
-                            setDefaultReferralPartyDisplayName(displayName);
-                            markFieldDirty("defaultReferralPartyId");
-                          }}
-                        />
-                        <p className="text-[11px] text-gray-500">
-                          {record?.clientLastTravelDate
-                            ? `${t(lang, "directory.defaultReferralLastTripPrefix")} ${formatDateDDMMYYYY(record.clientLastTravelDate)}`
-                            : t(lang, "directory.defaultReferralLastTripNone")}
-                        </p>
-                      </div>
-                    )}
-                    {mode === "edit" &&
-                      record?.id &&
-                      (roles.includes("client") || roles.includes("referral")) && (
+                    {roles.includes("client") &&
+                      !roles.includes("referral") &&
+                      mode === "edit" &&
+                      record?.id && (
                       <div className="mt-4 max-w-lg rounded-lg border border-gray-200 bg-gray-50/90 p-4">
                         <p className="text-sm font-semibold text-gray-900">
                           {t(lang, "directory.clientAppPasswordTitle")}
@@ -2843,9 +2846,169 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   </div>
                 </div>
               )}
-
+            </div>
+            ) : (
+            <div className="space-y-6">
+              {roles.includes("client") && (
+                <div className="max-w-lg space-y-1">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={showReferralInApp}
+                      onChange={(e) => {
+                        setShowReferralInApp(e.target.checked);
+                        markFieldDirty("showReferralInApp");
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-gray-300 text-black focus:ring-2 focus:ring-black focus:ring-offset-1 focus:ring-offset-white cursor-pointer"
+                    />
+                    <span className="text-xs font-medium text-gray-800 leading-snug">
+                      Show referral section in client app
+                      <span className="mt-0.5 block font-normal text-gray-500">
+                        Mobile app users see commission overview when this is on and the contact has the Referral role with rates.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+              {roles.includes("client") && (
+                <div className="max-w-lg space-y-2 border-t border-gray-200 pt-4">
+                  <div className="text-xs font-semibold text-gray-800">
+                    {t(lang, "directory.defaultReferralTitle")}
+                  </div>
+                  <p className="text-xs leading-snug text-gray-500">
+                    {t(lang, "directory.defaultReferralHint")}
+                  </p>
+                  <PartySelect
+                    roleFilter="referral"
+                    value={defaultReferralPartyId}
+                    initialDisplayName={defaultReferralPartyDisplayName}
+                    onChange={(pid, displayName) => {
+                      setDefaultReferralPartyId(pid);
+                      setDefaultReferralPartyDisplayName(displayName);
+                      markFieldDirty("defaultReferralPartyId");
+                    }}
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    {record?.clientLastTravelDate
+                      ? `${t(lang, "directory.defaultReferralLastTripPrefix")} ${formatDateDDMMYYYY(record.clientLastTravelDate)}`
+                      : t(lang, "directory.defaultReferralLastTripNone")}
+                  </p>
+                </div>
+              )}
+              {mode === "edit" && record?.id && roles.includes("referral") && (
+                <div className="max-w-lg rounded-lg border border-gray-200 bg-gray-50/90 p-4">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {t(lang, "directory.clientAppPasswordTitle")}
+                  </p>
+                  <p className="mt-1 text-xs leading-snug text-gray-600">
+                    {t(lang, "directory.clientAppPasswordHint")}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <label className="block text-xs font-medium text-gray-700">
+                      {t(lang, "directory.clientAppPasswordLabel")}
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={clientAppPassword}
+                        onChange={(e) => {
+                          setClientAppPassword(e.target.value);
+                          setClientAppPasswordMsg(null);
+                        }}
+                        className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-gray-700">
+                      {t(lang, "directory.clientAppPasswordConfirm")}
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={clientAppPasswordConfirm}
+                        onChange={(e) => {
+                          setClientAppPasswordConfirm(e.target.value);
+                          setClientAppPasswordMsg(null);
+                        }}
+                        className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  </div>
+                  {clientAppPasswordMsg ? (
+                    <p
+                      className={
+                        clientAppPasswordMsg.type === "ok"
+                          ? "mt-2 text-xs text-green-800"
+                          : "mt-2 text-xs text-red-700"
+                      }
+                      role="status"
+                    >
+                      {clientAppPasswordMsg.text}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={clientAppPasswordBusy}
+                    onClick={async () => {
+                      setClientAppPasswordMsg(null);
+                      if (!email.trim()) {
+                        setClientAppPasswordMsg({
+                          type: "err",
+                          text: t(lang, "directory.clientAppPasswordEmailRequired"),
+                        });
+                        return;
+                      }
+                      if (clientAppPassword.length < 8) {
+                        setClientAppPasswordMsg({
+                          type: "err",
+                          text: t(lang, "directory.clientAppPasswordTooShort"),
+                        });
+                        return;
+                      }
+                      if (clientAppPassword !== clientAppPasswordConfirm) {
+                        setClientAppPasswordMsg({
+                          type: "err",
+                          text: t(lang, "directory.clientAppPasswordMismatch"),
+                        });
+                        return;
+                      }
+                      setClientAppPasswordBusy(true);
+                      try {
+                        const res = await fetchWithAuth(
+                          `/api/directory/${encodeURIComponent(record.id)}/client-app-password`,
+                          {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ password: clientAppPassword }),
+                          }
+                        );
+                        const j = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          const errText =
+                            j?.message ||
+                            j?.error ||
+                            (res.status === 400 ? "Validation error" : "Request failed");
+                          setClientAppPasswordMsg({ type: "err", text: String(errText) });
+                          return;
+                        }
+                        setClientAppPasswordMsg({
+                          type: "ok",
+                          text: t(lang, "directory.clientAppPasswordSuccess"),
+                        });
+                        setClientAppPassword("");
+                        setClientAppPasswordConfirm("");
+                      } catch {
+                        setClientAppPasswordMsg({ type: "err", text: "Request failed" });
+                      } finally {
+                        setClientAppPasswordBusy(false);
+                      }
+                    }}
+                    className="mt-3 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {clientAppPasswordBusy
+                      ? t(lang, "directory.clientAppPasswordSaving")
+                      : t(lang, "directory.clientAppPasswordSave")}
+                  </button>
+                </div>
+              )}
               {isReferral && (
-                <div className="md:col-span-2 mt-6 pt-6 border-t border-gray-200">
                   <div
                     id="referral-settings"
                     ref={referralSectionRef}
@@ -3074,9 +3237,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                       </div>
                     )}
                   </div>
-                </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Right: Statistics with Tabs (1/3 width) - Always visible */}
