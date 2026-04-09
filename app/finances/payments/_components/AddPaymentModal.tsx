@@ -102,6 +102,7 @@ export default function AddPaymentModal({
   const [selectedOrder, setSelectedOrder] = useState<OrderOption | null>(null);
 
   const [payerSearch, setPayerSearch] = useState("");
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
   const [invoiceOptions, setInvoiceOptions] = useState<InvoiceOption[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -132,6 +133,15 @@ export default function AddPaymentModal({
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [open, onClose, resetPosition]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(pointer: coarse)");
+    const apply = () => setIsCoarsePointer(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -574,12 +584,23 @@ export default function AddPaymentModal({
               <label className="block text-xs font-medium text-gray-600 mb-0.5">
                 Payment Date <span className="text-red-500">*</span>
               </label>
-              <div className="relative w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white cursor-pointer select-none flex items-center justify-between">
+              <div
+                className="relative w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white cursor-pointer select-none flex items-center justify-between"
+                onClick={() => {
+                  if (!isCoarsePointer) {
+                    try {
+                      dateInputRef.current?.showPicker();
+                    } catch {
+                      dateInputRef.current?.focus();
+                      dateInputRef.current?.click();
+                    }
+                  }
+                }}
+              >
                 <span>{paidAtDisplay}</span>
                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                {/* Keep native date input clickable on mobile Safari (showPicker on hidden input is unreliable). */}
                 <input
                   ref={dateInputRef}
                   type="date"
@@ -591,7 +612,12 @@ export default function AddPaymentModal({
                       setPaidAtDisplay(isoToDisplay(iso, dateFormat));
                     }
                   }}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  className={
+                    isCoarsePointer
+                      ? "absolute inset-0 opacity-0 cursor-pointer"
+                      : "absolute inset-0 opacity-0 pointer-events-none"
+                  }
+                  tabIndex={isCoarsePointer ? 0 : -1}
                   aria-label="Payment Date"
                 />
               </div>

@@ -21,6 +21,37 @@
 
 ---
 
+## [2026-04-09 15:31] CODE_WRITER — O7-IMPL: Payment date picker desktop regression fix
+
+**Task:** O7-IMPL | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Updated `app/finances/payments/_components/AddPaymentModal.tsx` date input behavior for both touch and desktop pointers
+- Added coarse-pointer detection (`matchMedia("(pointer: coarse)")`)
+- Restored desktop click-driven picker open while keeping mobile direct native input tap
+
+**Результат:** Payment Date picker now opens on desktop again and remains tappable on mobile.
+**Next Step:** QA cross-device check (desktop + phone)
+
+---
+
+## [2026-04-09 15:31] CODE_WRITER — O7-IMPL: Payment Date calendar desktop regression fix
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Investigating regression after mobile date-picker fix in AddPaymentModal
+- Reproducing desktop date selection failure and preparing cross-device behavior
+
+**Результат:** In progress
+**Next Step:** Implement desktop-safe + mobile-safe date picker interaction
+
+---
+
 ## [2026-04-08 10:53] CODE_WRITER — O7-IMPL: Latvian invoice title spelling fix
 
 **Task:** O7-IMPL | **Status:** SUCCESS
