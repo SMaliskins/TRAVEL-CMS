@@ -9,6 +9,7 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
 import { sanitizeNumber } from '@/utils/sanitizeNumber';
+import { formatApiErrorResponse } from "@/lib/http/formatApiError";
 
 interface Service {
   id: string;
@@ -519,7 +520,7 @@ export default function ChangeServiceModal({
       
       if (!createResponse.ok) {
         const errData = await createResponse.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to create change service');
+        throw new Error(formatApiErrorResponse(errData, "Failed to create change service"));
       }
       
       // Save corrected parse template if text was parsed

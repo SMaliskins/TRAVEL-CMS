@@ -9,6 +9,7 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY } from '@/utils/dateFormat';
 import { sanitizeNumber } from '@/utils/sanitizeNumber';
 import { computeServiceLineEconomics } from '@/lib/orders/serviceEconomics';
+import { formatApiErrorResponse } from "@/lib/http/formatApiError";
 
 export type CancellationRefundType = 'fully_refunded' | 'partial_refunded' | 'non_refunded';
 
@@ -108,7 +109,7 @@ export default function CancelServiceModal({
       );
       if (!cloneRes.ok) {
         const errData = await cloneRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to create cancellation record');
+        throw new Error(formatApiErrorResponse(errData, "Failed to create cancellation record"));
       }
 
       const updateResponse = await fetch(
@@ -123,7 +124,8 @@ export default function CancelServiceModal({
         }
       );
       if (!updateResponse.ok) {
-        throw new Error('Failed to mark original service as cancelled');
+        const errData = await updateResponse.json().catch(() => ({}));
+        throw new Error(formatApiErrorResponse(errData, "Failed to mark original service as cancelled"));
       }
 
       onCancellationConfirmed();

@@ -23,6 +23,7 @@ import LinkedServicesModal from "./LinkedServicesModal";
 import ParseFeedbackPanel from "@/components/ParseFeedbackPanel";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import type { SupplierCommission } from '@/lib/types/directory';
+import { formatApiErrorResponse } from "@/lib/http/formatApiError";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -2890,7 +2891,7 @@ export default function EditServiceModalNew({
         onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
-        setError(errData.error || 'Failed to update service');
+        setError(formatApiErrorResponse(errData, "Failed to update service"));
       }
     } catch (err) {
       console.error('Update error:', err);

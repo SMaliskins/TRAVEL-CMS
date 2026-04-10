@@ -51,6 +51,21 @@
 
 ---
 
+## [2026-04-08] CODE_WRITER — UX: Show API error details on service modals
+
+**Task:** service PATCH error visibility | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Added `lib/http/formatApiError.ts` (`formatApiErrorResponse`)
+- EditServiceModalNew, AddServiceModal, ChangeServiceModal, CancelServiceModal: surface `details` / `message` from JSON error responses
+
+**Результат:** `npx tsc --noEmit` OK
+**Next Step:** QA: failed save shows Postgres/Supabase message after colon
+
+---
+
 ## [2026-04-06 12:00] CODE_WRITER — DASH-MAP: Dashboard map show all orders + geocode
 
 **Task:** DASH-MAP | **Status:** SUCCESS

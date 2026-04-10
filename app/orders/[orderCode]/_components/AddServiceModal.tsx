@@ -21,6 +21,7 @@ import { Hotel, Link2, Sparkles } from "lucide-react";
 import { sanitizeNumber, sanitizeDecimalInput } from "@/utils/sanitizeNumber";
 import LinkedServicesModal from "./LinkedServicesModal";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
+import { formatApiErrorResponse } from "@/lib/http/formatApiError";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -2150,7 +2151,7 @@ export default function AddServiceModal({
         onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
-        setError(errData.error || "Failed to create service");
+        setError(formatApiErrorResponse(errData, "Failed to create service"));
       }
     } catch (err) {
       console.error("Create service error:", err);
