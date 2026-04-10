@@ -5,6 +5,55 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Change ticket: dates, route label, category, itinerary
+
+**Task:** change-ticket fixes | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- ChangeServiceModal: keep `service_date_from`/`service_date_to` on original when no remaining segments; POST uses original `category` + `categoryId`, `travellerIds`; change name uses IATA chain + fallback from service name; parse enriches city→IATA on new segments
+- EditServiceModalNew: pass client/payer display names, `categoryId`, `ticketNumbers`, `assignedTravellerIds` into Change modal
+- ItineraryTimeline: skip superseded original flight service when a `change` child exists and segments are empty
+- Проверка: `npx tsc --noEmit`
+
+**Результат:** SCORE pending QA
+**Next Step:** QA
+
+---
+
+## [2026-04-06] CODE_WRITER — Change ticket: bulk menu + map excludes superseded original
+
+**Task:** change-ticket completion | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- OrderServicesBlock: "Change flight" in bulk More (single flight row with segments); `serviceRowForChangeModal` maps parties, tickets, travellers, categoryId; after confirm — clear selection, `fetchServices(true)` or `reloadServicesFromParent(true)`
+- Map + per-traveller routes: skip superseded original (`res_status` changed + change child + no segments), same rule as ItineraryTimeline
+- Проверка: `npx tsc --noEmit`
+
+**Результат:** SCORE pending QA
+**Next Step:** QA
+
+---
+
+## [2026-04-06] CODE_WRITER — client_price editable until invoice issued
+
+**Task:** client_price draft invoice | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Added `clientPriceLocked` from linked `invoices.status` (editable for `draft` / `cancelled`)
+- PATCH: allow `client_price` and `pricing_per_client` when not locked; list + single GET return `clientPriceLocked`
+- UI: EditServiceModal + OrderServicesBlock use `clientPriceLocked` for sale fields and row hints
+
+**Результат:** SCORE pending QA
+**Next Step:** QA
+
+---
+
 ## [2026-04-10 10:08] CODE_WRITER — O7-IMPL: Directory save blocked by client_party referral column
 
 **Task:** O7-IMPL | **Status:** START

@@ -195,6 +195,8 @@ interface Service {
   ticketNumbers?: { clientId: string; clientName: string; ticketNr: string }[];
   assignedTravellerIds: string[];
   invoice_id?: string | null;
+  /** When true, client/sale price must not be edited (issued invoice). Draft/cancelled → false. */
+  clientPriceLocked?: boolean;
   splitGroupId?: string | null;
   // Hotel-specific
   hotelName?: string;
@@ -276,6 +278,59 @@ interface Service {
   servicePriceLineItems?: { description: string; amount: number; commissionable: boolean }[];
 }
 
+/** Air / flight ticket rows (category name or categoryType). */
+function isFlightLikeService(s: Service): boolean {
+  const t = (s.categoryType || getCategoryTypeFromName(s.category) || "").toString().toLowerCase();
+  if (t === "flight") return true;
+  const cat = (s.category || "").toLowerCase();
+  return cat.includes("flight") || cat.includes("air ticket");
+}
+
+function serviceHasChangeChild(serviceId: string, all: Service[]): boolean {
+  return all.some((x) => x.parentServiceId === serviceId && x.serviceType === "change");
+}
+
+/** Original row fully replaced by a change service (no segments left) — omit from map (matches itinerary rule). */
+function isSupersededFlightOriginal(s: Service, all: Service[]): boolean {
+  if (s.serviceType === "change") return false;
+  if (s.resStatus !== "changed") return false;
+  if (!serviceHasChangeChild(s.id, all)) return false;
+  return !s.flightSegments || s.flightSegments.length === 0;
+}
+
+function serviceRowForChangeModal(s: Service) {
+  const clientParty = s.clientPartyId ?? s.client_party_id ?? null;
+  const payerParty = s.payerPartyId ?? s.payer_party_id ?? null;
+  const supplierParty = s.supplierPartyId ?? s.supplier_party_id ?? null;
+  const tickets = (s.ticketNumbers || []).filter(
+    (tn): tn is { clientId: string; clientName: string; ticketNr: string } =>
+      typeof tn.clientId === "string" && tn.clientId.length > 0
+  );
+  return {
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    categoryId: s.categoryId ?? null,
+    servicePrice: s.servicePrice,
+    clientPrice: s.clientPrice,
+    resStatus: s.resStatus,
+    refNr: s.refNr,
+    dateFrom: s.dateFrom,
+    dateTo: s.dateTo,
+    supplier: s.supplier,
+    supplierPartyId: supplierParty,
+    client: s.client && s.client !== "-" ? s.client : null,
+    clientPartyId: clientParty,
+    payer: s.payer && s.payer !== "-" ? s.payer : null,
+    payerPartyId: payerParty,
+    flightSegments: s.flightSegments || [],
+    ticketNumbers: tickets.length > 0 ? tickets : undefined,
+    assignedTravellerIds: s.assignedTravellerIds || [],
+    cabinClass: s.cabinClass,
+    baggage: s.baggage,
+  };
+}
+
 /** Client price for sums (matches table row): cancellation lines are credits; DB often stores positive amount. */
 function signedClientPriceForSum(s: Pick<Service, "clientPrice" | "serviceType">): number {
   const p = Number(s.clientPrice) || 0;
@@ -333,6 +388,10 @@ function mapOrderServicesApiRowsToServices(rows: unknown): Service[] {
       ticketNr: String(s.ticketNr ?? s.ticket_nr ?? ""),
       assignedTravellerIds: (s.travellerIds ?? s.traveller_ids ?? []) as string[],
       invoice_id: (s.invoice_id ?? null) as string | null,
+      clientPriceLocked:
+        typeof (s as { clientPriceLocked?: unknown }).clientPriceLocked === "boolean"
+          ? (s as { clientPriceLocked: boolean }).clientPriceLocked
+          : !!(s.invoice_id ?? null),
       splitGroupId: (s.splitGroupId ?? s.split_group_id ?? null) as string | null,
       flightSegments: (s.flightSegments ?? s.flight_segments ?? []) as FlightSegment[],
       ticketNumbers: (s.ticketNumbers ?? s.ticket_numbers ?? []) as Service["ticketNumbers"],
@@ -931,7 +990,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [duplicateConfirmService, setDuplicateConfirmService] = useState<Service | null>(null);
-  const [changeModalService, setChangeModalService] = useState<Service | null>(null);
+  const [changeModalService, setChangeModalService] = useState<React.ComponentProps<typeof ChangeServiceModal>["service"] | null>(null);
   const [cancelModalService, setCancelModalService] = useState<Service | null>(null);
   
   // Bulk actions state
@@ -1206,6 +1265,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     
     const flightServices = activeServices
       .filter(s => {
+        if (isSupersededFlightOriginal(s, services)) return false;
         const cat = (s.category || "").toLowerCase();
         const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
         return isFlight && s.flightSegments && s.flightSegments.length > 0;
@@ -1279,6 +1339,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     
     if (routePoints.length === 0) {
       const flightNoSegments = activeServices.filter(s => {
+        if (isSupersededFlightOriginal(s, services)) return false;
         const cat = (s.category || "").toLowerCase();
         const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
         return isFlight && (!s.flightSegments || s.flightSegments.length === 0) && s.name;
@@ -1427,6 +1488,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     
     const flightServices = travellerServices
       .filter(s => {
+        if (isSupersededFlightOriginal(s, services)) return false;
         const cat = (s.category || "").toLowerCase();
         const isFlight = cat.includes("flight") || cat.includes("air ticket") || cat.includes("tour");
         return isFlight && s.flightSegments && s.flightSegments.length > 0;
@@ -2711,7 +2773,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               e.stopPropagation();
                               setEditServiceId(service.id);
                             }}
-                            title={service.invoice_id ? "Double-click to edit (Supplier only)" : "Double-click to edit"}
+                            title={
+                              service.clientPriceLocked ?? !!service.invoice_id
+                                ? "Double-click to edit (Supplier only)"
+                                : "Double-click to edit"
+                            }
                           >
                             {orderedColumns.map((colKey) => {
                               switch (colKey) {
@@ -2734,7 +2800,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                         router.push(`/orders/${orderCodeToSlug(orderCode)}?tab=finance&invoice=${service.invoice_id}`);
                                       }}
                                       className="p-0.5 text-green-600 hover:text-green-800 hover:scale-110 transition-all cursor-pointer"
-                                      title="View invoice · Double-click row to edit (Supplier only)"
+                                      title={
+                                        service.clientPriceLocked ?? !!service.invoice_id
+                                          ? "View invoice · Double-click row to edit (Supplier only)"
+                                          : "View invoice · Double-click row to edit"
+                                      }
                                     >
                                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -3567,6 +3637,30 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                     </svg>
                     Duplicate
                   </button>
+                  {selectedServiceIds.length === 1 && (() => {
+                    const svc = services.find((s) => s.id === selectedServiceIds[0]);
+                    const canChange =
+                      !!svc &&
+                      svc.resStatus !== "cancelled" &&
+                      svc.serviceType !== "cancellation" &&
+                      isFlightLikeService(svc) &&
+                      (svc.flightSegments?.length ?? 0) > 0;
+                    return canChange ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowBulkActions(false);
+                          if (svc) setChangeModalService(serviceRowForChangeModal(svc));
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-amber-800 hover:bg-amber-50 flex items-center gap-3"
+                      >
+                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Change flight
+                      </button>
+                    ) : null;
+                  })()}
                   <button
                     onClick={() => {
                       setShowBulkActions(false);
@@ -3635,8 +3729,14 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
           orderCode={orderCode}
           onClose={() => setChangeModalService(null)}
           onChangeConfirmed={() => {
-            fetchServices();
-            fetchTravellers();
+            setChangeModalService(null);
+            setSelectedServiceIds([]);
+            if (parentControlsServices) {
+              void reloadServicesFromParent?.(true);
+            } else {
+              void fetchServices(true);
+            }
+            void fetchTravellers();
           }}
         />
       )}

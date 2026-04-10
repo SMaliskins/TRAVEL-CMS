@@ -244,12 +244,30 @@ export async function GET(
       },
       {} as Record<string, { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null }>
     );
+
+    const invoiceIds = [...new Set(rows.map((s) => s.invoice_id).filter((id): id is string => !!id))];
+    let invoiceStatusById: Record<string, string | null> | undefined;
+    if (invoiceIds.length > 0) {
+      const { data: invs, error: invErr } = await supabaseAdmin
+        .from("invoices")
+        .select("id, status")
+        .eq("company_id", companyId)
+        .in("id", invoiceIds);
+      if (!invErr) {
+        invoiceStatusById = Object.fromEntries(invoiceIds.map((id) => [id, null])) as Record<string, string | null>;
+        for (const inv of invs ?? []) {
+          if (inv?.id) invoiceStatusById[inv.id] = (inv as { status?: string | null }).status ?? null;
+        }
+      }
+    }
+
     const mappedServices = rows.map((s) =>
       mapOrderServiceRowToListApiItem(s as Record<string, unknown>, {
         travellerIds: travellerMap[String(s.id)] || [],
         categoryMap,
         contactOverridesMap,
         byId,
+        invoiceStatusById,
       })
     );
 

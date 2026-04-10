@@ -3,6 +3,8 @@
  * Used by list route and GET .../services/[serviceId] (ORDER_PAGE_PERF Step 2b).
  */
 
+import { clientPriceLockedFromInvoiceLink } from "@/lib/orders/clientPriceInvoiceLock";
+
 export type OrderServiceListMapById = Record<
   string,
   {
@@ -18,6 +20,8 @@ export type OrderServiceListMapContext = {
   categoryMap: Record<string, { type: string; vat_rate: number }>;
   contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }>;
   byId: OrderServiceListMapById;
+  /** When set, used with invoice_id to compute clientPriceLocked (draft/cancelled = editable). */
+  invoiceStatusById?: Record<string, string | null>;
 };
 
 function resolveSupplierName(row: Record<string, unknown>, byId: OrderServiceListMapById): string {
@@ -36,7 +40,7 @@ export function mapOrderServiceRowToListApiItem(
   row: Record<string, unknown>,
   ctx: OrderServiceListMapContext
 ): Record<string, unknown> {
-  const { travellerIds, categoryMap, contactOverridesMap, byId } = ctx;
+  const { travellerIds, categoryMap, contactOverridesMap, byId, invoiceStatusById } = ctx;
   const categoryId = row.category_id as string | null | undefined;
   const hotelHid = row.hotel_hid as number | null | undefined;
   const override = hotelHid != null ? contactOverridesMap[hotelHid] : undefined;
@@ -112,6 +116,9 @@ export function mapOrderServiceRowToListApiItem(
     return (parent?.supplier_party_id ?? row.supplier_party_id) ?? null;
   })();
 
+  const invoiceId = (row.invoice_id as string | null | undefined) ?? null;
+  const clientPriceLocked = clientPriceLockedFromInvoiceLink(invoiceId, invoiceStatusById);
+
   return {
     id: row.id,
     category: (row.category as string) || "",
@@ -142,7 +149,8 @@ export function mapOrderServiceRowToListApiItem(
     refNr: (row.ref_nr as string) || "",
     ticketNr: (row.ticket_nr as string) || "",
     travellerIds,
-    invoice_id: (row.invoice_id as string | null | undefined) ?? null,
+    invoice_id: invoiceId,
+    clientPriceLocked,
     referralIncludeInCommission: (row.referral_include_in_commission as boolean | null | undefined) !== false,
     referralCommissionPercentOverride: (() => {
       const v = row.referral_commission_percent_override as number | string | null | undefined;

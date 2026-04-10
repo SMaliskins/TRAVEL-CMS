@@ -6,6 +6,7 @@ import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
+import { isClientPriceLockedForInvoiceStatus } from "@/lib/orders/clientPriceInvoiceLock";
 
 async function syncOrderDatesFromServices(orderId: string) {
   try {
@@ -139,11 +140,26 @@ export async function GET(
       }
     }
 
+    const linkedInvId = rowRecord.invoice_id as string | null | undefined;
+    let invoiceStatusById: Record<string, string | null> | undefined;
+    if (linkedInvId) {
+      const { data: inv, error: invErr } = await supabaseAdmin
+        .from("invoices")
+        .select("id, status")
+        .eq("id", linkedInvId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (!invErr && inv?.id) {
+        invoiceStatusById = { [inv.id]: (inv as { status?: string | null }).status ?? null };
+      }
+    }
+
     const service = mapOrderServiceRowToListApiItem(rowRecord, {
       travellerIds,
       categoryMap,
       contactOverridesMap,
       byId,
+      invoiceStatusById,
     });
 
     return NextResponse.json({ service });
@@ -186,7 +202,19 @@ export async function PATCH(
       .eq("order_id", order.id)
       .single();
 
-    const isInvoiced = !!existingService?.invoice_id;
+    const linkedInvoiceId = existingService?.invoice_id as string | null | undefined;
+    let clientPriceLocked = false;
+    if (linkedInvoiceId) {
+      const { data: invRow } = await supabaseAdmin
+        .from("invoices")
+        .select("status")
+        .eq("id", linkedInvoiceId)
+        .eq("company_id", order.company_id)
+        .maybeSingle();
+      clientPriceLocked = isClientPriceLockedForInvoiceStatus(
+        (invRow as { status?: string | null } | null)?.status ?? null
+      );
+    }
 
     // Build update object
     const updates: Record<string, unknown> = {};
@@ -223,10 +251,10 @@ export async function PATCH(
     if (body.actually_paid !== undefined) updates.actually_paid = body.actually_paid != null && body.actually_paid !== "" ? parseFloat(String(body.actually_paid)) : null;
     if (body.actuallyPaid !== undefined) updates.actually_paid = body.actuallyPaid != null && body.actuallyPaid !== "" ? parseFloat(String(body.actuallyPaid)) : null;
     if (body.client_price !== undefined) {
-      if (!isInvoiced) {
+      if (!clientPriceLocked) {
         updates.client_price = body.client_price;
       }
-      // If invoiced, silently skip client_price update (field is locked on frontend)
+      // If sale is locked (non-draft invoice), silently skip client_price update
     }
     if (body.res_status !== undefined) updates.res_status = body.res_status;
     if (body.ref_nr !== undefined) updates.ref_nr = body.ref_nr;
@@ -315,7 +343,9 @@ export async function PATCH(
     if (body.flight_segments !== undefined) updates.flight_segments = body.flight_segments;
     if (body.quantity !== undefined) updates.quantity = Math.max(1, Math.floor(Number(body.quantity) || 1));
     if (body.priceUnits !== undefined) updates.quantity = Math.max(1, Math.floor(Number(body.priceUnits) || 1));
-    if (body.pricingPerClient !== undefined && Array.isArray(body.pricingPerClient)) updates.pricing_per_client = body.pricingPerClient;
+    if (body.pricingPerClient !== undefined && Array.isArray(body.pricingPerClient) && !clientPriceLocked) {
+      updates.pricing_per_client = body.pricingPerClient;
+    }
     // Amendment fields (change/cancellation)
     if (body.parentServiceId !== undefined) updates.parent_service_id = body.parentServiceId || null;
     if (body.serviceType !== undefined) updates.service_type = body.serviceType || "original";

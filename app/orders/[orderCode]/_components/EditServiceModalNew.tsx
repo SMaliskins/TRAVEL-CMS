@@ -155,7 +155,9 @@ interface Service {
   cancellationPenaltyAmount?: number | null;
   cancellationPenaltyPercent?: number | null;
   changeFee?: number | null; // Airline change fee (for Flights)
-  invoice_id?: string | null; // When set, service is on an invoice — client price (Sale) is locked
+  invoice_id?: string | null;
+  /** True when linked invoice is past draft (sale price locked in API/UI). */
+  clientPriceLocked?: boolean;
   // Amendment fields (change/cancellation)
   serviceType?: "original" | "change" | "cancellation" | "ancillary" | null;
   parentServiceId?: string | null;
@@ -419,6 +421,8 @@ export default function EditServiceModalNew({
   const COMMISSION_PRICING_CATEGORIES: CategoryType[] = ["tour", "insurance", "ancillary", "cruise", "rent_a_car", "transfer"];
   const isAirportServicesCategory = (category || "").toLowerCase().includes("airport") && (category || "").toLowerCase().includes("service");
   const usesCommissionPricing = COMMISSION_PRICING_CATEGORIES.includes(categoryType as CategoryType) || isAirportServicesCategory;
+  const clientPriceLocked =
+    (service as { clientPriceLocked?: boolean }).clientPriceLocked ?? !!service.invoice_id;
   const [servicePrice, setServicePrice] = useState(() => {
     const total = Number(service.servicePrice || 0);
     const raw = (service as { servicePriceLineItems?: { amount?: number }[] }).servicePriceLineItems;
@@ -979,8 +983,8 @@ export default function EditServiceModalNew({
     const perSale = prev > 0 ? (parseFloat(clientPrice) || 0) / prev : 0;
     setPriceUnits(n);
     setServicePrice(String(Math.round(perCost * n * 100) / 100));
-    if (!service.invoice_id) setClientPrice(String(Math.round(perSale * n * 100) / 100));
-  }, [categoryType, hotelPricePer, dateFrom, dateTo, priceUnits, servicePrice, clientPrice, service.invoice_id]);
+    if (!clientPriceLocked) setClientPrice(String(Math.round(perSale * n * 100) / 100));
+  }, [categoryType, hotelPricePer, dateFrom, dateTo, priceUnits, servicePrice, clientPrice, clientPriceLocked]);
 
   // Sync ticketNumbers with clients for Flight
   useEffect(() => {
@@ -1172,7 +1176,7 @@ export default function EditServiceModalNew({
       const discount = Math.max(0, Math.round((cost - saleVal) * 100) / 100);
       setAgentDiscountType("€");
       setAgentDiscountValue(discount.toFixed(2));
-      setClientPrice(saleVal.toFixed(2));
+      if (!clientPriceLocked) setClientPrice(saleVal.toFixed(2));
       pricingLastEditedRef.current = null;
       return;
     }
@@ -1181,7 +1185,7 @@ export default function EditServiceModalNew({
       const discountAmount = getAgentDiscountAmount(cost);
       const saleVal = Math.round((cost - discountAmount) * 100) / 100;
       setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
-      setClientPrice(saleVal.toFixed(2));
+      if (!clientPriceLocked) setClientPrice(saleVal.toFixed(2));
       pricingLastEditedRef.current = null;
       return;
     }
@@ -1192,7 +1196,7 @@ export default function EditServiceModalNew({
     setAgentDiscountValue(discount.toFixed(2));
     setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
     pricingLastEditedRef.current = null;
-  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice, marge]);
+  }, [usesCommissionPricing, effectiveServicePrice, commissionableCost, servicePrice, selectedCommissionIndex, supplierCommissions, agentDiscountValue, agentDiscountType, clientPrice, marge, clientPriceLocked]);
 
   // When net pay to operator changes (cost, line items, commission), Margin = Client − Net; € discount = Cost − Client (do not overwrite client price).
   // Intentionally omit clientPrice/marge/agentDiscountValue from deps — those edits are handled by the effect above; including them would fight user input.
@@ -1253,16 +1257,29 @@ export default function EditServiceModalNew({
     const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
     const units = isHotelPerNight && priceUnits >= 1 ? priceUnits : 1;
+    if (clientPriceLocked) {
+      const totalClient = Math.round((parseFloat(clientPrice) || 0) * 100) / 100;
+      const totalMargin = Math.round((totalClient - totalService) * 100) / 100;
+      const marginPerNight = units > 0 ? Math.round((totalMargin / units) * 100) / 100 : 0;
+      const newMarge = isHotelPerNight ? marginPerNight.toFixed(2) : totalMargin.toFixed(2);
+      setMarge(newMarge);
+      pricingLastEditedRef.current = null;
+      return;
+    }
     const margeVal = Math.round((parseFloat(marge) || 0) * 100) / 100;
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-  }, [usesCommissionPricing, categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
+  }, [usesCommissionPricing, categoryType, hotelPricePer, servicePrice, marge, priceUnits, clientPriceLocked, clientPrice]);
 
   // Non-commission-style: when user edits Marge, recalculate Sale = Cost + Marge.
   useEffect(() => {
     if (usesCommissionPricing) return;
     if (pricingLastEditedRef.current !== "marge") return;
+    if (clientPriceLocked) {
+      pricingLastEditedRef.current = null;
+      return;
+    }
     const totalService = Math.round((parseFloat(servicePrice) || 0) * 100) / 100;
     const isHotelPerNight = categoryType === "hotel" && hotelPricePer === "night";
     const units = isHotelPerNight && priceUnits >= 1 ? priceUnits : 1;
@@ -1270,7 +1287,7 @@ export default function EditServiceModalNew({
     const totalMargin = isHotelPerNight ? Math.round(margeVal * units * 100) / 100 : margeVal;
     const totalClient = Math.round((totalService + totalMargin) * 100) / 100;
     setClientPrice(totalClient.toFixed(2));
-  }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits]);
+  }, [categoryType, hotelPricePer, servicePrice, marge, priceUnits, clientPriceLocked]);
 
   // Auto-confirm when all tickets filled (Flight) or ref_nr filled (Hotel)
   useEffect(() => {
@@ -4731,7 +4748,7 @@ export default function EditServiceModalNew({
                             const totalCost = parseFloat(servicePrice) || 0;
                             const totalSale = parseFloat(clientPrice) || 0;
                             setServicePrice(String(totalCost));
-                            if (!service.invoice_id) setClientPrice(String(totalSale));
+                            if (!clientPriceLocked) setClientPrice(String(totalSale));
                             setPriceUnits(1);
                             prevDatesRefEdit.current = "";
                           }
@@ -5060,13 +5077,16 @@ export default function EditServiceModalNew({
                             step="0.01"
                             min="0"
                             value={clientPrice}
+                            disabled={clientPriceLocked}
+                            title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined}
                             onChange={(e) => {
+                              if (clientPriceLocked) return;
                               pricingLastEditedRef.current = "sale";
                               const v = parseFloat(e.target.value) || 0;
                               setClientPrice(String(Math.round(v * 100) / 100));
                             }}
                             placeholder="0.00"
-                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           />
                         </div>
                       </div>
@@ -5080,13 +5100,15 @@ export default function EditServiceModalNew({
                             type="number"
                             step="0.01"
                             value={marge}
+                            disabled={clientPriceLocked}
+                            title={clientPriceLocked ? "Sale is locked: invoice is issued" : "Edit margin — Total Client price updates; or edit client price to set margin"}
                             onChange={(e) => {
+                              if (clientPriceLocked) return;
                               pricingLastEditedRef.current = "marge";
                               setMarge(sanitizeNumber(e.target.value));
                             }}
                             placeholder="0.00"
-                            title="Edit margin — Total Client price updates; or edit client price to set margin"
-                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                           />
                         </div>
                       </div>
@@ -5124,9 +5146,9 @@ export default function EditServiceModalNew({
                                 />
                                 <button
                                   type="button"
-                                  disabled={!!service.invoice_id}
+                                  disabled={clientPriceLocked}
                                   onClick={() => {
-                                    if (service.invoice_id) return;
+                                    if (clientPriceLocked) return;
                                     const parseNum = (s: string) => parseFloat((s ?? "").trim().replace(/,/g, ".")) || 0;
                                     const v = parseNum(bulkCost);
                                     if (!v && !bulkCost.trim()) return;
@@ -5141,7 +5163,7 @@ export default function EditServiceModalNew({
                                     }));
                                   }}
                                   className="w-full flex items-center justify-center py-0.5 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs leading-none"
-                                  title={service.invoice_id ? "Amount is locked: service is on an invoice" : "Apply Cost to all clients"}
+                                  title={clientPriceLocked ? "Sale is locked: invoice is issued" : "Apply Cost to all clients"}
                                 >
                                   <span className="text-base">↓</span>
                                 </button>
@@ -5159,16 +5181,16 @@ export default function EditServiceModalNew({
                                 />
                                 <button
                                   type="button"
-                                  disabled={!!service.invoice_id}
+                                  disabled={clientPriceLocked}
                                   onClick={() => {
-                                    if (service.invoice_id) return;
+                                    if (clientPriceLocked) return;
                                     const parseNum = (s: string) => parseFloat((s ?? "").trim().replace(/,/g, ".")) || 0;
                                     const v = parseNum(bulkMarge);
                                     if (!v && !bulkMarge.trim()) return;
                                     setPricingPerClient(prev => prev.map(p => ({ ...p, marge: bulkMarge.trim() ? String(v) : (p.marge ?? "") })));
                                   }}
                                   className="w-full flex items-center justify-center py-0.5 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs leading-none"
-                                  title={service.invoice_id ? "Amount is locked: service is on an invoice" : "Apply Marge to all clients"}
+                                  title={clientPriceLocked ? "Sale is locked: invoice is issued" : "Apply Marge to all clients"}
                                 >
                                   <span className="text-base">↓</span>
                                 </button>
@@ -5186,9 +5208,9 @@ export default function EditServiceModalNew({
                                 />
                                 <button
                                   type="button"
-                                  disabled={!!service.invoice_id}
+                                  disabled={clientPriceLocked}
                                   onClick={() => {
-                                    if (service.invoice_id) return;
+                                    if (clientPriceLocked) return;
                                     const parseNum = (s: string) => parseFloat((s ?? "").trim().replace(/,/g, ".")) || 0;
                                     const v = parseNum(bulkSale);
                                     if (!v && !bulkSale.trim()) return;
@@ -5203,7 +5225,7 @@ export default function EditServiceModalNew({
                                     }));
                                   }}
                                   className="w-full flex items-center justify-center py-0.5 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs leading-none"
-                                  title={service.invoice_id ? "Amount is locked: service is on an invoice" : "Apply Sale to all clients"}
+                                  title={clientPriceLocked ? "Sale is locked: invoice is issued" : "Apply Sale to all clients"}
                                 >
                                   <span className="text-base">↓</span>
                                 </button>
@@ -5271,7 +5293,7 @@ export default function EditServiceModalNew({
                                   inputMode="decimal"
                                   value={pricingPerClient[idx]?.sale ?? ""}
                                   onChange={(e) => {
-                                    if (service.invoice_id) return;
+                                    if (clientPriceLocked) return;
                                     const raw = e.target.value;
                                     const saleStr = raw.replace(/\s/g, "");
                                     const cost = parsePrice(pricingPerClient[idx]?.cost);
@@ -5285,8 +5307,8 @@ export default function EditServiceModalNew({
                                     });
                                   }}
                                   placeholder="0.00"
-                                  disabled={!!service.invoice_id}
-                                  title={service.invoice_id ? "Amount is locked: service is on an invoice" : undefined}
+                                  disabled={clientPriceLocked}
+                                  title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined}
                                   className="w-full rounded border border-gray-300 px-2 py-1 text-right text-sm [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] disabled:bg-gray-100 disabled:cursor-not-allowed"
                                 />
                               </td>
@@ -5436,8 +5458,8 @@ export default function EditServiceModalNew({
                           </div>
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
                             <span className="text-slate-600 shrink-0">Client price</span>
-                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
-                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
                           </div>
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center pt-1.5 mt-0.5 border-t border-sky-200/80">
                             <span className="text-slate-700 font-medium shrink-0">Total Client price</span>
@@ -5467,7 +5489,7 @@ export default function EditServiceModalNew({
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-sm text-slate-600 shrink-0">Total Client price</span>
-                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={clientPrice} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                           </div>
                         </div>
                       )}
@@ -5485,7 +5507,7 @@ export default function EditServiceModalNew({
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Sale</span>
-                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("clientPrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={clientPrice} onChange={(e) => { pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); markCorrected("clientPrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("clientPrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={clientPrice} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); markCorrected("clientPrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                     </div>
                     )}
@@ -6196,6 +6218,7 @@ export default function EditServiceModalNew({
             id: service.id,
             name: serviceName,
             category: category,
+            categoryId: categoryId,
             servicePrice: parseFloat(servicePrice) || 0,
             clientPrice: parseFloat(clientPrice) || 0,
             resStatus: resStatus,
@@ -6204,9 +6227,15 @@ export default function EditServiceModalNew({
             dateTo: dateTo,
             supplier: supplierName,
             supplierPartyId: supplierPartyId,
-            clientPartyId: clients.find(c => c.id)?.id || null,
+            client: clients.find((c) => c.id)?.name || service.client || null,
+            clientPartyId: clients.find((c) => c.id)?.id || null,
+            payer: payerName || service.payer || null,
             payerPartyId: payerPartyId,
             flightSegments: flightSegments,
+            ticketNumbers: ticketNumbers.filter((t): t is { clientId: string; clientName: string; ticketNr: string } =>
+              typeof t.clientId === "string" && t.clientId.length > 0
+            ),
+            assignedTravellerIds: clients.filter((c) => c.id).map((c) => c.id as string),
             cabinClass: cabinClass,
             baggage: baggage,
           }}

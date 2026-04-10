@@ -757,6 +757,19 @@ function servicesToEvents(rawServices: TimelineService[], travellers: Traveller[
         });
       }
     } else if (isFlightService(service)) {
+      // Superseded original air ticket: a "change" child replaced all segments — hide stale/empty original from timeline
+      const hasChangeChild = services.some(
+        (s) => s.parentServiceId === service.id && s.serviceType === "change"
+      );
+      if (
+        hasChangeChild &&
+        service.resStatus === "changed" &&
+        service.serviceType !== "change" &&
+        (!service.flightSegments || service.flightSegments.length === 0)
+      ) {
+        continue;
+      }
+
       // Flight or Tour Package with flight segments — same approved layout
       const firstFlightNumber = service.flightSegments?.[0]?.flightNumber || "";
       const checkinUrl = getCheckinUrl(firstFlightNumber);

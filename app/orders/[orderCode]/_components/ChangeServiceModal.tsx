@@ -10,11 +10,50 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatDateDDMMYYYY, formatDateShort } from '@/utils/dateFormat';
 import { sanitizeNumber } from '@/utils/sanitizeNumber';
 import { formatApiErrorResponse } from "@/lib/http/formatApiError";
+import { getCityByName } from "@/lib/data/cities";
+
+function toAirportCode(value: string): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  if (/^[A-Za-z]{3}$/.test(s)) return s.toUpperCase();
+  const city = getCityByName(s);
+  return city?.iataCode ?? "";
+}
+
+function extractIataChainFromText(text: string): string {
+  const codes = text.toUpperCase().match(/\b([A-Z]{3})\b/g);
+  if (!codes || codes.length < 2) return "";
+  const path: string[] = [];
+  for (const c of codes) {
+    if (path.length === 0 || path[path.length - 1] !== c) path.push(c);
+  }
+  return path.join("-");
+}
+
+function buildChainFromSegments(segments: FlightSegment[]): string {
+  if (segments.length === 0) return "";
+  const sorted = [...segments].sort((a, b) => {
+    const da = a.departureDate || "";
+    const db = b.departureDate || "";
+    return da.localeCompare(db);
+  });
+  const codes: string[] = [];
+  for (const seg of sorted) {
+    const dep = toAirportCode(seg.departure || "") || String(seg.departure || "").trim().toUpperCase();
+    const arr = toAirportCode(seg.arrival || "") || String(seg.arrival || "").trim().toUpperCase();
+    const dep3 = /^[A-Z]{3}$/.test(dep) ? dep : "";
+    const arr3 = /^[A-Z]{3}$/.test(arr) ? arr : "";
+    if (dep3 && (!codes.length || codes[codes.length - 1] !== dep3)) codes.push(dep3);
+    if (arr3 && codes[codes.length - 1] !== arr3) codes.push(arr3);
+  }
+  return codes.join("-");
+}
 
 interface Service {
   id: string;
   name: string;
   category: string;
+  categoryId?: string | null;
   servicePrice: number;
   clientPrice: number;
   resStatus: string | null;
@@ -113,11 +152,16 @@ export default function ChangeServiceModal({
   
   // Apply segments to form (shared by AI and regex) — route with full city names: "date city - city / date city - city"
   const applySegments = useCallback((segments: FlightSegment[], booking: Record<string, unknown>) => {
-    setNewSegments(segments);
-    const fallbackDate = segments[0]?.departureDate || "";
-    const enriched = segments.map((seg, i) => {
+    const withCodes = segments.map((seg) => ({
+      ...seg,
+      departure: toAirportCode(seg.departure || "") || seg.departure || "",
+      arrival: toAirportCode(seg.arrival || "") || seg.arrival || "",
+    }));
+    setNewSegments(withCodes);
+    const fallbackDate = withCodes[0]?.departureDate || "";
+    const enriched = withCodes.map((seg, i) => {
       if (seg.departureDate) return seg;
-      const prev = (i > 0 ? segments[i - 1]?.departureDate : null) || fallbackDate;
+      const prev = (i > 0 ? withCodes[i - 1]?.departureDate : null) || fallbackDate;
       return { ...seg, departureDate: prev };
     });
     const groupedByDate: Record<string, FlightSegment[]> = {};
@@ -128,17 +172,18 @@ export default function ChangeServiceModal({
     });
     const routeParts = Object.entries(groupedByDate).map(([, segs]) => {
       const dateStr = formatDateShort(segs[0]?.departureDate || "");
-      const codes = [
-        segs[0].departure || "",
-        ...segs.map(s => s.arrival || ""),
-      ].filter(Boolean).map(c => c.toUpperCase());
-      const routeStr = codes.join("-");
+      const chain = buildChainFromSegments(segs);
+      const routeStr = chain || segs.map((s) => {
+        const d = toAirportCode(s.departure || "") || s.departure || "";
+        const a = toAirportCode(s.arrival || "") || s.arrival || "";
+        return `${d}-${a}`.replace(/^-|-$/g, "");
+      }).filter(Boolean).join("-");
       return dateStr && dateStr !== "-" ? `${dateStr} ${routeStr}` : routeStr;
     });
     setNewServiceName(routeParts.join(" / "));
-    if (segments.length > 0) {
-      setNewDateFrom(segments[0].departureDate || '');
-      setNewDateTo(segments[segments.length - 1].arrivalDate || segments[segments.length - 1].departureDate || '');
+    if (withCodes.length > 0) {
+      setNewDateFrom(withCodes[0].departureDate || '');
+      setNewDateTo(withCodes[withCodes.length - 1].arrivalDate || withCodes[withCodes.length - 1].departureDate || '');
     }
     if (booking.cabinClass) {
       const validClasses = ["economy", "premium_economy", "business", "first"];
@@ -304,7 +349,7 @@ export default function ChangeServiceModal({
     });
   };
   
-  // Helper function to format segments for service name
+  // Helper function to format segments for service name (per-segment legs; resolves city names to IATA where possible)
   const formatSegmentsForName = (segments: FlightSegment[], includeFlightNumber: boolean = false): string => {
     if (segments.length === 0) return '';
     
@@ -319,13 +364,30 @@ export default function ChangeServiceModal({
         currentDate = dateStr;
       }
       
+      const depC = toAirportCode(seg.departure || "") || (seg.departure || "").trim();
+      const arrC = toAirportCode(seg.arrival || "") || (seg.arrival || "").trim();
       const route = includeFlightNumber && seg.flightNumber 
-        ? `${seg.flightNumber} ${seg.departure || ""}-${seg.arrival || ""}`
-        : `${seg.departure || ""}-${seg.arrival || ""}`;
+        ? `${seg.flightNumber} ${depC}-${arrC}`.trim()
+        : `${depC}-${arrC}`;
       routeParts.push(route);
     });
     
     return routeParts.join(' ');
+  };
+
+  /** One-line summary for change label: trip date + full airport chain (e.g. 14.04.2026 LCY-AMS-LCY). */
+  const formatTripSideForChangeName = (
+    segments: FlightSegment[],
+    fallbackText: string,
+    tripDateFallback: string | null | undefined,
+  ): string => {
+    const chain = buildChainFromSegments(segments) || extractIataChainFromText(fallbackText);
+    const sortedDates = segments.map((s) => s.departureDate).filter(Boolean).sort();
+    const firstDate = sortedDates[0] || tripDateFallback || "";
+    const dateLabel = firstDate ? formatDateDDMMYYYY(firstDate) : "";
+    if (dateLabel && chain) return `${dateLabel} ${chain}`;
+    if (dateLabel) return dateLabel;
+    return chain || "";
   };
   
   // Submit change
@@ -378,11 +440,21 @@ export default function ChangeServiceModal({
       const isSameDayChange = oldDates.size === 1 && newDates.size === 1 && 
         Array.from(oldDates)[0] === Array.from(newDates)[0];
       
+      const sortedNewSegments = [...newSegments].sort((a, b) => {
+        const dateA = a.departureDate ? new Date(a.departureDate + 'T' + a.departureTimeScheduled).getTime() : 0;
+        const dateB = b.departureDate ? new Date(b.departureDate + 'T' + b.departureTimeScheduled).getTime() : 0;
+        return dateA - dateB;
+      });
+
       // Build change service name: "Change: old -> new"
       // Format: "01.02 NCE-FRA/ 01.02 FRA-TLL -> 02.02 NCE-FRA/ 02.02 FRA-TLL"
       // Or with flight numbers if same day: "01.02 LH881 NCE-FRA/ 01.02 LH1064 FRA-TLL -> 01.02 AY6262 NCE-FRA/ 02.02 AY2627 FRA-TLL"
-      const oldSegmentsName = formatSegmentsForName(selectedOldSegments, isSameDayChange);
-      const newSegmentsName = formatSegmentsForName(newSegments, isSameDayChange);
+      const oldSegmentsName = isSameDayChange
+        ? formatSegmentsForName(selectedOldSegments, true)
+        : formatTripSideForChangeName(selectedOldSegments, service.name, service.dateFrom);
+      const newSegmentsName = isSameDayChange
+        ? formatSegmentsForName(sortedNewSegments, true)
+        : formatTripSideForChangeName(sortedNewSegments, newServiceName, newDateFrom || null);
       const changeServiceName = `Change: ${oldSegmentsName} → ${newSegmentsName}`;
       
       // Calculate dates for updated original service (only remaining segments)
@@ -394,21 +466,14 @@ export default function ChangeServiceModal({
       
       const updatedOriginalDateFrom = updatedOriginalSegments.length > 0 
         ? updatedOriginalSegments[0].departureDate || null 
-        : null;
+        : service.dateFrom || null;
       const updatedOriginalDateTo = updatedOriginalSegments.length > 0 
         ? (updatedOriginalSegments[updatedOriginalSegments.length - 1].arrivalDate || 
            updatedOriginalSegments[updatedOriginalSegments.length - 1].departureDate || null)
-        : null;
+        : service.dateTo || service.dateFrom || null;
       
       // Build updated original service name
       const updatedOriginalName = formatSegmentsForName(updatedOriginalSegments, false);
-      
-      // Calculate dates for new change service (only new segments)
-      const sortedNewSegments = [...newSegments].sort((a, b) => {
-        const dateA = a.departureDate ? new Date(a.departureDate + 'T' + a.departureTimeScheduled).getTime() : 0;
-        const dateB = b.departureDate ? new Date(b.departureDate + 'T' + b.departureTimeScheduled).getTime() : 0;
-        return dateA - dateB;
-      });
       
       const newServiceDateFrom = sortedNewSegments.length > 0 
         ? sortedNewSegments[0].departureDate || null 
@@ -481,9 +546,17 @@ export default function ChangeServiceModal({
       const normalizedClient = service.client && service.client !== "-" ? service.client : null;
       const normalizedPayer = service.payer && service.payer !== "-" ? service.payer : null;
       
+      const effectiveTravellerIds =
+        service.assignedTravellerIds && service.assignedTravellerIds.length > 0
+          ? service.assignedTravellerIds
+          : service.clientPartyId
+            ? [service.clientPartyId]
+            : [];
+
       const changeServicePayload = {
         serviceName: changeServiceName,
-        category: 'Flight',
+        category: service.category?.trim() ? service.category : "Flight",
+        categoryId: service.categoryId ?? null,
         dateFrom: newServiceDateFrom,
         dateTo: newServiceDateTo,
         supplierPartyId: service.supplierPartyId || null,
@@ -498,6 +571,7 @@ export default function ChangeServiceModal({
         refNr: service.refNr,
         flightSegments: sortedNewSegments,
         ticketNumbers: ticketNumbers.length > 0 ? ticketNumbers : undefined,
+        travellerIds: effectiveTravellerIds.length > 0 ? effectiveTravellerIds : undefined,
         cabinClass: newCabinClass,
         baggage: newBaggage,
         changeFee: parseFloat(changeFee) || 0,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 // Date formatting utilities available if needed
 // import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
@@ -270,15 +270,22 @@ function SegmentEditForm({
   segment,
   onSave,
   onCancel,
+  onDraftChange,
 }: {
   segment: FlightSegment;
   onSave: (updated: FlightSegment) => void;
   onCancel: () => void;
+  /** Push every field change to parent so modal Save persists schedule without an extra segment Save click */
+  onDraftChange?: (updated: FlightSegment) => void;
 }) {
   const [form, setForm] = useState<FlightSegment>(segment);
   
   const updateField = (field: keyof FlightSegment, value: string) => {
-    setForm(prev => ({ ...prev, [field]: value }));
+    setForm(prev => {
+      const next = { ...prev, [field]: value } as FlightSegment;
+      onDraftChange?.(next);
+      return next;
+    });
   };
 
   /** Full width + min-w-0 so grid cells don’t clip; time pickers need room to render fully */
@@ -581,6 +588,8 @@ export default function FlightItineraryInput({
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Segment as loaded when user opened the editor — used to revert on Cancel after live drafts */
+  const editingSnapshotRef = useRef<FlightSegment | null>(null);
 
   // Handle file upload (images and PDFs)
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
