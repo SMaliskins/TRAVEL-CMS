@@ -23,7 +23,7 @@ import LinkedServicesModal from "./LinkedServicesModal";
 import ParseFeedbackPanel from "@/components/ParseFeedbackPanel";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import type { SupplierCommission } from '@/lib/types/directory';
-import { formatApiErrorResponse } from "@/lib/http/formatApiError";
+import { formatApiErrorResponse, parseFetchErrorBody } from "@/lib/http/formatApiError";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -2566,12 +2566,35 @@ export default function EditServiceModalNew({
       const clientIds = resolvedClients.filter(c => c.id).map(c => c.id as string);
       const primaryClient = resolvedClients.find(c => c.id) || resolvedClients[0];
 
+      let resolvedDateFrom = dateFrom?.trim() || undefined;
+      let resolvedDateTo = (dateTo?.trim() || dateFrom?.trim()) || undefined;
+      if (categoryType === "flight") {
+        if (flightSegments.length > 0) {
+          const first = flightSegments[0];
+          const last = flightSegments[flightSegments.length - 1];
+          const firstDep = first?.departureDate?.trim() || "";
+          const lastArr = last?.arrivalDate?.trim() || "";
+          const lastDep = last?.departureDate?.trim() || "";
+          if (!resolvedDateFrom && firstDep) resolvedDateFrom = firstDep;
+          if (!resolvedDateTo) resolvedDateTo = lastArr || lastDep || resolvedDateFrom;
+          if (!resolvedDateFrom) resolvedDateFrom = firstDep || lastDep || undefined;
+        }
+        if (!resolvedDateFrom) {
+          setError("Select trip dates (Dates) or enter departure dates on each flight segment.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (!resolvedDateTo) resolvedDateTo = resolvedDateFrom;
+      } else if (resolvedDateFrom && !resolvedDateTo) {
+        resolvedDateTo = resolvedDateFrom;
+      }
+
       const payload: Record<string, unknown> = {
         category,
         category_id: categoryId, // UUID reference to travel_service_categories
         service_name: serviceName.trim(),
-        service_date_from: dateFrom || null,
-        service_date_to: dateTo || dateFrom || null,
+        service_date_from: resolvedDateFrom ?? null,
+        service_date_to: resolvedDateTo ?? resolvedDateFrom ?? null,
         supplier_party_id: supplierPartyId,
         supplier_name: supplierName,
         client_party_id: primaryClient?.id || null,
@@ -2815,8 +2838,8 @@ export default function EditServiceModalNew({
           refNr,
           ticketNr,
           ticketNumbers: categoryType === "flight" ? ticketNumbers.map((t) => ({ clientId: t.clientId ?? "", clientName: t.clientName, ticketNr: t.ticketNr })) : undefined,
-          dateFrom,
-          dateTo,
+          dateFrom: resolvedDateFrom ?? dateFrom,
+          dateTo: resolvedDateTo ?? dateTo,
           // Flight-specific
           cabinClass: categoryType === "flight" ? cabinClass : undefined,
           baggage: categoryType === "flight" ? baggage : undefined,
@@ -2890,7 +2913,7 @@ export default function EditServiceModalNew({
         }
         onClose();
       } else {
-        const errData = await response.json().catch(() => ({}));
+        const errData = await parseFetchErrorBody(response);
         setError(formatApiErrorResponse(errData, "Failed to update service"));
       }
     } catch (err) {

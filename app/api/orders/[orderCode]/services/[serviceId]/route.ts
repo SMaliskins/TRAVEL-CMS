@@ -353,6 +353,36 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid referral commission fixed amount" }, { status: 400 });
     }
 
+    // Infer service_date_from / service_date_to from flight_segments when dates were cleared in UI but segments still have YYYY-MM-DD
+    const rawFlightSegments =
+      (Array.isArray(updates.flight_segments) ? updates.flight_segments : null) ||
+      (Array.isArray(body.flight_segments) ? body.flight_segments : null);
+    if (Array.isArray(rawFlightSegments) && rawFlightSegments.length > 0) {
+      type Seg = { departureDate?: string; arrivalDate?: string };
+      const segs = rawFlightSegments as Seg[];
+      const first = segs[0];
+      const last = segs[segs.length - 1];
+      const inferFrom =
+        typeof first?.departureDate === "string" ? first.departureDate.trim() : "";
+      const inferTo =
+        (typeof last?.arrivalDate === "string" && last.arrivalDate.trim()) ||
+        (typeof last?.departureDate === "string" && last.departureDate.trim()) ||
+        inferFrom;
+      const strBlank = (v: unknown) =>
+        v == null ||
+        v === "" ||
+        (typeof v === "string" && v.trim() === "");
+      if (inferFrom && strBlank(updates.service_date_from)) {
+        updates.service_date_from = inferFrom;
+      }
+      if (inferTo && strBlank(updates.service_date_to)) {
+        updates.service_date_to = inferTo;
+      }
+      if (!strBlank(updates.service_date_from) && strBlank(updates.service_date_to)) {
+        updates.service_date_to = updates.service_date_from as string;
+      }
+    }
+
     // Fetch old service for notification diff
     const { data: oldSvc } = await supabaseAdmin
       .from("order_services")
@@ -374,8 +404,22 @@ export async function PATCH(
 
     if (updateError) {
       console.error("Update service error:", updateError);
+      const pe = updateError as {
+        message?: string;
+        details?: string;
+        hint?: string;
+        code?: string;
+      };
+      const detailLine = [pe.message, pe.details, pe.hint]
+        .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+        .filter((x, i, a) => a.findIndex((y) => y === x) === i)
+        .join(" — ");
       return NextResponse.json(
-        { error: "Failed to update service", details: updateError.message },
+        {
+          error: "Failed to update service",
+          details: detailLine || "Unknown database error",
+          code: pe.code || undefined,
+        },
         { status: 500 }
       );
     }
@@ -461,8 +505,9 @@ export async function PATCH(
     return NextResponse.json({ service, referralSync });
   } catch (err) {
     console.error("PATCH service error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: msg },
       { status: 500 }
     );
   }
