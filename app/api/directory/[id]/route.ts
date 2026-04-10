@@ -21,6 +21,13 @@ function isMissingDefaultReferralColumn(error: unknown): boolean {
   return haystack.includes("default_referral_party_id");
 }
 
+/** client_party row for directory GET/PUT (`default_referral_party_id` absent in TS when fallback select runs) */
+type ClientPartyRowData = {
+  party_id: string;
+  show_referral_in_app?: boolean | null;
+  default_referral_party_id?: string | null;
+};
+
 // Get current user from auth header
 async function getCurrentUser(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -214,7 +221,7 @@ export async function GET(
     if (referralData.error) console.warn("[Directory GET] Error fetching referral_party:", referralData.error);
     if (referralRatesData.error) console.warn("[Directory GET] Error fetching referral_party_category_rate:", referralRatesData.error);
 
-    let clientPartyRow = clientData.data;
+    let clientPartyRow = clientData.data as ClientPartyRowData | null;
     const supportsDefaultReferralColumn = !(
       clientDataRaw.error && isMissingDefaultReferralColumn(clientDataRaw.error)
     );
@@ -225,12 +232,10 @@ export async function GET(
         id
       );
       if (cleared) {
-        const selectCols = supportsDefaultReferralColumn
-          ? "party_id, show_referral_in_app, default_referral_party_id"
-          : "party_id, show_referral_in_app";
+        // Literal .select() string required for Supabase TS (dynamic string breaks Parser)
         const { data: cpFresh } = await supabaseAdmin
           .from("client_party")
-          .select(selectCols)
+          .select("party_id, show_referral_in_app, default_referral_party_id")
           .eq("party_id", id)
           .maybeSingle();
         if (cpFresh) clientPartyRow = cpFresh;
@@ -1034,7 +1039,7 @@ export async function PUT(
           .maybeSingle()
       : clientDataRaw;
 
-    let clientPartyRowPut = clientData.data;
+    let clientPartyRowPut = clientData.data as ClientPartyRowData | null;
     const supportsDefaultReferralColumnPut = !(
       clientDataRaw.error && isMissingDefaultReferralColumn(clientDataRaw.error)
     );
@@ -1047,11 +1052,7 @@ export async function PUT(
       if (cleared) {
         const { data: cpFresh } = await supabaseAdmin
           .from("client_party")
-          .select(
-            supportsDefaultReferralColumnPut
-              ? "party_id, show_referral_in_app, default_referral_party_id"
-              : "party_id, show_referral_in_app"
-          )
+          .select("party_id, show_referral_in_app, default_referral_party_id")
           .eq("party_id", id)
           .maybeSingle();
         if (cpFresh) clientPartyRowPut = cpFresh;
