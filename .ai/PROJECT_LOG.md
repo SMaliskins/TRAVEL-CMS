@@ -5,6 +5,52 @@
 
 ---
 
+## [2026-04-10 10:08] CODE_WRITER — O7-IMPL: Directory save blocked by client_party referral column
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Reproduced and traced Directory save error while changing client invoice language
+- Identified missing DB column compatibility issue (`client_party.default_referral_party_id`) in directory API flows
+
+**Результат:** In progress
+**Next Step:** Add backward-compatible API fallback for DBs without that column
+
+---
+
+## [2026-04-10 10:08] CODE_WRITER — O7-IMPL: Directory save fallback for missing default_referral_party_id
+
+**Task:** O7-IMPL | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Updated `app/api/directory/[id]/route.ts` and `app/api/directory/create/route.ts`
+- Added compatibility fallback when DB schema does not have `client_party.default_referral_party_id`
+- Kept client updates/creates working (including `invoiceLanguage`) by retrying/selecting without that column
+
+**Результат:** Client card save is no longer blocked by missing `default_referral_party_id` column; invoice language changes can be saved.
+**Next Step:** QA: edit client invoice language EN→LV and save
+
+---
+
+## [2026-04-10 10:08] CODE_WRITER — O7-IMPL: Directory save fails on invoice language change
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Investigated error: `Could not find the 'default_referral_party_id' column of 'client_party'`
+- Traced failure to Directory PUT/GET and create role paths selecting/inserting that column unconditionally
+
+**Результат:** In progress
+**Next Step:** Add schema-compatible fallback for missing column
+
+---
+
 ## [2026-04-06 12:00] CODE_WRITER — DASH-MAP: Dashboard map show all orders + geocode
 
 **Task:** DASH-MAP | **Status:** SUCCESS

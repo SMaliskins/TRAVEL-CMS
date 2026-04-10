@@ -7,6 +7,14 @@ import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
 import { assertValidDefaultReferralParty } from "@/lib/referral/clientDefaultReferralParty";
 
+function isMissingDefaultReferralColumn(error: unknown): boolean {
+  const msg = String((error as { message?: string } | null)?.message || "").toLowerCase();
+  const details = String((error as { details?: string } | null)?.details || "").toLowerCase();
+  const hint = String((error as { hint?: string } | null)?.hint || "").toLowerCase();
+  const full = `${msg} ${details} ${hint}`;
+  return full.includes("default_referral_party_id") && (full.includes("schema cache") || full.includes("column"));
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -341,6 +349,30 @@ export async function POST(request: NextRequest) {
         default_referral_party_id: defaultRefId,
       });
       if (clientError) {
+        if (isMissingDefaultReferralColumn(clientError)) {
+          const { error: legacyClientError } = await supabaseAdmin.from("client_party").insert({
+            party_id: partyId,
+            client_type: clientType,
+            show_referral_in_app: data.showReferralInApp === true,
+          });
+          if (!legacyClientError) {
+            defaultRefId = null;
+          } else {
+            console.error("Error creating legacy client_party fallback:", {
+              partyId,
+              client_type: clientType,
+              error: legacyClientError.message,
+              code: legacyClientError.code,
+              details: legacyClientError.details,
+              hint: legacyClientError.hint,
+            });
+            await supabaseAdmin.from("party").delete().eq("id", partyId);
+            return NextResponse.json(
+              { error: "Failed to create client record", details: legacyClientError.message },
+              { status: 500 }
+            );
+          }
+        } else {
         console.error("Error creating client_party:", {
           partyId,
           client_type: clientType,
@@ -355,6 +387,7 @@ export async function POST(request: NextRequest) {
           { error: "Failed to create client record", details: clientError.message },
           { status: 500 }
         );
+        }
       }
     }
 

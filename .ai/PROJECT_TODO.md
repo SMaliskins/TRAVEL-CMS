@@ -83,7 +83,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 |----|------|------|-------|--------|--------|-------|
 | O7 | Finance | Payment form in Finance tab | DB → CODE WRITER → QA | TODO | - | Amount, type (bank/cash/card), date, payer, invoice link |
 | O8 | Finance | Invoice creation with service selection | DB → CODE WRITER → QA | DONE | feature/x | ✅ OD6 completed |
-| **O7-IMPL** | **Finance** | **Payment System: DB + API + UI** | **DB→CW→QA** | **IN_QA** | **feature/x** | **[09.04 15:31] Date picker cross-device fix: mobile + desktop calendar open restored** |
+| **O7-IMPL** | **Finance** | **Payment System: DB + API + UI** | **DB→CW→QA** | **IN_QA** | **feature/x** | **[10.04 10:08] Directory save hotfix: fallback when client_party.default_referral_party_id column is missing** |
 | **O8-IMPL** | **Finance** | **Email System: Send Invoice + Track** | **CW→QA** | **TODO** | **-** | **🔴 HIGH: email service, template, API, delivery tracking** |
 | FN1 | Finance | Edit Invoice button + handlers | CW→QA | DONE | feature/x | [11.01] ✅ Phase 1 complete |
 
