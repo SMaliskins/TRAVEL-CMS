@@ -6,6 +6,7 @@ import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 import { fetchOrderIdByRouteParam } from "@/lib/orders/orderFromRouteParam";
+import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -377,7 +378,7 @@ export async function POST(
       company_id: companyId,
       order_id: orderId,
       category: body.category || null,
-      category_id: body.categoryId || null,
+      category_id: normalizeCategoryIdForDb(body.categoryId),
       service_name: body.serviceName,
       service_date_from: body.dateFrom || null,
       service_date_to: body.dateTo || null,

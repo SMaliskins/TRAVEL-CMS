@@ -24,6 +24,7 @@ import ParseFeedbackPanel from "@/components/ParseFeedbackPanel";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import type { SupplierCommission } from '@/lib/types/directory';
 import { formatApiErrorResponse, parseFetchErrorBody } from "@/lib/http/formatApiError";
+import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -2591,7 +2592,7 @@ export default function EditServiceModalNew({
 
       const payload: Record<string, unknown> = {
         category,
-        category_id: categoryId, // UUID reference to travel_service_categories
+        category_id: normalizeCategoryIdForDb(categoryId),
         service_name: serviceName.trim(),
         service_date_from: resolvedDateFrom ?? null,
         service_date_to: resolvedDateTo ?? resolvedDateFrom ?? null,

@@ -5,6 +5,7 @@ import { mapOrderServiceRowToListApiItem, type OrderServiceListMapById } from "@
 import { upsertOrderServiceEmbedding } from "@/lib/embeddings/upsert";
 import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
+import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
 
 async function syncOrderDatesFromServices(orderId: string) {
   try {
@@ -193,7 +194,10 @@ export async function PATCH(
     if (body.service_name !== undefined) updates.service_name = body.service_name;
     if (body.category !== undefined) updates.category = body.category;
     if (body.category_id !== undefined) {
-      updates.category_id = body.category_id === "" ? null : body.category_id;
+      updates.category_id =
+        body.category_id === "" || body.category_id == null
+          ? null
+          : normalizeCategoryIdForDb(body.category_id);
     }
     if (body.vat_rate !== undefined) {
       const vr = Number(body.vat_rate);

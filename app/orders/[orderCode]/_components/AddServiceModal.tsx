@@ -22,6 +22,7 @@ import { sanitizeNumber, sanitizeDecimalInput } from "@/utils/sanitizeNumber";
 import LinkedServicesModal from "./LinkedServicesModal";
 import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { formatApiErrorResponse } from "@/lib/http/formatApiError";
+import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -1914,7 +1915,7 @@ export default function AddServiceModal({
       
       const payload: Record<string, unknown> = {
         category,
-        categoryId, // UUID reference to travel_service_categories
+        categoryId: normalizeCategoryIdForDb(categoryId),
         serviceName: effectiveServiceName,
         dateFrom: dateFrom || null,
         dateTo: dateTo || dateFrom || null,
