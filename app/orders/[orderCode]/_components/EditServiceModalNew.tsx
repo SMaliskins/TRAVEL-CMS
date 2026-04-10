@@ -579,13 +579,15 @@ export default function EditServiceModalNew({
   const [hotelBedType, setHotelBedType] = useState<"king_queen" | "twin" | "not_guaranteed">(
     (service.hotelBedType as any) || "not_guaranteed"
   );
-  const [hotelPreferences, setHotelPreferences] = useState({
-    earlyCheckIn: service.hotelEarlyCheckIn || false,
-    earlyCheckInTime: (service as { hotelEarlyCheckInTime?: string | null }).hotelEarlyCheckInTime || "",
-    lateCheckIn: service.hotelLateCheckIn || false,
-    lateCheckInTime: (service as { hotelLateCheckInTime?: string | null }).hotelLateCheckInTime || "",
-    lateCheckOut: (service as { hotelLateCheckOut?: boolean }).hotelLateCheckOut || false,
-    lateCheckOutTime: (service as { hotelLateCheckOutTime?: string | null }).hotelLateCheckOutTime || "",
+  const [hotelPreferences, setHotelPreferences] = useState(() => {
+    const s = service as Record<string, unknown>;
+    return {
+    earlyCheckIn: !!(service.hotelEarlyCheckIn ?? s.hotel_early_check_in),
+    earlyCheckInTime: String((service as { hotelEarlyCheckInTime?: string | null }).hotelEarlyCheckInTime ?? s.hotel_early_check_in_time ?? ""),
+    lateCheckIn: !!(service.hotelLateCheckIn ?? s.hotel_late_check_in),
+    lateCheckInTime: String((service as { hotelLateCheckInTime?: string | null }).hotelLateCheckInTime ?? s.hotel_late_check_in_time ?? ""),
+    lateCheckOut: !!((service as { hotelLateCheckOut?: boolean }).hotelLateCheckOut ?? s.hotel_late_check_out),
+    lateCheckOutTime: String((service as { hotelLateCheckOutTime?: string | null }).hotelLateCheckOutTime ?? s.hotel_late_check_out_time ?? ""),
     roomUpgrade: (service as { hotelRoomUpgrade?: boolean }).hotelRoomUpgrade || false,
     higherFloor: service.hotelHigherFloor || false,
     kingSizeBed: service.hotelKingSizeBed || false,
@@ -595,6 +597,7 @@ export default function EditServiceModalNew({
     roomsNextTo: service.hotelRoomsNextTo || "",
     parking: service.hotelParking || false,
     freeText: service.hotelPreferencesFreeText || "",
+    };
   });
   const [supplierBookingType, setSupplierBookingType] = useState<"gds" | "direct" | "partner">(() => {
     const v = String((service.supplierBookingType as string) || "gds").toLowerCase();
@@ -2814,6 +2817,34 @@ export default function EditServiceModalNew({
       );
 
       if (response.ok) {
+        // Overwrite company hotel contact overrides (RateHawk HID) when user corrects name / address / email / phone
+        if (
+          categoryType === "hotel" &&
+          hotelHid != null &&
+          hotelHid > 0 &&
+          hotelName.trim()
+        ) {
+          try {
+            await fetch("/api/hotel-contact-overrides", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+              },
+              credentials: "include",
+              body: JSON.stringify({
+                hotelHid,
+                hotelName: hotelName.trim(),
+                email: hotelEmail?.trim() || null,
+                phone: hotelPhone?.trim() || null,
+                address: hotelAddress?.trim() || null,
+              }),
+            });
+          } catch {
+            // Non-fatal: service row is already saved
+          }
+        }
+
         // Sync clients to order_travellers (so they appear in order Travellers column)
         await addClientsToOrderTravellers(clientIds);
 
@@ -2875,7 +2906,12 @@ export default function EditServiceModalNew({
           transferType: categoryType === "tour" ? opt(transferType) : undefined,
           additionalServices: categoryType === "tour" ? opt(additionalServices) : undefined,
           hotelEarlyCheckIn: showHotelFields ? hotelPreferences.earlyCheckIn ?? undefined : undefined,
+          hotelEarlyCheckInTime: showHotelFields ? (hotelPreferences.earlyCheckInTime?.trim() || undefined) : undefined,
           hotelLateCheckIn: showHotelFields ? hotelPreferences.lateCheckIn ?? undefined : undefined,
+          hotelLateCheckInTime: showHotelFields ? (hotelPreferences.lateCheckInTime?.trim() || undefined) : undefined,
+          hotelRoomUpgrade: showHotelFields ? hotelPreferences.roomUpgrade ?? undefined : undefined,
+          hotelLateCheckOut: showHotelFields ? hotelPreferences.lateCheckOut ?? undefined : undefined,
+          hotelLateCheckOutTime: showHotelFields ? (hotelPreferences.lateCheckOutTime?.trim() || undefined) : undefined,
           hotelHigherFloor: showHotelFields ? hotelPreferences.higherFloor ?? undefined : undefined,
           hotelKingSizeBed: showHotelFields ? hotelPreferences.kingSizeBed ?? undefined : undefined,
           hotelHoneymooners: showHotelFields ? hotelPreferences.honeymooners ?? undefined : undefined,

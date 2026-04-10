@@ -143,8 +143,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const pendingCloseAfterSaveRef = React.useRef<boolean>(false);
     const [highlightedSection, setHighlightedSection] = useState<"supplier" | "subagent" | "referral" | null>(null);
     
-    // Active tab state for Statistics section
-    const [activeTab, setActiveTab] = useState<"statistics" | "clientScore">("statistics");
+    // Active tab state for Statistics section (third tab: client app / referral portal password)
+    const [activeTab, setActiveTab] = useState<"statistics" | "clientScore" | "clientAppPassword">("statistics");
 
     /** Main details card: Main vs Referral (only when Referral role is checked) */
     const [directoryMainTab, setDirectoryMainTab] = useState<"main" | "referral">("main");
@@ -177,6 +177,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     // Ripple effects for tab buttons
     const statisticsTabRipple = useRipple({ color: 'rgba(0, 0, 0, 0.1)' });
     const clientScoreTabRipple = useRipple({ color: 'rgba(0, 0, 0, 0.1)' });
+    const clientAppPasswordTabRipple = useRipple({ color: "rgba(0, 0, 0, 0.1)" });
     
     // Track dirty fields (fields that have been modified)
     const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
@@ -204,6 +205,15 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
 
     const [baseType, setBaseType] = useState<DirectoryType>(getBaseType());
     const [roles, setRoles] = useState<DirectoryRole[]>(record?.roles || []);
+
+    const showClientAppPasswordTab =
+      mode === "edit" && !!record?.id && (roles.includes("client") || roles.includes("referral"));
+
+    useEffect(() => {
+      if (!showClientAppPasswordTab && activeTab === "clientAppPassword") {
+        setActiveTab("statistics");
+      }
+    }, [showClientAppPasswordTab, activeTab]);
     
     // Handle save success - mark all dirty fields as saved temporarily
     useEffect(() => {
@@ -1309,122 +1319,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         </label>
                       ))}
                     </div>
-                    {roles.includes("client") &&
-                      !roles.includes("referral") &&
-                      mode === "edit" &&
-                      record?.id && (
-                      <div className="mt-4 max-w-lg rounded-lg border border-gray-200 bg-gray-50/90 p-4">
-                        <p className="text-sm font-semibold text-gray-900">
-                          {t(lang, "directory.clientAppPasswordTitle")}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-600 leading-snug">
-                          {t(lang, "directory.clientAppPasswordHint")}
-                        </p>
-                        <div className="mt-3 space-y-2">
-                          <label className="block text-xs font-medium text-gray-700">
-                            {t(lang, "directory.clientAppPasswordLabel")}
-                            <input
-                              type="password"
-                              autoComplete="new-password"
-                              value={clientAppPassword}
-                              onChange={(e) => {
-                                setClientAppPassword(e.target.value);
-                                setClientAppPasswordMsg(null);
-                              }}
-                              className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                            />
-                          </label>
-                          <label className="block text-xs font-medium text-gray-700">
-                            {t(lang, "directory.clientAppPasswordConfirm")}
-                            <input
-                              type="password"
-                              autoComplete="new-password"
-                              value={clientAppPasswordConfirm}
-                              onChange={(e) => {
-                                setClientAppPasswordConfirm(e.target.value);
-                                setClientAppPasswordMsg(null);
-                              }}
-                              className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                            />
-                          </label>
-                        </div>
-                        {clientAppPasswordMsg ? (
-                          <p
-                            className={
-                              clientAppPasswordMsg.type === "ok"
-                                ? "mt-2 text-xs text-green-800"
-                                : "mt-2 text-xs text-red-700"
-                            }
-                            role="status"
-                          >
-                            {clientAppPasswordMsg.text}
-                          </p>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={clientAppPasswordBusy}
-                          onClick={async () => {
-                            setClientAppPasswordMsg(null);
-                            if (!email.trim()) {
-                              setClientAppPasswordMsg({
-                                type: "err",
-                                text: t(lang, "directory.clientAppPasswordEmailRequired"),
-                              });
-                              return;
-                            }
-                            if (clientAppPassword.length < 8) {
-                              setClientAppPasswordMsg({
-                                type: "err",
-                                text: t(lang, "directory.clientAppPasswordTooShort"),
-                              });
-                              return;
-                            }
-                            if (clientAppPassword !== clientAppPasswordConfirm) {
-                              setClientAppPasswordMsg({
-                                type: "err",
-                                text: t(lang, "directory.clientAppPasswordMismatch"),
-                              });
-                              return;
-                            }
-                            setClientAppPasswordBusy(true);
-                            try {
-                              const res = await fetchWithAuth(
-                                `/api/directory/${encodeURIComponent(record.id)}/client-app-password`,
-                                {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ password: clientAppPassword }),
-                                }
-                              );
-                              const j = await res.json().catch(() => ({}));
-                              if (!res.ok) {
-                                const errText =
-                                  j?.message ||
-                                  j?.error ||
-                                  (res.status === 400 ? "Validation error" : "Request failed");
-                                setClientAppPasswordMsg({ type: "err", text: String(errText) });
-                                return;
-                              }
-                              setClientAppPasswordMsg({
-                                type: "ok",
-                                text: t(lang, "directory.clientAppPasswordSuccess"),
-                              });
-                              setClientAppPassword("");
-                              setClientAppPasswordConfirm("");
-                            } catch {
-                              setClientAppPasswordMsg({ type: "err", text: "Request failed" });
-                            } finally {
-                              setClientAppPasswordBusy(false);
-                            }
-                          }}
-                          className="mt-3 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
-                        >
-                          {clientAppPasswordBusy
-                            ? t(lang, "directory.clientAppPasswordSaving")
-                            : t(lang, "directory.clientAppPasswordSave")}
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : null}
@@ -2895,119 +2789,6 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   </p>
                 </div>
               )}
-              {mode === "edit" && record?.id && roles.includes("referral") && (
-                <div className="max-w-lg rounded-lg border border-gray-200 bg-gray-50/90 p-4">
-                  <p className="text-sm font-semibold text-gray-900">
-                    {t(lang, "directory.clientAppPasswordTitle")}
-                  </p>
-                  <p className="mt-1 text-xs leading-snug text-gray-600">
-                    {t(lang, "directory.clientAppPasswordHint")}
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    <label className="block text-xs font-medium text-gray-700">
-                      {t(lang, "directory.clientAppPasswordLabel")}
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={clientAppPassword}
-                        onChange={(e) => {
-                          setClientAppPassword(e.target.value);
-                          setClientAppPasswordMsg(null);
-                        }}
-                        className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                      />
-                    </label>
-                    <label className="block text-xs font-medium text-gray-700">
-                      {t(lang, "directory.clientAppPasswordConfirm")}
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={clientAppPasswordConfirm}
-                        onChange={(e) => {
-                          setClientAppPasswordConfirm(e.target.value);
-                          setClientAppPasswordMsg(null);
-                        }}
-                        className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                      />
-                    </label>
-                  </div>
-                  {clientAppPasswordMsg ? (
-                    <p
-                      className={
-                        clientAppPasswordMsg.type === "ok"
-                          ? "mt-2 text-xs text-green-800"
-                          : "mt-2 text-xs text-red-700"
-                      }
-                      role="status"
-                    >
-                      {clientAppPasswordMsg.text}
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={clientAppPasswordBusy}
-                    onClick={async () => {
-                      setClientAppPasswordMsg(null);
-                      if (!email.trim()) {
-                        setClientAppPasswordMsg({
-                          type: "err",
-                          text: t(lang, "directory.clientAppPasswordEmailRequired"),
-                        });
-                        return;
-                      }
-                      if (clientAppPassword.length < 8) {
-                        setClientAppPasswordMsg({
-                          type: "err",
-                          text: t(lang, "directory.clientAppPasswordTooShort"),
-                        });
-                        return;
-                      }
-                      if (clientAppPassword !== clientAppPasswordConfirm) {
-                        setClientAppPasswordMsg({
-                          type: "err",
-                          text: t(lang, "directory.clientAppPasswordMismatch"),
-                        });
-                        return;
-                      }
-                      setClientAppPasswordBusy(true);
-                      try {
-                        const res = await fetchWithAuth(
-                          `/api/directory/${encodeURIComponent(record.id)}/client-app-password`,
-                          {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ password: clientAppPassword }),
-                          }
-                        );
-                        const j = await res.json().catch(() => ({}));
-                        if (!res.ok) {
-                          const errText =
-                            j?.message ||
-                            j?.error ||
-                            (res.status === 400 ? "Validation error" : "Request failed");
-                          setClientAppPasswordMsg({ type: "err", text: String(errText) });
-                          return;
-                        }
-                        setClientAppPasswordMsg({
-                          type: "ok",
-                          text: t(lang, "directory.clientAppPasswordSuccess"),
-                        });
-                        setClientAppPassword("");
-                        setClientAppPasswordConfirm("");
-                      } catch {
-                        setClientAppPasswordMsg({ type: "err", text: "Request failed" });
-                      } finally {
-                        setClientAppPasswordBusy(false);
-                      }
-                    }}
-                    className="mt-3 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
-                  >
-                    {clientAppPasswordBusy
-                      ? t(lang, "directory.clientAppPasswordSaving")
-                      : t(lang, "directory.clientAppPasswordSave")}
-                  </button>
-                </div>
-              )}
               {isReferral && (
                   <div
                     id="referral-settings"
@@ -3248,7 +3029,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               <div className="space-y-3 md:space-y-4">
                 {/* Tabs - modern style with switching */}
                 <div className="border-b border-gray-200/60">
-                  <nav className="-mb-px flex space-x-4 md:space-x-6" aria-label="Tabs">
+                  <nav className="-mb-px flex flex-wrap gap-x-2 gap-y-1 sm:flex-nowrap sm:space-x-4 md:space-x-6" aria-label="Tabs">
                     <button
                       {...statisticsTabRipple.rippleProps}
                       type="button"
@@ -3285,6 +3066,27 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900"></div>
                       )}
                     </button>
+                    {showClientAppPasswordTab ? (
+                      <button
+                        {...clientAppPasswordTabRipple.rippleProps}
+                        type="button"
+                        onClick={(e) => {
+                          clientAppPasswordTabRipple.createRipple(e);
+                          setActiveTab("clientAppPassword");
+                        }}
+                        className={`relative border-b-2 px-4 py-3 md:px-3 md:py-2.5 text-sm font-semibold tracking-tight transition-all duration-200 truncate min-h-[44px] md:min-h-0 ${
+                          activeTab === "clientAppPassword"
+                            ? "border-gray-900 text-gray-900"
+                            : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                        }`}
+                        aria-label={t(lang, "directory.clientAppPasswordTab")}
+                      >
+                        {t(lang, "directory.clientAppPasswordTab")}
+                        {activeTab === "clientAppPassword" && (
+                          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900"></div>
+                        )}
+                      </button>
+                    ) : null}
                   </nav>
                 </div>
 
@@ -3443,6 +3245,122 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                         Select "Client" role to view client score
                       </div>
                     )}
+                  </div>
+                )}
+
+                {activeTab === "clientAppPassword" && showClientAppPasswordTab && (
+                  <div className="pt-4">
+                    <div className="max-w-lg rounded-lg border border-gray-200 bg-gray-50/90 p-4">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {t(lang, "directory.clientAppPasswordTitle")}
+                      </p>
+                      <p className="mt-1 text-xs leading-snug text-gray-600">
+                        {t(lang, "directory.clientAppPasswordHint")}
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        <label className="block text-xs font-medium text-gray-700">
+                          {t(lang, "directory.clientAppPasswordLabel")}
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            value={clientAppPassword}
+                            onChange={(e) => {
+                              setClientAppPassword(e.target.value);
+                              setClientAppPasswordMsg(null);
+                            }}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-gray-700">
+                          {t(lang, "directory.clientAppPasswordConfirm")}
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            value={clientAppPasswordConfirm}
+                            onChange={(e) => {
+                              setClientAppPasswordConfirm(e.target.value);
+                              setClientAppPasswordMsg(null);
+                            }}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                          />
+                        </label>
+                      </div>
+                      {clientAppPasswordMsg ? (
+                        <p
+                          className={
+                            clientAppPasswordMsg.type === "ok"
+                              ? "mt-2 text-xs text-green-800"
+                              : "mt-2 text-xs text-red-700"
+                          }
+                          role="status"
+                        >
+                          {clientAppPasswordMsg.text}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={clientAppPasswordBusy}
+                        onClick={async () => {
+                          setClientAppPasswordMsg(null);
+                          if (!email.trim()) {
+                            setClientAppPasswordMsg({
+                              type: "err",
+                              text: t(lang, "directory.clientAppPasswordEmailRequired"),
+                            });
+                            return;
+                          }
+                          if (clientAppPassword.length < 8) {
+                            setClientAppPasswordMsg({
+                              type: "err",
+                              text: t(lang, "directory.clientAppPasswordTooShort"),
+                            });
+                            return;
+                          }
+                          if (clientAppPassword !== clientAppPasswordConfirm) {
+                            setClientAppPasswordMsg({
+                              type: "err",
+                              text: t(lang, "directory.clientAppPasswordMismatch"),
+                            });
+                            return;
+                          }
+                          setClientAppPasswordBusy(true);
+                          try {
+                            const res = await fetchWithAuth(
+                              `/api/directory/${encodeURIComponent(record!.id)}/client-app-password`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ password: clientAppPassword }),
+                              }
+                            );
+                            const j = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                              const errText =
+                                j?.message ||
+                                j?.error ||
+                                (res.status === 400 ? "Validation error" : "Request failed");
+                              setClientAppPasswordMsg({ type: "err", text: String(errText) });
+                              return;
+                            }
+                            setClientAppPasswordMsg({
+                              type: "ok",
+                              text: t(lang, "directory.clientAppPasswordSuccess"),
+                            });
+                            setClientAppPassword("");
+                            setClientAppPasswordConfirm("");
+                          } catch {
+                            setClientAppPasswordMsg({ type: "err", text: "Request failed" });
+                          } finally {
+                            setClientAppPasswordBusy(false);
+                          }
+                        }}
+                        className="mt-3 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {clientAppPasswordBusy
+                          ? t(lang, "directory.clientAppPasswordSaving")
+                          : t(lang, "directory.clientAppPasswordSave")}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

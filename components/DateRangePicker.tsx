@@ -144,14 +144,17 @@ export default function DateRangePicker({
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
+  // Above app modals (e.g. Edit Service z-[100000]) so the range calendar is visible and clickable
+  const CALENDAR_Z = "z-[200000]";
+
   const calendarContent = isCalendarOpen && (
     <div
       ref={calendarRef}
       data-calendar-dropdown
       className={
         isMobile
-          ? "fixed inset-0 z-[9999] flex flex-col bg-white"
-          : "fixed z-[9999] w-[680px] rounded-lg border border-gray-200 bg-white p-4 shadow-lg"
+          ? `fixed inset-0 ${CALENDAR_Z} flex flex-col bg-white`
+          : `fixed ${CALENDAR_Z} w-[680px] rounded-lg border border-gray-200 bg-white p-4 shadow-lg`
       }
       style={isMobile ? undefined : { top: dropdownPosition.top, left: dropdownPosition.left }}
       onClick={(e) => e.stopPropagation()}

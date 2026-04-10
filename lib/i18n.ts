@@ -77,6 +77,7 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.mainDetailsTabReferral": "Referral",
     "directory.mainDetailsTabsAria": "Main details sections",
     "directory.clientAppPasswordTitle": "Client app & referral portal password",
+    "directory.clientAppPasswordTab": "App login",
     "directory.clientAppPasswordHint":
       "Sets login password for /referral and the mobile app (same email as this card). Min. 8 characters. Saving invalidates existing app sessions.",
     "directory.clientAppPasswordLabel": "New password",
@@ -645,6 +646,7 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.mainDetailsTabReferral": "Реферал",
     "directory.mainDetailsTabsAria": "Разделы основных данных",
     "directory.clientAppPasswordTitle": "Пароль для приложения и портала реферала",
+    "directory.clientAppPasswordTab": "Вход в приложение",
     "directory.clientAppPasswordHint":
       "Задаёт пароль для входа на /referral и в мобильном приложении (тот же email, что в карточке). Минимум 8 символов. После сохранения старые сессии в приложении сбрасываются.",
     "directory.clientAppPasswordLabel": "Новый пароль",
@@ -1205,6 +1207,7 @@ const UI_STRINGS: Record<UILang, Record<string, string>> = {
     "directory.mainDetailsTabReferral": "Ieteikums",
     "directory.mainDetailsTabsAria": "Galveno datu sadaļas",
     "directory.clientAppPasswordTitle": "Parole lietotnei un ieteikuma portālam",
+    "directory.clientAppPasswordTab": "Pieteikšanās",
     "directory.clientAppPasswordHint":
       "Iestata paroli /referral un mobilajai lietotnei (tas pats e-pasts kā kartītē). Vismaz 8 rakstzīmes. Pēc saglabāšanas vecās sesijas lietotnē tiek atceltas.",
     "directory.clientAppPasswordLabel": "Jaunā parole",

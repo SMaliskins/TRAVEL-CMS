@@ -307,8 +307,9 @@ export function OrderPageHeaderE({
           )}
           <button
             type="button"
-            className="flex items-end gap-1.5 sm:gap-2"
+            className="flex cursor-pointer items-end gap-1.5 sm:gap-2 rounded-md outline-none ring-offset-2 hover:bg-sky-50/80 focus-visible:ring-2 focus-visible:ring-sky-400 disabled:pointer-events-none disabled:opacity-50"
             onClick={startEditingDates}
+            disabled={isSaving}
             title="Click to edit dates"
           >
             {dateFromIso ? (

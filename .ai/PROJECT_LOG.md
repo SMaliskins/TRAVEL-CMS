@@ -5,6 +5,68 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Hotel preferences: list SELECT + onServiceUpdated
+
+**Task:** O5 / Edit Service hotel prefs | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `GET .../services` used lean `ORDER_SERVICES_LIST_COLUMNS` without `hotel_late_check_in`, `hotel_late_check_in_time`, and other preference columns — after save, `fetchServices` refetch dropped them in UI (looked like DB not saving).
+- Added meal + all hotel preference columns to list SELECT; `EditServiceModalNew` init reads camelCase or snake_case; `onServiceUpdated` now includes early/late check-in/out times and room upgrade / late check-out flags.
+
+---
+
+## [2026-04-06] CODE_WRITER — Edit Hotel: sync contact overrides on save
+
+**Task:** O5 / hotel contacts | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- After successful PATCH, hotel + `hotelHid`: `POST /api/hotel-contact-overrides` with `hotelName`, `email`, `phone`, `address` from form — company-scoped overrides (RateHawk HID) update so manual corrections overwrite directory data for future loads / other orders.
+
+---
+
+## [2026-04-06] CODE_WRITER — Hotel Add Service: Service price decimal + leading zeros
+
+**Task:** O5 / Add Service pricing UX | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Cause: hotel **Per stay** used `input type="number"` + `parseFloat` on change — browsers drop invalid intermediate values (e.g. trailing `.`), so decimals felt “reset”; leading zeros stayed because state was string-like vs coerced display.
+- `AddServiceModal`: Per stay **Service price** and **Total Client price** → `type="text"` + `inputMode="decimal"` + `sanitizeDecimalInput` (same pattern as Cost field elsewhere).
+- `sanitizeDecimalInput`: normalize redundant leading zeros in integer part (`0144` → `144`), keep `0`, `0.xx`, `.xx`.
+
+**Next Step:** QA on Add Service → Hotel → Per stay pricing; optional follow-up: **Per night** columns still use `type="number"` (same class of issue if users type decimals there).
+
+---
+
+## [2026-04-06] CODE_WRITER — Directory: client app password on Statistics tab
+
+**Task:** directory password separate tab | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `DirectoryForm`: removed password block from Main details / referral column; added third tab "App login" (i18n en/ru/lv) in Statistics card; same API save; tab shown for edit + client or referral role; reset tab if role no longer qualifies
+- Tab nav: flex-wrap for three tabs on narrow screens
+
+---
+
+## [2026-04-06] CODE_WRITER — DateRangePicker z-index above modals
+
+**Task:** calendar invisible in modals | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `DateRangePicker` portal: `z-[200000]` so range calendar is above Edit Service / overlays (`z-[100000]`)
+- Order header date button: `cursor-pointer`, hover/focus, `disabled` when `isSaving`
+
+---
+
 ## [2026-04-06] CODE_WRITER — Change ticket: dates, route label, category, itinerary
 
 **Task:** change-ticket fixes | **Status:** SUCCESS

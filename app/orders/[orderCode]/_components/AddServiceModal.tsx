@@ -4465,7 +4465,18 @@ export default function AddServiceModal({
                             ) : (
                               <div className={`inline-flex items-center rounded border w-28 max-w-full overflow-hidden ${parsedFields.has("servicePrice") ? "border-green-500 bg-green-50/30" : parseAttemptedButEmpty.has("servicePrice") ? "border-red-400 bg-red-50/30" : "border-slate-300"} focus-within:border-sky-500`}>
                                 <span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span>
-                                <input type="number" step="0.01" min="0" value={(() => { const eff = (categoryType as string) === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits; const q = eff > 0 ? parseFloat(servicePrice) / eff : NaN; return (eff > 0 && !isNaN(q)) ? Math.round(q * 100) / 100 : servicePrice; })()} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; const eff = (categoryType as string) === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits; setServicePrice(String(Math.round(v * eff * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent focus:ring-0 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  value={servicePrice}
+                                  onChange={(e) => {
+                                    pricingLastEditedRef.current = "cost";
+                                    setServicePrice(sanitizeDecimalInput(e.target.value));
+                                  }}
+                                  placeholder="0.00"
+                                  className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent focus:ring-0 modal-input tabular-nums"
+                                />
                               </div>
                             )}
                           </div>
@@ -4489,7 +4500,18 @@ export default function AddServiceModal({
                             <span className="text-sm text-slate-600 shrink-0">{(categoryType as string) === "hotel" ? "Total Client price" : "Sale"}</span>
                             <div className={`inline-flex items-center rounded border w-28 max-w-full overflow-hidden ${parsedFields.has("clientPrice") ? "border-green-500 bg-green-50/30" : parseAttemptedButEmpty.has("clientPrice") ? "border-red-400 bg-red-50/30" : "border-slate-300"} focus-within:border-sky-500`}>
                               <span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span>
-                              <input type="number" step="0.01" min="0" value={(() => { const eff = (categoryType as string) === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits; const q = eff > 0 ? parseFloat(clientPrice) / eff : NaN; return (eff > 0 && !isNaN(q)) ? Math.round(q * 100) / 100 : clientPrice; })()} onChange={(e) => { pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; const eff = (categoryType as string) === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits; setClientPrice(String(Math.round(v * eff * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent focus:ring-0 modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                value={clientPrice}
+                                onChange={(e) => {
+                                  pricingLastEditedRef.current = "sale";
+                                  setClientPrice(sanitizeDecimalInput(e.target.value));
+                                }}
+                                placeholder="0.00"
+                                className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent focus:ring-0 modal-input tabular-nums"
+                              />
                             </div>
                           </div>
                         </div>
