@@ -85,6 +85,7 @@ function TypeBadge({ type }: { type: string }) {
     from_client: { label: "From Client", cls: "bg-teal-50 text-teal-700" },
     to_supplier: { label: "To Supplier", cls: "bg-amber-50 text-amber-700" },
     from_supplier: { label: "From Supplier", cls: "bg-cyan-50 text-cyan-700" },
+    hotel_confirmation: { label: "To Hotel", cls: "bg-orange-50 text-orange-800" },
     other: { label: "Other", cls: "bg-gray-100 text-gray-600" },
   };
   const t = labels[type] || labels.other;

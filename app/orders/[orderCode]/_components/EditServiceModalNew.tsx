@@ -25,6 +25,8 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import type { SupplierCommission } from '@/lib/types/directory';
 import { formatApiErrorResponse, parseFetchErrorBody } from "@/lib/http/formatApiError";
 import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
+import { vatRateFromCategory } from "@/lib/orders/vatRateFromCategory";
+import { useQueryClient } from "@tanstack/react-query";
 
 const CUSTOM_ROOMS_KEY = "travel-cms-custom-rooms";
 const CUSTOM_BOARDS_KEY = "travel-cms-custom-boards";
@@ -320,6 +322,7 @@ export default function EditServiceModalNew({
   onRestoreToOriginal,
 }: EditServiceModalProps) {
   useModalOverlay();
+  const queryClient = useQueryClient();
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1374,6 +1377,28 @@ export default function EditServiceModalNew({
   useEffect(() => {
     loadCategories();
   }, [loadCategories]);
+
+  // VAT in Pricing: default from Travel Service category; on category change, follow category
+  const lastCategoryIdForVatRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!categoryId || categories.length === 0) return;
+    const matched = categories.find((c) => c.id === categoryId);
+    if (!matched) return;
+    const fromCat = vatRateFromCategory(matched);
+    if (lastCategoryIdForVatRef.current === null) {
+      lastCategoryIdForVatRef.current = categoryId;
+      const stored = Number(service.vatRate);
+      if (Number.isFinite(stored) && stored > 0) {
+        return;
+      }
+      setVatRate(fromCat);
+      return;
+    }
+    if (lastCategoryIdForVatRef.current !== categoryId) {
+      lastCategoryIdForVatRef.current = categoryId;
+      setVatRate(fromCat);
+    }
+  }, [categoryId, categories, service.vatRate]);
 
   // When Edit opens with a hotel name, resolve HID + room options from Ratehawk
   useEffect(() => {
@@ -4835,7 +4860,6 @@ export default function EditServiceModalNew({
                                 <input
                                   type="number"
                                   step="0.01"
-                                  min="0"
                                   value={servicePriceForeign}
                                   onChange={(e) => {
                                     const v = sanitizeNumber(e.target.value);
@@ -4997,7 +5021,6 @@ export default function EditServiceModalNew({
                                 <input
                                   type="number"
                                   step="0.01"
-                                  min="0"
                                   value={item.amount || ""}
                                   onChange={(e) => {
                                     pricingLastEditedRef.current = "cost";
@@ -5081,7 +5104,6 @@ export default function EditServiceModalNew({
                           <input
                             type="number"
                             step="0.01"
-                            min="0"
                             value={agentDiscountValue}
                             onChange={(e) => {
                               pricingLastEditedRef.current = "agent";
@@ -5108,22 +5130,21 @@ export default function EditServiceModalNew({
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Total Client price</label>
                         <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                           <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={clientPrice}
-                            disabled={clientPriceLocked}
-                            title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined}
-                            onChange={(e) => {
-                              if (clientPriceLocked) return;
-                              pricingLastEditedRef.current = "sale";
-                              const v = parseFloat(e.target.value) || 0;
-                              setClientPrice(String(Math.round(v * 100) / 100));
-                            }}
-                            placeholder="0.00"
-                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                          />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={clientPrice}
+                              disabled={clientPriceLocked}
+                              title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined}
+                              onChange={(e) => {
+                                if (clientPriceLocked) return;
+                                pricingLastEditedRef.current = "sale";
+                                const v = parseFloat(e.target.value) || 0;
+                                setClientPrice(String(Math.round(v * 100) / 100));
+                              }}
+                              placeholder="0.00"
+                              className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            />
                         </div>
                       </div>
                     </div>
@@ -5420,17 +5441,17 @@ export default function EditServiceModalNew({
                                   <>
                                     <div className="flex items-center justify-end gap-0.5 w-[5.5rem]">
                                       <span className="text-slate-600 text-xs">{getCurrencySymbol(serviceCurrency)}</span>
-                                      <input type="number" step="0.01" min="0" value={servicePriceForeign} onChange={(e) => { const v = sanitizeNumber(e.target.value); setServicePriceForeign(v); const f = parseFloat(v) || 0; const r = parseFloat(exchangeRate) || 0; const mult = priceUnits >= 1 ? priceUnits : 1; if (r > 0) setServicePrice(String(Math.round(f * r * mult * 100) / 100)); }} placeholder="0.00" className="w-20 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                      <input type="number" step="0.01" value={servicePriceForeign} onChange={(e) => { const v = sanitizeNumber(e.target.value); setServicePriceForeign(v); const f = parseFloat(v) || 0; const r = parseFloat(exchangeRate) || 0; const mult = priceUnits >= 1 ? priceUnits : 1; if (r > 0) setServicePrice(String(Math.round(f * r * mult * 100) / 100)); }} placeholder="0.00" className="w-20 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                                     </div>
                                     <div className="flex items-center justify-end gap-0.5 w-[5.5rem]">
                                       <span className="text-slate-600 text-xs">{getCurrencySymbol(serviceCurrency)}</span>
-                                      <input type="number" step="0.01" min="0" value={priceUnits >= 1 ? Math.round((parseFloat(servicePriceForeign) || 0) * priceUnits * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) { const perNight = Math.round((v / priceUnits) * 100) / 100; setServicePriceForeign(String(perNight)); const r = parseFloat(exchangeRate) || 0; if (r > 0) setServicePrice(String(Math.round(perNight * r * priceUnits * 100) / 100)); } }} placeholder="0.00" className="w-20 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                      <input type="number" step="0.01" value={priceUnits >= 1 ? Math.round((parseFloat(servicePriceForeign) || 0) * priceUnits * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) { const perNight = Math.round((v / priceUnits) * 100) / 100; setServicePriceForeign(String(perNight)); const r = parseFloat(exchangeRate) || 0; if (r > 0) setServicePrice(String(Math.round(perNight * r * priceUnits * 100) / 100)); } }} placeholder="0.00" className="w-20 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                                     </div>
                                   </>
                                 ) : (
                                   <div className="flex items-center justify-end gap-0.5 col-span-2">
                                     <span className="text-slate-600 text-xs">{getCurrencySymbol(serviceCurrency)}</span>
-                                    <input type="number" step="0.01" min="0" value={servicePriceForeign} onChange={(e) => { const v = sanitizeNumber(e.target.value); setServicePriceForeign(v); const f = parseFloat(v) || 0; const r = parseFloat(exchangeRate) || 0; if (r > 0) setServicePrice(String(Math.round(f * r * 100) / 100)); }} placeholder="0.00" className="w-24 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                    <input type="number" step="0.01" value={servicePriceForeign} onChange={(e) => { const v = sanitizeNumber(e.target.value); setServicePriceForeign(v); const f = parseFloat(v) || 0; const r = parseFloat(exchangeRate) || 0; if (r > 0) setServicePrice(String(Math.round(f * r * 100) / 100)); }} placeholder="0.00" className="w-24 py-0.5 pr-1 text-right text-sm tabular-nums border border-slate-300 rounded modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                                   </div>
                                 )}
                               </div>
@@ -5458,8 +5479,8 @@ export default function EditServiceModalNew({
                                 </>
                               ) : (
                                 <>
-                                  <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={priceUnits > 0 && !isNaN(parseFloat(servicePrice)) ? Math.round((parseFloat(servicePrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; setServicePrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
-                                  <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={!isNaN(parseFloat(servicePrice)) ? Math.round(parseFloat(servicePrice) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; setServicePrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                                  <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" value={priceUnits > 0 && !isNaN(parseFloat(servicePrice)) ? Math.round((parseFloat(servicePrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; setServicePrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                                  <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" value={!isNaN(parseFloat(servicePrice)) ? Math.round(parseFloat(servicePrice) * 100) / 100 : ""} onChange={(e) => { pricingLastEditedRef.current = "cost"; const v = parseFloat(e.target.value) || 0; setServicePrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
                                 </>
                               )}
                             </div>
@@ -5483,8 +5504,8 @@ export default function EditServiceModalNew({
                           {serviceCurrency !== (companyCurrencyCode || "EUR") && (
                             <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
                               <span className="text-slate-600 shrink-0">Actually paid</span>
-                              <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={priceUnits >= 1 && actuallyPaid !== "" && !isNaN(parseFloat(actuallyPaid)) ? Math.round((parseFloat(actuallyPaid) / priceUnits) * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) setActuallyPaid(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
-                              <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" value={actuallyPaid !== "" && !isNaN(parseFloat(actuallyPaid)) ? Math.round(parseFloat(actuallyPaid) * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setActuallyPaid(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                              <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" value={priceUnits >= 1 && actuallyPaid !== "" && !isNaN(parseFloat(actuallyPaid)) ? Math.round((parseFloat(actuallyPaid) / priceUnits) * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; if (priceUnits >= 1) setActuallyPaid(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                              <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" value={actuallyPaid !== "" && !isNaN(parseFloat(actuallyPaid)) ? Math.round(parseFloat(actuallyPaid) * 100) / 100 : ""} onChange={(e) => { const v = parseFloat(e.target.value) || 0; setActuallyPaid(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
                             </div>
                           )}
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
@@ -5494,8 +5515,8 @@ export default function EditServiceModalNew({
                           </div>
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center">
                             <span className="text-slate-600 shrink-0">Client price</span>
-                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
-                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={priceUnits > 0 && !isNaN(parseFloat(clientPrice)) ? Math.round((parseFloat(clientPrice) / priceUnits) * 100) / 100 : ""} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * priceUnits * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
+                            <div className="flex justify-end w-[5.5rem]"><div className="inline-flex items-center min-h-[2.25rem] rounded border border-slate-300 w-24 overflow-hidden focus-within:border-sky-500"><span className="pl-1 text-slate-600 text-xs">{currencySymbol}</span><input type="number" step="0.01" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={!isNaN(parseFloat(clientPrice)) ? Math.round(parseFloat(clientPrice) * 100) / 100 : ""} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; const v = parseFloat(e.target.value) || 0; setClientPrice(String(Math.round(v * 100) / 100)); }} placeholder="0.00" className="flex-1 min-w-0 py-0.5 pr-1 text-right text-sm tabular-nums border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div></div>
                           </div>
                           <div className="grid grid-cols-[1fr_5.5rem_5.5rem] gap-x-2 gap-y-2 items-center pt-1.5 mt-0.5 border-t border-sky-200/80">
                             <span className="text-slate-700 font-medium shrink-0">Total Client price</span>
@@ -5508,14 +5529,14 @@ export default function EditServiceModalNew({
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-sm text-slate-600 shrink-0">Service price</span>
-                            {(categoryType as string) === "hotel" && serviceCurrency !== (companyCurrencyCode || "EUR") ? <span className="text-sm text-slate-800 tabular-nums text-right w-28">{(() => { const f = parseFloat(servicePriceForeign) || 0; const r = parseFloat(exchangeRate) || 0; const eur = r > 0 ? Math.round(f * r * 100) / 100 : 0; return eur > 0 ? `${currencySymbol}${(eur).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"; })()}</span> : <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>}
+                            {(categoryType as string) === "hotel" && serviceCurrency !== (companyCurrencyCode || "EUR") ? <span className="text-sm text-slate-800 tabular-nums text-right w-28">{(() => { const f = parseFloat(servicePriceForeign) || 0; const r = parseFloat(exchangeRate) || 0; const eur = r > 0 ? Math.round(f * r * 100) / 100 : 0; return eur > 0 ? `${currencySymbol}${(eur).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"; })()}</span> : <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>}
                           </div>
                           {serviceCurrency !== (companyCurrencyCode || "EUR") && (
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-sm text-slate-600 shrink-0">Actually paid</span>
                               <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500">
                                 <span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span>
-                                <input type="number" step="0.01" min="0" value={actuallyPaid} onChange={(e) => setActuallyPaid(sanitizeNumber(e.target.value))} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
+                                <input type="number" step="0.01" value={actuallyPaid} onChange={(e) => setActuallyPaid(sanitizeNumber(e.target.value))} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right text-sm tabular-nums border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" />
                               </div>
                             </div>
                           )}
@@ -5525,7 +5546,7 @@ export default function EditServiceModalNew({
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-sm text-slate-600 shrink-0">Total Client price</span>
-                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={clientPrice} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                            <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500"><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={clientPrice} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                           </div>
                         </div>
                       )}
@@ -5535,7 +5556,7 @@ export default function EditServiceModalNew({
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Cost</span>
-                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(sanitizeNumber(e.target.value)); markCorrected("servicePrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" value={servicePrice} onChange={(e) => { pricingLastEditedRef.current = "cost"; setServicePrice(sanitizeNumber(e.target.value)); markCorrected("servicePrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Marge</span>
@@ -5543,7 +5564,7 @@ export default function EditServiceModalNew({
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-slate-600 shrink-0">Sale</span>
-                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("clientPrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" min="0" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={clientPrice} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); markCorrected("clientPrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
+                        <div className={`inline-flex items-center rounded border w-28 overflow-hidden focus-within:border-sky-500 ${correctedFields.has("clientPrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : "border-slate-300"}`}><span className="pl-2 text-slate-600 shrink-0">{currencySymbol}</span><input type="number" step="0.01" disabled={clientPriceLocked} title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined} value={clientPrice} onChange={(e) => { if (clientPriceLocked) return; pricingLastEditedRef.current = "sale"; setClientPrice(sanitizeNumber(e.target.value)); markCorrected("clientPrice"); }} placeholder="0.00" className="flex-1 min-w-0 w-20 py-1 pr-2 text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed modal-input [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></div>
                       </div>
                     </div>
                     )}
@@ -6407,21 +6428,24 @@ export default function EditServiceModalNew({
                 disabled={hotelEmailSending || !hotelEmailModal.to.trim()}
                 onClick={async () => {
                   if (!hotelEmailModal.to.trim()) return;
+                  const recipient = hotelEmailModal.to.trim();
                   setHotelEmailSending(true);
                   try {
                     const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}/send-to-hotel`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
+                      credentials: "include",
                       body: JSON.stringify({
-                        to: hotelEmailModal.to.trim(),
+                        to: recipient,
                         subject: hotelEmailModal.subject,
                         message: hotelEmailModal.message,
                       }),
                     });
                     if (res.ok) {
                       setHotelEmailModal(null);
-                      if (!hotelEmail && hotelEmailModal.to.trim()) {
-                        setHotelEmail(hotelEmailModal.to.trim());
+                      void queryClient.invalidateQueries({ queryKey: ["order-communications", orderCode] });
+                      if (!hotelEmail && recipient) {
+                        setHotelEmail(recipient);
                       }
                     } else {
                       const err = await res.json().catch(() => ({ error: "Failed to send" }));

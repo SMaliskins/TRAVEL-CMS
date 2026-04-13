@@ -5,6 +5,57 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — PRICING: allow negative Cost/Sale (refunds)
+
+**Task:** O5 / Edit & Add service pricing | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `EditServiceModalNew.tsx`, `AddServiceModal.tsx`: убран HTML `min="0"` у полей стоимости/продажи/связанных сумм (в т.ч. hotel, commission client price, foreign service price, extra line items, agent discount), чтобы браузер не показывал валидацию «not less than 0» при возвратах (отрицательные суммы). Курс обмена и проценты депозита/пенальти без изменений.
+
+---
+
+## [2026-04-06] CODE_WRITER — Order header: date edit inside card (OrderPageHeaderE)
+
+**Task:** O3 / order dates edit UX | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `OrderPageHeaderE`: prop `datesEditSlot` — блок выбора дат внутри белой карточки под строкой 1 (как itinerary edit визуально)
+- `page.tsx`: перенесён `DateRangePicker` + Save/Cancel из-под шапки в `datesEditSlot`; удалён дубль снаружи
+
+**Результат:** SCORE: pending QA
+
+---
+
+## [2026-04-06] CODE_WRITER — VAT default from Service Category (Pricing)
+
+**Task:** O5 / pricing VAT | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `lib/orders/vatRateFromCategory.ts`: derive % from category (`vat_rate` / `vatRate`); flight 0; tour 0→21; missing → flight 0 else 21
+- AddServiceModal: category sync + locked initial category use helper (fixes undefined `vat_rate` → UI 0)
+- EditServiceModalNew: after categories load, if saved VAT ≤0 apply category; on `categoryId` change sync VAT
+
+---
+
+## [2026-04-06] CODE_WRITER — Send to Hotel: invalidate Communications + badge
+
+**Task:** Communications tab after hotel email | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- EditServiceModalNew: after successful send-to-hotel, `invalidateQueries` for `order-communications` + `credentials: "include"`; fix recipient capture before closing modal
+- OrderCommunicationsTab: `hotel_confirmation` → badge "To Hotel"
+- send-to-hotel API: log `order_communications` insert errors
+
+---
+
 ## [2026-04-06] CODE_WRITER — Hotel preferences: list SELECT + onServiceUpdated
 
 **Task:** O5 / Edit Service hotel prefs | **Status:** SUCCESS

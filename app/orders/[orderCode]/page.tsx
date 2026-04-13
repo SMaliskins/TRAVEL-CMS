@@ -1836,6 +1836,38 @@ export default function OrderPage({
                   </div>
                 ) : undefined
               }
+              datesEditSlot={
+                order && editingHeaderField === "dates" ? (
+                  <div className="flex flex-col flex-wrap gap-2 sm:flex-row sm:items-center">
+                    <div className="w-full min-w-0 sm:w-80">
+                      <DateRangePicker
+                        label=""
+                        from={editDateFrom || undefined}
+                        to={editDateTo || undefined}
+                        onChange={(from, to) => {
+                          setEditDateFrom(from || "");
+                          setEditDateTo(to || "");
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={saveDates}
+                      disabled={isSavingField}
+                      className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {isSavingField ? "..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingHeaderField(null)}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      {t(lang, "order.cancel")}
+                    </button>
+                  </div>
+                ) : undefined
+              }
             />
             {order && editingHeaderField === "itinerary" && (
               <div className="mt-2 rounded-lg border bg-gray-50 p-3">
@@ -1941,36 +1973,6 @@ export default function OrderPage({
                     Cancel
                   </button>
                 </div>
-              </div>
-            )}
-            {order && editingHeaderField === "dates" && (
-              <div className="mt-2 flex flex-col flex-wrap gap-2 sm:flex-row sm:items-center">
-                <div className="w-full min-w-0 sm:w-80">
-                  <DateRangePicker
-                    label=""
-                    from={editDateFrom || undefined}
-                    to={editDateTo || undefined}
-                    onChange={(from, to) => {
-                      setEditDateFrom(from || "");
-                      setEditDateTo(to || "");
-                    }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={saveDates}
-                  disabled={isSavingField}
-                  className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isSavingField ? "..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingHeaderField(null)}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  {t(lang, "order.cancel")}
-                </button>
               </div>
             )}
           </div>

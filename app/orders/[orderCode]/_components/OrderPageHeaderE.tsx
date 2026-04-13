@@ -168,6 +168,8 @@ export type OrderPageHeaderEProps = {
   onOpenDirectoryParty: (partyId: string) => void;
   /** When editing client, replaces row 2 (trip line). */
   row2Replacement?: React.ReactNode;
+  /** When editing trip dates, shown inside the header card under row 1 (picker + actions). */
+  datesEditSlot?: React.ReactNode;
 };
 
 export function OrderPageHeaderE({
@@ -198,6 +200,7 @@ export function OrderPageHeaderE({
   setOrder,
   onOpenDirectoryParty,
   row2Replacement,
+  datesEditSlot,
 }: OrderPageHeaderEProps) {
   const router = useRouter();
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
@@ -376,6 +379,10 @@ export function OrderPageHeaderE({
           </div>
         </div>
       </div>
+
+      {datesEditSlot ? (
+        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">{datesEditSlot}</div>
+      ) : null}
 
       {row2Replacement ? (
         <div className="border-t border-gray-100 pt-2">{row2Replacement}</div>

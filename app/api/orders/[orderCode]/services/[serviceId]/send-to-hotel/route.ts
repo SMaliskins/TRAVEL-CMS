@@ -79,7 +79,7 @@ export async function POST(
       { companyId: order.company_id }
     );
 
-    await supabaseAdmin.from("order_communications").insert({
+    const { error: commInsertError } = await supabaseAdmin.from("order_communications").insert({
       order_id: order.id,
       service_id: serviceId,
       type: "hotel_confirmation",
@@ -92,6 +92,9 @@ export async function POST(
       delivery_status: result.success ? "sent" : "failed",
       resend_email_id: result.success && "id" in result ? result.id : null,
     });
+    if (commInsertError) {
+      console.error("[send-to-hotel] order_communications insert failed:", commInsertError);
+    }
 
     if (!result.success) {
       if (result.reason === "no_api_key") {
