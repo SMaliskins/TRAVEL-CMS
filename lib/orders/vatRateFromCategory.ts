@@ -4,14 +4,15 @@
  */
 export function vatRateFromCategory(matched: {
   type?: string | null;
-  vat_rate?: number | null;
-  vatRate?: number | null;
+  vat_rate?: number | string | null;
+  vatRate?: number | string | null;
 }): number {
   const raw = matched.vat_rate ?? matched.vatRate;
   const typeLower = String(matched.type ?? "other").toLowerCase();
   const isTour = typeLower === "tour";
   const isFlight = typeLower === "flight";
-  const n = raw == null || raw === "" ? NaN : Number(raw);
+  const n =
+    raw == null || (typeof raw === "string" && raw.trim() === "") ? NaN : Number(raw);
   if (Number.isFinite(n)) {
     if (isTour && n === 0) return 21;
     return n;

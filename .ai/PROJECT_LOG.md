@@ -5,6 +5,18 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Build: TS fix EditServiceModal + vatRateFromCategory
+
+**Task:** deploy / tsc | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `EditServiceModalNew.tsx`: `service as unknown as Record<string, unknown>` для hotelPreferences init
+- `vatRateFromCategory.ts`: тип `vat_rate`/`vatRate` как number|string; пустая строка → NaN (убрано сравнение number с "")
+
+---
+
 ## [2026-04-06] CODE_WRITER — Supervisor: staff sessions (presence, IP/UA, revoke all devices)
 
 **Task:** Security / session visibility | **Status:** SUCCESS

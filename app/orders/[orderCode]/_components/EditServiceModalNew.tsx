@@ -583,7 +583,7 @@ export default function EditServiceModalNew({
     (service.hotelBedType as any) || "not_guaranteed"
   );
   const [hotelPreferences, setHotelPreferences] = useState(() => {
-    const s = service as Record<string, unknown>;
+    const s = service as unknown as Record<string, unknown>;
     return {
     earlyCheckIn: !!(service.hotelEarlyCheckIn ?? s.hotel_early_check_in),
     earlyCheckInTime: String((service as { hotelEarlyCheckInTime?: string | null }).hotelEarlyCheckInTime ?? s.hotel_early_check_in_time ?? ""),
