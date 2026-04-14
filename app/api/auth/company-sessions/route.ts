@@ -6,9 +6,17 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const ACTIVE_MS = 10 * 60 * 1000;
 
+type SessionRow = {
+  id: string;
+  user_id: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  last_seen_at: string | null;
+};
+
 /**
  * GET /api/auth/company-sessions
- * Supervisor: list recent staff sessions for the company (from heartbeat table).
+ * Supervisor: all company users with presence (heartbeat) and/or Auth last sign-in.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,63 +28,105 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden: Supervisor role required" }, { status: 403 });
     }
 
-    const { data: rows, error } = await supabaseAdmin
+    const { data: profiles, error: profErr } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, first_name, last_name, is_active")
+      .eq("company_id", apiUser.companyId)
+      .order("first_name", { ascending: true });
+
+    if (profErr) {
+      console.error("[company-sessions] profiles", profErr);
+      return NextResponse.json({ error: "Failed to load users" }, { status: 500 });
+    }
+
+    const profileList = profiles || [];
+    const profileIds = new Set(profileList.map((p) => (p as { id: string }).id));
+
+    const { data: sessionRows, error: sessErr } = await supabaseAdmin
       .from("user_auth_sessions")
-      .select("id, user_id, device_fingerprint, user_agent, ip_address, last_seen_at, created_at")
+      .select("id, user_id, user_agent, ip_address, last_seen_at")
       .eq("company_id", apiUser.companyId)
       .order("last_seen_at", { ascending: false })
-      .limit(500);
+      .limit(2000);
 
-    if (error) {
-      console.error("[company-sessions]", error);
+    if (sessErr) {
+      console.error("[company-sessions] sessions", sessErr);
       return NextResponse.json({ error: "Failed to load sessions" }, { status: 500 });
     }
 
-    const list = rows || [];
-    const userIds = [...new Set(list.map((r) => r.user_id as string))];
+    const byUser = new Map<string, SessionRow[]>();
+    for (const r of sessionRows || []) {
+      const row = r as SessionRow;
+      const uid = row.user_id;
+      if (!byUser.has(uid)) byUser.set(uid, []);
+      byUser.get(uid)!.push(row);
+    }
 
-    const { data: profiles } =
-      userIds.length === 0
-        ? { data: [] as { id: string; first_name?: string | null; last_name?: string | null }[] }
-        : await supabaseAdmin
-            .from("user_profiles")
-            .select("id, first_name, last_name")
-            .eq("company_id", apiUser.companyId)
-            .in("id", userIds);
-
-    const nameByUser = new Map<string, string>();
-    for (const p of profiles || []) {
-      const pr = p as { id: string; first_name?: string | null; last_name?: string | null };
-      const name = [pr.first_name, pr.last_name].filter(Boolean).join(" ").trim() || "—";
-      nameByUser.set(pr.id, name);
+    const authUsers: { id: string; email?: string; last_sign_in_at?: string | null }[] = [];
+    let page = 1;
+    for (;;) {
+      const { data: pageData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+      const batch = pageData?.users || [];
+      if (batch.length === 0) break;
+      authUsers.push(...batch);
+      if (batch.length < 1000) break;
+      page += 1;
     }
 
     const emailMap = new Map<string, string>();
-    const { data: listAuth } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of listAuth?.users || []) {
-      if (userIds.includes(u.id)) emailMap.set(u.id, u.email || "");
+    const lastSignInMap = new Map<string, string | null>();
+    for (const u of authUsers) {
+      if (!profileIds.has(u.id)) continue;
+      emailMap.set(u.id, u.email || "");
+      lastSignInMap.set(u.id, u.last_sign_in_at ?? null);
     }
 
     const now = Date.now();
-    const sessions = list.map((r) => {
-      const last = r.last_seen_at ? new Date(r.last_seen_at as string).getTime() : 0;
-      const active = now - last < ACTIVE_MS;
-      const ua = (r.user_agent as string) || "";
+    const users = profileList.map((p) => {
+      const pr = p as { id: string; first_name?: string | null; last_name?: string | null; is_active?: boolean | null };
+      const uid = pr.id;
+      const userName = [pr.first_name, pr.last_name].filter(Boolean).join(" ").trim() || "—";
+      const sessions = (byUser.get(uid) || []).slice();
+      sessions.sort((a, b) => {
+        const ta = new Date(a.last_seen_at || 0).getTime();
+        const tb = new Date(b.last_seen_at || 0).getTime();
+        return tb - ta;
+      });
+
+      const latest = sessions[0];
+      const heartbeatAt = latest?.last_seen_at ?? null;
+      const lastSignInAt = lastSignInMap.get(uid) ?? null;
+
+      const hbTime = heartbeatAt ? new Date(heartbeatAt).getTime() : 0;
+      const active = hbTime > 0 && now - hbTime < ACTIVE_MS;
+
+      const deviceCount = sessions.length;
+      let devicesLabel = "—";
+      if (deviceCount === 1) {
+        devicesLabel = deviceLabelFromUserAgent(sessions[0].user_agent || "");
+      } else if (deviceCount > 1) {
+        const first = deviceLabelFromUserAgent(sessions[0].user_agent || "");
+        devicesLabel = `${first} +${deviceCount - 1}`;
+      }
+
+      const ipHint = latest?.ip_address ? String(latest.ip_address) : null;
+
       return {
-        id: r.id,
-        userId: r.user_id,
-        userName: nameByUser.get(r.user_id as string) || "—",
-        email: emailMap.get(r.user_id as string) || "",
-        deviceLabel: deviceLabelFromUserAgent(ua),
-        userAgent: ua,
-        ipAddress: (r.ip_address as string) || null,
-        lastSeenAt: r.last_seen_at,
-        createdAt: r.created_at,
+        userId: uid,
+        userName,
+        email: emailMap.get(uid) || "",
+        isActiveProfile: pr.is_active !== false,
+        deviceCount,
+        devicesLabel,
+        ipHint,
+        heartbeatAt,
+        lastSignInAt,
         active,
+        hasHeartbeat: deviceCount > 0,
       };
     });
 
-    return NextResponse.json({ sessions });
+    return NextResponse.json({ users });
   } catch (e) {
     console.error("[company-sessions]", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

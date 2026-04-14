@@ -8,18 +8,22 @@ import { t } from "@/lib/i18n";
 import { ROLES } from "@/lib/auth/roles";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 
-type SessionRow = {
-  id: string;
+type UserRow = {
   userId: string;
   userName: string;
   email: string;
-  deviceLabel: string;
-  ipAddress: string | null;
-  lastSeenAt: string;
+  isActiveProfile: boolean;
+  deviceCount: number;
+  devicesLabel: string;
+  ipHint: string | null;
+  heartbeatAt: string | null;
+  lastSignInAt: string | null;
   active: boolean;
+  hasHeartbeat: boolean;
 };
 
-function formatLastSeen(iso: string): string {
+function formatActivity(iso: string | null | undefined): string {
+  if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
   const date = formatDateDDMMYYYY(iso.slice(0, 10));
@@ -33,7 +37,7 @@ export default function StaffSessionsPage() {
   const lang = prefs.language;
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
 
@@ -67,7 +71,7 @@ export default function StaffSessionsPage() {
         return;
       }
       const j = await res.json();
-      setSessions(j.sessions || []);
+      setUsers(j.users || []);
     } catch {
       setError(t(lang, "sessions.loadError"));
     } finally {
@@ -126,8 +130,6 @@ export default function StaffSessionsPage() {
     );
   }
 
-  const seenUser = new Set<string>();
-
   return (
     <div className="bg-gray-50 p-6">
       <div className="mb-6">
@@ -145,14 +147,16 @@ export default function StaffSessionsPage() {
       )}
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        {sessions.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">{t(lang, "sessions.empty")}</div>
+        {users.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">{t(lang, "sessions.emptyUsers")}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <table className="min-w-[720px] w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-700">{t(lang, "sessions.colUser")}</th>
+                  <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left font-medium text-gray-700 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                    {t(lang, "sessions.colUser")}
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">{t(lang, "sessions.colDevice")}</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">{t(lang, "sessions.colIp")}</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">{t(lang, "sessions.colLastSeen")}</th>
@@ -161,44 +165,68 @@ export default function StaffSessionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {sessions.map((s) => {
-                  const firstForUser = !seenUser.has(s.userId);
-                  if (firstForUser) seenUser.add(s.userId);
-                  return (
-                    <tr key={s.id} className="hover:bg-gray-50/80">
-                      <td className="px-4 py-3 text-gray-900">
-                        <div className="font-medium">{s.userName}</div>
-                        <div className="text-xs text-gray-500">{s.email}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-800">{s.deviceLabel}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-700">{s.ipAddress || "—"}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-gray-800">{formatLastSeen(s.lastSeenAt)}</td>
-                      <td className="px-4 py-3">
-                        {s.active ? (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                            {t(lang, "sessions.statusActive")}
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                            {t(lang, "sessions.statusAway")}
-                          </span>
+                {users.map((u) => (
+                  <tr key={u.userId} className="hover:bg-gray-50/80">
+                    <td className="sticky left-0 z-[1] bg-white px-4 py-3 text-gray-900 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                      <div className="font-medium">
+                        {u.userName}
+                        {!u.isActiveProfile && (
+                          <span className="ml-2 text-xs font-normal text-amber-700">({t(lang, "sessions.userInactive")})</span>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {firstForUser && (
-                          <button
-                            type="button"
-                            disabled={revoking === s.userId}
-                            onClick={() => void revokeAllForUser(s.userId)}
-                            className="text-sm font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
-                          >
-                            {revoking === s.userId ? "…" : t(lang, "sessions.revokeAll")}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </div>
+                      <div className="text-xs text-gray-500">{u.email || "—"}</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-800">
+                      <div>{u.devicesLabel}</div>
+                      {u.deviceCount > 0 && (
+                        <div className="text-xs text-gray-500">
+                          {u.deviceCount} {u.deviceCount === 1 ? t(lang, "sessions.deviceSingular") : t(lang, "sessions.devicePlural")}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{u.ipHint || "—"}</td>
+                    <td className="px-4 py-3 text-gray-800">
+                      <div className="whitespace-nowrap">
+                        {u.heartbeatAt
+                          ? formatActivity(u.heartbeatAt)
+                          : formatActivity(u.lastSignInAt)}
+                      </div>
+                      {u.heartbeatAt && (
+                        <div className="text-xs text-gray-500">{t(lang, "sessions.lastSeenApp")}</div>
+                      )}
+                      {!u.heartbeatAt && u.lastSignInAt && (
+                        <div className="text-xs text-gray-500">{t(lang, "sessions.lastSeenLoginOnly")}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.hasHeartbeat && u.active && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                          {t(lang, "sessions.statusActive")}
+                        </span>
+                      )}
+                      {u.hasHeartbeat && !u.active && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                          {t(lang, "sessions.statusAway")}
+                        </span>
+                      )}
+                      {!u.hasHeartbeat && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          {t(lang, "sessions.statusNoPing")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        disabled={revoking === u.userId}
+                        onClick={() => void revokeAllForUser(u.userId)}
+                        className="text-sm font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
+                      >
+                        {revoking === u.userId ? "…" : t(lang, "sessions.revokeAll")}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

@@ -5,6 +5,18 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Staff sessions: list all company users + last sign-in fallback
+
+**Task:** Supervisor sessions UI | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `GET /api/auth/company-sessions`: все `user_profiles` компании; heartbeat агрегируется по пользователю; email/`last_sign_in_at` из Auth (listUsers с пагинацией); ответ `{ users: [...] }`.
+- `/settings/sessions`: одна строка на пользователя; Last seen — heartbeat или fallback на last sign-in; статусы Active / Away / No app session; Action на каждой строке; липкий столбец User на горизонтальном скролле.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Build: TS fix EditServiceModal + vatRateFromCategory
 
 **Task:** deploy / tsc | **Status:** SUCCESS
