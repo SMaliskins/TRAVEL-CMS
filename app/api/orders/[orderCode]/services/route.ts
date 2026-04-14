@@ -7,6 +7,7 @@ import { sendPushToClient } from "@/lib/client-push/sendPush";
 import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccruals";
 import { fetchOrderIdByRouteParam } from "@/lib/orders/orderFromRouteParam";
 import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
+import { vatRateFromCategory } from "@/lib/orders/vatRateFromCategory";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -521,6 +522,32 @@ export async function POST(
     if (body.ancillaryType) serviceData.ancillary_type = body.ancillaryType;
     if (body.cancellationFee != null) serviceData.cancellation_fee = parseFloat(String(body.cancellationFee)) || null;
     if (body.refundAmount != null) serviceData.refund_amount = parseFloat(String(body.refundAmount)) || null;
+
+    // VAT: Add Service sends vatRate; if absent, derive from travel_service_categories (Settings).
+    {
+      const rawVat = body.vatRate ?? body.vat_rate;
+      if (rawVat !== undefined && rawVat !== null && rawVat !== "") {
+        const vr = Number(rawVat);
+        if (Number.isFinite(vr)) {
+          serviceData.vat_rate = Math.round(vr);
+        }
+      } else {
+        const cid = serviceData.category_id as string | null | undefined;
+        if (cid) {
+          const { data: cat } = await supabaseAdmin
+            .from("travel_service_categories")
+            .select("type, vat_rate")
+            .eq("id", cid)
+            .eq("company_id", companyId)
+            .maybeSingle();
+          if (cat) {
+            serviceData.vat_rate = vatRateFromCategory(
+              cat as { type?: string | null; vat_rate?: number | null }
+            );
+          }
+        }
+      }
+    }
 
     const { data: service, error } = await supabaseAdmin
       .from("order_services")

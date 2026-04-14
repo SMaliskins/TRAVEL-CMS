@@ -4,6 +4,7 @@
  */
 
 import { clientPriceLockedFromInvoiceLink } from "@/lib/orders/clientPriceInvoiceLock";
+import { vatRateFromCategory } from "@/lib/orders/vatRateFromCategory";
 
 export type OrderServiceListMapById = Record<
   string,
@@ -101,11 +102,19 @@ export function mapOrderServiceRowToListApiItem(
 
   const vatRate = (() => {
     const raw = row.vat_rate as number | string | null | undefined;
-    if (raw != null && raw !== "") {
-      const n = Number(raw);
-      if (Number.isFinite(n)) return n;
+    const n = raw != null && raw !== "" ? Number(raw) : NaN;
+    const catMeta = categoryId ? categoryMap[categoryId] : undefined;
+    // Explicit positive rate on the line wins (user override).
+    if (Number.isFinite(n) && n > 0) return n;
+    // 0 / null / missing: use Travel Service category defaults (same as Settings).
+    if (catMeta) {
+      return vatRateFromCategory({
+        type: catMeta.type,
+        vat_rate: catMeta.vat_rate,
+        vatRate: catMeta.vat_rate,
+      });
     }
-    if (categoryId && categoryMap[categoryId]?.vat_rate != null) return categoryMap[categoryId].vat_rate;
+    if (Number.isFinite(n)) return n;
     return null;
   })();
 

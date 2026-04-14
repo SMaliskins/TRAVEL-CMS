@@ -5,6 +5,50 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Travelers on map: active-only (remove Past from map)
+
+**Task:** DASH3 / TouristsMap UX | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `TouristsMap.tsx`: карта только **Upcoming + In progress**; завершённые не на карте (см. Recently completed). Убран чекбокс Past / completed. Пустое состояние при только прошлых поездках — текст про Recently completed.
+
+**Причина путаницы:** past попадали в синие маркеры/кластеры как upcoming (иконка: не in-progress → синий).
+
+**Next Step:** QA
+
+---
+
+## [2026-04-06] CODE_WRITER — Flight: ticket_numbers not wiped on load + PATCH alias
+
+**Task:** S3 / flight ticket persistence | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `EditServiceModalNew.tsx`: sync effect для flight — строки пассажиров по имени (не только по `id`); при пустом списке имён не затирать `ticketNumbers` (гонка до загрузки travellers); `clientId` допускает `null`; при сохранении `ticket_numbers` сопоставляется с `resolvedClients` после find-or-create.
+- `PATCH .../services/[id]`: принимает также `ticketNumbers` (camelCase) как алиас к `ticket_numbers`.
+
+**Результат:** SCORE: pending QA
+
+**Next Step:** QA — повторить сценарий «ввести номера → Save & Exit → открыть снова»
+
+---
+
+## [2026-04-10] CODE_WRITER — VAT from Travel Service category (persist + list)
+
+**Task:** O5 / service VAT defaults | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `POST /api/orders/.../services`: пишет `vat_rate` из `vatRate`/`vat_rate` тела; иначе — из `travel_service_categories` через `vatRateFromCategory`
+- `mapOrderServiceRowToListApi`: при `vat_rate` 0/null и известной категории — эффективный % из настроек (не «залипание» нуля)
+- `PATCH .../services/[id]`: принимает также `vatRate` (camelCase)
+
+---
+
 ## [2026-04-06] CODE_WRITER — PRICING: allow negative Cost/Sale (refunds)
 
 **Task:** O5 / Edit & Add service pricing | **Status:** SUCCESS

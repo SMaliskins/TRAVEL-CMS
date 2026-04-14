@@ -992,27 +992,28 @@ export default function EditServiceModalNew({
     if (!clientPriceLocked) setClientPrice(String(Math.round(perSale * n * 100) / 100));
   }, [categoryType, hotelPricePer, dateFrom, dateTo, priceUnits, servicePrice, clientPrice, clientPriceLocked]);
 
-  // Sync ticketNumbers with clients for Flight
+  // Sync ticketNumbers with clients for Flight (do not require party id — name-only rows are valid; never wipe while passenger list is still loading)
   useEffect(() => {
     if (categoryType === "flight") {
-      const validClients = clients.filter(c => c.id && c.name);
+      const namedClients = clients.filter(c => (c.name || "").trim());
       const legacyTicketNr = (service.ticketNr || (service as { ticket_nr?: string }).ticket_nr || "").trim();
       setTicketNumbers(prev => {
-        const newTickets = validClients.map((client) => {
+        if (namedClients.length === 0) return prev;
+        const newTickets = namedClients.map((client) => {
           const existing = prev.find(t =>
-            (t.clientId && t.clientId === client.id) ||
+            (t.clientId && client.id && t.clientId === client.id) ||
             (t.clientName && client.name && t.clientName.toLowerCase().trim() === client.name.toLowerCase().trim())
           );
           let ticketNr = existing?.ticketNr || "";
-          if (!ticketNr && legacyTicketNr && validClients.length === 1) {
+          if (!ticketNr && legacyTicketNr && namedClients.length === 1) {
             ticketNr = legacyTicketNr;
           }
-          return { clientId: client.id!, clientName: client.name, ticketNr };
+          return { clientId: client.id ?? null, clientName: client.name, ticketNr };
         });
         return newTickets;
       });
     }
-  }, [clients, category, service.ticketNr]);
+  }, [clients, categoryType, service.ticketNr]);
 
   // Extract ticket numbers from flightSegments and update ticketNumbers
   useEffect(() => {
@@ -1054,7 +1055,7 @@ export default function EditServiceModalNew({
                 const index = updated.findIndex(t => t.ticketNr === ticketNr);
                 if (index >= 0) {
                   updated[index] = {
-                    clientId: client.id!,
+                    clientId: client.id ?? null,
                     clientName: client.name,
                     ticketNr: ticketNr,
                   };
@@ -1062,7 +1063,7 @@ export default function EditServiceModalNew({
               } else {
                 // Add new if client matches
                 updated.push({
-                  clientId: client.id!,
+                  clientId: client.id ?? null,
                   clientName: client.name,
                   ticketNr: ticketNr,
                 });
@@ -2663,7 +2664,23 @@ export default function EditServiceModalNew({
         res_status: resStatus || "booked",
         ref_nr: categoryType === "flight" && refNrs.length > 0 ? refNrs.filter(Boolean).join(", ") || null : refNr || null,
         ticket_nr: showTicketNr ? (categoryType === "flight" && ticketNumbers.length > 0 ? ticketNumbers.map(t => t.ticketNr).join(", ") : ticketNr) : null,
-        ticket_numbers: categoryType === "flight" ? ticketNumbers : undefined,
+        ticket_numbers:
+          categoryType === "flight"
+            ? ticketNumbers.map((row) => {
+                const match = resolvedClients.find(
+                  (c) =>
+                    (row.clientId && c.id && c.id === row.clientId) ||
+                    (row.clientName?.trim() &&
+                      c.name?.trim() &&
+                      row.clientName.toLowerCase().trim() === c.name.toLowerCase().trim())
+                );
+                return {
+                  clientId: match?.id ?? row.clientId ?? null,
+                  clientName: match?.name ?? row.clientName,
+                  ticketNr: row.ticketNr,
+                };
+              })
+            : undefined,
       };
 
       // Add hotel-specific fields
