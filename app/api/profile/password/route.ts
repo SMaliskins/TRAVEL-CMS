@@ -47,6 +47,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { data: profile } = await supabaseAdmin
+      .from("user_profiles")
+      .select("is_active")
+      .eq("id", user.id)
+      .single();
+
+    if (profile?.is_active === false) {
+      return NextResponse.json({ error: "Account is deactivated" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { currentPassword, newPassword } = body;
 
