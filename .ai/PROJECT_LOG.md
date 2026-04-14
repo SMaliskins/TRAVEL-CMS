@@ -5,6 +5,34 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Supervisor: staff sessions (presence, IP/UA, revoke all devices)
+
+**Task:** Security / session visibility | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Миграция `migrations/add_user_auth_sessions.sql` — таблица `user_auth_sessions` (user, company, device id, UA, IP, last_seen).
+- API: `POST /api/auth/session-heartbeat`, `GET /api/auth/company-sessions` (Supervisor), `POST /api/auth/revoke-user-sessions` (Supervisor, `auth.admin.signOutUser` + удаление строк).
+- `SessionHeartbeat` в `ClientLayout` — пинг ~2 мин + при загрузке.
+- Страница `/settings/sessions` (только Supervisor), карточка в Settings hub; i18n en/ru/lv.
+
+**Next Step:** Применить SQL в Supabase; QA — revoke на тестовом пользователе
+
+---
+
+## [2026-04-06] CODE_WRITER — Travelers map: legend counts + date preset; exclude Cancelled from map API
+
+**Task:** DASH3 / TouristsMap | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `TouristsMap.tsx`: счётчик **Upcoming** в легенде = те же правила, что и маркеры (`upcomingMatchesDatePreset` + только `mapLocations`); **In progress** = все in-progress на карте. Подсказка при Next 7/14 days.
+- `GET /api/dashboard/map`: не отдаём заказы со `status = Cancelled`.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Travelers on map: active-only (remove Past from map)
 
 **Task:** DASH3 / TouristsMap UX | **Status:** SUCCESS

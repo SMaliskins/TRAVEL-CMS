@@ -288,6 +288,24 @@ export default function TouristsMap({
     });
   }, [mapLocations, showUpcoming, showInProgress, upcomingPreset]);
 
+  /** Same rules as map markers: upcoming respects «Upcoming trips start»; in-progress = trip dates overlap today (from API). */
+  const legendUpcomingCount = useMemo(
+    () =>
+      sumHeadcounts(
+        mapLocations.filter(
+          (l) =>
+            l.status === "upcoming" &&
+            upcomingMatchesDatePreset(l.dateFrom, upcomingPreset)
+        )
+      ),
+    [mapLocations, upcomingPreset]
+  );
+
+  const legendInProgressCount = useMemo(
+    () => sumHeadcounts(mapLocations.filter((l) => l.status === "in-progress")),
+    [mapLocations]
+  );
+
   const cityGroups = useMemo(() => {
     const map = new Map<string, CityGroup>();
     for (const loc of visibleLocations) {
@@ -334,9 +352,6 @@ export default function TouristsMap({
       ? boundsArr.reduce((s, l) => s + l[1], 0) / boundsArr.length
       : 10;
 
-  const upcomingCount = sumHeadcounts(locations.filter((l) => l.status === "upcoming"));
-  const inProgressCount = sumHeadcounts(locations.filter((l) => l.status === "in-progress"));
-
   if (noDataAtAll) {
     return (
       <div className={`booking-glass-panel !p-4 ${className}`}>
@@ -370,7 +385,7 @@ export default function TouristsMap({
             />
             <span className="flex items-center gap-1.5 font-medium">
               <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-blue-500" />
-              Upcoming ({upcomingCount})
+              Upcoming ({legendUpcomingCount})
             </span>
           </label>
           <label className="inline-flex cursor-pointer items-center gap-2">
@@ -382,7 +397,7 @@ export default function TouristsMap({
             />
             <span className="flex items-center gap-1.5 font-medium">
               <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-emerald-500" />
-              In progress ({inProgressCount})
+              In progress ({legendInProgressCount})
             </span>
           </label>
           <span className="hidden h-5 w-px bg-gray-200 sm:block" aria-hidden />
@@ -393,12 +408,15 @@ export default function TouristsMap({
               onChange={(e) => setUpcomingPreset(e.target.value as UpcomingDatePreset)}
               disabled={!showUpcoming}
               className="min-h-[2.25rem] rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Upcoming date range"
+              aria-label="Upcoming date range (Upcoming legend count uses the same range)"
             >
               <option value="all">Any date</option>
               <option value="next7">Next 7 days</option>
               <option value="next14">Next 14 days</option>
             </select>
+            {showUpcoming && upcomingPreset !== "all" && (
+              <span className="text-xs text-gray-500">Upcoming count matches this range.</span>
+            )}
           </div>
           <span className="hidden h-5 w-px bg-gray-200 sm:block" aria-hidden />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">

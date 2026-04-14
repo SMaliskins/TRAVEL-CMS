@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Brain, Mail } from "lucide-react";
+import { Building2, UsersRound, CreditCard, UserCircle, Plane, Type, Brain, Mail, ShieldCheck } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n";
 const SETTINGS_SECTIONS = [
   { nameKey: "settings.company", descKey: "settings.companyDesc", href: "/settings/company", icon: Building2, minRole: "manager" },
   { nameKey: "settings.users", descKey: "settings.usersDesc", href: "/settings/users", icon: UsersRound, minRole: "supervisor" },
+  { nameKey: "settings.sessions", descKey: "settings.sessionsDesc", href: "/settings/sessions", icon: ShieldCheck, minRole: "supervisor" },
   { nameKey: "settings.database", descKey: "settings.databaseDesc", href: "/settings/database", icon: CreditCard, minRole: "supervisor" },
   { nameKey: "settings.profileLink", descKey: "settings.profileDesc", href: "/settings/profile", icon: UserCircle },
   { nameKey: "settings.travelServices", descKey: "settings.travelServicesDesc", href: "/settings/travel-services", icon: Plane, minRole: "agent" },

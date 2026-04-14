@@ -274,7 +274,8 @@ export async function GET(request: NextRequest) {
     let mapQ = supabaseAdmin
       .from("orders")
       .select("id, order_code, client_display_name, countries_cities, date_from, date_to, status, owner_user_id, manager_user_id")
-      .eq("company_id", companyId);
+      .eq("company_id", companyId)
+      .neq("status", "Cancelled");
     if (isOwnScope) {
       mapQ = mapQ.or(`owner_user_id.eq.${userId},manager_user_id.eq.${userId}`);
     }
