@@ -19,8 +19,9 @@ type UserRow = {
   heartbeatAt: string | null;
   lastSignInAt: string | null;
   lastCrmAt: string | null;
+  profileApiAt: string | null;
   lastActivityAt: string | null;
-  lastActivitySource: "app" | "login" | "crm";
+  lastActivitySource: "app" | "login" | "crm" | "api";
   active: boolean;
   hasHeartbeat: boolean;
 };
@@ -38,6 +39,7 @@ function formatActivity(iso: string | null | undefined): string {
 function activitySourceLabel(lang: string, source: UserRow["lastActivitySource"]): string {
   if (source === "app") return t(lang, "sessions.lastSeenApp");
   if (source === "crm") return t(lang, "sessions.lastSeenCrm");
+  if (source === "api") return t(lang, "sessions.lastSeenApi");
   return t(lang, "sessions.lastSeenLoginOnly");
 }
 

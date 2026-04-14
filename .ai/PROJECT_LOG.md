@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Staff sessions: user_profiles.last_activity_at + getApiUser bump
+
+**Task:** accurate Last activity (not only Supabase sign-in) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Миграция `add_user_profiles_last_activity_at.sql`: колонка `last_activity_at`, RPC `user_profile_bump_activity` (throttle 1 мин).
+- `getApiUser`: после успешной авторизации — `scheduleBumpUserProfileActivity` (fire-and-forget).
+- `company-sessions`: в расчёт max добавлен `profileApiAt`; источник `api`; i18n.
+
+**Важно:** выполнить SQL в Supabase; до этого колонка в select может дать ошибку.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Staff sessions: Last activity includes order_communications (CRM log)
 
 **Task:** Supervisor sessions / explain 13.04 vs 30.03 | **Status:** SUCCESS

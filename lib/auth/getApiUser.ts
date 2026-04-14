@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { scheduleBumpUserProfileActivity } from "@/lib/auth/bumpUserProfileActivity";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -65,6 +66,8 @@ export async function getApiUser(request: NextRequest): Promise<ApiUser | null> 
   const roleName = roleObj?.name || "agent";
   const ownRoles = ["subagent", "agent", "manager"];
   const scope = ownRoles.includes(roleName) ? "own" as const : "all" as const;
+
+  scheduleBumpUserProfileActivity(authUser.id, profile.company_id);
 
   return { userId: authUser.id, companyId: profile.company_id, role: roleName, scope };
 }

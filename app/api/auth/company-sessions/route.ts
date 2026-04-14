@@ -17,19 +17,22 @@ type SessionRow = {
 function maxActivitySource(
   heartbeatAt: string | null,
   lastSignInAt: string | null,
-  crmAt: string | null
-): { at: string | null; source: "app" | "login" | "crm" } {
-  const items: { at: string; source: "app" | "login" | "crm" }[] = [];
+  crmAt: string | null,
+  profileApiAt: string | null
+): { at: string | null; source: "app" | "login" | "crm" | "api" } {
+  const items: { at: string; source: "app" | "login" | "crm" | "api" }[] = [];
   if (heartbeatAt) items.push({ at: heartbeatAt, source: "app" });
   if (lastSignInAt) items.push({ at: lastSignInAt, source: "login" });
   if (crmAt) items.push({ at: crmAt, source: "crm" });
+  if (profileApiAt) items.push({ at: profileApiAt, source: "api" });
   if (items.length === 0) return { at: null, source: "login" };
   return items.reduce((a, b) => (new Date(a.at) > new Date(b.at) ? a : b));
 }
 
 /**
  * GET /api/auth/company-sessions
- * Supervisor: all company users — heartbeat, Auth last sign-in, and CRM (order_communications) last activity.
+ * Supervisor: all company users — heartbeat, user_profiles.last_activity_at (CRM API),
+ * Auth last sign-in, and order_communications aggregates.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profiles, error: profErr } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, first_name, last_name, is_active")
+      .select("id, first_name, last_name, is_active, last_activity_at")
       .eq("company_id", apiUser.companyId)
       .order("first_name", { ascending: true });
 
@@ -109,8 +112,15 @@ export async function GET(request: NextRequest) {
 
     const now = Date.now();
     const users = profileList.map((p) => {
-      const pr = p as { id: string; first_name?: string | null; last_name?: string | null; is_active?: boolean | null };
+      const pr = p as {
+        id: string;
+        first_name?: string | null;
+        last_name?: string | null;
+        is_active?: boolean | null;
+        last_activity_at?: string | null;
+      };
       const uid = pr.id;
+      const profileApiAt = pr.last_activity_at ?? null;
       const userName = [pr.first_name, pr.last_name].filter(Boolean).join(" ").trim() || "—";
       const sessions = (byUser.get(uid) || []).slice();
       sessions.sort((a, b) => {
@@ -126,7 +136,8 @@ export async function GET(request: NextRequest) {
       const { at: lastActivityAt, source: lastActivitySource } = maxActivitySource(
         heartbeatAt,
         lastSignInAt,
-        lastCrmAt
+        lastCrmAt,
+        profileApiAt
       );
 
       const hbTime = heartbeatAt ? new Date(heartbeatAt).getTime() : 0;
@@ -154,6 +165,7 @@ export async function GET(request: NextRequest) {
         heartbeatAt,
         lastSignInAt,
         lastCrmAt,
+        profileApiAt,
         lastActivityAt,
         lastActivitySource,
         active,
