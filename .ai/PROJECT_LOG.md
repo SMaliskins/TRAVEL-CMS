@@ -5,6 +5,18 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Auth: idle auto-logout (4h)
+
+**Task:** Auto sign-out when staff UI idle > 4 hours | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `components/auth/IdleLogout.tsx`: таймер по активности (mousedown/move/key/scroll/touch/click/wheel), проверка каждую минуту + при `visibilitychange` visible; `signOut` + `router.replace("/login")`.
+- Подключение в `ClientLayout` только вместе с основным shell (как SessionHeartbeat).
+
+---
+
 ## [2026-04-06] CODE_WRITER — Staff sessions: user_profiles.last_activity_at + getApiUser bump
 
 **Task:** accurate Last activity (not only Supabase sign-in) | **Status:** SUCCESS

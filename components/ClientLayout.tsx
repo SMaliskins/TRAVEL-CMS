@@ -9,6 +9,7 @@ import UrlModalProvider from "./UrlModalProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
 import BugReportOverlay from "./BugReportOverlay";
 import SessionHeartbeat from "./auth/SessionHeartbeat";
+import IdleLogout from "./auth/IdleLogout";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -36,6 +37,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             // All other pages - show sidebar/topbar with proper padding
             <>
               <SessionHeartbeat />
+              <IdleLogout />
               <Sidebar />
               <TopBar />
               <div id="main-content-wrapper" className="min-h-screen pl-0 lg:pl-[72px] pt-14 lg:pt-16 transition-all duration-200 theme-page-bg">
