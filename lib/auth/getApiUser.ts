@@ -39,9 +39,13 @@ export async function getApiUser(request: NextRequest): Promise<ApiUser | null> 
 
   const { data: profile } = await supabaseAdmin
     .from("user_profiles")
-    .select("company_id, role:roles(name)")
+    .select("company_id, is_active, role:roles(name)")
     .eq("id", authUser.id)
     .single();
+
+  if (profile?.is_active === false) {
+    return null;
+  }
 
   // Fallback: profiles table (demo user, legacy setups)
   if (!profile?.company_id) {
