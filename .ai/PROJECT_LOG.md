@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Staff sessions: Last activity includes order_communications (CRM log)
+
+**Task:** Supervisor sessions / explain 13.04 vs 30.03 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- SQL `company_users_last_comm_activity` (миграция): MAX(created_at) по `order_communications.sent_by` на компанию.
+- API: `lastActivityAt` = max(heartbeat, Supabase last_sign_in, CRM); подпись источника (app / login / crm).
+- UI: колонка «Last activity» + i18n (вход в аккаунт не обновляется при работе в заявке без re-login).
+
+---
+
 ## [2026-04-06] CODE_WRITER — Staff sessions: list all company users + last sign-in fallback
 
 **Task:** Supervisor sessions UI | **Status:** SUCCESS

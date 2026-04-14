@@ -14,9 +14,22 @@ type SessionRow = {
   last_seen_at: string | null;
 };
 
+function maxActivitySource(
+  heartbeatAt: string | null,
+  lastSignInAt: string | null,
+  crmAt: string | null
+): { at: string | null; source: "app" | "login" | "crm" } {
+  const items: { at: string; source: "app" | "login" | "crm" }[] = [];
+  if (heartbeatAt) items.push({ at: heartbeatAt, source: "app" });
+  if (lastSignInAt) items.push({ at: lastSignInAt, source: "login" });
+  if (crmAt) items.push({ at: crmAt, source: "crm" });
+  if (items.length === 0) return { at: null, source: "login" };
+  return items.reduce((a, b) => (new Date(a.at) > new Date(b.at) ? a : b));
+}
+
 /**
  * GET /api/auth/company-sessions
- * Supervisor: all company users with presence (heartbeat) and/or Auth last sign-in.
+ * Supervisor: all company users — heartbeat, Auth last sign-in, and CRM (order_communications) last activity.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -81,6 +94,19 @@ export async function GET(request: NextRequest) {
       lastSignInMap.set(u.id, u.last_sign_in_at ?? null);
     }
 
+    const crmLastMap = new Map<string, string>();
+    const { data: crmRpc, error: crmErr } = await supabaseAdmin.rpc("company_users_last_comm_activity", {
+      p_company_id: apiUser.companyId,
+    });
+    if (crmErr) {
+      console.warn("[company-sessions] CRM activity RPC (apply migrations/add_company_users_last_comm_activity_fn.sql):", crmErr.message);
+    } else if (Array.isArray(crmRpc)) {
+      for (const row of crmRpc) {
+        const r = row as { user_id?: string; last_at?: string };
+        if (r.user_id && r.last_at) crmLastMap.set(r.user_id, r.last_at);
+      }
+    }
+
     const now = Date.now();
     const users = profileList.map((p) => {
       const pr = p as { id: string; first_name?: string | null; last_name?: string | null; is_active?: boolean | null };
@@ -96,6 +122,12 @@ export async function GET(request: NextRequest) {
       const latest = sessions[0];
       const heartbeatAt = latest?.last_seen_at ?? null;
       const lastSignInAt = lastSignInMap.get(uid) ?? null;
+      const lastCrmAt = crmLastMap.get(uid) ?? null;
+      const { at: lastActivityAt, source: lastActivitySource } = maxActivitySource(
+        heartbeatAt,
+        lastSignInAt,
+        lastCrmAt
+      );
 
       const hbTime = heartbeatAt ? new Date(heartbeatAt).getTime() : 0;
       const active = hbTime > 0 && now - hbTime < ACTIVE_MS;
@@ -121,6 +153,9 @@ export async function GET(request: NextRequest) {
         ipHint,
         heartbeatAt,
         lastSignInAt,
+        lastCrmAt,
+        lastActivityAt,
+        lastActivitySource,
         active,
         hasHeartbeat: deviceCount > 0,
       };

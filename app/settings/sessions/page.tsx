@@ -18,6 +18,9 @@ type UserRow = {
   ipHint: string | null;
   heartbeatAt: string | null;
   lastSignInAt: string | null;
+  lastCrmAt: string | null;
+  lastActivityAt: string | null;
+  lastActivitySource: "app" | "login" | "crm";
   active: boolean;
   hasHeartbeat: boolean;
 };
@@ -30,6 +33,12 @@ function formatActivity(iso: string | null | undefined): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${date} ${hh}:${mm}`;
+}
+
+function activitySourceLabel(lang: string, source: UserRow["lastActivitySource"]): string {
+  if (source === "app") return t(lang, "sessions.lastSeenApp");
+  if (source === "crm") return t(lang, "sessions.lastSeenCrm");
+  return t(lang, "sessions.lastSeenLoginOnly");
 }
 
 export default function StaffSessionsPage() {
@@ -186,16 +195,9 @@ export default function StaffSessionsPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">{u.ipHint || "—"}</td>
                     <td className="px-4 py-3 text-gray-800">
-                      <div className="whitespace-nowrap">
-                        {u.heartbeatAt
-                          ? formatActivity(u.heartbeatAt)
-                          : formatActivity(u.lastSignInAt)}
-                      </div>
-                      {u.heartbeatAt && (
-                        <div className="text-xs text-gray-500">{t(lang, "sessions.lastSeenApp")}</div>
-                      )}
-                      {!u.heartbeatAt && u.lastSignInAt && (
-                        <div className="text-xs text-gray-500">{t(lang, "sessions.lastSeenLoginOnly")}</div>
+                      <div className="whitespace-nowrap">{formatActivity(u.lastActivityAt)}</div>
+                      {u.lastActivityAt && (
+                        <div className="text-xs text-gray-500">{activitySourceLabel(lang, u.lastActivitySource)}</div>
                       )}
                     </td>
                     <td className="px-4 py-3">
