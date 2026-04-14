@@ -6,6 +6,8 @@ import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { createClient } from "@supabase/supabase-js";
 import { Plane, Eye, EyeOff, Loader2 } from "lucide-react";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { t } from "@/lib/i18n";
 
 const LOGIN_VIDEOS = [
   "https://sueberukmgbycpczjxtx.supabase.co/storage/v1/object/public/login-videos/856382-hd_1920_1080_30fps.mp4",
@@ -18,6 +20,7 @@ const LOGIN_VIDEOS = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const { prefs } = useUserPreferences();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -81,6 +84,33 @@ export default function LoginPage() {
         setError(authError.message === "Invalid login credentials"
           ? "Invalid email or password"
           : authError.message);
+        setLoading(false);
+        return;
+      }
+
+      const { data: { session } } = await authClient.auth.getSession();
+      if (!session) {
+        setError(t(prefs.language, "auth.loginFailed"));
+        setLoading(false);
+        return;
+      }
+
+      const profileRes = await fetch("/api/profile", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (profileRes.status === 403) {
+        await authClient.auth.signOut({ scope: "local" }).catch(() => {});
+        setError(t(prefs.language, "auth.accountDeactivated"));
+        setLoading(false);
+        return;
+      }
+
+      if (!profileRes.ok) {
+        await authClient.auth.signOut({ scope: "local" }).catch(() => {});
+        setError(t(prefs.language, "auth.loginFailed"));
         setLoading(false);
         return;
       }

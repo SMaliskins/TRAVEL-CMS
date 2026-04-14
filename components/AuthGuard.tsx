@@ -77,6 +77,23 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        try {
+          const profileRes = await fetch("/api/profile", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (profileRes.status === 403) {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+            setIsAuthenticated(false);
+            if (!publicPath) {
+              router.push("/login");
+            }
+            setIsLoading(false);
+            return;
+          }
+        } catch {
+          // Non-blocking: keep existing auth behavior if profile check fails due to network/transient errors
+        }
+
         setIsAuthenticated(true);
         if (publicPath) { router.push("/dashboard"); }
         setIsLoading(false);
@@ -110,10 +127,29 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             router.push("/login");
           }
         } else if (event === "SIGNED_IN" && session) {
-          setIsAuthenticated(true);
-          if (publicPath) {
-            router.push("/dashboard");
-          }
+          fetch("/api/profile", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+            .then(async (res) => {
+              if (res.status === 403) {
+                await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+                setIsAuthenticated(false);
+                if (!publicPath) {
+                  router.push("/login");
+                }
+                return;
+              }
+              setIsAuthenticated(true);
+              if (publicPath) {
+                router.push("/dashboard");
+              }
+            })
+            .catch(() => {
+              setIsAuthenticated(true);
+              if (publicPath) {
+                router.push("/dashboard");
+              }
+            });
         }
       }
     );
