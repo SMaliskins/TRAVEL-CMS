@@ -48,6 +48,7 @@ async function getCurrentUserWithRole(request: NextRequest) {
     .from("user_profiles")
     .select(`
       id,
+      is_active,
       company_id,
       first_name,
       last_name,
@@ -57,6 +58,7 @@ async function getCurrentUserWithRole(request: NextRequest) {
     .single();
 
   if (!profile) return null;
+  if (profile.is_active === false) return null;
 
   // Handle role as single object (Supabase may return array for join)
   const role = Array.isArray(profile.role) ? profile.role[0] : profile.role;
