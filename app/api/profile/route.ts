@@ -149,6 +149,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    if (profile.is_active === false) {
+      return NextResponse.json(
+        { error: "Account is deactivated" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       ...profile,
       email: user.email,
