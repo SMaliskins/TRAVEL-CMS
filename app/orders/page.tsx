@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -500,8 +500,8 @@ export default function OrdersPage() {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
-  const deferredSearchState = useDeferredValue(searchState);
   const listSearch = searchState.queryText.trim();
+  const listLastName = searchState.clientLastName.trim();
 
   const {
     data: listInfiniteData,
@@ -513,9 +513,9 @@ export default function OrdersPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ordersListQueryKeys.listInfinite(ORDERS_LIST_PAGE_SIZE, listSearch),
+    queryKey: ordersListQueryKeys.listInfinite(ORDERS_LIST_PAGE_SIZE, listSearch, listLastName),
     queryFn: ({ pageParam }) =>
-      fetchOrdersListPage(pageParam, ORDERS_LIST_PAGE_SIZE, listSearch),
+      fetchOrdersListPage(pageParam, ORDERS_LIST_PAGE_SIZE, listSearch, listLastName),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const p = lastPage.pagination;
@@ -687,13 +687,14 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
   }, [searchState.queryText]);
 
-  // Filter orders based on search state
+  // Filter orders based on search state (no useDeferredValue — filters must stay in sync with inputs)
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, deferredSearchState, {
+    return filterOrders(orders, searchState, {
       semanticOrderCodes,
       skipClientQueryTextMatch: listSearch.length > 0,
+      skipSurnameMatch: listLastName.length > 0,
     });
-  }, [orders, deferredSearchState, semanticOrderCodes, listSearch]);
+  }, [orders, searchState, semanticOrderCodes, listSearch, listLastName]);
 
   // Build tree from filtered orders
   const tree = useMemo(() => buildOrdersTree(filteredOrders, dateGroupMode), [filteredOrders, dateGroupMode]);

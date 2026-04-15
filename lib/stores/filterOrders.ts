@@ -41,6 +41,11 @@ export interface FilterOrdersOptions {
    * Skip client-side queryText matching to avoid stripping valid server rows (fuzzy rules differ).
    */
   skipClientQueryTextMatch?: boolean;
+  /**
+   * When true, the list API already narrowed with `lastName` (same ilike on order_code / client / search_text).
+   * Skip in-memory surname fuzzy match so we do not drop rows the server already matched.
+   */
+  skipSurnameMatch?: boolean;
 }
 
 /**
@@ -51,7 +56,11 @@ export function filterOrders(
   searchState: OrdersSearchState,
   options?: FilterOrdersOptions
 ): OrderRow[] {
-  const { semanticOrderCodes = [], skipClientQueryTextMatch = false } = options || {};
+  const {
+    semanticOrderCodes = [],
+    skipClientQueryTextMatch = false,
+    skipSurnameMatch = false,
+  } = options || {};
   const semanticSet = new Set(semanticOrderCodes);
 
   // Pre-compute search patterns once (expensive)
@@ -83,7 +92,7 @@ export function filterOrders(
     }
 
     // Client / Payer surname search with layout + diacritics + typo tolerance
-    if (surnamePatterns) {
+    if (surnamePatterns && !skipSurnameMatch) {
       const matchClient = matchesSearch(order.client, surnamePatterns);
       const matchPayer = (order.payers || []).some(p => matchesSearch(p, surnamePatterns));
       const matchServiceClient = (order.serviceClients || []).some((c) =>

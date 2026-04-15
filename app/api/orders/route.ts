@@ -250,6 +250,8 @@ export async function GET(request: NextRequest) {
     const orderType = searchParams.get("order_type");
     const searchRaw = searchParams.get("search");
     const searchTrim = (searchRaw || "").trim();
+    const lastNameRaw = searchParams.get("lastName");
+    const lastNameTrim = (lastNameRaw || "").trim();
     const page = parseInt(searchParams.get("page") || "1") || 1;
     const pageSize = Math.min(parseInt(searchParams.get("pageSize") || "200") || 200, 500);
 
@@ -272,10 +274,15 @@ export async function GET(request: NextRequest) {
       query = query.eq("order_type", orderType);
     }
 
-    // Text search: server-side ilike on order_code + client_display_name (paginated; no full-table load)
+    // Text search: server-side ilike on order_code + client_display_name + search_text (paginated)
+    // Multiple `.or()` groups are ANDed — so search + lastName both narrow the set.
     const textSearchOr = searchTrim ? ordersListTextSearchOrClause(searchTrim) : null;
     if (textSearchOr) {
       query = query.or(textSearchOr);
+    }
+    const lastNameSearchOr = lastNameTrim ? ordersListTextSearchOrClause(lastNameTrim) : null;
+    if (lastNameSearchOr) {
+      query = query.or(lastNameSearchOr);
     }
 
     const from = (page - 1) * pageSize;

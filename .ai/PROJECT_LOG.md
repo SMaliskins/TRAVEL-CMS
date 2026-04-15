@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Orders: Client/Payer surname search (server + queryKey)
+
+**Task:** Surname filter showed unrelated orders — fix end-to-end | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Root cause: inline field maps to `clientLastName` only; React Query key used `queryText` only → stale cache and no `search` param; filtering ran only on already-loaded pages (or lagged via `useDeferredValue`).
+- `GET /api/orders`: query param `lastName` — second `.or()` on same columns (AND with `search`).
+- `fetchOrdersListPage` + `queryKey`: include `lastName`; filter uses `searchState` directly; `skipSurnameMatch` when API applied lastName.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Auth: idle auto-logout (4h)
 
 **Task:** Auto sign-out when staff UI idle > 4 hours | **Status:** SUCCESS

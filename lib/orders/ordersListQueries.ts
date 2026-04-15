@@ -9,8 +9,8 @@ export const ORDERS_LIST_STALE_MS = 30_000;
 
 export const ordersListQueryKeys = {
   /** useInfiniteQuery: pageParam = API page number (1-based) */
-  listInfinite: (pageSize: number, search: string) =>
-    ["orders-list", "infinite", pageSize, search] as const,
+  listInfinite: (pageSize: number, search: string, lastName: string) =>
+    ["orders-list", "infinite", pageSize, search, lastName] as const,
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -38,7 +38,8 @@ export type OrdersListFetchResult = {
 export async function fetchOrdersListPage(
   page: number,
   pageSize: number = ORDERS_LIST_PAGE_SIZE,
-  search: string = ""
+  search: string = "",
+  lastName: string = ""
 ): Promise<OrdersListFetchResult> {
   const headers = await authHeaders();
   const q = new URLSearchParams({
@@ -47,6 +48,8 @@ export async function fetchOrdersListPage(
   });
   const t = search.trim();
   if (t) q.set("search", t);
+  const ln = lastName.trim();
+  if (ln) q.set("lastName", ln);
   const response = await fetch(`/api/orders?${q.toString()}`, {
     headers,
     credentials: "include",
