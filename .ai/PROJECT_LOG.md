@@ -5,6 +5,17 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Orders list: debounce search for React Query
+
+**Task:** Stop refetch on every keystroke | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/orders/page.tsx`: `useDebounce` (320ms) для строк, уходящих в `queryKey` и `fetchOrdersListPage`; `skip*` в `filterOrders` по debounced значениям; `placeholderData: keepPreviousData` при смене запроса.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Orders: Client/Payer surname search (server + queryKey)
 
 **Task:** Surname filter showed unrelated orders — fix end-to-end | **Status:** SUCCESS

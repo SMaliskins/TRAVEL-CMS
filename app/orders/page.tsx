@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -16,6 +16,7 @@ import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { useTabs } from "@/contexts/TabsContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useDebounce } from "@/hooks/useDebounce";
 import { t } from "@/lib/i18n";
 import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { getCityByName, ensureWorldCitiesLoaded } from "@/lib/data/cities";
@@ -492,6 +493,8 @@ function getGroupKey(type: "year" | "month" | "day", key: string): string {
 
 // Debounce delay for semantic search (ms)
 const SEMANTIC_DEBOUNCE_MS = 400;
+/** Orders list API + React Query key — must not change on every keystroke */
+const ORDERS_LIST_SEARCH_DEBOUNCE_MS = 320;
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -502,6 +505,8 @@ export default function OrdersPage() {
   const [searchState, setSearchState] = useState(() => ordersSearchStore.getState());
   const listSearch = searchState.queryText.trim();
   const listLastName = searchState.clientLastName.trim();
+  const debouncedListSearch = useDebounce(listSearch, ORDERS_LIST_SEARCH_DEBOUNCE_MS);
+  const debouncedListLastName = useDebounce(listLastName, ORDERS_LIST_SEARCH_DEBOUNCE_MS);
 
   const {
     data: listInfiniteData,
@@ -513,9 +518,18 @@ export default function OrdersPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ordersListQueryKeys.listInfinite(ORDERS_LIST_PAGE_SIZE, listSearch, listLastName),
+    queryKey: ordersListQueryKeys.listInfinite(
+      ORDERS_LIST_PAGE_SIZE,
+      debouncedListSearch,
+      debouncedListLastName
+    ),
     queryFn: ({ pageParam }) =>
-      fetchOrdersListPage(pageParam, ORDERS_LIST_PAGE_SIZE, listSearch, listLastName),
+      fetchOrdersListPage(
+        pageParam,
+        ORDERS_LIST_PAGE_SIZE,
+        debouncedListSearch,
+        debouncedListLastName
+      ),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const p = lastPage.pagination;
@@ -524,6 +538,7 @@ export default function OrdersPage() {
     },
     staleTime: ORDERS_LIST_STALE_MS,
     gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 
   const loadError =
@@ -691,10 +706,17 @@ export default function OrdersPage() {
   const filteredOrders = useMemo(() => {
     return filterOrders(orders, searchState, {
       semanticOrderCodes,
-      skipClientQueryTextMatch: listSearch.length > 0,
-      skipSurnameMatch: listLastName.length > 0,
+      // Align skips with what the list API last requested (debounced), not raw keystrokes
+      skipClientQueryTextMatch: debouncedListSearch.length > 0,
+      skipSurnameMatch: debouncedListLastName.length > 0,
     });
-  }, [orders, searchState, semanticOrderCodes, listSearch, listLastName]);
+  }, [
+    orders,
+    searchState,
+    semanticOrderCodes,
+    debouncedListSearch,
+    debouncedListLastName,
+  ]);
 
   // Build tree from filtered orders
   const tree = useMemo(() => buildOrdersTree(filteredOrders, dateGroupMode), [filteredOrders, dateGroupMode]);
