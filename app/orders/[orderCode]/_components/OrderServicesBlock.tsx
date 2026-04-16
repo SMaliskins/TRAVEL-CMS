@@ -2759,6 +2759,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                           category: service.category,
                           commission_amount: service.commissionAmount,
                           vat_rate: service.vatRate,
+                          pricing_per_client: service.pricingPerClient ?? undefined,
                         });
 
                         const rowDelay = serviceRowIndex++ * 40;

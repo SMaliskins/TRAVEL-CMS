@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Flight PRICING: footer + list economics (pricing_per_client)
+
+**Task:** Fix flaky Air Ticket PRICING footer Profit vs grid; list margin when service_price=0 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `EditServiceModalNew.tsx`: sync aggregate `servicePrice`/`clientPrice`/`marge` from `pricingPerClient` sums; VAT/Profit block uses same total marge as grid; hide duplicate Cost/Marge/Sale row when flight per-client grid is active; removed render `console.log`.
+- `lib/orders/serviceEconomics.ts`: for flight/air ticket, when stored `service_price`≈0 but `pricing_per_client` has cost sum, use row sums for margin.
+- `OrderServicesBlock.tsx`, `OrderReferralServicesPanel.tsx`, `app/api/orders/route.ts` (fallback stats): pass `pricing_per_client` into `computeServiceLineEconomics`.
+
+**Результат:** tsc --noEmit OK
+
+---
+
 ## [2026-04-06] CODE_WRITER — Auth: canonical reset redirect (NEXT_PUBLIC_SITE_URL)
 
 **Task:** Password reset link not working — Supabase redirect allowlist / http vs https | **Status:** SUCCESS

@@ -221,6 +221,7 @@ function computeServiceStatsFromServices(services: any[]): {
       category: s.category,
       commission_amount: s.commission_amount,
       vat_rate: s.vat_rate,
+      pricing_per_client: s.pricing_per_client,
     });
     profit += econ.profitNetOfVat;
     vat += econ.vatOnMargin;

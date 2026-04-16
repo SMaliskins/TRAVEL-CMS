@@ -93,6 +93,7 @@ function mapService(raw: ApiService): Row {
     category: raw.category != null ? String(raw.category) : undefined,
     commission_amount: raw.commissionAmount ?? raw.commission_amount,
     vat_rate: raw.vatRate ?? raw.vat_rate,
+    pricing_per_client: (raw.pricingPerClient ?? raw.pricing_per_client) as { cost?: unknown; sale?: unknown }[] | undefined,
   });
   return {
     id: String(raw.id),

@@ -14,12 +14,53 @@ export type ServiceEconomicsInput = {
   category?: string | null;
   commission_amount?: unknown;
   vat_rate?: unknown;
+  /** Per-passenger rows (flight); when top-level service_price is 0 but rows have cost, sums are used */
+  pricing_per_client?: { cost?: unknown; sale?: unknown }[] | null;
 };
 
 function signed(s: ServiceEconomicsInput, field: "client_price" | "service_price"): number {
   const raw = field === "client_price" ? s.client_price : s.service_price;
   const v = Number(raw) || 0;
   return s.service_type === "cancellation" ? -Math.abs(v) : v;
+}
+
+function perClientRows(s: ServiceEconomicsInput): { cost?: unknown; sale?: unknown }[] | null {
+  const raw =
+    s.pricing_per_client ??
+    (s as { pricingPerClient?: { cost?: unknown; sale?: unknown }[] | null }).pricingPerClient;
+  return Array.isArray(raw) && raw.length > 0 ? raw : null;
+}
+
+function sumPerClientField(rows: { cost?: unknown; sale?: unknown }[], field: "cost" | "sale"): number {
+  return rows.reduce((acc, p) => acc + (Math.abs(Number(field === "cost" ? p?.cost : p?.sale)) || 0), 0);
+}
+
+/**
+ * For flight/air ticket with per-passenger pricing, DB sometimes has service_price=0 while rows hold cost.
+ * Use row sums only when the stored aggregate is ~0 and the sum is positive.
+ */
+function effectiveSignedAmounts(s: ServiceEconomicsInput): { client: number; service: number } {
+  const clientSigned = signed(s, "client_price");
+  const serviceSigned = signed(s, "service_price");
+  const rows = perClientRows(s);
+  if (!rows) return { client: clientSigned, service: serviceSigned };
+  const cat = (s.category || "").toLowerCase();
+  const flightLike = cat.includes("flight") || cat.includes("air ticket");
+  if (!flightLike) return { client: clientSigned, service: serviceSigned };
+  const sumCost = sumPerClientField(rows, "cost");
+  const sumSale = sumPerClientField(rows, "sale");
+  const isCancellation = s.service_type === "cancellation";
+  const storedServiceAbs = Math.abs(serviceSigned);
+  const storedClientAbs = Math.abs(clientSigned);
+  let effService = serviceSigned;
+  let effClient = clientSigned;
+  if (storedServiceAbs < 1e-9 && sumCost > 1e-9) {
+    effService = isCancellation ? -sumCost : sumCost;
+  }
+  if (storedClientAbs < 1e-9 && sumSale > 1e-9) {
+    effClient = isCancellation ? -sumSale : sumSale;
+  }
+  return { client: effClient, service: effService };
 }
 
 /**
@@ -63,8 +104,7 @@ export function computeServiceLineEconomics(s: ServiceEconomicsInput): {
   vatOnMargin: number;
   profitNetOfVat: number;
 } {
-  const clientPrice = signed(s, "client_price");
-  const servicePrice = signed(s, "service_price");
+  const { client: clientPrice, service: servicePrice } = effectiveSignedAmounts(s);
   const cat = s.category;
   const useCommissionNetCost = categoryUsesCommissionAdjustedNetCost(cat);
   const vatRate = resolveVatRatePercent(s);
