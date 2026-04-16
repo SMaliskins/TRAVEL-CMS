@@ -117,6 +117,7 @@ export async function GET(request: NextRequest) {
         is_active,
         created_at,
         last_login_at,
+        target_profit_monthly,
         role:roles(id, name, display_name, display_name_en, level, color)
       `)
       .eq("company_id", currentUser.companyId)

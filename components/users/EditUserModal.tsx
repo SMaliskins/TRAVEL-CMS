@@ -52,6 +52,7 @@ interface User {
   avatar_url: string | null;
   is_active: boolean;
   role: Role;
+  target_profit_monthly?: number | string | null;
 }
 
 interface EditUserModalProps {
@@ -75,6 +76,9 @@ export default function EditUserModal({
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || "");
   const [roleId, setRoleId] = useState(user.role.id);
   const [isActive, setIsActive] = useState(user.is_active);
+  const [targetProfit, setTargetProfit] = useState<string>(
+    user.target_profit_monthly != null ? String(Number(user.target_profit_monthly) || 0) : "0"
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +165,7 @@ export default function EditUserModal({
           avatarUrl: avatarUrl || null,
           roleId,
           isActive,
+          targetProfitMonthly: parseFloat(targetProfit) || 0,
           ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
         }),
       });
@@ -331,6 +336,24 @@ export default function EditUserModal({
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
                 placeholder="+371 12345678"
               />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Monthly Profit Target (EUR)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={targetProfit}
+                onChange={(e) => setTargetProfit(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Personal monthly profit target shown on the Dashboard speedometer when this agent is selected. Leave 0 to use the company-level target.
+              </p>
             </div>
 
             <div>

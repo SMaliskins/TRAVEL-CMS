@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const { data: agents } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, first_name, last_name, is_active, role_id, role:roles(name)")
+      .select("id, first_name, last_name, is_active, role_id, target_profit_monthly, role:roles(name)")
       .eq("company_id", companyId);
 
     const { data: servicesData } = await supabaseAdmin
@@ -60,7 +60,8 @@ export async function GET(request: NextRequest) {
       .map((a) => {
         const name = `${a.first_name || ""} ${a.last_name || ""}`.trim() || "—";
         const profit = Math.round((agentProfit[a.id] || 0) * 100) / 100;
-        return { id: a.id, name, profit };
+        const target = Math.round((Number(a.target_profit_monthly) || 0) * 100) / 100;
+        return { id: a.id, name, profit, target };
       })
       .sort((a, b) => b.profit - a.profit);
 

@@ -601,30 +601,25 @@ export default function DashboardPage() {
               )}
               {showTargets && !isFinance && (() => {
                 const monthlyTarget = statistics?.targetProfitMonthly || 0;
-                if (period === "currentMonth" || period === "lastMonth") {
-                  return (
-                    <TargetSpeedometer
-                      current={statistics?.profit || 0}
-                      target={monthlyTarget}
-                      label="Target"
-                      vat={statistics?.vat || 0}
-                      agents={showAgentBreakdown ? agentTargets : undefined}
-                      showAgentSelector={showAgentBreakdown}
-                    />
-                  );
-                }
-                const days = periodStart && periodEnd
+                const isMonthly = period === "currentMonth" || period === "lastMonth";
+                const days = !isMonthly && periodStart && periodEnd
                   ? Math.max(1, Math.round((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / 86400000) + 1)
                   : 30;
-                const months = days / 30.44;
-                const scaledTarget = Math.round(monthlyTarget * months * 100) / 100;
+                const scaleFactor = isMonthly ? 1 : days / 30.44;
+                const scaledCompanyTarget = Math.round(monthlyTarget * scaleFactor * 100) / 100;
+                const scaledAgents = showAgentBreakdown
+                  ? agentTargets.map(a => ({
+                      ...a,
+                      target: a.target ? Math.round(a.target * scaleFactor * 100) / 100 : 0,
+                    }))
+                  : undefined;
                 return (
                   <TargetSpeedometer
                     current={statistics?.profit || 0}
-                    target={scaledTarget}
+                    target={scaledCompanyTarget}
                     label="Target"
                     vat={statistics?.vat || 0}
-                    agents={showAgentBreakdown ? agentTargets : undefined}
+                    agents={scaledAgents}
                     showAgentSelector={showAgentBreakdown}
                   />
                 );

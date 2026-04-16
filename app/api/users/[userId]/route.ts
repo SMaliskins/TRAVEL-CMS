@@ -104,6 +104,7 @@ export async function GET(
         is_active,
         created_at,
         last_login_at,
+        target_profit_monthly,
         role:roles(id, name, display_name, display_name_en, level, color)
       `)
       .eq("id", userId)
@@ -170,7 +171,7 @@ export async function PATCH(
     const existingRole = Array.isArray(existingUser.role) ? existingUser.role[0] : existingUser.role;
 
     const body = await request.json();
-    const { firstName, lastName, phone, avatarUrl, roleId, isActive, password } = body;
+    const { firstName, lastName, phone, avatarUrl, roleId, isActive, password, targetProfitMonthly } = body;
 
     // Security checks
     const isSelf = userId === currentUser.id;
@@ -250,6 +251,10 @@ export async function PATCH(
     if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl || null;
     if (roleId !== undefined) updateData.role_id = roleId;
     if (isActive !== undefined) updateData.is_active = isActive;
+    if (targetProfitMonthly !== undefined) {
+      const n = Number(targetProfitMonthly);
+      updateData.target_profit_monthly = Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
+    }
 
     // Update user profile
     const { data: updated, error: updateError } = await supabaseAdmin
@@ -264,6 +269,7 @@ export async function PATCH(
         is_active,
         created_at,
         updated_at,
+        target_profit_monthly,
         role:roles(id, name, display_name, level, color)
       `)
       .single();

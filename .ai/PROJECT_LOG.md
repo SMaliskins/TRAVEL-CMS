@@ -5,6 +5,30 @@
 
 ---
 
+## [2026-04-16] CODE_WRITER — Dashboard TARGET: per-agent monthly profit target (real, DB-backed)
+
+**Task:** TARGET widget showed one company target (€4000) for every agent — user set targets "per agent" but only `companies.target_profit_monthly` existed in DB | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Root cause:**
+- `user_profiles` had NO column for personal target. `dashboard_targets` table referenced in old migrations was never created in prod. So `/api/dashboard/agent-targets` had no per-user target to return, and `TargetSpeedometer` compared every agent's profit against the single company-level target.
+
+**Действия:**
+- DB migration (applied to prod via MCP): `ALTER TABLE user_profiles ADD COLUMN target_profit_monthly numeric(12,2) NOT NULL DEFAULT 0;` (`migrations/add_user_target_profit_monthly.sql`).
+- `app/api/users/[userId]/route.ts` — GET returns `target_profit_monthly`; PATCH accepts `targetProfitMonthly` (clamped to ≥ 0, 2 decimals).
+- `app/api/users/route.ts` — list now includes `target_profit_monthly`.
+- `components/users/EditUserModal.tsx` — new field "Monthly Profit Target (EUR)" with explainer; sends `targetProfitMonthly` on save.
+- `app/api/dashboard/agent-targets/route.ts` — returns `{ id, name, profit, target }` for each agent.
+- `components/dashboard/TargetSpeedometer.tsx` — `AgentTarget.target?`; when an agent is selected, use their personal target; fallback to company target if 0. Stars, bar, %, over-target message all respect `effectiveTarget`. "All Agents" list scales each agent by their own target.
+- `app/dashboard/page.tsx` — single branch for monthly/custom periods; scales BOTH company target AND per-agent targets by `scaleFactor` (days/30.44) so custom ranges stay consistent.
+
+**Результат:** no linter errors; migration applied. Supervisor can now set a personal monthly profit target per user in Settings → Users → Edit; Dashboard speedometer uses that target when the agent is selected.
+
+**Next Step:** QA — set different targets for 2 agents, switch speedometer between Company / All Agents / Agent A / Agent B, verify % and stars.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Flight PRICING: revert destructive sync; persistence-first
 
 **Task:** Reopen modal → PRICING shows 0; list shows client=1275/service=0 (false profit) | **Status:** SUCCESS

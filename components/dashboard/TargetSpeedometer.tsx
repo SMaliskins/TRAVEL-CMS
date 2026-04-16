@@ -7,6 +7,8 @@ export interface AgentTarget {
   id: string;
   name: string;
   profit: number;
+  /** Personal monthly profit target for this agent. 0 = not set → falls back to `target` prop. */
+  target?: number;
 }
 
 interface TargetSpeedometerProps {
@@ -37,10 +39,14 @@ export default function TargetSpeedometer({
   const selectedAgent = isAgentView ? agents?.find((a) => a.id === view) : null;
 
   const displayCurrent = selectedAgent ? selectedAgent.profit : current;
-  const percentage = target > 0 ? (displayCurrent / target) * 100 : 0;
+  // Per-agent target overrides company target when this agent has a personal one set (> 0).
+  const effectiveTarget = selectedAgent && selectedAgent.target && selectedAgent.target > 0
+    ? selectedAgent.target
+    : target;
+  const percentage = effectiveTarget > 0 ? (displayCurrent / effectiveTarget) * 100 : 0;
   const displayPercentage = Math.min(percentage, 100);
 
-  const stars = target > 0
+  const stars = effectiveTarget > 0
     ? Math.min(5, Math.max(0, Math.ceil(percentage / 20)))
     : 0;
 
@@ -53,7 +59,9 @@ export default function TargetSpeedometer({
   };
 
   const getMotivationalMessage = () => {
-    if (target <= 0) return "Set target in Settings";
+    if (effectiveTarget <= 0) {
+      return selectedAgent ? "No personal target set" : "Set target in Settings";
+    }
     if (percentage >= 100) {
       return `+${Math.round(percentage - 100)}% over target!`;
     }
@@ -113,7 +121,7 @@ export default function TargetSpeedometer({
             </div>
           )}
         </div>
-        {target > 0 && view !== "agents" && (
+        {effectiveTarget > 0 && view !== "agents" && (
           <div className="flex gap-0.5">
             {[1, 2, 3, 4, 5].map((s) => (
               <svg key={s} xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 ${s <= stars ? "fill-yellow-400 text-yellow-400" : "fill-gray-200 text-gray-200"}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
@@ -127,7 +135,8 @@ export default function TargetSpeedometer({
       {view === "agents" ? (
         <div className="flex-1 overflow-y-auto -mx-1 mt-1" style={{ maxHeight: "140px" }}>
           {agents!.map((a) => {
-            const agentPct = target > 0 ? (a.profit / target) * 100 : 0;
+            const agentTarget = a.target && a.target > 0 ? a.target : target;
+            const agentPct = agentTarget > 0 ? (a.profit / agentTarget) * 100 : 0;
             const agentBarPct = Math.min(agentPct, 100);
             const agentColor = getColor(agentPct);
             return (
@@ -157,7 +166,7 @@ export default function TargetSpeedometer({
           <div className="mt-1">
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-gray-900">€{displayCurrent.toLocaleString()}</span>
-              <span className="text-xs font-medium text-gray-500">/ €{target.toLocaleString()}</span>
+              <span className="text-xs font-medium text-gray-500">/ €{effectiveTarget.toLocaleString()}</span>
             </div>
             {vat !== undefined && vat > 0 && !isAgentView && (
               <div className="mt-0.5 text-xs text-gray-500">
