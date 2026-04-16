@@ -959,17 +959,6 @@ export default function EditServiceModalNew({
     }
   }, [categoryType, clients, service.servicePrice, service.clientPrice]);
 
-  // Flight per-passenger grid is source of truth: keep aggregate service/client/marge in sync for VAT footer and persisted fields
-  useEffect(() => {
-    if (categoryType !== "flight" || pricingPerClient.length === 0) return;
-    const totalCost = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100;
-    const totalSale = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100;
-    const totalMarge = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.marge), 0) * 100) / 100;
-    setServicePrice(totalCost ? String(totalCost) : "");
-    setClientPrice(totalSale ? String(totalSale) : "");
-    setMarge(totalMarge ? String(totalMarge) : "");
-  }, [categoryType, pricingPerClient]);
-
   // When user changes calendar (Dates) to 2026, re-normalize segment years so Schedule shows 2026 (fixes stuck 2024)
   useEffect(() => {
     if (categoryType !== "flight" || flightSegments.length === 0) return;
@@ -2652,14 +2641,22 @@ export default function EditServiceModalNew({
         payer_name: payerName,
         service_price: isCancellationService
           ? -(parseFloat(amendRefundAmount) || 0)
-          : categoryType === "flight" && pricingPerClient.length > 0
-            ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
-            : (usesCommissionPricing && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0),
+          : (() => {
+              if (categoryType === "flight" && pricingPerClient.length > 0) {
+                const sum = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100;
+                if (sum > 0) return sum;
+              }
+              return usesCommissionPricing && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0;
+            })(),
         client_price: isCancellationService
           ? -(parseFloat(amendRefundAmount) || 0) + (parseFloat(amendCancellationFee) || 0)
-          : categoryType === "flight" && pricingPerClient.length > 0
-            ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
-            : parseFloat(clientPrice) || 0,
+          : (() => {
+              if (categoryType === "flight" && pricingPerClient.length > 0) {
+                const sum = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100;
+                if (sum > 0) return sum;
+              }
+              return parseFloat(clientPrice) || 0;
+            })(),
         quantity: categoryType === "flight" || usesCommissionPricing || categoryType === "visa" ? 1 : (categoryType === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits),
         vat_rate: vatRate,
         res_status: resStatus || "booked",
@@ -2905,12 +2902,20 @@ export default function EditServiceModalNew({
         }
 
         const opt = (v: string | null | undefined) => (v?.trim() ? v.trim() : undefined);
-        const finalServicePrice = categoryType === "flight" && pricingPerClient.length > 0
-          ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100
-          : (usesCommissionPricing && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0);
-        const finalClientPrice = categoryType === "flight" && pricingPerClient.length > 0
-          ? Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100
-          : parseFloat(clientPrice) || 0;
+        const finalServicePrice = (() => {
+          if (categoryType === "flight" && pricingPerClient.length > 0) {
+            const sum = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.cost), 0) * 100) / 100;
+            if (sum > 0) return sum;
+          }
+          return usesCommissionPricing && servicePriceLineItems.length > 0 ? effectiveServicePrice : parseFloat(servicePrice) || 0;
+        })();
+        const finalClientPrice = (() => {
+          if (categoryType === "flight" && pricingPerClient.length > 0) {
+            const sum = Math.round(pricingPerClient.reduce((s, p) => s + parsePrice(p.sale), 0) * 100) / 100;
+            if (sum > 0) return sum;
+          }
+          return parseFloat(clientPrice) || 0;
+        })();
         onServiceUpdated({
           id: service.id,
           name: serviceName,
@@ -5642,14 +5647,22 @@ export default function EditServiceModalNew({
                     </select>
                   </div>
                   {(() => {
-                    const isFlightPerClient = (categoryType as string) === "flight" && pricingPerClient.length > 0;
                     const marginPerUnit = parseFloat(marge) || 0;
                     const effUnits = (categoryType as string) === "hotel" && hotelPricePer === "stay" ? 1 : priceUnits;
-                    const totalMargin = isFlightPerClient
+                    const gridMarge = (categoryType as string) === "flight" && pricingPerClient.length > 0
                       ? Math.round(pricingPerClient.reduce((acc, p) => acc + parsePrice(p.marge), 0) * 100) / 100
+                      : 0;
+                    const gridCost = (categoryType as string) === "flight" && pricingPerClient.length > 0
+                      ? Math.round(pricingPerClient.reduce((acc, p) => acc + parsePrice(p.cost), 0) * 100) / 100
+                      : 0;
+                    const gridSale = (categoryType as string) === "flight" && pricingPerClient.length > 0
+                      ? Math.round(pricingPerClient.reduce((acc, p) => acc + parsePrice(p.sale), 0) * 100) / 100
+                      : 0;
+                    const totalMargin = gridMarge !== 0 || gridCost !== 0 || gridSale !== 0
+                      ? (gridMarge || Math.round((gridSale - gridCost) * 100) / 100)
                       : Math.round(marginPerUnit * effUnits * 100) / 100;
                     const paid = (categoryType as string) === "hotel" && actuallyPaid !== "" ? parseFloat(actuallyPaid) : null;
-                    const saleTotal = parseFloat(clientPrice) || 0;
+                    const saleTotal = gridSale !== 0 ? gridSale : (parseFloat(clientPrice) || 0);
                     const marginFromPaid = paid != null && Number.isFinite(paid) ? Math.round((saleTotal - paid) * 100) / 100 : null;
                     const baseForVat = marginFromPaid != null ? marginFromPaid : totalMargin;
                     const vatAmount = vatRate > 0 && baseForVat >= 0 ? Math.round(baseForVat * vatRate / (100 + vatRate) * 100) / 100 : 0;

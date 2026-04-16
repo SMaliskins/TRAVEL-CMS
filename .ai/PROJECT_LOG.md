@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Flight PRICING: revert destructive sync; persistence-first
+
+**Task:** Reopen modal → PRICING shows 0; list shows client=1275/service=0 (false profit) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `EditServiceModalNew.tsx`: REMOVED the useEffect that wrote `pricingPerClient` sums back into `servicePrice/clientPrice/marge` — it destroyed valid values on mount when the client-sync effect had populated empty rows.
+- Save path: `service_price`/`client_price` for flight use `pricingPerClient` sums ONLY when sum > 0; otherwise keep the `servicePrice`/`clientPrice` entered by the user.
+- Footer VAT/Profit block: pure computation — prefers grid sums when grid has any non-zero data; otherwise falls back to `marge × units` and `clientPrice`. No setState side effects.
+- `migrations/fix_flight_service_price_from_pricing_per_client.sql`: backfill to repair existing rows where `service_price`/`client_price` = 0 but `pricing_per_client` has values.
+
+**Результат:** `tsc --noEmit` OK. Principle restored: UI loads exactly what DB holds; save writes exactly what user entered. No recalculation on open.
+
+---
+
 ## [2026-04-06] CODE_WRITER — Flight PRICING: footer + list economics (pricing_per_client)
 
 **Task:** Fix flaky Air Ticket PRICING footer Profit vs grid; list margin when service_price=0 | **Status:** SUCCESS
