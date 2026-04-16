@@ -3,6 +3,11 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { CITIES, getCityByName, type City } from "@/lib/data/cities";
 
+// Always re-run on request. The map must reflect current orders immediately; any caching layer
+// (Next.js Data Cache / CDN) would cause the "markers flicker in and out" effect users observed.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const CITY_COORDS: Record<string, [number, number]> = {
   "london": [51.5074, -0.1278],
   "paris": [48.8566, 2.3522],

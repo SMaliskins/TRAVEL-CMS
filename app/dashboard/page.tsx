@@ -258,9 +258,12 @@ export default function DashboardPage() {
     fetchChart();
   }, [periodStart, periodEnd, isFinance, tokenReady]);
 
-  // Fetch real tourist locations (skip for finance role)
+  // Fetch real tourist locations (skip for finance role).
+  // no-store + AbortController prevent stale/cached responses and racing updates between re-mounts.
   useEffect(() => {
     if (isFinance || !tokenReady) return;
+
+    const controller = new AbortController();
 
     const fetchLocations = async () => {
       try {
@@ -271,6 +274,8 @@ export default function DashboardPage() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          cache: 'no-store',
+          signal: controller.signal,
         });
 
         if (response.ok) {
@@ -280,11 +285,13 @@ export default function DashboardPage() {
           }
         }
       } catch (error) {
+        if ((error as { name?: string })?.name === 'AbortError') return;
         console.error("Error fetching tourist locations on map:", error);
       }
     };
 
     fetchLocations();
+    return () => controller.abort();
   }, [isFinance, tokenReady]);
 
   // Fetch calendar events (skip for finance role)

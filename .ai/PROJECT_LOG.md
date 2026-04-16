@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-04-16] CODE_WRITER — MAP-01 Step 1: stabilize Travelers-on-map API (no more flicker)
+
+**Task:** MAP-01 — Fix unstable Travelers on map: markers flicker in/out, Tashkent missing | **Status:** SUCCESS (Step 1 of 7)
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия (Шаг 1 — стабильность):**
+- `app/api/dashboard/map/route.ts` — добавлены `export const dynamic = "force-dynamic"` и `export const revalidate = 0`. Next.js теперь не кэширует ответ route handler-а, карта всегда отражает свежее состояние `orders`.
+- `app/dashboard/page.tsx` — fetch `/api/dashboard/map` теперь с `cache: 'no-store'` и `AbortController`. Cleanup в useEffect отменяет устаревший запрос при перемонтировании/смене роли.
+- Никаких изменений в геокодере/парсере destination на этом шаге — только устранён источник мигания данных.
+
+**Результат:** `tsc --noEmit` = 0. eslint clean на изменённых блоках (единственный warning — в чужом useEffect, строка 342, не в моей правке). «То появляются, то пропадают» должно прекратиться сразу — тот же набор локаций при F5.
+
+**Next Step:** Шаг 2 — миграция `city_geocache` + функция `resolveCity()` (нормализация + alias-таблица lv/ru + внешний геокодер Nominatim с кэшом в БД). После Шага 2 Ташкент и прочие неизвестные города начнут автоматически попадать на карту.
+
+---
+
 ## [2026-04-16] CODE_WRITER — Per-agent targets moved into existing Monthly Targets section + new rule 6.13
 
 **Task:** User corrected earlier approach: "Monthly Targets in Company Settings is THE place for per-agent targets — don't bolt a new field onto Edit User" | **Status:** SUCCESS
