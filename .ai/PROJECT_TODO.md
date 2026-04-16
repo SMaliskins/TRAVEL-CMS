@@ -203,7 +203,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | DASH4 | Dashboard | Period Selector: Shopify-style dropdown | CODE WRITER | DONE  | **feature/x** | **⚠️ Custom не работает, нужен календарь. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
 | DASH5 | Dashboard | Target Speedometer: Professional redesign | CODE WRITER | DONE  | **feature/x** | **⚠️ Зелёная зона должна быть на 80%, не 100%. Spec: .ai/tasks/code-writer-dash4-5-rework.md** |
 | DASH4-FIX | Dashboard | Calendar: ограничить maxDate = сегодня | CW→QA | CW | TODO | - | [09.01 14:15] Spec created |
-| MAP-01 | Dashboard | Travelers on map: stop flicker + auto-geocode unknown cities + per-stop markers | CW→QA | CW | IN_PROGRESS | feature/x | [16.04 Step 1/7 DONE] force-dynamic + no-store + AbortController |
+| MAP-01 | Dashboard | Travelers on map: stop flicker + auto-geocode unknown cities + per-stop markers | CW→QA | CW | IN_PROGRESS | feature/x | [16.04 Step 2/7 DONE] city_geocache table + resolveCity() (alias/builtin/Nominatim/country-fallback) wired into /api/dashboard/map |
 
 ## LEGACY TASKS (Directory)
 

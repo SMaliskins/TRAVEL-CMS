@@ -5,6 +5,37 @@
 
 ---
 
+## [2026-04-16] CODE_WRITER — MAP-01 Step 2: auto-growing geocoder (city_geocache + Nominatim)
+
+**Task:** MAP-01 — Travelers on map: unknown cities (Tashkent, Bishkek, …) must be resolved automatically and never disappear. | **Status:** SUCCESS (Step 2 of 7)
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- DB migration `migrations/add_city_geocache.sql` — new global table `public.city_geocache(query_norm, country_norm UNIQUE, city, country, lat, lng, source, approximate, hits, …)` with RLS (SELECT: authenticated; writes via service_role), `updated_at` trigger. Applied to production via MCP.
+- New module `lib/geocoding/resolveCity.ts`:
+  - `normalizeCityQuery()` — lowercase + strip diacritics.
+  - `LOCALE_ALIASES` — compiled from real `countries_cities` values in the DB (lv/ru → English): `antalija→Antalya, taskenta→Tashkent, parize→Paris, minhene→Munich, biskeka→Bishkek, kaira→Cairo, barselona→Barcelona, kreta→Crete, burgasa→Burgas, hurgada→Hurghada, marakesa→Marrakech, atenas→Athens, agadira→Agadir, beiruta→Beirut, kalabrija→Calabria, larnaka→Larnaca, pukteta→Phuket, maljorka→Palma de Mallorca, montekarlo→Monte Carlo, ulaanbaatara→Ulaanbaatar, nusadua→Nusa Dua, salou, nesebar, …`.
+  - `BUILTIN_CITIES` — seed table (~160 cities) with canonical English name + country.
+  - `COUNTRY_FALLBACK` — country centroids (~70 countries) so a marker is shown even when the city is unresolvable.
+  - `Nominatim` client with mandatory UA + throttle `1.1 s` between requests + batch de-dup.
+  - `resolveCity(city, country)` pipeline: `cache → alias → builtin → Nominatim → country-fallback → unmapped`. Every non-cache hit is written to `city_geocache` so the next request is an O(1) DB lookup.
+  - `resolveCitiesBatch(pairs)` — deduplicates identical queries across a single dashboard render.
+- `app/api/dashboard/map/route.ts`:
+  - Dropped the old `CITY_COORDS` / `MAP_CITY_ALIASES` / `geocodeCity()` (and with them the buggy substring-match that could warp cities to `kos/nice/kuala lumpur`).
+  - Now pre-parses all orders, collects unique (city, country) pairs, calls `resolveCitiesBatch`, and builds `MapLocation`s from the resolved map.
+  - Response now also carries `stats: { total, mapped, unmapped }` for observability.
+
+**Результат:** `tsc --noEmit` = 0; `eslint` clean on both changed files.
+- Known cities (Antalya, Istanbul, Riga, …) hit the builtin table instantly and are persisted to cache.
+- Unknown-yet-recognized cities (Tashkent via `taskenta→Tashkent` alias) resolve without any external call.
+- Brand-new, previously-unseen cities will be auto-resolved via Nominatim on first render and cached forever.
+- Total external calls per dashboard render ≤ (unique-unknown-cities in orders), throttled to 1 req/s. First render with many misses may be slightly slower; subsequent renders are DB-only.
+
+**Next Step:** Шаг 3 — seed `city_geocache` builtin rows eagerly (one-time SQL seed) + optional admin UI in Settings → Company (Шаг 6 по плану).  По плану следующий — Шаг 4 (парсер destination → все сегменты шапки, маркер на каждый).
+
+---
+
 ## [2026-04-16] CODE_WRITER — MAP-01 Step 1: stabilize Travelers-on-map API (no more flicker)
 
 **Task:** MAP-01 — Fix unstable Travelers on map: markers flicker in/out, Tashkent missing | **Status:** SUCCESS (Step 1 of 7)
