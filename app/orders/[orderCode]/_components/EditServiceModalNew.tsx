@@ -929,34 +929,52 @@ export default function EditServiceModalNew({
   const [amendRefundAmount, setAmendRefundAmount] = useState(service.refundAmount?.toString() || "");
   const [amendCancellationFee, setAmendCancellationFee] = useState(service.cancellationFee?.toString() || "");
 
-  // Sync pricingPerClient with clients for Flight (same length, preserve existing values)
-  // When pricing_per_client is empty, derive from service_price/client_price for single client
+  // Sync pricingPerClient with clients for Flight (same length, preserve existing values).
+  // When pricing_per_client is missing in DB but service_price/client_price totals exist,
+  // evenly distribute the totals across all passengers so UI shows the real numbers immediately
+  // (user entered totals earlier via another field; we don't invent numbers, we only allocate existing ones).
   useEffect(() => {
-        if (categoryType === "flight") {
-      const validClients = clients.filter(c => c.id || c.name);
-      if (validClients.length === 0) return;
-      const costTotal = Number(service.servicePrice ?? 0) || 0;
-      const saleTotal = Number(service.clientPrice ?? 0) || 0;
-      const margeTotal = saleTotal - costTotal;
-      setPricingPerClient(prev => {
-        const hasAnyData = prev.some(p => parsePrice(p.cost) !== 0 || parsePrice(p.sale) !== 0);
-        const next = validClients.map((_, idx) => {
-          const existing = prev[idx];
-          if (existing && ((existing.cost && parseFloat(existing.cost)) || (existing.sale && parseFloat(existing.sale)))) {
-            return existing;
-          }
-          if (!hasAnyData && validClients.length === 1 && (costTotal !== 0 || saleTotal !== 0)) {
-            return {
-              cost: costTotal ? String(costTotal) : "",
-              marge: margeTotal ? String(Math.round(margeTotal * 100) / 100) : "",
-              sale: saleTotal ? String(saleTotal) : "",
-            };
-          }
-          return existing ?? { cost: "", marge: "", sale: "" };
-        });
-        return next;
+    if (categoryType !== "flight") return;
+    const validClients = clients.filter(c => c.id || c.name);
+    if (validClients.length === 0) return;
+    const costTotal = Number(service.servicePrice ?? 0) || 0;
+    const saleTotal = Number(service.clientPrice ?? 0) || 0;
+    const margeTotal = saleTotal - costTotal;
+    const N = validClients.length;
+    const roundCents = (n: number) => Math.round(n * 100) / 100;
+
+    setPricingPerClient(prev => {
+      const hasAnyData = prev.some(p => parsePrice(p.cost) !== 0 || parsePrice(p.sale) !== 0);
+      const canDistributeTotals = !hasAnyData && (costTotal !== 0 || saleTotal !== 0);
+
+      // Even split of totals; last row absorbs rounding leftover so ΣN === total exactly.
+      const perCost = canDistributeTotals ? roundCents(costTotal / N) : 0;
+      const perSale = canDistributeTotals ? roundCents(saleTotal / N) : 0;
+      const perMarge = canDistributeTotals ? roundCents(margeTotal / N) : 0;
+      const lastCost = canDistributeTotals ? roundCents(costTotal - perCost * (N - 1)) : 0;
+      const lastSale = canDistributeTotals ? roundCents(saleTotal - perSale * (N - 1)) : 0;
+      const lastMarge = canDistributeTotals ? roundCents(margeTotal - perMarge * (N - 1)) : 0;
+
+      const next = validClients.map((_, idx) => {
+        const existing = prev[idx];
+        if (existing && ((existing.cost && parseFloat(existing.cost)) || (existing.sale && parseFloat(existing.sale)))) {
+          return existing;
+        }
+        if (canDistributeTotals) {
+          const isLast = idx === N - 1;
+          const c = isLast ? lastCost : perCost;
+          const s = isLast ? lastSale : perSale;
+          const m = isLast ? lastMarge : perMarge;
+          return {
+            cost: c ? String(c) : "",
+            marge: m ? String(m) : "",
+            sale: s ? String(s) : "",
+          };
+        }
+        return existing ?? { cost: "", marge: "", sale: "" };
       });
-    }
+      return next;
+    });
   }, [categoryType, clients, service.servicePrice, service.clientPrice]);
 
   // When user changes calendar (Dates) to 2026, re-normalize segment years so Schedule shows 2026 (fixes stuck 2024)
