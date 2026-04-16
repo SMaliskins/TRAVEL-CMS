@@ -19,6 +19,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     pathname === "/" ||
     pathname === "/register" ||
     pathname?.startsWith("/login") ||
+    pathname?.startsWith("/forgot-password") ||
+    pathname?.startsWith("/reset-password") ||
     pathname?.startsWith("/devlog") ||
     pathname?.startsWith("/superadmin") ||
     pathname?.startsWith("/map") ||

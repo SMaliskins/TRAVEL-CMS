@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Sidebar from "./Sidebar";
@@ -19,12 +19,20 @@ function bypassCrmAuth(pathname: string | null): boolean {
 
 function isPublicPath(pathname: string | null): boolean {
   if (!pathname) return false;
-  return pathname === "/" || pathname === "/register" || pathname.startsWith("/login");
+  return (
+    pathname === "/" ||
+    pathname === "/register" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password")
+  );
 }
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -37,6 +45,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     const publicPath = isPublicPath(pathname);
+
+    const redirectPublicAuthedToDashboard = (path: string | null) => {
+      if (!path) return;
+      if (path.startsWith("/forgot-password") || path.startsWith("/reset-password")) return;
+      router.push("/dashboard");
+    };
 
     const checkAuth = async (isRetry = false) => {
       try {
@@ -83,7 +97,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         }
 
         setIsAuthenticated(true);
-        if (publicPath) { router.push("/dashboard"); }
+        if (publicPath) {
+          redirectPublicAuthedToDashboard(pathname);
+        }
         setIsLoading(false);
         return;
       } catch (error) {
@@ -109,15 +125,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (skipCrm) return;
+        const pathNow = pathnameRef.current;
+        const pub = isPublicPath(pathNow);
         if (event === "SIGNED_OUT") {
           setIsAuthenticated(false);
-          if (!publicPath) {
+          if (!pub) {
             router.push("/login");
           }
         } else if (event === "SIGNED_IN" && session) {
           setIsAuthenticated(true);
-          if (publicPath) {
-            router.push("/dashboard");
+          if (pub) {
+            redirectPublicAuthedToDashboard(pathNow);
           }
         }
       }

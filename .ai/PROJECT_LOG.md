@@ -5,6 +5,67 @@
 
 ---
 
+## [2026-04-06] CODE_WRITER — Auth: canonical reset redirect (NEXT_PUBLIC_SITE_URL)
+
+**Task:** Password reset link not working — Supabase redirect allowlist / http vs https | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `lib/auth/passwordResetRedirect.ts` + `forgot-password`: `redirectTo` из `NEXT_PUBLIC_SITE_URL` при наличии, иначе `window.location.origin`.
+- `.env.example`: переменная `NEXT_PUBLIC_SITE_URL`.
+
+---
+
+## [2026-04-06] CODE_WRITER — AuthGuard: forgot/reset public + pathnameRef
+
+**Task:** Forgot password link redirected to /login | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `isPublicPath` уже включал `/forgot-password` и `/reset-password` — без деплоя пользователь видел старый бандл.
+- `onAuthStateChange`: решения по редиректу через `pathnameRef.current` + `isPublicPath(pathNow)` (не устаревший closure).
+- Залогиненный пользователь: на forgot/reset не уводим на `/dashboard`.
+- `layout-client-wrapper`: `skipLayout` для forgot/reset (как у login).
+
+---
+
+## [2026-04-06] CODE_WRITER — Auth: forgot/reset password for dedicated Supabase
+
+**Task:** Forgot password broken (wrong project / session) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `forgot-password`: `resolve-company` + `resetPasswordForEmail` на dedicated; fallback на центральный клиент при ошибке.
+- `reset-password`: URL проекта из JWT в hash; `GET /api/auth/public-anon-key`; при необходимости `setSession` из fragment.
+- `lib/auth/supabaseRecoveryUrl.ts`, `app/api/auth/public-anon-key/route.ts`.
+
+---
+
+## [2026-04-06] CODE_WRITER — Login: normalize email for signIn (match resolve-company)
+
+**Task:** Invalid credentials despite correct password (spaces / case) | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/login/page.tsx`: один `emailNorm = trim + lowerCase` для resolve и `signInWithPassword`; проверка `!resolveRes.ok`; сообщение при ошибке resolve.
+
+---
+
+## [2026-04-06] CODE_WRITER — Login: fallback to central Supabase after dedicated invalid creds
+
+**Task:** Password rejected — possible dedicated vs central user mismatch | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Если выбран dedicated-клиент и Supabase вернул invalid login credentials — `signOut(local)` на dedicated и повторный `signInWithPassword` через дефолтный `supabase` (центральный проект).
+
+---
+
 ## [2026-04-06] CODE_WRITER — Orders list: debounce search for React Query
 
 **Task:** Stop refetch on every keystroke | **Status:** SUCCESS

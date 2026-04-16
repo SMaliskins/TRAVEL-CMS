@@ -43,7 +43,8 @@ export default function LoginPage() {
 
   const handleLogin = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!email || !password) {
+    const emailNorm = email.trim().toLowerCase();
+    if (!emailNorm || !password) {
       setError("Please enter email and password");
       return;
     }
@@ -51,14 +52,24 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Resolve which Supabase to authenticate against
+      // Resolve which Supabase to authenticate against (must match signIn email exactly)
       const resolveRes = await fetch("/api/auth/resolve-company", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: emailNorm }),
       });
 
-      const resolved = await resolveRes.json();
+      const resolved = await resolveRes.json().catch(() => ({}));
+
+      if (!resolveRes.ok) {
+        setError(
+          typeof resolved?.error === "string"
+            ? resolved.error
+            : "Could not verify your account. Please try again."
+        );
+        setLoading(false);
+        return;
+      }
 
       if (resolved.suspended) {
         setError(resolved.message || "Account suspended");
@@ -66,25 +77,39 @@ export default function LoginPage() {
         return;
       }
 
-      let authClient = supabase;
+      const usedDedicated =
+        Boolean(resolved.dedicated && resolved.supabaseUrl && resolved.supabaseAnonKey);
 
-      if (resolved.dedicated && resolved.supabaseUrl && resolved.supabaseAnonKey) {
-        authClient = createClient(resolved.supabaseUrl, resolved.supabaseAnonKey);
+      const dedicatedClient = usedDedicated
+        ? createClient(resolved.supabaseUrl as string, resolved.supabaseAnonKey as string)
+        : null;
+
+      const creds = { email: emailNorm, password };
+
+      const isInvalidPasswordMessage = (msg: string | undefined) =>
+        msg === "Invalid login credentials" || /invalid login credential/i.test(msg || "");
+
+      let authClient: typeof supabase = dedicatedClient ?? supabase;
+      let authError = (await authClient.auth.signInWithPassword(creds)).error;
+
+      // Company may point at a dedicated Supabase while the user still exists only on the central project
+      // (or keys/URL drift). Retry on the default app client before failing.
+      if (authError && usedDedicated && dedicatedClient && isInvalidPasswordMessage(authError.message)) {
+        await dedicatedClient.auth.signOut({ scope: "local" }).catch(() => {});
+        authError = (await supabase.auth.signInWithPassword(creds)).error;
       }
 
-      const { error: authError } = await authClient.auth.signInWithPassword({
-        email,
-        password,
-      });
-
       if (authError) {
-        setError(authError.message === "Invalid login credentials"
-          ? "Invalid email or password"
-          : authError.message);
+        setError(
+          isInvalidPasswordMessage(authError.message)
+            ? "Invalid email or password"
+            : authError.message
+        );
         setLoading(false);
         return;
       }
 
+      setLoading(false);
       router.push("/dashboard");
     } catch {
       setError("Login failed. Please try again.");

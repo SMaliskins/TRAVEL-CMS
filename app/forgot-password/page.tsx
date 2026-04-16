@@ -3,11 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+import { getStaffPasswordResetRedirectUrl } from "@/lib/auth/passwordResetRedirect";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   if (!isSupabaseConfigured) {
     return (
@@ -28,26 +31,68 @@ export default function ForgotPasswordPage() {
     setError("");
     setSuccess(false);
 
-    if (!email.trim()) {
+    const emailNorm = email.trim().toLowerCase();
+    if (!emailNorm) {
       setError("Email is required");
       return;
     }
 
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/reset-password`
-        : "/reset-password";
+    setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo,
-    });
+    try {
+      const resolveRes = await fetch("/api/auth/resolve-company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailNorm }),
+      });
 
-    if (error) {
-      setError(error.message);
-      return;
+      const resolved = await resolveRes.json().catch(() => ({}));
+
+      if (!resolveRes.ok) {
+        setError(
+          typeof resolved?.error === "string"
+            ? resolved.error
+            : "Could not verify your account. Please try again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (resolved.suspended) {
+        setError(resolved.message || "Account suspended");
+        setLoading(false);
+        return;
+      }
+
+      const redirectTo = getStaffPasswordResetRedirectUrl();
+
+      const usedDedicated =
+        Boolean(resolved.dedicated && resolved.supabaseUrl && resolved.supabaseAnonKey);
+
+      const authClient = usedDedicated
+        ? createClient(resolved.supabaseUrl as string, resolved.supabaseAnonKey as string)
+        : supabase;
+
+      let { error: resetErr } = await authClient.auth.resetPasswordForEmail(emailNorm, {
+        redirectTo,
+      });
+
+      if (resetErr && usedDedicated) {
+        resetErr = (await supabase.auth.resetPasswordForEmail(emailNorm, { redirectTo })).error;
+      }
+
+      if (resetErr) {
+        setError(resetErr.message);
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(true);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setSuccess(true);
   };
 
   return (
@@ -83,9 +128,10 @@ export default function ForgotPasswordPage() {
             />
             <button
               type="submit"
-              className="w-full bg-black text-white p-2"
+              disabled={loading}
+              className="w-full bg-black text-white p-2 disabled:opacity-60"
             >
-              Send reset link
+              {loading ? "Sending…" : "Send reset link"}
             </button>
             {error && <p className="text-red-600 text-sm">{error}</p>}
           </form>
