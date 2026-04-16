@@ -5,6 +5,40 @@
 
 ---
 
+## [2026-04-16] CODE_WRITER — Per-agent targets moved into existing Monthly Targets section + new rule 6.13
+
+**Task:** User corrected earlier approach: "Monthly Targets in Company Settings is THE place for per-agent targets — don't bolt a new field onto Edit User" | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- Removed the "Monthly Profit Target" field from `EditUserModal` (rolled back previous attempt).
+- Extended `app/settings/company/page.tsx` → **Monthly Targets** section: company-level Profit Target is now labeled "Profit Target (Company)" + fallback note; added a table "Personal Profit Target — per agent" underneath, listing active agents/managers/supervisors/subagents with one numeric input per row.
+- `handleSave` on Company Settings first PATCHes `/api/users/[id]` (`targetProfitMonthly`) for every changed row, then PATCHes `/api/company`. Baseline is refreshed after success so follow-up edits are tracked.
+- DB column (`user_profiles.target_profit_monthly`) from previous step is reused — no new table, no new endpoint.
+- `cursor/rules/cursorrules.mdc` → added rule **6.13** "Не выдумывать новые функции, если уже есть реализация" (mandatory check for existing form/page/endpoint before creating a new one).
+
+**Результат:** `tsc --noEmit` OK. Only Settings → Company → Monthly Targets is now the single place where per-agent profit targets are set. Dashboard speedometer continues to read `target_profit_monthly` per user (logic unchanged).
+
+**Next Step:** QA — open Settings → Company → Monthly Targets, set different values for 2 agents, hit Save, verify on Dashboard speedometer that selecting each agent uses their personal target.
+
+---
+
+## [2026-04-16] CODE_WRITER — Edit Service (Air Ticket): distribute totals across passengers on open
+
+**Task:** Air Ticket PRICING shows 0.00 for every passenger on first open — numbers appear only after reopening | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Root cause:** Fallback inside the `pricingPerClient` sync useEffect required `validClients.length === 1`. For flights with N passengers and empty `pricing_per_client` in DB, every row was left blank → UI showed 0.00 for each passenger and Totals=0 while the footer Profit showed the real `client_price`.
+
+**Действия:**
+- `EditServiceModalNew.tsx` — when `pricing_per_client` is missing but `service_price`/`client_price` totals exist, evenly distribute them across ALL N passengers (last row absorbs rounding leftover so ΣN equals DB total exactly). No numbers are invented — we only allocate values already in DB.
+
+**Результат:** `tsc --noEmit` OK. First open of Air Ticket Edit now shows the real totals split across passengers; Total Cost / Total Marge / Total Sale and footer Profit are consistent with DB from frame 1.
+
+---
+
 ## [2026-04-16] CODE_WRITER — Dashboard TARGET: per-agent monthly profit target (real, DB-backed)
 
 **Task:** TARGET widget showed one company target (€4000) for every agent — user set targets "per agent" but only `companies.target_profit_monthly` existed in DB | **Status:** SUCCESS

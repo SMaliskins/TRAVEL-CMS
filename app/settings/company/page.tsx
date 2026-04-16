@@ -195,6 +195,17 @@ export default function CompanySettingsPage() {
   const [invoiceLanguageSuggestOpen, setInvoiceLanguageSuggestOpen] = useState(false);
   const invoiceLanguageSuggestRef = useRef<HTMLUListElement>(null);
 
+  // Monthly Targets — per-user personal profit targets (same section as company targets)
+  type UserTargetRow = {
+    id: string;
+    first_name: string;
+    last_name: string;
+    role_name: string;
+    target_profit_monthly: number;
+  };
+  const [userTargets, setUserTargets] = useState<UserTargetRow[]>([]);
+  const [userTargetsOriginal, setUserTargetsOriginal] = useState<Record<string, number>>({});
+
   useEffect(() => {
     loadCompany();
     checkRole();
@@ -261,6 +272,49 @@ export default function CompanySettingsPage() {
     }
   };
 
+  // Load users for per-agent Monthly Profit Target table (Supervisor/Director only).
+  useEffect(() => {
+    const canSeeTargets = currentRole === "supervisor" || currentRole === "director";
+    if (!canSeeTargets) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch("/api/users", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const list = await res.json();
+        if (cancelled) return;
+        const rows: UserTargetRow[] = (Array.isArray(list) ? list : [])
+          .filter((u: { is_active?: boolean; role?: { name?: string } }) => {
+            const name = (u.role?.name || "").toLowerCase();
+            // Only roles that actually produce orders/profit.
+            return u.is_active !== false && ["agent", "manager", "supervisor", "director", "subagent"].includes(name);
+          })
+          .map((u: { id: string; first_name?: string; last_name?: string; role?: { name?: string }; target_profit_monthly?: number | string }) => ({
+            id: u.id,
+            first_name: u.first_name || "",
+            last_name: u.last_name || "",
+            role_name: u.role?.name || "",
+            target_profit_monthly: Math.round((Number(u.target_profit_monthly) || 0) * 100) / 100,
+          }))
+          .sort((a: UserTargetRow, b: UserTargetRow) =>
+            (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name)
+          );
+        setUserTargets(rows);
+        const baseline: Record<string, number> = {};
+        for (const u of rows) baseline[u.id] = u.target_profit_monthly;
+        setUserTargetsOriginal(baseline);
+      } catch (err) {
+        console.error("Load users (targets) error:", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentRole]);
+
   const loadCompany = async () => {
     try {
       setLoading(true);
@@ -301,13 +355,31 @@ export default function CompanySettingsPage() {
       setSuccess(false);
       
       const { data: { session } } = await supabase.auth.getSession();
-      
+      const authHeader: Record<string, string> = session?.access_token
+        ? { "Authorization": `Bearer ${session.access_token}` }
+        : {};
+
+      // 1) Persist per-user monthly profit targets that changed.
+      const changedUserTargets = userTargets.filter(
+        (u) => (userTargetsOriginal[u.id] ?? 0) !== (u.target_profit_monthly || 0)
+      );
+      for (const u of changedUserTargets) {
+        const resp = await fetch(`/api/users/${u.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...authHeader },
+          credentials: "include",
+          body: JSON.stringify({ targetProfitMonthly: u.target_profit_monthly || 0 }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || `Failed to save target for ${u.first_name} ${u.last_name}`);
+        }
+      }
+
+      // 2) Persist company settings (includes company-level Monthly Targets).
       const response = await fetch("/api/company", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json", ...authHeader },
         credentials: "include",
         body: JSON.stringify(formData),
       });
@@ -319,6 +391,10 @@ export default function CompanySettingsPage() {
         if (data.company?.date_format) {
           setGlobalDateFormat(data.company.date_format as DateFormatPattern);
         }
+        // Refresh baseline so further edits are tracked correctly.
+        const nextOriginal: Record<string, number> = {};
+        for (const u of userTargets) nextOriginal[u.id] = u.target_profit_monthly || 0;
+        setUserTargetsOriginal(nextOriginal);
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
@@ -327,7 +403,7 @@ export default function CompanySettingsPage() {
       }
     } catch (err) {
       console.error("Save error:", err);
-      setError("Network error");
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setSaving(false);
     }
@@ -1460,7 +1536,7 @@ export default function CompanySettingsPage() {
               <p className="text-sm text-gray-500 mb-4">Targets shown on the Dashboard speedometer and comparison cards.</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Profit Target</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Profit Target (Company)</label>
                   <input
                     type="number"
                     step="100"
@@ -1471,6 +1547,7 @@ export default function CompanySettingsPage() {
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="e.g., 50000"
                   />
+                  <p className="mt-1 text-xs text-gray-500">Fallback for agents with no personal target.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Revenue Target</label>
@@ -1498,6 +1575,58 @@ export default function CompanySettingsPage() {
                     placeholder="e.g., 100"
                   />
                 </div>
+              </div>
+
+              {/* Per-agent monthly Profit Target — saved together with this page's Save button */}
+              <div className="mt-6 border-t border-gray-200 pt-6">
+                <h4 className="text-sm font-semibold text-gray-900">Personal Profit Target — per agent</h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  Used by the Dashboard speedometer when a specific agent is selected. Leave 0 to fall back to the company-level Profit Target above.
+                </p>
+                {userTargets.length === 0 ? (
+                  <p className="text-xs text-gray-400">No active agents.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs font-medium text-gray-500 uppercase">
+                          <th className="py-2 pr-4">Agent</th>
+                          <th className="py-2 pr-4">Role</th>
+                          <th className="py-2 pr-4 w-48">Monthly Profit Target (EUR)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {userTargets.map((u, idx) => (
+                          <tr key={u.id}>
+                            <td className="py-2 pr-4 text-gray-900">
+                              {`${u.first_name} ${u.last_name}`.trim() || "—"}
+                            </td>
+                            <td className="py-2 pr-4 text-gray-500 capitalize">{u.role_name}</td>
+                            <td className="py-2 pr-4">
+                              <input
+                                type="number"
+                                min="0"
+                                step="100"
+                                value={u.target_profit_monthly}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value) || 0;
+                                  setUserTargets(prev => {
+                                    const next = [...prev];
+                                    next[idx] = { ...next[idx], target_profit_monthly: Math.max(0, Math.round(v * 100) / 100) };
+                                    return next;
+                                  });
+                                }}
+                                disabled={readonly}
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                placeholder="0"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
