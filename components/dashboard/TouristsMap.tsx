@@ -448,6 +448,7 @@ export default function TouristsMap({
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <MapFitBounds bounds={boundsArr} />
             <MarkerClusterGroup
+              key={`cluster-${showUpcoming ? 1 : 0}-${showInProgress ? 1 : 0}-${upcomingPreset}-${visibleLocations.length}`}
               chunkedLoading
               maxClusterRadius={50}
               spiderfyOnMaxZoom={false}
