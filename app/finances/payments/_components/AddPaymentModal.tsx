@@ -175,7 +175,7 @@ export default function AddPaymentModal({
       });
       loadBankAccounts();
       if (editPayment.order_code) {
-        loadOrderDetails(editPayment.order_id, editPayment.order_code);
+        loadOrderDetails(editPayment.order_id, editPayment.order_code, false);
       }
     } else {
       setOrderId(preselectedOrderId || "");
@@ -244,7 +244,7 @@ export default function AddPaymentModal({
     }
   };
 
-  const loadOrderDetails = async (oid: string, ocode: string) => {
+  const loadOrderDetails = async (oid: string, ocode: string, suggestAmount: boolean = true) => {
     const token = await getToken();
     if (!token) return;
     try {
@@ -270,7 +270,9 @@ export default function AddPaymentModal({
           setOrderId(match.id);
           setOrderSearch(match.order_code);
           if (match.client_display_name) setPayerSearch(match.client_display_name as string);
-          if (match.amount_debt > 0) setAmount(String(match.amount_debt));
+          // Auto-suggest debt amount only when adding a new payment.
+          // In Edit mode the amount must come from DB and never be overwritten.
+          if (suggestAmount && match.amount_debt > 0) setAmount(String(match.amount_debt));
         }
       }
     } catch (err) {
