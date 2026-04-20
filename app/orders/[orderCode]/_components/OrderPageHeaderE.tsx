@@ -76,6 +76,7 @@ function buildDestinationParts(
   if (!order) return { countryCode: null, compact: "", full: "" };
 
   const manualDests = [
+    ...(parsedItinerary.origin ? [parsedItinerary.origin] : []),
     ...parsedItinerary.destinations,
     ...(parsedItinerary.returnCity && parsedItinerary.returnCity.name !== parsedItinerary.origin?.name
       ? [parsedItinerary.returnCity]
@@ -121,12 +122,7 @@ function buildDestinationParts(
   });
   const full = fullParts.join(" / ");
 
-  let compact = "";
-  if (orderedCityNames.length >= 2) {
-    compact = `${orderedCityNames[0]} → ${orderedCityNames[orderedCityNames.length - 1]}`;
-  } else if (orderedCityNames.length === 1) {
-    compact = orderedCityNames[0];
-  }
+  const compact = orderedCityNames.join(" → ");
 
   let countryCode: string | null = null;
   for (const [, data] of Object.entries(countryCities)) {
