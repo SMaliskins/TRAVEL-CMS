@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
             type: "payment_received",
             title: "Payment received",
             message: parts.join(" · "),
-            link: orderCode ? `/orders/${orderCode}` : null,
+            link: orderCode ? `/orders/${encodeURIComponent(orderCode)}` : null,
             ref_id: `payment_received:${(payment as { id: string }).id}`,
             read: false,
           },

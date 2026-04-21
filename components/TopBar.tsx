@@ -179,7 +179,15 @@ export default function TopBar() {
     }
     if (n.link) {
       setNotifOpen(false);
-      router.push(n.link);
+      // Defensive: legacy notifications may have been written with an
+      // unencoded order_code (e.g. `/orders/0113/26-SM`), which Next parses
+      // as two segments → 404. Re-encode the segment after `/orders/` so
+      // those old links work too.
+      const safeLink = n.link.replace(
+        /^\/orders\/(.+)$/,
+        (_m, rest: string) => `/orders/${encodeURIComponent(rest)}`
+      );
+      router.push(safeLink);
     } else {
       setExpandedNotifId((prev) => (prev === n.id ? null : n.id));
     }

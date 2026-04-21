@@ -103,7 +103,7 @@ async function processCheckins(company: CompanyRow): Promise<number> {
           type: "checkin_reminder",
           title: `Check-in opens soon: ${seg.flightNumber}`,
           message: `${clientName} — PNR ${bookingRef}. Departure ${depTimeStr}`,
-          link: `/orders/${order.order_code}`,
+          link: `/orders/${encodeURIComponent(order.order_code)}`,
           ref_id: refId,
         });
         if (inserted) {
@@ -127,7 +127,7 @@ async function processCheckins(company: CompanyRow): Promise<number> {
           type: "checkin_open",
           title: `Check-in NOW OPEN: ${seg.flightNumber}`,
           message: `${clientName} — PNR ${bookingRef}. Check-in: ${checkinUrl}`,
-          link: `/orders/${order.order_code}`,
+          link: `/orders/${encodeURIComponent(order.order_code)}`,
           ref_id: refId,
         });
         if (inserted) {
@@ -196,7 +196,7 @@ async function processPassports(company: CompanyRow): Promise<number> {
         type: "passport_expiry",
         title: `Passport expiry: ${clientName}`,
         message: `Passport expires ${person.passport_expiry_date} — trip ${order.date_from} (${order.order_code})`,
-        link: `/orders/${order.order_code}`,
+        link: `/orders/${encodeURIComponent(order.order_code)}`,
         ref_id: refId,
       });
 
