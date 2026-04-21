@@ -16,6 +16,7 @@ import { useStaffNotificationsToolbarQuery } from "@/hooks/useStaffNotifications
 import { staffNotificationsRootQueryKey } from "@/lib/notifications/staffNotificationsQuery";
 import type { StaffNotificationRow } from "@/lib/notifications/staffNotificationsQuery";
 import { playCashRegisterChime, wasLocalPaymentChimeRecent } from "@/lib/sound/cashRegister";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
 function localizedText(text: string, lang: string): string {
   if (text.startsWith("{")) {
@@ -179,14 +180,18 @@ export default function TopBar() {
     }
     if (n.link) {
       setNotifOpen(false);
-      // Defensive: legacy notifications may have been written with an
-      // unencoded order_code (e.g. `/orders/0113/26-SM`), which Next parses
-      // as two segments → 404. Re-encode the segment after `/orders/` so
-      // those old links work too.
-      const safeLink = n.link.replace(
-        /^\/orders\/(.+)$/,
-        (_m, rest: string) => `/orders/${encodeURIComponent(rest)}`
-      );
+      // Defensive: legacy rows may carry `/orders/<raw code with />` or
+      // `/orders/<%2F-encoded code>` instead of the canonical slug form.
+      // Rewrite both shapes to the slug form (`0113-26-sm`) the page expects.
+      const safeLink = n.link.replace(/^\/orders\/(.+)$/, (_m, rest: string) => {
+        let code = rest;
+        try {
+          code = decodeURIComponent(rest);
+        } catch {
+          /* ignore */
+        }
+        return `/orders/${orderCodeToSlug(code)}`;
+      });
       router.push(safeLink);
     } else {
       setExpandedNotifId((prev) => (prev === n.id ? null : n.id));

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { enrichPaymentsWithEnteredBy } from "@/lib/finances/paymentEnteredBy";
+import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
 export async function GET(request: NextRequest) {
   try {
@@ -278,7 +279,7 @@ export async function POST(request: NextRequest) {
             type: "payment_received",
             title: "Payment received",
             message: parts.join(" · "),
-            link: orderCode ? `/orders/${encodeURIComponent(orderCode)}` : null,
+            link: orderCode ? `/orders/${orderCodeToSlug(orderCode)}` : null,
             ref_id: `payment_received:${(payment as { id: string }).id}`,
             read: false,
           },
