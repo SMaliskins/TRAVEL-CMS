@@ -62,11 +62,36 @@ function chunkIds<T>(ids: T[], chunkSize: number): T[][] {
 }
 
 /**
- * PostgREST `.or()` fragment: order_code, client_display_name, search_text (A1.3 denormalized blob).
- * Requires migration `migrations/add_orders_search_text.sql` on the database.
+ * Diacritic-insensitive normalization mirroring Postgres `unaccent()`.
+ * NFD-decomposes characters and strips combining marks, plus a small map for
+ * letters that don't decompose (ł, ø, đ, ß, æ, œ, þ, ð, ı). Result is lowercased.
+ */
+function normalizeForSearch(input: string): string {
+  let s = input.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const map: Record<string, string> = {
+    "ł": "l", "Ł": "L",
+    "ø": "o", "Ø": "O",
+    "đ": "d", "Đ": "D",
+    "ß": "ss",
+    "æ": "ae", "Æ": "AE",
+    "œ": "oe", "Œ": "OE",
+    "þ": "th", "Þ": "TH",
+    "ð": "d", "Ð": "D",
+    "ı": "i", "İ": "I",
+  };
+  s = s.replace(/[łŁøØđĐßæÆœŒþÞðÐıİ]/g, (c) => map[c] ?? c);
+  return s.toLowerCase();
+}
+
+/**
+ * PostgREST `.or()` fragment matched against `search_text` (lower+unaccent blob
+ * containing order_code, client_display_name, traveller/payer/service-client labels).
+ * Input is normalized the same way (lower+unaccent) so "Ulja" finds "Uļjanova"
+ * and "Gilch" finds "Gilchenko". Requires migration
+ * `migrations/add_unaccent_to_orders_search_text.sql` on the database.
  */
 function ordersListTextSearchOrClause(raw: string): string | null {
-  const core = raw
+  const core = normalizeForSearch(raw)
     .trim()
     .replace(/[%,]/g, " ")
     .replace(/\s+/g, " ")
@@ -74,7 +99,7 @@ function ordersListTextSearchOrClause(raw: string): string | null {
   if (!core) return null;
   const esc = core.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
   const p = `%${esc}%`;
-  return `order_code.ilike.${p},client_display_name.ilike.${p},search_text.ilike.${p}`;
+  return `search_text.ilike.${p}`;
 }
 
 const ORDER_TRAVELLERS_LABEL_SELECT = `order_id,
