@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id")
+      .select("id, order_code, client_display_name")
       .eq("id", order_id)
       .eq("company_id", companyId)
       .single();
@@ -254,6 +254,38 @@ export async function POST(request: NextRequest) {
             .eq("id", paymentInvoiceId);
         }
       }
+    }
+
+    // In-app "Payment received" notification (bell icon + cash-register chime).
+    // Best-effort: never block the response on it.
+    try {
+      const cur = (currency || "EUR").toUpperCase();
+      const amountStr = amountNum.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      const orderCode = (order as { order_code?: string }).order_code || "";
+      const clientName = (order as { client_display_name?: string }).client_display_name || "";
+      const parts = [`${amountStr} ${cur}`];
+      if (clientName) parts.push(clientName);
+      if (orderCode) parts.push(orderCode);
+
+      await supabaseAdmin
+        .from("staff_notifications")
+        .upsert(
+          {
+            company_id: companyId,
+            type: "payment_received",
+            title: "Payment received",
+            message: parts.join(" · "),
+            link: orderCode ? `/orders/${orderCode}` : null,
+            ref_id: `payment_received:${(payment as { id: string }).id}`,
+            read: false,
+          },
+          { onConflict: "company_id,ref_id", ignoreDuplicates: true }
+        );
+    } catch (notifyErr) {
+      console.error("[payments] notification insert failed:", notifyErr);
     }
 
     return NextResponse.json({ data: payment });

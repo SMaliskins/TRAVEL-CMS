@@ -10,6 +10,7 @@ import { formatDateDDMMYYYY, type DateFormatPattern } from "@/utils/dateFormat";
 import PartySelect from "@/components/PartySelect";
 import { Landmark, Banknote, CreditCard } from "lucide-react";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
+import { playCashRegisterChime } from "@/lib/sound/cashRegister";
 
 interface BankAccount {
   id: string;
@@ -413,6 +414,16 @@ export default function AddPaymentModal({
         console.error("[AddPayment] Save failed", JSON.stringify({ orderId, status: res.status, json }));
         setError(json.message || json.error || "Failed to save payment");
         return;
+      }
+
+      // Play cash-register chime only on new (positive) payments — not on
+      // edits, refunds, or credit-invoice negative entries. Best-effort.
+      if (!editPayment && !isCreditInvoice && !isEditingRefund && amountNum > 0) {
+        try {
+          void playCashRegisterChime();
+        } catch {
+          // ignore — sound is non-critical
+        }
       }
 
       onCreated();

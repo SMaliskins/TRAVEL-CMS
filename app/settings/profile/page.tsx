@@ -9,6 +9,11 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import RoleBadge from "@/components/users/RoleBadge";
 import dynamic from "next/dynamic";
+import {
+  isPaymentSoundEnabled,
+  setPaymentSoundEnabled,
+  playCashRegisterChime,
+} from "@/lib/sound/cashRegister";
 
 const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), { ssr: false });
 
@@ -74,6 +79,23 @@ export default function ProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Notifications: cash-register chime on incoming payments
+  const [paymentSoundOn, setPaymentSoundOn] = useState<boolean>(true);
+  useEffect(() => {
+    setPaymentSoundOn(isPaymentSoundEnabled());
+  }, []);
+  const togglePaymentSound = (next: boolean) => {
+    setPaymentSoundOn(next);
+    setPaymentSoundEnabled(next);
+    if (next) {
+      try {
+        void playCashRegisterChime();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -537,6 +559,47 @@ export default function ProfilePage() {
               ) : (
                 <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
               )}
+            </div>
+          </div>
+
+          {/* Notifications */}
+          <div className="rounded-lg bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Notifications</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Sounds and alerts in this browser.</p>
+            </div>
+            <div className="p-6 space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={paymentSoundOn}
+                  onChange={(e) => togglePaymentSound(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-900">
+                    Play sound on incoming payments
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    A short cash-register chime when a payment is added by you or
+                    another user. Saved per browser.
+                  </span>
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    void playCashRegisterChime();
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                disabled={!paymentSoundOn}
+                className="text-xs text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                Test sound
+              </button>
             </div>
           </div>
 

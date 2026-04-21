@@ -15,6 +15,7 @@ import { THEME_SCHEMES } from "@/lib/themeSchemes";
 import { useStaffNotificationsToolbarQuery } from "@/hooks/useStaffNotificationsToolbarQuery";
 import { staffNotificationsRootQueryKey } from "@/lib/notifications/staffNotificationsQuery";
 import type { StaffNotificationRow } from "@/lib/notifications/staffNotificationsQuery";
+import { playCashRegisterChime, wasLocalPaymentChimeRecent } from "@/lib/sound/cashRegister";
 
 function localizedText(text: string, lang: string): string {
   if (text.startsWith("{")) {
@@ -34,6 +35,7 @@ function notifIcon(type: string): string {
     case "checkin_reminder": return "⏰";
     case "passport_expiry": return "⚠️";
     case "payment_overdue": return "🔴";
+    case "payment_received": return "💰";
     case "system_update": return "🚀";
     default: return "🔔";
   }
@@ -80,6 +82,37 @@ export default function TopBar() {
   } = useStaffNotificationsToolbarQuery();
   const notifications = notifPayload?.notifications ?? [];
   const unreadCount = notifPayload?.unreadCount ?? 0;
+
+  // Cash-register chime for incoming "payment_received" notifications.
+  // - First refresh seeds the seen-set silently (no chime on initial load).
+  // - On subsequent refreshes, any newly-arrived payment_received id triggers
+  //   a single chime. We suppress within 90s of a local chime (i.e. when this
+  //   tab itself just created the payment) to avoid hearing it twice.
+  const seenPaymentNotifIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = notifications
+      .filter((n) => n.type === "payment_received")
+      .map((n) => n.id);
+    if (seenPaymentNotifIdsRef.current === null) {
+      seenPaymentNotifIdsRef.current = new Set(ids);
+      return;
+    }
+    const seen = seenPaymentNotifIdsRef.current;
+    let hasNew = false;
+    for (const id of ids) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        hasNew = true;
+      }
+    }
+    if (hasNew && !wasLocalPaymentChimeRecent(90_000)) {
+      try {
+        void playCashRegisterChime();
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [notifications]);
 
   // Always read commit SHA from server to avoid stale inlined env values.
   useEffect(() => {
