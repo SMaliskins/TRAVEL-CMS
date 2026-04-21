@@ -1,12 +1,11 @@
 /**
- * Synthesized "cash register" / cha-ching chime.
- * Generated on demand via Web Audio API — no audio file needed and avoids any
- * licensing issues. Plays a short two-note bell sequence (~500 ms total).
+ * Cash-register chime played on incoming payments.
+ * Plays /sounds/cash-register.mp3 via a singleton HTMLAudioElement so concurrent
+ * triggers don't pile up; volume is capped and rapid re-plays are throttled.
  *
- * Browser autoplay policy: the AudioContext is created lazily on the first
- * call so that the very first invocation happens inside a user gesture
- * (e.g. clicking "Save" in AddPaymentModal). Subsequent invocations resume
- * the existing context.
+ * Browser autoplay policy: the element is created lazily on the first call so
+ * that the very first invocation happens inside a user gesture (e.g. clicking
+ * "Save" in AddPaymentModal). Subsequent invocations reuse the same element.
  *
  * Usage:
  *   import { playCashRegisterChime } from "@/lib/sound/cashRegister";
@@ -19,73 +18,26 @@ type ChimeOptions = {
   volume?: number;
 };
 
-let ctx: AudioContext | null = null;
-let unlockPromise: Promise<void> | null = null;
+const SOUND_SRC = "/sounds/cash-register.mp3";
+/** Don't restart the clip more than once per this many ms. */
+const REPLAY_THROTTLE_MS = 400;
 
-function getContext(): AudioContext | null {
+let audioEl: HTMLAudioElement | null = null;
+let lastPlayAt = 0;
+
+function getAudio(): HTMLAudioElement | null {
   if (typeof window === "undefined") return null;
-  if (ctx) return ctx;
-  const Ctor =
-    (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
-      .AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctor) return null;
+  if (audioEl) return audioEl;
   try {
-    ctx = new Ctor();
+    audioEl = new Audio(SOUND_SRC);
+    audioEl.preload = "auto";
   } catch {
-    ctx = null;
+    audioEl = null;
   }
-  return ctx;
+  return audioEl;
 }
 
-function ensureRunning(c: AudioContext): Promise<void> {
-  if (c.state !== "suspended") return Promise.resolve();
-  if (!unlockPromise) {
-    unlockPromise = c
-      .resume()
-      .catch(() => undefined)
-      .finally(() => {
-        unlockPromise = null;
-      });
-  }
-  return unlockPromise;
-}
-
-function playBell(
-  c: AudioContext,
-  startAt: number,
-  freq: number,
-  duration: number,
-  gain: number
-) {
-  // Two stacked sines (fundamental + 2x partial) with a fast attack and
-  // exponential decay → bell-ish "ting" suitable for a cash register.
-  const env = c.createGain();
-  env.gain.setValueAtTime(0, startAt);
-  env.gain.linearRampToValueAtTime(gain, startAt + 0.005);
-  env.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-  env.connect(c.destination);
-
-  const oscA = c.createOscillator();
-  oscA.type = "triangle";
-  oscA.frequency.value = freq;
-  oscA.connect(env);
-  oscA.start(startAt);
-  oscA.stop(startAt + duration);
-
-  const partial = c.createGain();
-  partial.gain.value = 0.35;
-  partial.connect(env);
-
-  const oscB = c.createOscillator();
-  oscB.type = "sine";
-  oscB.frequency.value = freq * 2;
-  oscB.connect(partial);
-  oscB.start(startAt);
-  oscB.stop(startAt + duration);
-}
-
-/** localStorage key shared with the Profile mute toggle (Step 4). */
+/** localStorage key shared with the Profile mute toggle. */
 export const PAYMENT_SOUND_LS_KEY = "payment_sound_enabled";
 
 /** Returns the user's mute preference. Default: enabled. */
@@ -140,15 +92,27 @@ export function wasLocalPaymentChimeRecent(maxAgeMs: number): boolean {
 
 export async function playCashRegisterChime(opts: ChimeOptions = {}): Promise<void> {
   if (!isPaymentSoundEnabled()) return;
-  const c = getContext();
-  if (!c) return;
-  await ensureRunning(c);
+  const a = getAudio();
+  if (!a) return;
+
+  const now = Date.now();
+  if (now - lastPlayAt < REPLAY_THROTTLE_MS) return;
+  lastPlayAt = now;
+
   const volume = Math.max(0, Math.min(1, opts.volume ?? 0.6));
   if (volume === 0) return;
-  markLocalChime();
 
-  const now = c.currentTime;
-  // Two ascending bell strikes ~150 ms apart — classic "cha-ching".
-  playBell(c, now, 1320, 0.35, volume); // E6
-  playBell(c, now + 0.12, 1760, 0.55, volume); // A6
+  try {
+    a.volume = volume;
+    a.currentTime = 0;
+    const p = a.play();
+    if (p && typeof (p as Promise<void>).then === "function") {
+      await (p as Promise<void>).catch(() => {
+        // Autoplay can reject if invoked outside a user gesture — silent.
+      });
+    }
+    markLocalChime();
+  } catch {
+    // ignore — sound is non-critical
+  }
 }
