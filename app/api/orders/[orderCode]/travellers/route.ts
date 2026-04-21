@@ -132,6 +132,10 @@ export async function GET(
         id,
         party_id,
         is_main_client,
+        itinerary,
+        date_from,
+        date_to,
+        position,
         created_at,
         party:party_id (
           id,
@@ -151,7 +155,10 @@ export async function GET(
         )
       `)
       .eq("order_id", order.id)
-      .eq("company_id", auth.companyId);
+      .eq("company_id", auth.companyId)
+      .order("is_main_client", { ascending: false })
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
 
     console.log("Fetched travellers:", { count: travellers?.length, travellers, error });
 
@@ -176,6 +183,13 @@ export async function GET(
 
         const computedTitle = computeTravellerTitle(person?.gender, person?.dob);
 
+        const tt = t as unknown as {
+          itinerary?: unknown;
+          date_from?: string | null;
+          date_to?: string | null;
+          position?: number | null;
+        };
+
         return {
           id: t.party_id,
           firstName: person?.first_name || party?.display_name?.split(" ")[0] || "",
@@ -186,6 +200,10 @@ export async function GET(
           contactNumber: party?.phone || null,
           isMainClient: t.is_main_client || t.party_id === order.client_party_id,
           avatarUrl: person?.avatar_url || null,
+          itinerary: (tt.itinerary && typeof tt.itinerary === "object") ? tt.itinerary : {},
+          dateFrom: tt.date_from ?? null,
+          dateTo: tt.date_to ?? null,
+          position: typeof tt.position === "number" ? tt.position : 0,
         };
       });
 
@@ -222,7 +240,7 @@ export async function POST(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const { partyId, isMainClient } = body;
+    const { partyId, isMainClient, itinerary, dateFrom, dateTo, position } = body;
 
     if (!partyId) {
       return NextResponse.json({ error: "partyId is required" }, { status: 400 });
@@ -248,6 +266,10 @@ export async function POST(
         order_id: order.id,
         party_id: partyId,
         is_main_client: isMainClient || partyId === order.client_party_id,
+        itinerary: itinerary && typeof itinerary === "object" ? itinerary : {},
+        date_from: dateFrom || null,
+        date_to: dateTo || null,
+        position: typeof position === "number" ? position : 0,
       }, {
         onConflict: "order_id,party_id",
       })

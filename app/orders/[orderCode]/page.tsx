@@ -57,6 +57,9 @@ const OrderClientsDataTab = dynamic(() => import("./_components/OrderClientsData
   loading: () => <OrderTabSkeleton />,
   ssr: false,
 });
+const OrderPassengerRoutes = dynamic(() => import("./_components/OrderPassengerRoutes"), {
+  ssr: false,
+});
 import PartySelect from "@/components/PartySelect";
 import DateRangePicker from "@/components/DateRangePicker";
 import CityMultiSelect, { CityWithCountry } from "@/components/CityMultiSelect";
@@ -2043,6 +2046,14 @@ export default function OrderPage({
 
           {activeTab === "client" && (
             <div className="space-y-6">
+              {effectiveOrderCode && (
+                <OrderPassengerRoutes
+                  orderCode={effectiveOrderCode}
+                  fallbackCountriesCities={order?.countries_cities ?? null}
+                  fallbackDateFrom={order?.date_from ?? null}
+                  fallbackDateTo={order?.date_to ?? null}
+                />
+              )}
               {/* Services Block - loads in parallel with order (table appears as soon as services load) */}
               <OrderServicesBlock
                 ref={servicesBlockRef}

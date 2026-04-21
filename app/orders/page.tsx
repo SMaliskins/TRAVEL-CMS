@@ -18,7 +18,7 @@ import { useTabs } from "@/contexts/TabsContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useDebounce } from "@/hooks/useDebounce";
 import { t } from "@/lib/i18n";
-import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight, Globe } from "lucide-react";
 import { getCityByName, ensureWorldCitiesLoaded } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -415,6 +415,42 @@ function formatCountriesWithFlags(countriesCities: string): React.ReactNode {
   }) as { city: string; countryCode: string | null }[];
 
   if (parsed.length === 0) return <span className="text-gray-400">—</span>;
+
+  // Multi-Country / Multi-City compact label.
+  // Triggers when the route is too rich to fit a flag-per-city list.
+  const uniqueCountryCodes = new Set(
+    parsed.map((p) => p.countryCode).filter((c): c is string => Boolean(c))
+  );
+  const uniqueCities = new Set(parsed.map((p) => p.city).filter(Boolean));
+  const tooltip = parsed
+    .map((p) => (p.countryCode ? `${p.city} (${p.countryCode})` : p.city))
+    .join(", ");
+
+  if (uniqueCountryCodes.size >= 2) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-gray-700"
+        title={tooltip}
+      >
+        <Globe className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
+        <span>Multi-Country</span>
+        <span className="text-gray-400 text-xs">({uniqueCountryCodes.size})</span>
+      </span>
+    );
+  }
+
+  if (uniqueCountryCodes.size === 1 && uniqueCities.size >= 4) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-gray-700"
+        title={tooltip}
+      >
+        <Globe className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden />
+        <span>Multi-City</span>
+        <span className="text-gray-400 text-xs">({uniqueCities.size})</span>
+      </span>
+    );
+  }
 
   return (
     <span className="inline-flex items-center gap-1 flex-wrap">

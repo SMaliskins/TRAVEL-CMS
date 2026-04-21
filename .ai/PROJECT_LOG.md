@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-04-16] CODE_WRITER — MULTI-ROUTE-01 Step 4: inline route editor per passenger
+
+**Task:** MULTI-ROUTE-01 — per-passenger itinerary (multi-route orders) | **Status:** SUCCESS (Step 4 of 4)
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- `app/orders/[orderCode]/_components/OrderPassengerRoutes.tsx` — добавлен inline-редактор: кнопка Edit на каждой строке раскрывает форму под пассажиром (From/To chips через `CityMultiSelect`, Return-to-origin чекбокс с опциональным return-city, `DateRangePicker`). Save → PATCH `/api/orders/[orderCode]/travellers/[partyId]` с `{ itinerary, dateFrom, dateTo }`. Кнопка "Use order route" очищает индивидуальный маршрут и даты. После сохранения — фоновый refetch списка пассажиров.
+- Никаких новых API и таблиц — используется PATCH из Step 2. Стек как в шапке заявки: те же компоненты CityMultiSelect/DateRangePicker, единые утилиты дат.
+
+**Результат:** `tsc --noEmit` = 0. Lints clean. Пассажир может задать свой маршрут (Nice→Ist→Led→Ist→London→Rome→Nice) и свои даты; второй пассажир того же заказа оставит «uses order route» и будет наследовать шапку.
+
+**Next Step:** пользователь визуально проверяет → при необходимости правки UX; дальше (backlog) — MAP-01 Step 3 (multi-stop parsing для карты теперь опирается на per-traveller itinerary).
+
+---
+
 ## [2026-04-16] CODE_WRITER — MAP-01 Step 1: stabilize Travelers-on-map API (no more flicker)
 
 **Task:** MAP-01 — Fix unstable Travelers on map: markers flicker in/out, Tashkent missing | **Status:** SUCCESS (Step 1 of 7)

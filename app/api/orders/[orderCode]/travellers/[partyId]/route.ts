@@ -49,6 +49,83 @@ async function getUserAndCompany(request: NextRequest): Promise<{ userId: string
   return { userId: user.id, companyId: profile.company_id };
 }
 
+// PATCH: Update per-traveller itinerary, dates, position or lead flag
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderCode: string; partyId: string }> }
+) {
+  try {
+    const { orderCode, partyId } = await params;
+
+    const auth = await getUserAndCompany(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from("orders")
+      .select("id")
+      .eq("company_id", auth.companyId)
+      .eq("order_code", orderCode)
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { itinerary, dateFrom, dateTo, position, isMainClient } = body as {
+      itinerary?: unknown;
+      dateFrom?: string | null;
+      dateTo?: string | null;
+      position?: number;
+      isMainClient?: boolean;
+    };
+
+    const update: Record<string, unknown> = {};
+    if (itinerary !== undefined) {
+      update.itinerary = itinerary && typeof itinerary === "object" ? itinerary : {};
+    }
+    if (dateFrom !== undefined) update.date_from = dateFrom || null;
+    if (dateTo !== undefined) update.date_to = dateTo || null;
+    if (typeof position === "number") update.position = position;
+    if (typeof isMainClient === "boolean") update.is_main_client = isMainClient;
+
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
+    // If promoting this traveller to lead, demote others atomically (best-effort).
+    if (update.is_main_client === true) {
+      await supabaseAdmin
+        .from("order_travellers")
+        .update({ is_main_client: false })
+        .eq("order_id", order.id)
+        .eq("company_id", auth.companyId)
+        .neq("party_id", partyId);
+    }
+
+    const { data: traveller, error: updateError } = await supabaseAdmin
+      .from("order_travellers")
+      .update(update)
+      .eq("order_id", order.id)
+      .eq("party_id", partyId)
+      .eq("company_id", auth.companyId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("Error updating traveller:", updateError);
+      return NextResponse.json({ error: "Failed to update traveller" }, { status: 500 });
+    }
+
+    return NextResponse.json({ traveller });
+  } catch (error) {
+    console.error("Traveller PATCH error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
 // DELETE: Remove a traveller from order
 export async function DELETE(
   request: NextRequest,
