@@ -257,6 +257,21 @@ export default function OrderPage({
   const autoDestSavedRef = useRef(false);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
+  // Effective trip date range = union of order-level dates and per-passenger dates.
+  // Used for header display only; editing still updates order.date_from/date_to.
+  const effectiveTripDates = useMemo<{ from: string | null; to: string | null }>(() => {
+    const froms: string[] = [];
+    const tos: string[] = [];
+    if (order?.date_from) froms.push(order.date_from.slice(0, 10));
+    if (order?.date_to) tos.push(order.date_to.slice(0, 10));
+    for (const t of orderTravellers) {
+      if (t.dateFrom) froms.push(t.dateFrom.slice(0, 10));
+      if (t.dateTo) tos.push(t.dateTo.slice(0, 10));
+    }
+    const min = froms.length > 0 ? froms.reduce((a, b) => (a < b ? a : b)) : null;
+    const max = tos.length > 0 ? tos.reduce((a, b) => (a > b ? a : b)) : null;
+    return { from: min, to: max };
+  }, [order?.date_from, order?.date_to, orderTravellers]);
   const queryClient = useQueryClient();
   const servicesOrderCode = orderCodeFromUrl || orderCode;
   const {
@@ -1811,6 +1826,7 @@ export default function OrderPage({
               startEditingDates={startEditingDates}
               setOrder={setOrder as Dispatch<SetStateAction<OrderHeaderEOrder | null>>}
               onOpenDirectoryParty={(partyId) => setDirectoryPopupPartyId(partyId)}
+              effectiveTripDates={effectiveTripDates}
               row2Replacement={
                 order && editingHeaderField === "client" ? (
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">

@@ -158,6 +158,9 @@ export interface Traveller {
   personalCode?: string;
   contactNumber?: string;
   avatarUrl?: string | null;
+  isMainClient?: boolean;
+  dateFrom?: string | null;
+  dateTo?: string | null;
 }
 
 // Functional types that determine which features are available

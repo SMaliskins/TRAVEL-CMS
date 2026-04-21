@@ -166,6 +166,11 @@ export type OrderPageHeaderEProps = {
   row2Replacement?: React.ReactNode;
   /** When editing trip dates, shown inside the header card under row 1 (picker + actions). */
   datesEditSlot?: React.ReactNode;
+  /**
+   * Optional union of per-passenger dates. Falls back to order.date_from/order.date_to
+   * for display only. Editing still updates the order-level dates.
+   */
+  effectiveTripDates?: { from: string | null; to: string | null };
 };
 
 export function OrderPageHeaderE({
@@ -197,6 +202,7 @@ export function OrderPageHeaderE({
   onOpenDirectoryParty,
   row2Replacement,
   datesEditSlot,
+  effectiveTripDates,
 }: OrderPageHeaderEProps) {
   const router = useRouter();
   const currencySymbol = getCurrencySymbol(companyCurrencyCode);
@@ -279,8 +285,10 @@ export function OrderPageHeaderE({
           ? t(lang, "order.partiallyPaid")
           : t(lang, "order.unpaid");
 
-  const dateFromIso = order.date_from?.slice(0, 10);
-  const dateToIso = order.date_to?.slice(0, 10);
+  const displayedFrom = effectiveTripDates?.from ?? order.date_from;
+  const displayedTo = effectiveTripDates?.to ?? order.date_to;
+  const dateFromIso = displayedFrom?.slice(0, 10);
+  const dateToIso = displayedTo?.slice(0, 10);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm space-y-2">

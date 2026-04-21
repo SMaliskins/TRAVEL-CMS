@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Globe, MapPin, Pencil } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { MapPin, Pencil, Plus } from "lucide-react";
 import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatDateRange } from "@/utils/dateFormat";
 import { countryCodeToFlag } from "@/lib/data/cities";
@@ -60,6 +60,13 @@ function buildChain(it: TravellerItinerary): CityRef[] {
     chain.push(it.returnCity);
   }
   return chain;
+}
+
+/** Cheap structural fingerprint for comparing two effective itineraries. */
+function itineraryFingerprint(it: TravellerItinerary | null): string {
+  if (!it) return "ORDER";
+  const chain = buildChain(it).map((c) => `${c.city || ""}|${c.countryCode || c.country || ""}`);
+  return chain.join("→") || "EMPTY";
 }
 
 function CityChain({ chain }: { chain: CityRef[] }) {
@@ -145,6 +152,7 @@ export default function OrderPassengerRoutes({
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showAddPicker, setShowAddPicker] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetchWithAuth(
@@ -178,6 +186,7 @@ export default function OrderPassengerRoutes({
     setEditingId(t.id);
     setDraft(draftFromTraveller(t));
     setSaveError(null);
+    setShowAddPicker(false);
   };
 
   const cancelEdit = () => {
@@ -256,37 +265,141 @@ export default function OrderPassengerRoutes({
     }
   };
 
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500 shadow-sm">
-        Loading passengers…
-      </div>
-    );
-  }
+  // Lead = main client (or first traveller). Lead's effective itinerary defines the
+  // "order header" route; only show passengers whose route OR dates differ.
+  const lead = useMemo(
+    () => travellers.find((t) => t.isMainClient) || travellers[0] || null,
+    [travellers]
+  );
 
+  const leadFingerprint = useMemo(() => {
+    if (!lead) return "ORDER";
+    const it = (lead.itinerary || {}) as TravellerItinerary;
+    return itineraryFingerprint(isItineraryEmpty(it) ? null : it);
+  }, [lead]);
+
+  const leadFrom = lead?.dateFrom || fallbackDateFrom || null;
+  const leadTo = lead?.dateTo || fallbackDateTo || null;
+
+  /** Passengers whose route or dates differ from lead. */
+  const differing = useMemo(() => {
+    return travellers.filter((t) => {
+      if (!lead) return false;
+      if (t.id === lead.id) return false;
+      const it = (t.itinerary || {}) as TravellerItinerary;
+      const fp = itineraryFingerprint(isItineraryEmpty(it) ? null : it);
+      if (fp !== leadFingerprint) return true;
+      const tFrom = t.dateFrom || fallbackDateFrom || null;
+      const tTo = t.dateTo || fallbackDateTo || null;
+      if (tFrom !== leadFrom) return true;
+      if (tTo !== leadTo) return true;
+      return false;
+    });
+  }, [travellers, lead, leadFingerprint, leadFrom, leadTo, fallbackDateFrom, fallbackDateTo]);
+
+  /** Non-lead passengers currently following the order route — candidates to add a custom route for. */
+  const sameAsLead = useMemo(() => {
+    return travellers.filter(
+      (t) => lead && t.id !== lead.id && !differing.some((d) => d.id === t.id)
+    );
+  }, [travellers, lead, differing]);
+
+  if (loading) {
+    return null;
+  }
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-sm">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 shadow-sm">
         Failed to load passengers: {error}
       </div>
     );
   }
-
   if (travellers.length === 0) {
     return null;
   }
+
+  // Hide section entirely when there are no differing passengers and the user
+  // hasn't asked to add a custom route — header already shows lead's route.
+  const editingTraveller = editingId ? travellers.find((t) => t.id === editingId) : null;
+  const editingIsExtra = editingTraveller && !differing.some((d) => d.id === editingTraveller.id);
+  if (differing.length === 0 && !showAddPicker && !editingIsExtra) {
+    if (sameAsLead.length === 0) return null;
+    // Render only the "+ Set custom route per passenger" affordance
+    return (
+      <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-2 text-xs text-gray-500 shadow-sm flex items-center justify-between">
+        <span>All passengers follow the order route.</span>
+        <button
+          type="button"
+          onClick={() => setShowAddPicker(true)}
+          className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Set custom route
+        </button>
+      </div>
+    );
+  }
+
+  // Rows to render: differing passengers + (if user opened picker, also the one being edited)
+  const rows = editingIsExtra && editingTraveller
+    ? [...differing, editingTraveller]
+    : differing;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5">
         <MapPin className="h-4 w-4 text-gray-400" aria-hidden />
         <h3 className="text-sm font-semibold text-gray-700">
-          Passengers &amp; routes
+          Different routes
         </h3>
-        <span className="text-xs text-gray-400">({travellers.length})</span>
+        <span className="text-xs text-gray-400">({rows.length})</span>
+        <div className="ml-auto">
+          {sameAsLead.length > 0 && !showAddPicker && !editingIsExtra ? (
+            <button
+              type="button"
+              onClick={() => setShowAddPicker(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+              title="Add a different route for another passenger"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {showAddPicker && sameAsLead.length > 0 ? (
+        <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
+            Pick passenger to set a different route
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {sameAsLead.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => startEdit(t)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                <Initials first={t.firstName} last={t.lastName} />
+                <span>
+                  {[t.firstName, t.lastName].filter(Boolean).join(" ") || "—"}
+                </span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowAddPicker(false)}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-700 underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <ul className="divide-y divide-gray-100">
-        {travellers.map((t) => {
+        {rows.map((t) => {
           const it = (t.itinerary || {}) as TravellerItinerary;
           const empty = isItineraryEmpty(it);
           const chain = empty ? [] : buildChain(it);
@@ -304,20 +417,6 @@ export default function OrderPassengerRoutes({
                     <span className="text-sm font-medium text-gray-900 truncate">
                       {[t.firstName, t.lastName].filter(Boolean).join(" ") || "—"}
                     </span>
-                    {t.isMainClient ? (
-                      <span className="inline-flex rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
-                        Lead
-                      </span>
-                    ) : null}
-                    {empty ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500"
-                        title="Falls back to the order route"
-                      >
-                        <Globe className="h-3 w-3" aria-hidden />
-                        uses order route
-                      </span>
-                    ) : null}
                   </div>
                   <div className="mt-1 text-sm">
                     {empty ? (
