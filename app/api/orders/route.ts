@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
+import {
+  hasRussianJcukenChar,
+  russianJcukenToLatinQwerty,
+} from "@/lib/search/russianJcukenToLatinQwerty";
 
 // Edge runtime — lower cold start
 export const runtime = "edge";
@@ -89,17 +93,40 @@ function normalizeForSearch(input: string): string {
  * Input is normalized the same way (lower+unaccent) so "Ulja" finds "Uļjanova"
  * and "Gilch" finds "Gilchenko". Requires migration
  * `migrations/add_unaccent_to_orders_search_text.sql` on the database.
+ *
+ * If the user typed with Russian layout but meant Latin (e.g. "ифдедштук" for
+ * "baltliner"), we also OR-match the JCUKEN→QWERTY conversion so the DB
+ * (Latin) still matches.
  */
+function buildSearchTextIlikeClause(core: string): string {
+  const esc = core
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+  return `search_text.ilike.%${esc}%`;
+}
+
 function ordersListTextSearchOrClause(raw: string): string | null {
-  const core = normalizeForSearch(raw)
-    .trim()
-    .replace(/[%,]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalizeCore = (s: string) =>
+    normalizeForSearch(s)
+      .trim()
+      .replace(/[%,]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const core = normalizeCore(raw);
   if (!core) return null;
-  const esc = core.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-  const p = `%${esc}%`;
-  return `search_text.ilike.${p}`;
+
+  const fragments: string[] = [buildSearchTextIlikeClause(core)];
+
+  if (hasRussianJcukenChar(raw)) {
+    const altCore = normalizeCore(russianJcukenToLatinQwerty(raw));
+    if (altCore && altCore !== core) {
+      fragments.push(buildSearchTextIlikeClause(altCore));
+    }
+  }
+
+  return [...new Set(fragments)].join(",");
 }
 
 const ORDER_TRAVELLERS_LABEL_SELECT = `order_id,
