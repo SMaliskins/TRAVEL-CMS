@@ -37,7 +37,18 @@ export async function GET(
       return NextResponse.json({ error: "Failed to load file" }, { status: 500 });
     }
 
-    const mime = doc.mime_type || "application/octet-stream";
+    const inferMime = (name: string | null | undefined): string => {
+      const n = (name || "").toLowerCase();
+      if (n.endsWith(".pdf")) return "application/pdf";
+      if (n.endsWith(".png")) return "image/png";
+      if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+      if (n.endsWith(".webp")) return "image/webp";
+      if (n.endsWith(".gif")) return "image/gif";
+      return "application/octet-stream";
+    };
+    const mime = doc.mime_type && doc.mime_type !== "application/octet-stream"
+      ? doc.mime_type
+      : inferMime(doc.file_name);
     return new NextResponse(blob, {
       status: 200,
       headers: {

@@ -124,7 +124,6 @@ export default function ContentModal({
               src={url}
               title={title || "Content"}
               className="h-full w-full min-h-[70vh] border-0"
-              sandbox="allow-scripts allow-same-origin allow-forms"
             />
           )}
           {hasHtml && !hasUrl && blobUrl && (
