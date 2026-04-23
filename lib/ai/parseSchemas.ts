@@ -53,6 +53,12 @@ const FlightSegmentSchema = z.object({
   baggage: z.string().optional(),
   ticketNumber: z.string().optional(),
   passengerName: z.string().optional(),
+  // New optional fields preserved by the parser → UI mapping
+  departureTerminal: z.string().optional(),
+  arrivalTerminal: z.string().optional(),
+  seat: z.string().optional(),
+  aircraft: z.string().optional(),
+  bookingRef: z.string().optional(),
 });
 
 const PassengerSchema = z.object({

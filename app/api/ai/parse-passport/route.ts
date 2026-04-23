@@ -10,7 +10,7 @@ import { logAiUsage } from "@/lib/aiUsageLogger";
 
 /**
  * AI-powered passport parsing
- *
+ * 
  * Uses unified pipeline for file intake + AI client,
  * but keeps passport-specific orchestration:
  * - MRZ library parsing (pre-AI, most reliable for DOB/expiry)
@@ -89,7 +89,7 @@ function normalizePassport(passport: Record<string, unknown>): PassportData {
     g === "male" || g === "female" ? g
     : g === "m" || g === "mr" ? "male"
     : g === "f" || g === "mrs" || g === "ms" ? "female"
-    : undefined;
+          : undefined;
 
   return {
     passportNumber: (passport.passportNumber as string)?.trim() || undefined,
@@ -320,25 +320,25 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. MERGE: prefer OpenAI primary, fill gaps from Anthropic
-    let finalPassport = openaiPassport
-      ? anthropicPassport
-        ? mergePassports(openaiPassport, anthropicPassport)
-        : openaiPassport
-      : anthropicPassport;
+      let finalPassport = openaiPassport
+        ? anthropicPassport
+          ? mergePassports(openaiPassport, anthropicPassport)
+          : openaiPassport
+        : anthropicPassport;
 
     // 7. APPLY MRZ OVERRIDES (most reliable for DOB, expiry, passport number)
-    if (finalPassport) {
-      finalPassport = applyMrzOverrides(finalPassport, mrzLine1, mrzLine2);
-      return NextResponse.json({ passport: finalPassport });
-    }
+      if (finalPassport) {
+        finalPassport = applyMrzOverrides(finalPassport, mrzLine1, mrzLine2);
+        return NextResponse.json({ passport: finalPassport });
+      }
 
     // 8. LAST RESORT: MRZ-only parse
-    if (mrzLine1 && mrzLine2) {
-      const mrzOnly = parseMrzToPassportData(`${mrzLine1}\n${mrzLine2}`);
-      if (mrzOnly && (mrzOnly.passportNumber || mrzOnly.lastName || mrzOnly.firstName)) {
-        return NextResponse.json({ passport: mrzBlocksToPassportData(mrzOnly) });
+      if (mrzLine1 && mrzLine2) {
+        const mrzOnly = parseMrzToPassportData(`${mrzLine1}\n${mrzLine2}`);
+        if (mrzOnly && (mrzOnly.passportNumber || mrzOnly.lastName || mrzOnly.firstName)) {
+          return NextResponse.json({ passport: mrzBlocksToPassportData(mrzOnly) });
+        }
       }
-    }
 
     return NextResponse.json({ error: "Could not extract passport information", passport: null });
   } catch (err) {

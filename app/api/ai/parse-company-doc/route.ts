@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
-import { parseFromRequest } from "@/lib/ai/parseWithAI";
+import { parseFromRequest, parseErrorToStatus } from "@/lib/ai/parseWithAI";
 import type { CompanyDocData } from "@/lib/ai/parseSchemas";
 
 // Re-export for backward compat (components import CompanyDocData from here)
@@ -34,7 +34,14 @@ export async function POST(request: NextRequest) {
     );
 
     if (!result.success || !result.data) {
-      return NextResponse.json({ error: "Could not extract company information", company: null });
+      return NextResponse.json(
+        {
+          error: result.error || "Could not extract company information",
+          warnings: result.warnings,
+          company: null,
+        },
+        { status: parseErrorToStatus(result.errorCode) },
+      );
     }
 
     return NextResponse.json({ company: result.data });

@@ -19,23 +19,28 @@ export interface AIConfig {
 }
 
 export const MODELS = {
-  OPENAI_VISION: "gpt-4o",
-  OPENAI_FAST: "gpt-4o-mini",
-  OPENAI_COMPLEX: "gpt-4o",
-  ANTHROPIC_FAST: "claude-3-haiku-20240307",
-  ANTHROPIC_CHAT: "claude-sonnet-4-5",
+  OPENAI_VISION: "gpt-5.4",
+  OPENAI_FAST: "gpt-5.4-mini",
+  OPENAI_COMPLEX: "gpt-5.4",
+  ANTHROPIC_FAST: "claude-haiku-4.5",
+  ANTHROPIC_CHAT: "claude-sonnet-4.5",
 } as const;
 
 export type ModelId = (typeof MODELS)[keyof typeof MODELS];
 
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  [MODELS.OPENAI_VISION]:   { input: 2.50,  output: 10.00 },
-  [MODELS.OPENAI_FAST]:     { input: 0.15,  output: 0.60  },
-  [MODELS.ANTHROPIC_FAST]:  { input: 0.25,  output: 1.25  },
+  [MODELS.OPENAI_VISION]:   { input: 3.00,  output: 12.00 },
+  [MODELS.OPENAI_FAST]:     { input: 0.20,  output: 0.80  },
+  [MODELS.ANTHROPIC_FAST]:  { input: 0.80,  output: 4.00  },
   [MODELS.ANTHROPIC_CHAT]:  { input: 3.00,  output: 15.00 },
+  "claude-sonnet-4.6":      { input: 3.00,  output: 15.00 },
+  "gpt-4o":                 { input: 2.50,  output: 10.00 },
+  "gpt-4o-mini":            { input: 0.15,  output: 0.60  },
   "gpt-4-turbo":            { input: 10.00, output: 30.00 },
   "gpt-4":                  { input: 30.00, output: 60.00 },
   "gpt-3.5-turbo":          { input: 0.50,  output: 1.50  },
+  "claude-3-haiku-20240307":{ input: 0.25,  output: 1.25  },
+  "claude-sonnet-4-5":      { input: 3.00,  output: 15.00 },
 };
 
 export const AI_CONFIGS = {
@@ -96,8 +101,14 @@ export const AI_CONFIGS = {
   },
 };
 
-// Get API key for provider
+// Get API key for provider.
+// If AI_GATEWAY_API_KEY is set, lib/ai/sdk.ts routes every call through the
+// Vercel AI Gateway and the gateway key alone is enough for any provider —
+// we surface it here so callers that gate on key presence stay happy without
+// requiring direct OPENAI_API_KEY / ANTHROPIC_API_KEY in production.
 export function getAPIKey(provider: AIProvider): string | undefined {
+  const gatewayKey = process.env.AI_GATEWAY_API_KEY;
+  if (gatewayKey) return gatewayKey;
   switch (provider) {
     case "openai":
       return process.env.OPENAI_API_KEY;

@@ -11,10 +11,13 @@
     "migrate:parsed": "node --env-file=.env scripts/run-parsed-fields-migration.mjs",
     "test:passport": "node scripts/test-passport-parser.mjs",
     "test:airbaltic": "node scripts/test-airbaltic-invoice.mjs",
+    "test:flight-parsers": "node scripts/test-flight-parsers.mjs",
     "generate:cities": "node scripts/generate-world-cities.mjs",
     "seed:demo": "node --env-file=.env.local scripts/seed-demo-presentation.mjs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.71",
+    "@ai-sdk/openai": "^3.0.53",
     "@anthropic-ai/sdk": "^0.72.1",
     "@napi-rs/canvas": "^0.1.89",
     "@nwpr/airport-codes": "^3.0.3",
@@ -31,6 +34,7 @@
     "@tiptap/react": "^3.20.1",
     "@tiptap/starter-kit": "^3.20.1",
     "@vercel/speed-insights": "^1.3.1",
+    "ai": "^6.0.168",
     "bcryptjs": "^3.0.3",
     "cities.json": "^1.1.50",
     "fast-xml-parser": "^5.2.0",

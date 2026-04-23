@@ -133,15 +133,28 @@ export async function processFile(
   const contentMode = selectContentMode(documentType, textResult);
   const layoutRisk = selectLayoutRisk(documentType, textResult);
 
+  // For hybrid/vision modes, render the first PDF page as a PNG so the
+  // Anthropic fallback (which doesn't accept native PDF) still has visual
+  // context. OpenAI primary path uses pdfBase64 directly and ignores this.
+  let pageImages: string[] = [];
+  let pageCount = 1;
+  if (contentMode === "vision" || contentMode === "hybrid") {
+    const rendered = await renderFirstPdfPage(buffer);
+    if (rendered) {
+      pageImages = [rendered.base64];
+      pageCount = rendered.pageCount;
+    }
+  }
+
   return {
     documentType,
     contentMode,
     extractedText: textResult.text || null,
-    pageImages: [], // populated lazily if needed
+    pageImages,
     pdfBase64,
     mimeType: "application/pdf",
     fileHash,
-    pageCount: 1, // could be enhanced with pdf-to-img page count
+    pageCount,
     layoutRisk,
     sourceMeta: {
       originalFilename: options.filename,
@@ -244,9 +257,11 @@ function selectContentMode(
     return "vision";
   }
 
-  // Flight tickets — text if quality is good
+  // Flight tickets — hybrid (text + page image) so the model sees both the
+  // selectable text (for IATA codes / dates) AND the visual layout (table
+  // structure, segment grouping). Falls back to vision-only if no text.
   if (documentType === "flight_ticket") {
-    if (textResult.quality === "good" && textResult.text.length > 100) return "text";
+    if (textResult.quality === "good" && textResult.text.length > 100) return "hybrid";
     return "vision";
   }
 
@@ -271,4 +286,29 @@ function selectLayoutRisk(
 
 function computeHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
+}
+
+/**
+ * Render only the first page of a PDF as a base64 PNG. Returns null if
+ * rendering is unavailable in this environment (e.g. missing native deps).
+ * The function is intentionally tolerant — vision is an enhancement, not
+ * a hard requirement of the pipeline.
+ */
+async function renderFirstPdfPage(
+  buffer: Buffer,
+): Promise<{ base64: string; pageCount: number } | null> {
+  try {
+    // Dynamic import: pdf-to-img has heavy native deps and we want intake to
+    // keep working in environments where image rendering isn't available.
+    const mod = await import("pdf-to-img");
+    const document = await mod.pdf(buffer, { scale: 2 });
+    const pageCount = document.length || 1;
+    for await (const pageBuffer of document) {
+      return { base64: pageBuffer.toString("base64"), pageCount };
+    }
+    return null;
+  } catch (err) {
+    console.warn("[documentIntake] PDF page render skipped:", err);
+    return null;
+  }
 }

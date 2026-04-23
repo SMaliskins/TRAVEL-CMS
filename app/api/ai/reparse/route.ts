@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
-import { parseFromRequest, type ParseResult } from "@/lib/ai/parseWithAI";
+import { parseFromRequest, parseErrorToStatus, type ParseResult } from "@/lib/ai/parseWithAI";
 import type { DocumentType } from "@/lib/ai/parseSchemas";
 
 function jsonFromParseResult<T>(result: ParseResult<T>) {
@@ -16,8 +16,9 @@ function jsonFromParseResult<T>(result: ParseResult<T>) {
       {
         ...base,
         error: result.error || "AI did not return valid structured data for this document.",
+        warnings: result.warnings,
       },
-      { status: 422 }
+      { status: parseErrorToStatus(result.errorCode) },
     );
   }
   return NextResponse.json(base);

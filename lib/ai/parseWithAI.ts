@@ -1,14 +1,21 @@
 /**
  * Parse Orchestrator — single entry point for all document parsing.
  *
- * Flow: intake → load rules → build prompt → AI call → validate → retry → log → return
+ * Flow: intake -> load rules -> build prompt -> SDK structured call ->
+ *       validate -> retry-with-feedback -> provider fallback -> log -> return
+ *
+ * Powered by Vercel AI SDK (`Output.object` with Zod schema). The previous
+ * hand-rolled OpenAI Structured Outputs path lives only as a legacy escape
+ * hatch in `client.ts` for non-parsing call sites.
  */
 
 import { z } from "zod";
-import { aiComplete, type AIMessage, type AIMessageContent, type AIResponse } from "./client";
-import { processFile, processRequest, type IntakeResult, type ContentMode } from "./documentIntake";
-import { PARSE_SCHEMAS, zodSchemaToOpenAI, type DocumentType } from "./parseSchemas";
+import type { AIMessage, AIMessageContent, AIResponse } from "./client";
+import { aiCompleteStructured, type StructuredResponse } from "./sdk";
+import { processFile, processRequest, type IntakeResult } from "./documentIntake";
+import { PARSE_SCHEMAS, type DocumentType } from "./parseSchemas";
 import { buildSystemPrompt } from "./parsePrompts";
+import { buildCacheKey, readCache, writeCache } from "./parseCache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { logAiUsage } from "@/lib/aiUsageLogger";
 import type { NextRequest } from "next/server";
@@ -32,6 +39,8 @@ export interface ParseResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  /** HTTP-style hint so route handlers can pick 422 / 502 / 504 etc. */
+  errorCode?: "validation" | "provider" | "timeout" | "intake" | "unknown";
   confidence: number;
   warnings: string[];
   retryCount: number;
@@ -41,28 +50,14 @@ export interface ParseResult<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Main entry point
+// parseDocument — file-based entry (Buffer in)
 // ---------------------------------------------------------------------------
 
-/**
- * Parse a document using the unified pipeline.
- *
- * @example
- * const result = await parseDocument<PackageTourData>({
- *   file: buffer,
- *   filename: "contract.pdf",
- *   documentType: "package_tour",
- *   companyId: auth.companyId,
- *   userId: auth.userId,
- * });
- */
 export async function parseDocument<T>(options: ParseOptions): Promise<ParseResult<T>> {
   const start = Date.now();
   const { documentType, companyId, userId } = options;
-  const schemaEntry = PARSE_SCHEMAS[documentType];
 
   try {
-    // 1. INTAKE
     const intake = await processFile({
       file: options.file,
       text: options.text,
@@ -71,86 +66,160 @@ export async function parseDocument<T>(options: ParseOptions): Promise<ParseResu
       documentType,
     });
 
-    // 2. LOAD RULES FROM DB
-    const rules = await loadActiveRules(companyId, documentType);
+    return await runPipeline<T>({
+      intake,
+      documentType,
+      companyId,
+      userId,
+      start,
+    });
+  } catch (err) {
+    return failure<T>(start, "intake", err);
+  }
+}
 
-    // 3. BUILD PROMPT
-    const systemPrompt = buildSystemPrompt(documentType, rules);
+// ---------------------------------------------------------------------------
+// parseFromRequest — NextRequest entry (multipart / JSON in)
+// ---------------------------------------------------------------------------
 
-    // 4. CHOOSE MODEL CONFIG
-    const configKey = intake.contentMode === "text" ? "parsing_text" : "parsing_vision";
+export async function parseFromRequest<T>(
+  request: NextRequest,
+  documentType: DocumentType,
+  companyId: string,
+  userId: string,
+  userFeedback?: string,
+  promptExtensions?: { fewShotExamples?: string },
+): Promise<ParseResult<T>> {
+  const start = Date.now();
+  try {
+    const intake = await processRequest(request, documentType);
+    return await runPipeline<T>({
+      intake,
+      documentType,
+      companyId,
+      userId,
+      start,
+      userFeedback,
+      promptExtensions,
+    });
+  } catch (err) {
+    return failure<T>(start, "intake", err);
+  }
+}
 
-    // 5. BUILD JSON SCHEMA for Structured Outputs (OpenAI only)
-    let jsonSchema: { name: string; schema: Record<string, unknown>; strict: boolean } | undefined;
-    try {
-      jsonSchema = await zodSchemaToOpenAI(schemaEntry.schema, `${documentType}_output`);
-    } catch {
-      // Fallback: no structured output, rely on prompt + JSON mode
+// ---------------------------------------------------------------------------
+// Shared pipeline (retry + fallback + validation feedback)
+// ---------------------------------------------------------------------------
+
+interface RunPipelineArgs {
+  intake: IntakeResult;
+  documentType: DocumentType;
+  companyId: string;
+  userId: string;
+  start: number;
+  userFeedback?: string;
+  promptExtensions?: { fewShotExamples?: string };
+}
+
+const MAX_RETRIES = 2;
+
+async function runPipeline<T>({
+  intake,
+  documentType,
+  companyId,
+  userId,
+  start,
+  userFeedback,
+  promptExtensions,
+}: RunPipelineArgs): Promise<ParseResult<T>> {
+  const schemaEntry = PARSE_SCHEMAS[documentType];
+
+  // Cache lookup — only meaningful when there's no per-call user feedback
+  // (feedback fundamentally changes the desired output).
+  const cacheKey = buildCacheKey(documentType, intake);
+  if (!userFeedback) {
+    const hit = await readCache<T>(cacheKey, documentType);
+    if (hit) {
+      return {
+        success: true,
+        data: hit.data,
+        confidence: hit.confidence,
+        warnings: [],
+        retryCount: 0,
+        model: hit.model || "cache",
+        provider: hit.provider || "cache",
+        latencyMs: Date.now() - start,
+      };
+    }
+  }
+
+  const rules = await loadActiveRules(companyId, documentType);
+  let systemPrompt = buildSystemPrompt(documentType, rules);
+
+  if (promptExtensions?.fewShotExamples?.trim()) {
+    systemPrompt +=
+      "\n\n--- FEW-SHOT EXAMPLES (similar previously-parsed documents) ---\n" +
+      promptExtensions.fewShotExamples.trim();
+  }
+
+  if (userFeedback?.trim()) {
+    systemPrompt +=
+      `\n\n--- USER FEEDBACK (CRITICAL — follow these instructions) ---\n` +
+      `The user reviewed the previous result and says: "${userFeedback.trim()}"\n` +
+      `Make sure to address this feedback. Extract ALL fields the user mentions are missing.\n---`;
+  }
+
+  const primaryConfigKey =
+    intake.contentMode === "text" ? "parsing_text" : "parsing_vision";
+
+  let lastWarnings: string[] = [];
+  let lastResult: ParseResult<T> | null = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const messages = buildMessages(intake, systemPrompt, attempt > 0 ? lastWarnings : undefined);
+
+    // Primary call (with built-in fallback to Anthropic on failure).
+    const aiResult = await aiCompleteStructured<T>({
+      configKey: primaryConfigKey,
+      fallbackConfigKey: "parsing_fallback",
+      messages,
+      schema: schemaEntry.schema as unknown as z.ZodType<T>,
+      schemaName: `${documentType}_output`,
+      timeout: 90_000,
+    });
+
+    if (!aiResult.success || !aiResult.data) {
+      lastResult = {
+        success: false,
+        error: aiResult.error || "AI provider returned no data",
+        errorCode: aiResult.error?.toLowerCase().includes("abort") ? "timeout" : "provider",
+        confidence: 0,
+        warnings: [],
+        retryCount: attempt,
+        model: aiResult.model || "unknown",
+        provider: aiResult.provider || "unknown",
+        latencyMs: Date.now() - start,
+      };
+      // No point retrying if both providers failed; break early.
+      break;
     }
 
-    // 6. CALL AI (with retry on validation failure)
-    let lastResult: ParseResult<T> | null = null;
-    const maxRetries = 2;
+    const validated = validateAndScore<T>(aiResult.data, schemaEntry, documentType);
+    await logParseUsage(companyId, userId, documentType, aiResult, attempt);
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const messages = buildMessages(intake, systemPrompt, attempt > 0 ? lastResult?.warnings : undefined);
-
-      const aiResult = await aiComplete({
-        configKey: configKey as "parsing_text" | "parsing_vision",
-        messages,
-        jsonSchema,
-        jsonMode: !jsonSchema, // use jsonMode as fallback when no schema
-        timeout: 90_000,
-      });
-
-      if (!aiResult.success) {
-        // If OpenAI fails and this is first attempt, try fallback provider
-        if (attempt === 0) {
-          const fallbackResult = await tryFallback(intake, systemPrompt, documentType);
-          if (fallbackResult?.success) {
-            const validated = validateAndScore<T>(fallbackResult.content || "", schemaEntry, documentType);
-            await logParseUsage(companyId, userId, documentType, fallbackResult, attempt + 1);
-            return {
-              ...validated,
-              retryCount: attempt + 1,
-              model: fallbackResult.model || "unknown",
-              provider: fallbackResult.provider || "unknown",
-              latencyMs: Date.now() - start,
-            };
-          }
-        }
-
-        lastResult = {
-          success: false,
-          error: aiResult.error,
-          confidence: 0,
-          warnings: [],
-          retryCount: attempt,
-          model: aiResult.model || "unknown",
-          provider: aiResult.provider || "unknown",
-          latencyMs: Date.now() - start,
-        };
-        continue;
+    if (validated.success && validated.confidence >= 0.5) {
+      // Persist high-confidence results for future identical inputs.
+      if (!userFeedback && validated.data && validated.confidence >= 0.7) {
+        void writeCache(
+          cacheKey,
+          documentType,
+          validated.data,
+          validated.confidence,
+          aiResult.model || "unknown",
+          aiResult.provider || "unknown",
+        );
       }
-
-      // 7. VALIDATE
-      const validated = validateAndScore<T>(aiResult.content || "", schemaEntry, documentType);
-
-      // Log usage
-      await logParseUsage(companyId, userId, documentType, aiResult, attempt);
-
-      if (validated.success && validated.confidence >= 0.5) {
-        return {
-          ...validated,
-          retryCount: attempt,
-          model: aiResult.model || "unknown",
-          provider: aiResult.provider || "unknown",
-          latencyMs: Date.now() - start,
-        };
-      }
-
-      // Prepare for retry
-      lastResult = {
+      return {
         ...validated,
         retryCount: attempt,
         model: aiResult.model || "unknown",
@@ -159,106 +228,21 @@ export async function parseDocument<T>(options: ParseOptions): Promise<ParseResu
       };
     }
 
-    // Return best result even if low confidence
-    return lastResult || {
-      success: false,
-      error: "All parsing attempts failed",
-      confidence: 0,
-      warnings: [],
-      retryCount: maxRetries,
-      model: "unknown",
-      provider: "unknown",
-      latencyMs: Date.now() - start,
-    };
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Parsing failed",
-      confidence: 0,
-      warnings: [],
-      retryCount: 0,
-      model: "unknown",
-      provider: "unknown",
-      latencyMs: Date.now() - start,
-    };
-  }
-}
-
-/**
- * Parse directly from a NextRequest (convenience for API routes).
- */
-export async function parseFromRequest<T>(
-  request: NextRequest,
-  documentType: DocumentType,
-  companyId: string,
-  userId: string,
-  userFeedback?: string
-): Promise<ParseResult<T>> {
-  const start = Date.now();
-  const schemaEntry = PARSE_SCHEMAS[documentType];
-
-  try {
-    const intake = await processRequest(request, documentType);
-    const rules = await loadActiveRules(companyId, documentType);
-    let systemPrompt = buildSystemPrompt(documentType, rules);
-
-    // Inject user feedback as additional instructions (for re-parse with corrections)
-    if (userFeedback && userFeedback.trim()) {
-      systemPrompt += `\n\n--- USER FEEDBACK (CRITICAL — follow these instructions) ---\nThe user reviewed the previous result and says: "${userFeedback.trim()}"\nMake sure to address this feedback. Extract ALL fields the user mentions are missing.\n---`;
-    }
-
-    const configKey = intake.contentMode === "text" ? "parsing_text" : "parsing_vision";
-
-    let jsonSchema: { name: string; schema: Record<string, unknown>; strict: boolean } | undefined;
-    try {
-      jsonSchema = await zodSchemaToOpenAI(schemaEntry.schema, `${documentType}_output`);
-    } catch { /* fallback to jsonMode */ }
-
-    const messages = buildMessages(intake, systemPrompt);
-
-    const aiResult = await aiComplete({
-      configKey: configKey as "parsing_text" | "parsing_vision",
-      messages,
-      jsonSchema,
-      jsonMode: !jsonSchema,
-      timeout: 90_000,
-    });
-
-    if (!aiResult.success) {
-      return {
-        success: false,
-        error: aiResult.error,
-        confidence: 0,
-        warnings: [],
-        retryCount: 0,
-        model: aiResult.model || "unknown",
-        provider: aiResult.provider || "unknown",
-        latencyMs: Date.now() - start,
-      };
-    }
-
-    const validated = validateAndScore<T>(aiResult.content || "", schemaEntry, documentType);
-    await logParseUsage(companyId, userId, documentType, aiResult, 0);
-
-    return {
+    lastWarnings = validated.warnings;
+    lastResult = {
       ...validated,
-      retryCount: 0,
+      errorCode: validated.success ? undefined : "validation",
+      retryCount: attempt,
       model: aiResult.model || "unknown",
       provider: aiResult.provider || "unknown",
       latencyMs: Date.now() - start,
     };
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Parsing failed",
-      confidence: 0,
-      warnings: [],
-      retryCount: 0,
-      model: "unknown",
-      provider: "unknown",
-      latencyMs: Date.now() - start,
-    };
   }
+
+  return (
+    lastResult ||
+    failure<T>(start, "unknown", new Error("All parsing attempts failed"))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -268,26 +252,22 @@ export async function parseFromRequest<T>(
 function buildMessages(
   intake: IntakeResult,
   systemPrompt: string,
-  retryWarnings?: string[]
+  retryWarnings?: string[],
 ): AIMessage[] {
-  const messages: AIMessage[] = [
-    { role: "system", content: systemPrompt },
-  ];
-
-  // Build user message based on content mode
+  const messages: AIMessage[] = [{ role: "system", content: systemPrompt }];
   const userContent: AIMessageContent[] = [];
 
-  // Add retry hint if this is a retry
   if (retryWarnings && retryWarnings.length > 0) {
     userContent.push({
       type: "text",
-      text: `Previous extraction was incomplete. Missing/invalid: ${retryWarnings.join(", ")}. Please extract more carefully.`,
+      text:
+        `Previous extraction was incomplete or failed validation. Issues:\n` +
+        retryWarnings.slice(0, 12).map((w) => `- ${w}`).join("\n") +
+        `\nPlease re-extract carefully, paying special attention to the fields above.`,
     });
   }
 
-  // Add content based on mode
   if (intake.contentMode === "vision" || intake.contentMode === "hybrid") {
-    // Prefer native PDF for OpenAI
     if (intake.pdfBase64) {
       userContent.push({
         type: "file",
@@ -297,27 +277,26 @@ function buildMessages(
         },
       });
     }
-
-    // Add page images if available (fallback for providers that don't support PDF)
     for (const img of intake.pageImages) {
       userContent.push({
         type: "image_url",
-        image_url: {
-          url: `data:image/png;base64,${img}`,
-          detail: "high",
-        },
+        image_url: { url: `data:image/png;base64,${img}`, detail: "high" },
       });
     }
   }
 
-  // Add text content
-  if (intake.extractedText && (intake.contentMode === "text" || intake.contentMode === "hybrid")) {
+  if (
+    intake.extractedText &&
+    (intake.contentMode === "text" || intake.contentMode === "hybrid")
+  ) {
     userContent.push({
       type: "text",
       text: `Extract structured data from this document:\n\n${intake.extractedText.slice(0, 120_000)}`,
     });
-  } else if (userContent.length === 0 || (userContent.length === 1 && retryWarnings)) {
-    // Vision-only with no text — add instruction
+  } else if (
+    userContent.length === 0 ||
+    (userContent.length === 1 && retryWarnings)
+  ) {
     userContent.push({
       type: "text",
       text: "Extract all structured data from this document. Return JSON only.",
@@ -325,44 +304,34 @@ function buildMessages(
   }
 
   messages.push({ role: "user", content: userContent });
-
   return messages;
 }
 
 // ---------------------------------------------------------------------------
-// Validation & scoring
+// Validation & scoring (now operates on already-parsed objects from the SDK)
 // ---------------------------------------------------------------------------
 
 function validateAndScore<T>(
-  content: string,
+  raw: unknown,
   schemaEntry: { schema: z.ZodType; required: readonly string[] },
-  documentType: DocumentType
+  documentType: DocumentType,
 ): { success: boolean; data?: T; confidence: number; warnings: string[] } {
   const warnings: string[] = [];
 
-  // Extract JSON from response
-  const json = extractJSON(content);
-  if (!json) {
-    return { success: false, confidence: 0, warnings: ["Failed to parse JSON from AI response"] };
+  if (!raw || typeof raw !== "object") {
+    return { success: false, confidence: 0, warnings: ["AI returned non-object output"] };
   }
 
-  // Unwrap nested objects (e.g. { "passport": {...} } → {...})
-  const unwrapped = unwrapNestedResult(json, documentType);
-
-  // Convert null → undefined (OpenAI Structured Outputs returns null for optional fields,
-  // but Zod v4 .optional() only accepts undefined, not null)
+  const unwrapped = unwrapNestedResult(raw as Record<string, unknown>, documentType);
   nullsToUndefined(unwrapped);
 
-  // Validate with Zod
   const parseResult = schemaEntry.schema.safeParse(unwrapped);
   if (!parseResult.success) {
-    // Try to extract what we can even if validation fails
     const partial = unwrapped as T;
     const zodErrors = parseResult.error.issues.map(
-      (i: z.ZodIssue) => `${i.path.join(".")}: ${i.message}`
+      (i: z.ZodIssue) => `${i.path.join(".")}: ${i.message}`,
     );
     warnings.push(...zodErrors);
-
     const confidence = calculateConfidence(unwrapped, schemaEntry.required);
     return { success: confidence > 0, data: partial, confidence, warnings };
   }
@@ -370,7 +339,6 @@ function validateAndScore<T>(
   const data = parseResult.data as T;
   const confidence = calculateConfidence(data, schemaEntry.required);
 
-  // Check required fields
   for (const field of schemaEntry.required) {
     const value = (data as Record<string, unknown>)[field];
     if (value === undefined || value === null || value === "") {
@@ -381,62 +349,35 @@ function validateAndScore<T>(
   return { success: true, data, confidence, warnings };
 }
 
-function calculateConfidence(
-  data: unknown,
-  requiredFields: readonly string[]
-): number {
+function calculateConfidence(data: unknown, requiredFields: readonly string[]): number {
   if (!data || typeof data !== "object") return 0;
   const obj = data as Record<string, unknown>;
 
-  // Count all non-empty fields
   const allFields = Object.keys(obj);
-  const filledFields = allFields.filter((k) => {
-    const v = obj[k];
-    if (v === undefined || v === null || v === "") return false;
-    if (Array.isArray(v) && v.length === 0) return false;
-    return true;
-  });
+  const filledFields = allFields.filter((k) => isFilled(obj[k]));
+  const requiredFilled = requiredFields.filter((f) => isFilled(obj[f]));
 
-  // Required fields satisfaction
-  const requiredFilled = requiredFields.filter((f) => {
-    const v = obj[f];
-    if (v === undefined || v === null || v === "") return false;
-    if (Array.isArray(v) && v.length === 0) return false;
-    return true;
-  });
-
-  const requiredScore = requiredFields.length > 0
-    ? requiredFilled.length / requiredFields.length
-    : 1;
-
-  // Overall fill rate
-  const fillRate = allFields.length > 0
-    ? filledFields.length / allFields.length
-    : 0;
-
-  // Weighted: 70% required fields, 30% fill rate
+  const requiredScore =
+    requiredFields.length > 0 ? requiredFilled.length / requiredFields.length : 1;
+  const fillRate = allFields.length > 0 ? filledFields.length / allFields.length : 0;
   return Math.round((requiredScore * 0.7 + fillRate * 0.3) * 100) / 100;
 }
 
-// ---------------------------------------------------------------------------
-// Null → undefined conversion
-// ---------------------------------------------------------------------------
+function isFilled(v: unknown): boolean {
+  if (v === undefined || v === null || v === "") return false;
+  if (Array.isArray(v) && v.length === 0) return false;
+  return true;
+}
 
-/**
- * Recursively convert null values to undefined in an object.
- * OpenAI Structured Outputs returns null for optional fields,
- * but Zod v4 .optional() only accepts undefined.
- */
 function nullsToUndefined(obj: Record<string, unknown>): void {
   for (const key of Object.keys(obj)) {
     if (obj[key] === null) {
-      delete obj[key]; // delete = undefined for Zod
+      delete obj[key];
     } else if (Array.isArray(obj[key])) {
-      // Recurse into arrays, but filter out null items
       const arr = obj[key] as unknown[];
-      for (let i = 0; i < arr.length; i++) {
-        if (arr[i] && typeof arr[i] === "object" && !Array.isArray(arr[i])) {
-          nullsToUndefined(arr[i] as Record<string, unknown>);
+      for (const item of arr) {
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+          nullsToUndefined(item as Record<string, unknown>);
         }
       }
     } else if (typeof obj[key] === "object") {
@@ -445,108 +386,52 @@ function nullsToUndefined(obj: Record<string, unknown>): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// JSON extraction
-// ---------------------------------------------------------------------------
-
-function extractJSON(content: string): Record<string, unknown> | null {
-  if (!content) return null;
-
-  // Strip markdown code fences
-  let cleaned = content.trim();
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "");
-    cleaned = cleaned.replace(/\s*```\s*$/i, "");
-    cleaned = cleaned.trim();
-  }
-
-  // Try direct parse
-  try {
-    return JSON.parse(cleaned) as Record<string, unknown>;
-  } catch {
-    // Try extracting JSON object from text
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]) as Record<string, unknown>;
-      } catch { /* ignore */ }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Some AI responses wrap the data: { "passport": {...} } or { "parsed": {...} }.
- * Unwrap to get the actual data object.
- */
 function unwrapNestedResult(
   obj: Record<string, unknown>,
-  documentType: DocumentType
+  documentType: DocumentType,
 ): Record<string, unknown> {
   const wrapperKeys: Record<DocumentType, string[]> = {
     passport: ["passport"],
-    flight_ticket: [], // flight_ticket has booking + segments at top level
+    flight_ticket: [],
     package_tour: ["parsed", "tour"],
     invoice: ["invoice", "parsed"],
     expense: ["expense", "parsed"],
     company_doc: ["company", "parsed"],
   };
-
   const keys = wrapperKeys[documentType] || [];
   for (const key of keys) {
     if (obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
       return obj[key] as Record<string, unknown>;
     }
   }
-
   return obj;
 }
 
 // ---------------------------------------------------------------------------
-// Fallback provider
+// Helpers
 // ---------------------------------------------------------------------------
 
-async function tryFallback(
-  intake: IntakeResult,
-  systemPrompt: string,
-  _documentType: DocumentType
-): Promise<AIResponse | null> {
-  // Only try fallback for vision/hybrid modes where Anthropic can help
-  if (intake.contentMode === "text" && intake.extractedText) {
-    const messages = buildMessages(intake, systemPrompt);
-    return aiComplete({
-      configKey: "parsing_fallback",
-      messages,
-      jsonMode: true,
-      timeout: 90_000,
-    });
-  }
-
-  // Anthropic vision needs images, not PDF — skip if only PDF available
-  if (intake.pageImages.length > 0) {
-    const messages = buildMessages(
-      { ...intake, pdfBase64: null }, // remove PDF, use images only
-      systemPrompt
-    );
-    return aiComplete({
-      configKey: "parsing_fallback",
-      messages,
-      jsonMode: true,
-      timeout: 90_000,
-    });
-  }
-
-  return null;
+function failure<T>(
+  start: number,
+  errorCode: ParseResult<T>["errorCode"],
+  err: unknown,
+): ParseResult<T> {
+  return {
+    success: false,
+    error: err instanceof Error ? err.message : "Parsing failed",
+    errorCode,
+    confidence: 0,
+    warnings: [],
+    retryCount: 0,
+    model: "unknown",
+    provider: "unknown",
+    latencyMs: Date.now() - start,
+  };
 }
-
-// ---------------------------------------------------------------------------
-// DB: load correction rules
-// ---------------------------------------------------------------------------
 
 async function loadActiveRules(
   companyId: string,
-  documentType: DocumentType
+  documentType: DocumentType,
 ): Promise<{ rule_text: string; id: string }[]> {
   try {
     const { data } = await supabaseAdmin
@@ -557,24 +442,18 @@ async function loadActiveRules(
       .eq("is_active", true)
       .order("priority", { ascending: true })
       .limit(50);
-
     return (data || []) as { rule_text: string; id: string }[];
   } catch {
-    // Table may not exist yet — gracefully return empty
     return [];
   }
 }
-
-// ---------------------------------------------------------------------------
-// Usage logging
-// ---------------------------------------------------------------------------
 
 async function logParseUsage(
   companyId: string,
   userId: string,
   documentType: DocumentType,
-  aiResult: AIResponse,
-  retryCount: number
+  aiResult: AIResponse | StructuredResponse<unknown>,
+  retryCount: number,
 ): Promise<void> {
   try {
     await logAiUsage({
@@ -592,6 +471,25 @@ async function logParseUsage(
       },
     });
   } catch {
-    // Non-fatal
+    // non-fatal
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HTTP status helper for route handlers
+// ---------------------------------------------------------------------------
+
+export function parseErrorToStatus(code: ParseResult<unknown>["errorCode"]): number {
+  switch (code) {
+    case "validation":
+      return 422;
+    case "timeout":
+      return 504;
+    case "provider":
+      return 502;
+    case "intake":
+      return 400;
+    default:
+      return 500;
   }
 }

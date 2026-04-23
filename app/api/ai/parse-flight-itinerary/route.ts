@@ -3,8 +3,9 @@ import { requireModule } from "@/lib/modules/checkModule";
 import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
-import { parseFromRequest } from "@/lib/ai/parseWithAI";
+import { parseFromRequest, parseErrorToStatus } from "@/lib/ai/parseWithAI";
 import type { FlightTicketData } from "@/lib/ai/parseSchemas";
+import { findSimilarTemplates, buildFewShotExamples, saveTemplate } from "@/lib/flights/parseTemplates";
 
 /**
  * AI-powered flight itinerary parsing
@@ -105,6 +106,10 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get("content-type") || "";
     let intakeRequest: NextRequest = request;
     let userFeedback: string | undefined;
+    // Captured original text (when available) so we can: (1) seed few-shot
+    // examples from similar previously-parsed tickets, (2) save the result
+    // back as a template after a high-confidence parse.
+    let originalText: string | undefined;
 
     if (contentType.includes("application/json")) {
       const body = (await request.json()) as {
@@ -117,6 +122,7 @@ export async function POST(request: NextRequest) {
       userFeedback = fb || undefined;
 
       if (body.text) {
+        originalText = body.text;
         intakeRequest = cloneJsonIntakeRequest(request, { text: body.text });
       } else if (body.image) {
         intakeRequest = cloneJsonIntakeRequest(request, {
@@ -146,28 +152,58 @@ export async function POST(request: NextRequest) {
       intakeRequest = new NextRequest(request.url, { method: "POST", body: newFd });
     }
 
+    // Look up structurally-similar prior tickets and build a few-shot block.
+    // Only attempted for text input (where we can fingerprint cheaply).
+    let fewShotExamples: string | undefined;
+    if (originalText) {
+      try {
+        const templates = await findSimilarTemplates(originalText, authInfo.companyId);
+        if (templates.length > 0) {
+          fewShotExamples = buildFewShotExamples(templates);
+        }
+      } catch (e) {
+        console.warn("[parse-flight] template lookup failed:", e);
+      }
+    }
+
     const result = await parseFromRequest<FlightTicketData>(
       intakeRequest,
       "flight_ticket",
       authInfo.companyId,
       authInfo.userId,
-      userFeedback
+      userFeedback,
+      fewShotExamples ? { fewShotExamples } : undefined,
     );
 
     if (!result.success || !result.data) {
-      return NextResponse.json({
-        error: result.error || "Could not extract flight information",
-        segments: [],
-        booking: null,
-      });
+      return NextResponse.json(
+        {
+          error: result.error || "Could not extract flight information",
+          warnings: result.warnings,
+          segments: [],
+          booking: null,
+        },
+        { status: parseErrorToStatus(result.errorCode) },
+      );
     }
 
     const parsed = result.data;
     const booking = parsed.booking || {};
 
-    // Map to legacy response format with year-fix post-processing
-    const segments: FlightSegment[] = (parsed.segments || []).map(
-      (seg, index) => ({
+    // Map parsed segments to the response shape used by the UI.
+    // We pass through values exactly as the model returned them (with `?? ""`
+    // only to keep the response shape stable). Previously the mapper hard-cleared
+    // `seat`, terminals and `aircraft` even when the model had captured them,
+    // which forced users to re-enter the data manually.
+    const segments: FlightSegment[] = (parsed.segments || []).map((seg, index) => {
+      const segAny = seg as typeof seg & {
+        departureTerminal?: string;
+        arrivalTerminal?: string;
+        seat?: string;
+        aircraft?: string;
+        bookingRef?: string;
+      };
+      return {
         id: `seg-${Date.now()}-${index}`,
         flightNumber: seg.flightNumber || "",
         airline: seg.airline || booking.airline || "",
@@ -184,20 +220,21 @@ export async function POST(request: NextRequest) {
         arrivalTimeScheduled: seg.arrivalTimeScheduled || "",
         arrivalTimeActual: "",
         duration: seg.duration || "",
-        departureTerminal: "",
-        arrivalTerminal: "",
+        departureTerminal: segAny.departureTerminal || "",
+        arrivalTerminal: segAny.arrivalTerminal || "",
         cabinClass: seg.cabinClass || booking.cabinClass || "",
         bookingClass: seg.bookingClass || "",
-        bookingRef: booking.bookingRef || "",
+        // Per-segment bookingRef wins over the booking-level one (split tickets).
+        bookingRef: segAny.bookingRef || booking.bookingRef || "",
         ticketNumber: seg.ticketNumber || "",
         baggage: seg.baggage || booking.baggage || "",
-        seat: "",
+        seat: segAny.seat || "",
         passengerName: seg.passengerName || "",
-        aircraft: "",
+        aircraft: segAny.aircraft || "",
         departureStatus: "scheduled",
         arrivalStatus: "scheduled",
-      })
-    );
+      };
+    });
 
     const responseBooking = {
       bookingRef: booking.bookingRef || "",
@@ -211,6 +248,22 @@ export async function POST(request: NextRequest) {
       changeFee: booking.changeFee || null,
       baggage: booking.baggage || "",
     };
+
+    // Auto-save high-confidence text-based parses as future few-shot
+    // templates. Skipped for image/PDF (no text fingerprint available)
+    // and for results below the confidence floor.
+    if (originalText && result.confidence >= 0.85 && segments.length > 0) {
+      try {
+        await saveTemplate(
+          originalText,
+          { booking: responseBooking, segments },
+          "ai",
+          authInfo.companyId,
+        );
+      } catch (e) {
+        console.warn("[parse-flight] template save failed:", e);
+      }
+    }
 
     return NextResponse.json({ segments, booking: responseBooking });
   } catch (err) {

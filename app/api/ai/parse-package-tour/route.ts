@@ -3,7 +3,7 @@ import { requireModule } from "@/lib/modules/checkModule";
 import { checkAiUsageLimit } from "@/lib/ai/usageLimit";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { consumeRateLimit } from "@/lib/security/rateLimit";
-import { parseFromRequest } from "@/lib/ai/parseWithAI";
+import { parseFromRequest, parseErrorToStatus } from "@/lib/ai/parseWithAI";
 import type { PackageTourData } from "@/lib/ai/parseSchemas";
 
 /**
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
     );
   }
-
+  
   // Check module access (skip in development)
   if (process.env.NODE_ENV === "production") {
     const moduleError = await requireModule(authInfo.companyId, "ai_parsing");
@@ -45,14 +45,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Check AI usage limit
-  const usage = await checkAiUsageLimit(authInfo.companyId);
-  if (!usage.allowed) {
-    return NextResponse.json(
-      { error: `AI usage limit reached (${usage.used}/${usage.limit} calls this month). Upgrade your plan or purchase an AI add-on.` },
-      { status: 429 }
-    );
+    const usage = await checkAiUsageLimit(authInfo.companyId);
+    if (!usage.allowed) {
+      return NextResponse.json(
+        { error: `AI usage limit reached (${usage.used}/${usage.limit} calls this month). Upgrade your plan or purchase an AI add-on.` },
+        { status: 429 }
+      );
   }
-
+  
   try {
     const result = await parseFromRequest<PackageTourData>(
       request,
@@ -62,14 +62,18 @@ export async function POST(request: NextRequest) {
     );
 
     if (!result.success || !result.data) {
-      return NextResponse.json({
-        error: result.error || "Could not extract tour information",
-        parsed: null,
-      });
+      return NextResponse.json(
+        {
+          error: result.error || "Could not extract tour information",
+          warnings: result.warnings,
+          parsed: null,
+        },
+        { status: parseErrorToStatus(result.errorCode) },
+      );
     }
 
     // Backward-compatible response format
-    return NextResponse.json({
+        return NextResponse.json({
       parsed: result.data,
       detectedOperator: result.data.detectedOperator || null,
     });
