@@ -121,8 +121,14 @@ export async function GET(request: NextRequest) {
       }
 
       for (const inv of overdueInvoices) {
-        const dueDate = inv.final_payment_date || inv.due_date;
-        if (!dueDate || dueDate >= todayStr) continue;
+        const dueRaw = inv.final_payment_date || inv.due_date;
+        if (!dueRaw) continue;
+        const dueDay = String(dueRaw).slice(0, 10);
+        if (dueDay >= todayStr) continue;
+        // Match the selected dashboard/card period: only count debt for invoices
+        // whose due date falls inside [periodStart, periodEnd]. Otherwise the
+        // overdue total never changes when the user changes the period.
+        if (dueDay < periodStart || dueDay > periodEnd) continue;
         const total = parseFloat(inv.total?.toString() || "0");
         const paid = paidByInvoice[inv.id] || 0;
         const debt = total - paid;
