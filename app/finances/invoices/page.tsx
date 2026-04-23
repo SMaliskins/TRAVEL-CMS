@@ -328,7 +328,12 @@ export default function FinancesInvoicesPage() {
     let list = invoices;
     if (searchNumber.trim()) {
       const q = searchNumber.trim().toLowerCase();
-      list = list.filter((inv) => inv.invoice_number.toLowerCase().includes(q));
+      list = list.filter((inv) => {
+        const num = (inv.invoice_number || "").toLowerCase();
+        const payer = (inv.payer_name || "").toLowerCase();
+        const client = (inv.client_name || "").toLowerCase();
+        return num.includes(q) || payer.includes(q) || client.includes(q);
+      });
     }
     if (sortField) {
       list = [...list].sort((a, b) => {
@@ -471,8 +476,8 @@ export default function FinancesInvoicesPage() {
             type="text"
             value={searchNumber}
             onChange={(e) => setSearchNumber(e.target.value)}
-            placeholder="Invoice #"
-            className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md w-full sm:w-40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            placeholder="Invoice # or payer"
+            className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-md w-full sm:w-56 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
         </div>
         {(filterStatus !== "all" || !activeOnly || searchNumber || period !== "currentMonth") && (
