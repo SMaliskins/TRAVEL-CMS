@@ -1,0 +1,15 @@
+-- System update notification: 2026-04-23
+-- Run in Supabase SQL Editor. Idempotent (ON CONFLICT DO NOTHING per company+ref_id).
+-- Multilingual: title and message are JSON {"en": "...", "ru": "...", "lv": "..."}
+-- TopBar.tsx parses JSON and shows text in the user's interface language
+
+INSERT INTO public.staff_notifications (company_id, type, title, message, link, ref_id)
+SELECT
+  c.id,
+  'system_update',
+  $t${"en":"System update — Apr 23, 2026","ru":"Обновление системы — 23.04.2026","lv":"Sistēmas atjauninājums — 23.04.2026."}$t$,
+  $m${"en":"• Dashboard map: more stable loading; cluster counts match zoomed view; city coordinates cached in DB and resolved more reliably (MAP)\n• Orders: different routes/dates per passenger; trip date range in header = union of all; full city chain in header\n• Client payments: cash-register sound + bell notification; Edit Payment no longer overwrites the saved amount; order links in notifications work for all order code formats\n• Order search: diacritics; names from Directory; mistaken Russian keyboard layout (JCUKEN→Latin) still finds records\n• Order documents: PDF preview in modal fixed (Chrome)\n• Finances: Invoices — quick search by payer/client name, not only invoice #; Supplier Invoices — same layout as Company expenses + preview, edit, delete; Company expenses — file preview in modal (Eye)\n• Staff: idle auto-logout; session activity shown more accurately in Supervisor view\n• Misc: air ticket / PRICING grid and invoice-related fixes","ru":"• Карта на дашборде: стабильнее маркеры и кластеры; геокод с кэшем в БД (MAP)\n• Заявки: маршруты/даты по пассажирам; общие даты = объединение по всем; полная цепочка городов в шапке\n• Оплаты клиентов: звук кассы + уведомление; при правке платежа сумма не затирается; ссылки на заявки в уведомлениях везде открываются\n• Поиск заявок: диакритика, актуальные имена из Directory, раскладка (JCUKEN→латиница)\n• Документы заявки: снова работает превью PDF в окне (Chrome)\n• Финансы: Invoices — поиск по плательщику/клиенту; Supplier Invoices — как Company expenses + превью, правка, удаление; Company expenses — превью во всплывающем окне\n• Сотрудники: выход по неактивности; сессии у руководителя\n• Прочее: авиа / PRICING / счета","lv":"• Informācijas panela karte: stabilāki marķieri un klasteri; pilsētu geokods ar DB kešu (MAP)\n• Pasūtījumi: maršruti un dati pa pasažieriem; kopīgie datumi = apvienojums; pilna pilsētu ķēde\n• Klienta maksājumi: kases skaņa + paziņojums; maksājuma labošana neaizpilda summu pāri saglabātajam; saites uz pasūtījumiem darbojas\n• Pasūtījumu meklēšana: diakritika, vārdi no Directory, JCUKEN→latīņa kļūdas režīmā\n• Pasūtījuma dokumenti: PDF priekšskatījums atkal darbojas (Chrome)\n• Finanses: Rēķini — meklēšana pēc maksātāja/klienta; Piegādātāju rēķini — kā Uzņēmuma izdevumi + priekšskatījums, rediģēšana, dzēšana; Uzņēmuma izdevumi — priekšskatījums modālogā\n• Personāls: automātiska iziešana; sesijas pārvaldniekam\n• Citi: aviācija / PRICING / rēķini"}$m$,
+  NULL,
+  'system_update:2026-04-23'
+FROM public.companies c
+ON CONFLICT (company_id, ref_id) DO NOTHING;
