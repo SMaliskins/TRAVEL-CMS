@@ -9,7 +9,7 @@ import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelecto
 import ContentModal from "@/components/ContentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { Download, Eye, FileText } from "lucide-react";
+import { Download, Eye, FileText, Pencil, Trash2, X } from "lucide-react";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
 
 interface UploadedDoc {
@@ -71,6 +71,14 @@ export default function SuppliersInvoicesPage() {
 
   const [previewDoc, setPreviewDoc] = useState<UploadedDoc | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formSupplier, setFormSupplier] = useState("");
+  const [formDate, setFormDate] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formCurrency, setFormCurrency] = useState("EUR");
+  const [formInvoiceNumber, setFormInvoiceNumber] = useState("");
+  const [formSaving, setFormSaving] = useState(false);
 
   useEffect(() => {
     saveFilters({ period, dateFrom, dateTo });
@@ -176,6 +184,84 @@ export default function SuppliersInvoicesPage() {
     }
   };
 
+  const startEdit = (doc: UploadedDoc) => {
+    setEditingId(doc.id);
+    setFormSupplier(doc.supplier ?? "");
+    setFormDate(doc.effective_invoice_date ?? "");
+    setFormAmount(doc.effective_amount != null ? String(doc.effective_amount) : "");
+    setFormCurrency(doc.effective_currency || "EUR");
+    setFormInvoiceNumber(doc.effective_invoice_number ?? "");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setFormSupplier("");
+    setFormDate("");
+    setFormAmount("");
+    setFormCurrency("EUR");
+    setFormInvoiceNumber("");
+  };
+
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingId) return;
+    const target = docs.find((d) => d.id === editingId);
+    if (!target?.order_code) return;
+    const amount = formAmount.trim() === "" ? null : parseFloat(formAmount.replace(",", "."));
+    if (amount !== null && (isNaN(amount) || amount < 0)) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    setFormSaving(true);
+    try {
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(target.order_code)}/documents/${editingId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            supplier_name: formSupplier.trim() || null,
+            invoice_date: formDate || null,
+            amount,
+            currency: (formCurrency || "EUR").toUpperCase(),
+            invoice_number: formInvoiceNumber.trim() || null,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to update");
+        return;
+      }
+      cancelEdit();
+      loadDocs();
+    } finally {
+      setFormSaving(false);
+    }
+  };
+
+  const handleDelete = async (doc: UploadedDoc) => {
+    if (!doc.order_code) return;
+    if (!confirm(`Delete "${doc.file_name}"? This cannot be undone.`)) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const res = await fetch(
+      `/api/orders/${encodeURIComponent(doc.order_code)}/documents/${doc.id}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }
+    );
+    if (res.ok) {
+      loadDocs();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || "Failed to delete");
+    }
+  };
+
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-4">
@@ -225,6 +311,88 @@ export default function SuppliersInvoicesPage() {
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-md w-24 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
         />
       </div>
+
+      {editingId && (
+        <form
+          onSubmit={handleSubmitEdit}
+          className="mb-4 bg-white rounded-lg border border-gray-200 overflow-hidden p-4 flex flex-wrap items-end gap-3"
+        >
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
+              {t(lang, "companyExpenses.supplier")}
+            </label>
+            <input
+              type="text"
+              value={formSupplier}
+              onChange={(e) => setFormSupplier(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md w-44 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
+              {t(lang, "companyExpenses.invoiceDate")}
+            </label>
+            <input
+              type="date"
+              value={formDate}
+              onChange={(e) => setFormDate(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
+              {t(lang, "companyExpenses.amount")}
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={formAmount}
+              onChange={(e) => setFormAmount(e.target.value)}
+              placeholder="0.00"
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md w-24 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">
+              {t(lang, "companyExpenses.currency")}
+            </label>
+            <select
+              value={formCurrency}
+              onChange={(e) => setFormCurrency(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md w-20 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+            >
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="GBP">GBP</option>
+              <option value="CHF">CHF</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-0.5">Invoice #</label>
+            <input
+              type="text"
+              value={formInvoiceNumber}
+              onChange={(e) => setFormInvoiceNumber(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-md w-32 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={formSaving}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            {formSaving ? "..." : t(lang, "common.save")}
+          </button>
+          <button
+            type="button"
+            onClick={cancelEdit}
+            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </form>
+      )}
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
         {loading ? (
@@ -316,12 +484,28 @@ export default function SuppliersInvoicesPage() {
                         href={doc.download_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md"
+                        className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
                         title={t(lang, "invoices.download")}
                       >
                         <Download className="w-4 h-4" />
                       </a>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => startEdit(doc)}
+                      className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(doc)}
+                      className="inline-flex p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}

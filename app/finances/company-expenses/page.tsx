@@ -8,8 +8,9 @@ import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelecto
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
-import { Upload, Pencil, Trash2, X, FileText } from "lucide-react";
+import { Upload, Pencil, Trash2, X, FileText, Eye } from "lucide-react";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
+import ContentModal from "@/components/ContentModal";
 
 interface CompanyExpenseRow {
   id: string;
@@ -74,6 +75,9 @@ export default function CompanyExpensesPage() {
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
   const [quickSearch, setQuickSearch] = useState("");
+
+  const [previewRow, setPreviewRow] = useState<CompanyExpenseRow | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
 
   const [formSupplier, setFormSupplier] = useState("");
   const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10));
@@ -300,6 +304,34 @@ export default function CompanyExpensesPage() {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
   };
 
+  const handlePreview = async (row: CompanyExpenseRow) => {
+    if (!row.file_path) return;
+    setPreviewRow(row);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+      const res = await fetch(`/api/finances/company-expenses/${row.id}/file`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load file");
+      const blob = await res.blob();
+      setPreviewBlobUrl(URL.createObjectURL(blob));
+    } catch {
+      setPreviewRow(null);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewRow(null);
+    if (previewBlobUrl) {
+      URL.revokeObjectURL(previewBlobUrl);
+      setPreviewBlobUrl(null);
+    }
+  };
+
   const openInvoiceFile = async (id: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -485,13 +517,23 @@ export default function CompanyExpensesPage() {
                   <td className="px-4 py-3 text-right font-medium text-gray-900 tabular-nums">{row.amount.toFixed(2)}</td>
                   <td className="px-4 py-3 text-gray-600">{row.currency}</td>
                   <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.description ?? undefined}>{row.description ?? "—"}</td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                    {row.file_path ? (
+                      <button
+                        type="button"
+                        onClick={() => handlePreview(row)}
+                        className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
+                        title={t(lang, "companyExpenses.viewInvoice")}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    ) : null}
                     {row.file_path ? (
                       <button
                         type="button"
                         onClick={() => openInvoiceFile(row.id)}
                         className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
-                        title={t(lang, "companyExpenses.viewInvoice")}
+                        title="Open in new tab"
                       >
                         <FileText className="w-4 h-4" />
                       </button>
@@ -509,6 +551,13 @@ export default function CompanyExpensesPage() {
           </table>
         )}
       </div>
+
+      <ContentModal
+        isOpen={!!previewRow}
+        onClose={closePreview}
+        title={previewRow?.file_name || previewRow?.supplier}
+        url={previewBlobUrl ?? undefined}
+      />
     </div>
   );
 }
