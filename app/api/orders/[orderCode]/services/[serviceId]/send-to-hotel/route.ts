@@ -5,6 +5,7 @@ import { normalizeEmailToField, sendEmail } from "@/lib/email/sendEmail";
 import { replaceBase64Images } from "@/lib/email/replaceBase64Images";
 import { loadDefaultEmailTemplateForCategory } from "@/lib/email/emailTemplateUtils";
 import { appendHtmlWithEmailSignature } from "@/lib/email/appendUserEmailSignature";
+import { fetchOrderIdentityByRouteParam } from "@/lib/orders/orderFromRouteParam";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -45,11 +46,9 @@ export async function POST(
 
     const user = await getUser(request);
 
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("id, company_id")
-      .eq("order_code", orderCode)
-      .single();
+    // Slug-aware lookup: URL param may be slug form (`0113-26-sm`) while DB
+    // stores the canonical code with a slash (`0113/26-SM`).
+    const order = await fetchOrderIdentityByRouteParam(supabaseAdmin, orderCode);
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -80,6 +79,7 @@ export async function POST(
     );
 
     const { error: commInsertError } = await supabaseAdmin.from("order_communications").insert({
+      company_id: order.company_id,
       order_id: order.id,
       service_id: serviceId,
       type: "hotel_confirmation",
