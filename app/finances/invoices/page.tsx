@@ -171,6 +171,8 @@ export default function FinancesInvoicesPage() {
           const todayStr = new Date().toISOString().slice(0, 10);
           filtered = filtered.filter((inv: Invoice) => {
             if (inv.status === 'paid' || inv.status === 'cancelled') return false;
+            // Fully paid by payments but status still "issued" — not overdue (API sets remaining).
+            if (typeof inv.remaining === 'number' && inv.remaining <= 0) return false;
             const dueDate = inv.final_payment_date || inv.due_date;
             return dueDate && dueDate < todayStr;
           });
