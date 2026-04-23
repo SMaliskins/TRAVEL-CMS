@@ -24,7 +24,19 @@ export async function GET(request: NextRequest) {
         file_name,
         file_path,
         file_size,
+        mime_type,
         created_at,
+        order_id,
+        amount,
+        currency,
+        invoice_number,
+        supplier_name,
+        invoice_date,
+        parsed_amount,
+        parsed_currency,
+        parsed_invoice_number,
+        parsed_supplier,
+        parsed_invoice_date,
         orders!inner(order_code, owner_user_id, manager_user_id)
       `)
       .eq("company_id", companyId)
@@ -46,7 +58,20 @@ export async function GET(request: NextRequest) {
     }
 
     const withUrls = await Promise.all(
-      (docs || []).map(async (d: { file_path: string; orders?: { order_code?: string } | { order_code?: string }[] }) => {
+      (docs || []).map(async (d: {
+        file_path: string;
+        orders?: { order_code?: string } | { order_code?: string }[];
+        supplier_name?: string | null;
+        parsed_supplier?: string | null;
+        amount?: number | null;
+        parsed_amount?: number | null;
+        currency?: string | null;
+        parsed_currency?: string | null;
+        invoice_date?: string | null;
+        parsed_invoice_date?: string | null;
+        invoice_number?: string | null;
+        parsed_invoice_number?: string | null;
+      }) => {
         const { data: signed } = await supabaseAdmin.storage
           .from(BUCKET_NAME)
           .createSignedUrl(d.file_path, 60 * 60);
@@ -57,6 +82,11 @@ export async function GET(request: NextRequest) {
           order_code,
           orders: undefined,
           download_url: signed?.signedUrl || null,
+          supplier: d.supplier_name || d.parsed_supplier || null,
+          effective_amount: d.amount ?? d.parsed_amount ?? null,
+          effective_currency: d.currency || d.parsed_currency || null,
+          effective_invoice_date: d.invoice_date || d.parsed_invoice_date || null,
+          effective_invoice_number: d.invoice_number || d.parsed_invoice_number || null,
         };
       })
     );
