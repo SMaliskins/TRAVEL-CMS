@@ -23,7 +23,72 @@ const BOARD_LABELS: Record<string, string> = {
   uai: "UAI",
 };
 
-type FlightSegmentLike = { departure?: string; arrival?: string; departureCity?: string; arrivalCity?: string };
+type FlightSegmentLike = {
+  departure?: string;
+  arrival?: string;
+  departureCity?: string;
+  arrivalCity?: string;
+  departureDate?: string;
+  arrivalDate?: string;
+};
+
+/**
+ * IATA → city name with safe fallback to a city already known on the segment
+ * (e.g. parsed from the supplier confirmation but not present in our local
+ * IATA database — like RMO → Chișinău).
+ */
+function resolveSegmentCity(code: string | undefined, fallbackCity?: string): string {
+  const c = (code || "").trim().toUpperCase();
+  const cityFallback = (fallbackCity || "").trim();
+  if (!c && cityFallback) return cityFallback;
+  if (!c) return "";
+  const fromIata = getCityByIATA(c)?.name;
+  if (fromIata) return fromIata;
+  return cityFallback || c;
+}
+
+function formatSegmentDate(date: string | undefined): string {
+  if (!date) return "";
+  // Expecting YYYY-MM-DD; render as DD.MM
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}.${m[2]}`;
+  // Or DD.MM[.YYYY] passthrough
+  const m2 = date.match(/^(\d{2})\.(\d{2})/);
+  if (m2) return `${m2[1]}.${m2[2]}`;
+  return "";
+}
+
+/**
+ * Build a flight service name from structured segments. Groups by departure
+ * date and joins city names with " - ", same shape as the legacy stored name
+ * ("DD.MM City1 - City2 - City3 / DD.MM City1 - City2"). Used when the
+ * service has flightSegments[] available — covers IATA codes our local
+ * database does not know but the parser recorded the city for.
+ */
+function buildFlightNameFromSegments(segments: FlightSegmentLike[]): string {
+  if (!segments.length) return "";
+  const groups: Array<{ date: string; segs: FlightSegmentLike[] }> = [];
+  let currentDate: string | undefined;
+  for (const seg of segments) {
+    const d = seg.departureDate || currentDate || "";
+    if (!groups.length || groups[groups.length - 1].date !== d) {
+      groups.push({ date: d, segs: [seg] });
+    } else {
+      groups[groups.length - 1].segs.push(seg);
+    }
+    currentDate = d;
+  }
+  const parts = groups.map(({ date, segs }) => {
+    const cities: string[] = [];
+    if (segs[0]) cities.push(resolveSegmentCity(segs[0].departure, segs[0].departureCity));
+    for (const s of segs) cities.push(resolveSegmentCity(s.arrival, s.arrivalCity));
+    const filtered = cities.filter((c, i, arr) => c && c !== arr[i - 1]);
+    const route = filtered.join(" - ");
+    const datePrefix = formatSegmentDate(date);
+    return datePrefix ? `${datePrefix} ${route}` : route;
+  });
+  return parts.filter(Boolean).join(" / ");
+}
 
 export type ServiceForDisplayName = {
   category?: string;
@@ -57,7 +122,15 @@ export function getServiceDisplayName(
     catNorm.includes("air ticket") ||
     catNorm.includes("авиа");
 
-  // Flight: use stored service name (auto-generated from segments in Add/Edit modal)
+  // Flight: prefer rebuilding the name from structured segments, so IATA
+  // codes our local database does not know (e.g. RMO → Chișinău) still
+  // resolve to the city name captured during parsing.
+  if (isFlight && s.flightSegments && s.flightSegments.length > 0) {
+    const fromSegments = buildFlightNameFromSegments(s.flightSegments);
+    if (fromSegments) return fromSegments;
+  }
+
+  // Flight: fall back to parsing the stored service name when no segments.
   if (isFlight && s.name) {
     // Multi-segment: "18.03 RIX-IST / 24.03 IST-RIX" — split by " / " and resolve each part
     const segments = s.name.split(/\s*\/\s*/);
