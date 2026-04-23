@@ -22,6 +22,7 @@ interface StatisticCardProps {
   valueClassName?: string;
   cardPeriod?: CardPeriodType;
   onCardPeriodChange?: (period: CardPeriodType) => void;
+  subValue?: React.ReactNode;
 }
 
 export default function StatisticCard({
@@ -35,6 +36,7 @@ export default function StatisticCard({
   valueClassName,
   cardPeriod,
   onCardPeriodChange,
+  subValue,
 }: StatisticCardProps) {
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
@@ -125,6 +127,9 @@ export default function StatisticCard({
           <p className={`mt-1 text-3xl font-black ${valueClassName || "text-gray-900"}`}>
             {formatValue(value)}
           </p>
+          {subValue !== undefined && subValue !== null && (
+            <div className="mt-1 text-xs text-gray-500">{subValue}</div>
+          )}
           {previousValue !== undefined && (
             <div className="mt-2 space-y-1">
               <p className="text-xs font-medium text-gray-500">

@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
     const overdueError = overdueResult.error;
 
     let overdueAmount = 0;
+    let overdueInPeriodAmount = 0;
     if (!overdueError && overdueInvoices && overdueInvoices.length > 0) {
       const invoiceIds = overdueInvoices.map((inv) => inv.id);
       const { data: paymentsData } = await supabaseAdmin
@@ -121,18 +122,16 @@ export async function GET(request: NextRequest) {
       }
 
       for (const inv of overdueInvoices) {
-        const dueRaw = inv.final_payment_date || inv.due_date;
-        if (!dueRaw) continue;
-        const dueDay = String(dueRaw).slice(0, 10);
-        if (dueDay >= todayStr) continue;
-        // Match the selected dashboard/card period: only count debt for invoices
-        // whose due date falls inside [periodStart, periodEnd]. Otherwise the
-        // overdue total never changes when the user changes the period.
-        if (dueDay < periodStart || dueDay > periodEnd) continue;
+        const dueDate = inv.final_payment_date || inv.due_date;
+        if (!dueDate || dueDate >= todayStr) continue;
         const total = parseFloat(inv.total?.toString() || "0");
         const paid = paidByInvoice[inv.id] || 0;
         const debt = total - paid;
-        if (debt > 0) overdueAmount += debt;
+        if (debt <= 0) continue;
+        overdueAmount += debt;
+        if (dueDate >= periodStart && dueDate <= periodEnd) {
+          overdueInPeriodAmount += debt;
+        }
       }
     }
 
@@ -151,6 +150,7 @@ export async function GET(request: NextRequest) {
       vat: Math.round(vat * 100) / 100,
       totalCommission: Math.round(totalCommission * 100) / 100,
       overdueAmount: Math.round(overdueAmount * 100) / 100,
+      overdueInPeriodAmount: Math.round(overdueInPeriodAmount * 100) / 100,
       targetProfitMonthly: parseFloat(companyData?.target_profit_monthly?.toString() || "0"),
       targetRevenueMonthly: parseFloat(companyData?.target_revenue_monthly?.toString() || "0"),
       targetOrdersMonthly: companyData?.target_orders_monthly || 0,

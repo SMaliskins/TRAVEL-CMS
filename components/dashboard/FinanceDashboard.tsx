@@ -17,6 +17,7 @@ interface FinanceDashboardProps {
   statistics: {
     revenue: number;
     overdueAmount: number;
+    overdueInPeriodAmount?: number;
   } | null;
   previousYear: {
     revenue: number;
@@ -111,7 +112,7 @@ export default function FinanceDashboard({
     revenue: "inherit",
     overdue: "allTime",
   });
-  const [cardOverrideData, setCardOverrideData] = useState<Record<string, { stats: { revenue: number; overdueAmount: number } | null; prevYear: { revenue: number } | null } | null>>({
+  const [cardOverrideData, setCardOverrideData] = useState<Record<string, { stats: { revenue: number; overdueAmount: number; overdueInPeriodAmount?: number } | null; prevYear: { revenue: number } | null } | null>>({
     revenue: null,
     overdue: null,
   });
@@ -313,6 +314,11 @@ export default function FinanceDashboard({
           valueClassName="text-red-600"
           cardPeriod={cardPeriods.overdue}
           onCardPeriodChange={(p) => setCardPeriods((prev) => ({ ...prev, overdue: p }))}
+          subValue={
+            getStats("overdue")?.overdueInPeriodAmount !== undefined
+              ? `of which due in period: €${(getStats("overdue")!.overdueInPeriodAmount || 0).toLocaleString()}`
+              : undefined
+          }
           onClick={() => router.push("/finances/invoices?status=overdue")}
         />
         {/* Cash Flow */}
