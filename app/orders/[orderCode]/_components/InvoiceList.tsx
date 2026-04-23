@@ -194,7 +194,7 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
     if (!isError || !invoicesQueryError) return;
     const msg =
       invoicesQueryError instanceof Error ? invoicesQueryError.message : "Unknown error";
-    showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load invoices: ${msg}`);
+      showToast("error", msg.startsWith("Failed to load") ? msg : `Failed to load invoices: ${msg}`);
   }, [isError, invoicesQueryError, showToast]);
 
   const reloadInvoices = useCallback(async (): Promise<Invoice[]> => {
@@ -225,11 +225,11 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
             headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
           }
         );
-        if (!res.ok) return;
-        const data = await res.json();
-        const map: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
         const rmap: Record<string, { delivery_status: string; delivered_at: string | null; opened_at: string | null; open_count: number; sent_at: string }> = {};
-        for (const c of data.communications || []) {
+      for (const c of data.communications || []) {
           if (!c.invoice_id) continue;
           const kind = (c as { email_kind?: string | null }).email_kind;
           if (kind === "payment_reminder") {
@@ -252,9 +252,9 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                 sent_at: c.sent_at,
               };
             }
-          }
         }
-        setEmailStatuses(map);
+      }
+      setEmailStatuses(map);
         setReminderStatuses(rmap);
       } catch {
         // ignore
@@ -1983,15 +1983,15 @@ export default function InvoiceList({ orderCode, onCreateNew, onInvoiceChanged, 
                     <span>Loading template…</span>
                   </div>
                 ) : (
-                  <RichTextEditor
-                    content={
-                      emailModal.message.includes("<")
-                        ? emailModal.message
-                        : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
-                    }
-                    onChange={(html) => setEmailModal({ ...emailModal, message: html })}
-                    compact
-                  />
+                <RichTextEditor
+                  content={
+                    emailModal.message.includes("<")
+                      ? emailModal.message
+                      : `<p>${emailModal.message.replace(/\n/g, "</p><p>")}</p>`.replace(/<p><\/p>/g, "<p><br></p>")
+                  }
+                  onChange={(html) => setEmailModal({ ...emailModal, message: html })}
+                  compact
+                />
                 )}
               </div>
 

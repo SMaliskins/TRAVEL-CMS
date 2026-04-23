@@ -2639,20 +2639,20 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                       } ${dragOverCol === colKey ? "border-l-2 border-blue-400" : ""}`}
                     >
                       {isInvoice ? (
-                        <div className="flex items-center justify-center gap-2">
-                          {visibleServicesWithoutInvoice.length > 0 && (
-                            <input
-                              type="checkbox"
-                              checked={allVisibleWithoutInvoiceSelected}
-                              onChange={(e) => handleSelectAllVisible(e.target.checked)}
-                              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                              title="Select all non-invoiced services"
-                              aria-label="Select all non-invoiced services"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          )}
+                  <div className="flex items-center justify-center gap-2">
+                    {visibleServicesWithoutInvoice.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={allVisibleWithoutInvoiceSelected}
+                        onChange={(e) => handleSelectAllVisible(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        title="Select all non-invoiced services"
+                        aria-label="Select all non-invoiced services"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
                           <span>{t(lang, def.i18nKey)}</span>
-                        </div>
+                  </div>
                       ) : (
                         t(lang, def.i18nKey)
                       )}
@@ -2679,7 +2679,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                         }}
                         draggable={false}
                       />
-                    </th>
+                </th>
                   );
                 })}
               </tr>

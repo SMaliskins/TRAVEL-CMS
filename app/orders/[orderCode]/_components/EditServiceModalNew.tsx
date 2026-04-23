@@ -486,8 +486,8 @@ export default function EditServiceModalNew({
   const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>([]);
   const [selectedCommissionIndex, setSelectedCommissionIndex] = useState<number>(-1);
   const [agentDiscountValue, setAgentDiscountValue] = useState(() => {
-    const cost = Number(service.servicePrice ?? 0);
-    const sale = Number(service.clientPrice ?? 0);
+      const cost = Number(service.servicePrice ?? 0);
+      const sale = Number(service.clientPrice ?? 0);
     const commissionCats: CategoryType[] = ["tour", "insurance", "ancillary", "cruise", "rent_a_car", "transfer"];
     const catStr = String((service as { category?: string }).category || "").toLowerCase();
     const isAirportSvc = catStr.includes("airport") && catStr.includes("service");
@@ -935,16 +935,16 @@ export default function EditServiceModalNew({
   // (user entered totals earlier via another field; we don't invent numbers, we only allocate existing ones).
   useEffect(() => {
     if (categoryType !== "flight") return;
-    const validClients = clients.filter(c => c.id || c.name);
-    if (validClients.length === 0) return;
-    const costTotal = Number(service.servicePrice ?? 0) || 0;
-    const saleTotal = Number(service.clientPrice ?? 0) || 0;
-    const margeTotal = saleTotal - costTotal;
+      const validClients = clients.filter(c => c.id || c.name);
+      if (validClients.length === 0) return;
+      const costTotal = Number(service.servicePrice ?? 0) || 0;
+      const saleTotal = Number(service.clientPrice ?? 0) || 0;
+      const margeTotal = saleTotal - costTotal;
     const N = validClients.length;
     const roundCents = (n: number) => Math.round(n * 100) / 100;
 
-    setPricingPerClient(prev => {
-      const hasAnyData = prev.some(p => parsePrice(p.cost) !== 0 || parsePrice(p.sale) !== 0);
+      setPricingPerClient(prev => {
+        const hasAnyData = prev.some(p => parsePrice(p.cost) !== 0 || parsePrice(p.sale) !== 0);
       const canDistributeTotals = !hasAnyData && (costTotal !== 0 || saleTotal !== 0);
 
       // Even split of totals; last row absorbs rounding leftover so ΣN === total exactly.
@@ -955,26 +955,26 @@ export default function EditServiceModalNew({
       const lastSale = canDistributeTotals ? roundCents(saleTotal - perSale * (N - 1)) : 0;
       const lastMarge = canDistributeTotals ? roundCents(margeTotal - perMarge * (N - 1)) : 0;
 
-      const next = validClients.map((_, idx) => {
-        const existing = prev[idx];
-        if (existing && ((existing.cost && parseFloat(existing.cost)) || (existing.sale && parseFloat(existing.sale)))) {
-          return existing;
-        }
+        const next = validClients.map((_, idx) => {
+          const existing = prev[idx];
+          if (existing && ((existing.cost && parseFloat(existing.cost)) || (existing.sale && parseFloat(existing.sale)))) {
+            return existing;
+          }
         if (canDistributeTotals) {
           const isLast = idx === N - 1;
           const c = isLast ? lastCost : perCost;
           const s = isLast ? lastSale : perSale;
           const m = isLast ? lastMarge : perMarge;
-          return {
+            return {
             cost: c ? String(c) : "",
             marge: m ? String(m) : "",
             sale: s ? String(s) : "",
-          };
-        }
-        return existing ?? { cost: "", marge: "", sale: "" };
+            };
+          }
+          return existing ?? { cost: "", marge: "", sale: "" };
+        });
+        return next;
       });
-      return next;
-    });
   }, [categoryType, clients, service.servicePrice, service.clientPrice]);
 
   // When user changes calendar (Dates) to 2026, re-normalize segment years so Schedule shows 2026 (fixes stuck 2024)
@@ -1197,11 +1197,11 @@ export default function EditServiceModalNew({
     }
     // User edited agent discount → Sale = Cost − discount; Margin = Sale − Net
     if (pricingLastEditedRef.current === "agent") {
-      const discountAmount = getAgentDiscountAmount(cost);
+    const discountAmount = getAgentDiscountAmount(cost);
       const saleVal = Math.round((cost - discountAmount) * 100) / 100;
       setMarge(Math.round((saleVal - netCost) * 100) / 100 + "");
       if (!clientPriceLocked) setClientPrice(saleVal.toFixed(2));
-      pricingLastEditedRef.current = null;
+    pricingLastEditedRef.current = null;
       return;
     }
     // User edited cost / line items → keep Total Client price; Agent discount = Cost − Sale; Margin = Sale − Net
@@ -1747,8 +1747,8 @@ export default function EditServiceModalNew({
             const parties = data.parties || [];
             const clientEntries = parties.map(
               (r: { name: string; id: string | null; displayName: string; matched?: boolean }) => ({
-                id: r.id,
-                name: r.displayName || r.name,
+              id: r.id,
+              name: r.displayName || r.name,
                 parseUnmatched: r.matched === false,
               })
             );
@@ -3223,12 +3223,12 @@ export default function EditServiceModalNew({
             <div className="mb-3 space-y-2">
               <div className="flex items-center justify-between gap-2 rounded-lg border bg-amber-50 border-amber-200 px-3 py-2 text-xs text-amber-800">
                 <span>📋 Data was recognized from the document. {correctedFields.size > 0 ? `Fields corrected: ${correctedFields.size}` : "Edit a field — it will highlight in orange."}</span>
-                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                   <button type="button" onClick={() => setShowReparseChat(prev => !prev)} className="px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700">
                     {showReparseChat ? "Hide chat" : "💬 Chat with parser"}
                   </button>
-                  <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
-                </div>
+                    <button type="button" onClick={() => setShowAIParsedBanner(false)} className="text-amber-600 hover:text-amber-900 font-bold">&times;</button>
+                  </div>
               </div>
               {showReparseChat && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
@@ -3276,7 +3276,7 @@ export default function EditServiceModalNew({
           )}
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-
+            
             <div className={`space-y-3 min-w-0 ${categoryType === "hotel" ? "" : ""}`}>
               {/* BASIC INFO for flight — first, aligns with PRICING on the right */}
               {categoryType === "flight" && (
@@ -4985,22 +4985,22 @@ export default function EditServiceModalNew({
                             })()}
                           </div>
                         ) : (
-                          <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-                            <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
-                            <input
+                        <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                          <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
+                          <input
                               type="text"
                               inputMode="decimal"
                               autoComplete="off"
-                              value={servicePrice}
-                              onChange={(e) => {
-                                pricingLastEditedRef.current = "cost";
+                            value={servicePrice}
+                            onChange={(e) => {
+                              pricingLastEditedRef.current = "cost";
                                 setServicePrice(sanitizeDecimalInput(e.target.value));
                                 markCorrected("servicePrice");
-                              }}
-                              placeholder="0.00"
+                            }}
+                            placeholder="0.00"
                               className={`flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right tabular-nums border-0 bg-transparent ${correctedFields.has("servicePrice") ? "ring-2 ring-amber-400 border-amber-400 bg-amber-50/30" : parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400" : ""}`}
-                            />
-                          </div>
+                          />
+                        </div>
                         )}
                       </div>
                       <div>
@@ -5118,12 +5118,12 @@ export default function EditServiceModalNew({
                       return (
                         <div className="mt-1 space-y-2">
                           <div className={`rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-                            <div className="flex items-center justify-between">
-                              <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
-                              <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
-                            </div>
-                            <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
-                              {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
+                            <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                          </div>
+                          <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
+                            {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
                           <div className="rounded-lg px-3 py-2 bg-sky-50 border border-sky-200">
@@ -5171,21 +5171,21 @@ export default function EditServiceModalNew({
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Total Client price</label>
                         <div className="inline-flex w-full rounded-lg border border-gray-300 overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                           <span className="pl-2.5 py-1.5 text-slate-600 text-sm shrink-0">{currencySymbol}</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={clientPrice}
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={clientPrice}
                               disabled={clientPriceLocked}
                               title={clientPriceLocked ? "Sale is locked: invoice is issued" : undefined}
-                              onChange={(e) => {
+                            onChange={(e) => {
                                 if (clientPriceLocked) return;
-                                pricingLastEditedRef.current = "sale";
-                                const v = parseFloat(e.target.value) || 0;
-                                setClientPrice(String(Math.round(v * 100) / 100));
-                              }}
-                              placeholder="0.00"
-                              className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                            />
+                              pricingLastEditedRef.current = "sale";
+                              const v = parseFloat(e.target.value) || 0;
+                              setClientPrice(String(Math.round(v * 100) / 100));
+                            }}
+                            placeholder="0.00"
+                            className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-right border-0 bg-transparent disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          />
                         </div>
                       </div>
                     </div>

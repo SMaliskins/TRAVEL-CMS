@@ -879,17 +879,17 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
               return;
             }
             const rect = el.getBoundingClientRect();
-            const isVisible =
-              rect.top >= 0 &&
-              rect.left >= 0 &&
-              rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-              rect.right <= (window.innerWidth || document.documentElement.clientWidth);
-            if (!isVisible) {
+          const isVisible =
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+          if (!isVisible) {
               el.scrollIntoView({
                 behavior: "smooth",
                 block: "start",
-              });
-            }
+            });
+          }
           };
           requestAnimationFrame(() => requestAnimationFrame(scrollToReferral));
           setTimeout(() => setHighlightedSection(null), 1200);
@@ -3019,8 +3019,8 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                     )}
                   </div>
               )}
-            </div>
-            )}
+                </div>
+              )}
           </div>
 
           {/* Right: Statistics with Tabs (1/3 width) - Always visible */}

@@ -257,7 +257,7 @@ export async function GET(
           parent_service_id?: string | null;
           service_type?: string | null;
         };
-        return acc;
+      return acc;
       },
       {} as Record<string, { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null }>
     );

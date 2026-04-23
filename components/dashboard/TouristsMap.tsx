@@ -373,8 +373,8 @@ export default function TouristsMap({
     <div className={`booking-glass-panel !p-4 ${className}`}>
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
         <h3 className="shrink-0 text-xl font-bold leading-tight text-gray-900 tracking-tight">
-          {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
-        </h3>
+        {showAgentOnly ? "My Travelers on map" : "Travelers on map"}
+      </h3>
         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-800">
           <label className="inline-flex cursor-pointer items-center gap-2">
             <input
@@ -439,10 +439,10 @@ export default function TouristsMap({
             No travelers match the current filters. Turn on Upcoming or In progress, or widen the upcoming date range.
           </div>
         ) : (
-          <MapContainer
-            center={[avgLat, avgLng]}
+        <MapContainer
+          center={[avgLat, avgLng]}
             zoom={4}
-            style={{ height: "100%", width: "100%" }}
+          style={{ height: "100%", width: "100%" }}
             attributionControl={false}
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -511,13 +511,13 @@ export default function TouristsMap({
                             </div>
                           ))}
                         </div>
-                      </div>
-                    </Popup>
-                  </Marker>
+                </div>
+              </Popup>
+            </Marker>
                 );
               })}
             </MarkerClusterGroup>
-          </MapContainer>
+        </MapContainer>
         )}
       </div>
     </div>

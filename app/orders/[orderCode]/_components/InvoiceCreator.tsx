@@ -766,7 +766,7 @@ export default function InvoiceCreator({
     }
     return roundMoney2(clampNum(depositValue, 0, total));
   }, [depositValue, depositType, total]);
-
+  
   const calculatedFinalPayment = useMemo(() => {
     if (total <= 0) return null;
     if (calculatedDeposit == null) return roundMoney2(total);
@@ -1955,7 +1955,7 @@ export default function InvoiceCreator({
                     paymentDraftFinalPctMirror !== null
                       ? paymentDraftFinalPctMirror
                       : (() => {
-                          const fp = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
+                    const fp = isFinalPaymentManual ? finalPaymentAmount : calculatedFinalPayment;
                           return total > 0 && fp != null
                             ? (Math.round((clampNum(fp, 0, total) / total) * 1000) / 10).toFixed(1)
                             : "";

@@ -357,9 +357,9 @@ export default function AddServiceModal({
       const m = FALLBACK_CATEGORIES.find((c) => c.id === initialCategoryId);
       if (m) return vatRateFromCategory(m);
       if (initialVatRate != null && !Number.isNaN(Number(initialVatRate))) {
-        const v = Number(initialVatRate);
-        if (initialCategoryType === "tour" && v === 0) return 21;
-        return v;
+      const v = Number(initialVatRate);
+      if (initialCategoryType === "tour" && v === 0) return 21;
+      return v;
       }
     }
     return 0;
@@ -1779,8 +1779,8 @@ export default function AddServiceModal({
             const parties = data.parties || [];
             const clientEntries = parties.map(
               (r: { name: string; id: string | null; displayName: string; matched?: boolean }) => ({
-                id: r.id,
-                name: r.displayName || r.name,
+              id: r.id,
+              name: r.displayName || r.name,
                 parseUnmatched: r.matched === false,
               })
             );
@@ -3792,10 +3792,10 @@ export default function AddServiceModal({
                               <span className="text-sm text-slate-600 shrink-0">Service price</span>
                               <div className="inline-flex items-center rounded border border-slate-300 w-28 overflow-hidden focus-within:border-sky-500">
                                 <span className="pl-2 text-slate-600 shrink-0">{getCurrencySymbol(serviceCurrency)}</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
                                   value={servicePriceForeign}
                                   onChange={(e) => {
                                     const v = e.target.value;
@@ -3881,14 +3881,14 @@ export default function AddServiceModal({
                             type="text"
                             inputMode="decimal"
                             autoComplete="off"
-                            value={servicePrice}
-                            onChange={(e) => {
-                              pricingLastEditedRef.current = "cost";
+                          value={servicePrice}
+                          onChange={(e) => {
+                            pricingLastEditedRef.current = "cost";
                               setServicePrice(sanitizeDecimalInput(e.target.value));
-                            }}
-                            placeholder="0.00"
+                          }}
+                          placeholder="0.00"
                             className={`w-full rounded-lg border px-2.5 py-1.5 text-sm tabular-nums ${parseAttemptedButEmpty.has("servicePrice") ? "ring-2 ring-red-300 border-red-400 bg-red-50/50" : parsedFields.has("servicePrice") ? "ring-2 ring-green-300 border-green-400 focus:border-green-500 focus:ring-green-500" : "border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"}`}
-                          />
+                        />
                         )}
                       </div>
                       <div>
@@ -3991,12 +3991,12 @@ export default function AddServiceModal({
                       return (
                         <div className="mt-1 space-y-2">
                           <div className={`rounded-lg px-3 py-2 ${hasComm ? "bg-amber-50 border border-amber-200" : "bg-gray-50 border border-gray-200"}`}>
-                            <div className="flex items-center justify-between">
-                              <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
-                              <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
-                            </div>
-                            <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
-                              {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${hasComm ? "text-amber-800" : "text-gray-500"}`}>Service Price Net</span>
+                            <span className={`text-xs ${hasComm ? "text-amber-600" : "text-gray-400"}`}>pay to operator</span>
+                          </div>
+                          <div className={`mt-1 text-right text-lg font-bold ${hasComm ? "text-amber-900" : "text-gray-700"}`}>
+                            {currencySymbol}{netPrice.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
                           <div className="rounded-lg px-3 py-2 bg-sky-50 border border-sky-200">

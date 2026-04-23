@@ -190,11 +190,11 @@ export default function OrderPage({
 
   // Update URL when tab changes — replaceState only (avoids router.replace RSC work)
   const setActiveTab = useCallback((tab: TabType) => {
-    setActiveTabState(tab);
+      setActiveTabState(tab);
     if (typeof window === "undefined") return;
     const next = new URLSearchParams(window.location.search);
-    next.set("tab", tab);
-    const query = next.toString();
+      next.set("tab", tab);
+      const query = next.toString();
     const url = query ? `${pathname}?${query}` : pathname;
     window.history.replaceState(window.history.state, "", url);
   }, [pathname]);
@@ -1333,7 +1333,7 @@ export default function OrderPage({
                             title={
                               order.client_party_id
                                 ? `${t(lang, "order.clickToChangeClient")} · ${t(lang, "order.ctrlClickToOpenClient")}`
-                                : t(lang, "order.clickToChangeClient")
+                                  : t(lang, "order.clickToChangeClient")
                             }
                           >
                             {order.client_display_name || t(lang, "order.selectClient")}
