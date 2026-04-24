@@ -18,10 +18,14 @@ export interface AIConfig {
   temperature: number;
 }
 
+// gpt-5.4-mini handles vision + structured output for parsing tasks at near
+// gpt-5.4 quality but ~15× cheaper. Full gpt-5.4 is also currently restricted
+// on Vercel AI Gateway free credits, so we route everything to mini until
+// quality regression is observed.
 export const MODELS = {
-  OPENAI_VISION: "gpt-5.4",
+  OPENAI_VISION: "gpt-5.4-mini",
   OPENAI_FAST: "gpt-5.4-mini",
-  OPENAI_COMPLEX: "gpt-5.4",
+  OPENAI_COMPLEX: "gpt-5.4-mini",
   ANTHROPIC_FAST: "claude-haiku-4.5",
   ANTHROPIC_CHAT: "claude-sonnet-4.5",
 } as const;
@@ -29,10 +33,11 @@ export const MODELS = {
 export type ModelId = (typeof MODELS)[keyof typeof MODELS];
 
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  [MODELS.OPENAI_VISION]:   { input: 3.00,  output: 12.00 },
-  [MODELS.OPENAI_FAST]:     { input: 0.20,  output: 0.80  },
-  [MODELS.ANTHROPIC_FAST]:  { input: 0.80,  output: 4.00  },
-  [MODELS.ANTHROPIC_CHAT]:  { input: 3.00,  output: 15.00 },
+  "gpt-5.4":                { input: 3.00,  output: 12.00 },
+  "gpt-5.4-mini":           { input: 0.20,  output: 0.80  },
+  "gpt-5.4-nano":           { input: 0.10,  output: 0.40  },
+  "claude-haiku-4.5":       { input: 0.80,  output: 4.00  },
+  "claude-sonnet-4.5":      { input: 3.00,  output: 15.00 },
   "claude-sonnet-4.6":      { input: 3.00,  output: 15.00 },
   "gpt-4o":                 { input: 2.50,  output: 10.00 },
   "gpt-4o-mini":            { input: 0.15,  output: 0.60  },
