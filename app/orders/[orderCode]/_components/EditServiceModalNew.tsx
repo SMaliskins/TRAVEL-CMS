@@ -3633,9 +3633,10 @@ export default function EditServiceModalNew({
                               return replacingClientIdx === realIndex ? (
                                 <div key={realIndex} className="w-48">
                                   <PartySelect
+                                    allowFreeText
                                     value={client.id}
                                     onChange={(id, name) => {
-                                      if (id) updateClient(realIndex, id, name);
+                                      updateClient(realIndex, id, name);
                                       setReplacingClientIdx(null);
                                     }}
                                     roleFilter="client"
@@ -3678,6 +3679,7 @@ export default function EditServiceModalNew({
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
                       <PartySelect
+                        allowFreeText
                         key={`payer-${payerPartyId || "empty"}`}
                         value={payerPartyId}
                         onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }}
@@ -3709,6 +3711,7 @@ export default function EditServiceModalNew({
                       </div>
                       <div className="flex-1 min-w-0">
                         <PartySelect
+                          allowFreeText
                           value={supplierPartyId}
                           onChange={(id, name) => {
                             setSupplierPartyId(id);
@@ -3747,6 +3750,7 @@ export default function EditServiceModalNew({
                           <div className="pl-6">
                             <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                             <PartySelect
+                              allowFreeText
                               value={airlineChannelSupplierId}
                               onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                               roleFilter="supplier"
@@ -4329,6 +4333,7 @@ export default function EditServiceModalNew({
                 <div className={correctedFields.has("supplierName") ? "ring-2 ring-amber-400 border-amber-400 rounded-lg p-0.5 -m-0.5 bg-amber-50/30" : categoryType === "tour" && parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 rounded-lg p-1 -m-1" : ""}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   <PartySelect
+                    allowFreeText
                     value={supplierPartyId}
                     onChange={(id, name) => {
                       setSupplierPartyId(id);
@@ -4366,6 +4371,7 @@ export default function EditServiceModalNew({
                         <div className="pl-6">
                           <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                           <PartySelect
+                            allowFreeText
                             value={airlineChannelSupplierId}
                             onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                             roleFilter="supplier"
@@ -4386,7 +4392,7 @@ export default function EditServiceModalNew({
                           className={`flex-1 min-w-0 ${client.parseUnmatched ? "rounded-md ring-2 ring-amber-400 bg-amber-50/50 p-0.5" : ""}`}
                           title={client.parseUnmatched ? "Not found in directory — select client or add new" : undefined}
                         >
-                          <PartySelect key={`client-${client.id || index}`} value={client.id} onChange={(id, name) => updateClient(index, id, name)} roleFilter="client" initialDisplayName={client.name} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                          <PartySelect allowFreeText key={`client-${client.id || index}`} value={client.id} onChange={(id, name) => updateClient(index, id, name)} roleFilter="client" initialDisplayName={client.name} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                         </div>
                         {clients.length > 1 && (
                           <button type="button" onClick={() => removeClient(index)} className="px-1.5 text-red-400 hover:text-red-600">
@@ -4400,7 +4406,7 @@ export default function EditServiceModalNew({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                  <PartySelect allowFreeText key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 </div>
               </div>
                 )}
@@ -4429,9 +4435,10 @@ export default function EditServiceModalNew({
                           {replacingClientIdx === realIndex ? (
                             <div className="w-48">
                               <PartySelect
+                                allowFreeText
                                 value={client.id}
                                 onChange={(id, name) => {
-                                  if (id) updateClient(realIndex, id, name);
+                                  updateClient(realIndex, id, name);
                                   setReplacingClientIdx(null);
                                 }}
                                 roleFilter="client"
@@ -4488,6 +4495,7 @@ export default function EditServiceModalNew({
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
                   <PartySelect
+                    allowFreeText
                     key={`payer-${payerPartyId || "empty"}`}
                     value={payerPartyId}
                     onChange={(id, name) => { setPayerPartyId(id ?? null); setPayerName(name); }}
@@ -4504,6 +4512,7 @@ export default function EditServiceModalNew({
               <div className="p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">SUPPLIER</h4>
                 <PartySelect
+                  allowFreeText
                   value={supplierPartyId}
                   onChange={(id, name) => {
                     setSupplierPartyId(id);
@@ -4540,6 +4549,7 @@ export default function EditServiceModalNew({
                       <div className="pl-6">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                         <PartySelect
+                          allowFreeText
                           value={airlineChannelSupplierId}
                           onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                           roleFilter="supplier"
@@ -4650,6 +4660,7 @@ export default function EditServiceModalNew({
               <div className="p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">SUPPLIER</h4>
                 <PartySelect
+                  allowFreeText
                   value={supplierPartyId}
                   onChange={(id, name) => {
                     setSupplierPartyId(id);
@@ -4686,6 +4697,7 @@ export default function EditServiceModalNew({
                       <div className="pl-6">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                         <PartySelect
+                          allowFreeText
                           value={airlineChannelSupplierId}
                           onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                           roleFilter="supplier"
@@ -4745,6 +4757,7 @@ export default function EditServiceModalNew({
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                       <PartySelect
+                        allowFreeText
                         value={supplierPartyId}
                         onChange={(id, name) => {
                           setSupplierPartyId(id);
@@ -4781,6 +4794,7 @@ export default function EditServiceModalNew({
                             <div className="pl-6">
                               <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                               <PartySelect
+                                allowFreeText
                                 value={airlineChannelSupplierId}
                                 onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                                 roleFilter="supplier"

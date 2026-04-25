@@ -18,14 +18,12 @@ export interface AIConfig {
   temperature: number;
 }
 
-// gpt-5.4-mini handles vision + structured output for parsing tasks at near
-// gpt-5.4 quality but ~15× cheaper. Full gpt-5.4 is also currently restricted
-// on Vercel AI Gateway free credits, so we route everything to mini until
-// quality regression is observed.
+// gpt-5.5 is available on this Vercel AI Gateway account and is used for
+// high-quality parsing/vision tasks. Keep fast utility calls on gpt-5.4-mini.
 export const MODELS = {
-  OPENAI_VISION: "gpt-5.4-mini",
+  OPENAI_VISION: "gpt-5.5",
   OPENAI_FAST: "gpt-5.4-mini",
-  OPENAI_COMPLEX: "gpt-5.4-mini",
+  OPENAI_COMPLEX: "gpt-5.5",
   ANTHROPIC_FAST: "claude-haiku-4.5",
   ANTHROPIC_CHAT: "claude-sonnet-4.5",
 } as const;
@@ -33,6 +31,8 @@ export const MODELS = {
 export type ModelId = (typeof MODELS)[keyof typeof MODELS];
 
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "gpt-5.5":                { input: 3.00,  output: 12.00 },
+  "gpt-5.5-pro":            { input: 15.00, output: 60.00 },
   "gpt-5.4":                { input: 3.00,  output: 12.00 },
   "gpt-5.4-mini":           { input: 0.20,  output: 0.80  },
   "gpt-5.4-nano":           { input: 0.10,  output: 0.40  },
@@ -85,7 +85,8 @@ export const AI_CONFIGS = {
     maxTokens: 2000,
     temperature: 0.7,
   },
-  // Parsing pipeline configs (gpt-4o for all — quality over cost)
+  // Parsing pipeline configs: primary OpenAI model is the strongest Gateway
+  // model currently available on this account; Anthropic Sonnet remains fallback.
   parsing_vision: {
     provider: "openai" as AIProvider,
     model: MODELS.OPENAI_VISION,

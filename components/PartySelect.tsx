@@ -49,6 +49,8 @@ interface PartySelectProps {
    * roles.includes("client") || !roles.includes("supplier"). Ensures avatars match Travellers search.
    */
   directoryMatchTravellersApi?: boolean;
+  /** Allow saving typed text without creating/selecting a Directory record. */
+  allowFreeText?: boolean;
 }
 
 function directoryRowMatchesTravellersSearch(r: Record<string, unknown>): boolean {
@@ -65,6 +67,7 @@ export default function PartySelect({
   initialDisplayName = "",
   prioritizedParties = [],
   directoryMatchTravellersApi = false,
+  allowFreeText = false,
 }: PartySelectProps) {
   const currentRole = useCurrentUserRole();
   const isSubagentUser = currentRole === "subagent";
@@ -222,6 +225,9 @@ export default function PartySelect({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputValue(val);
+    if (allowFreeText) {
+      setSelectedParty(null);
+    }
     setIsOpen(true);
 
     if (debounceRef.current) {
@@ -578,6 +584,22 @@ export default function PartySelect({
             if (inputValue.length >= minSearchChars) {
               searchParties(inputValue);
             }
+          }}
+          onBlur={() => {
+            if (!allowFreeText) return;
+            const trimmed = inputValue.trim();
+            if (trimmed !== inputValue) {
+              setInputValue(trimmed);
+              onChange(null, trimmed);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (!allowFreeText || e.key !== "Enter") return;
+            e.preventDefault();
+            const trimmed = inputValue.trim();
+            setInputValue(trimmed);
+            setIsOpen(false);
+            onChange(null, trimmed);
           }}
           placeholder="Search or type name..."
           className={`w-full rounded-lg border px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-1 ${

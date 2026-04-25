@@ -2652,9 +2652,10 @@ export default function AddServiceModal({
                           return replacingClientIdx === realIndex ? (
                             <div key={client.id || realIndex} className="w-48">
                               <PartySelect
+                                allowFreeText
                                 value={client.id}
                                 onChange={(id, name) => {
-                                  if (id) updateClient(realIndex, id, name);
+                                  updateClient(realIndex, id, name);
                                   setReplacingClientIdx(null);
                                 }}
                                 roleFilter="client"
@@ -2695,6 +2696,7 @@ export default function AddServiceModal({
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
                       <PartySelect
+                        allowFreeText
                         key={`payer-${payerPartyId || "empty"}`}
                         value={payerPartyId}
                         onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
@@ -2726,6 +2728,7 @@ export default function AddServiceModal({
                       </div>
                       <div className="flex-1 min-w-0">
                         <PartySelect
+                          allowFreeText
                           value={supplierPartyId}
                           onChange={(id, name) => {
                             setSupplierPartyId(id);
@@ -2764,6 +2767,7 @@ export default function AddServiceModal({
                           <div className="pl-6">
                             <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                             <PartySelect
+                              allowFreeText
                               value={airlineChannelSupplierId}
                               onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                               roleFilter="supplier"
@@ -3253,6 +3257,7 @@ export default function AddServiceModal({
                 <div className={categoryType === "tour" ? (parseAttemptedButEmpty.has("supplierName") ? "ring-2 ring-red-300 border-red-400 rounded-lg p-0.5 -m-0.5 bg-red-50/50" : parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : "") : undefined}>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Supplier</label>
                   <PartySelect
+                    allowFreeText
                     value={supplierPartyId}
                     onChange={(id, name) => {
                       setSupplierPartyId(id);
@@ -3289,6 +3294,7 @@ export default function AddServiceModal({
                         <div className="pl-6">
                           <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                           <PartySelect
+                            allowFreeText
                             value={airlineChannelSupplierId}
                             onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                             roleFilter="supplier"
@@ -3314,9 +3320,10 @@ export default function AddServiceModal({
                           {replacingClientIdx === realIdx ? (
                             <div className="w-48">
                               <PartySelect
+                                allowFreeText
                                 value={client.id}
                                 onChange={(id, name) => {
-                                  if (id) updateClient(realIdx, id, name);
+                                  updateClient(realIdx, id, name);
                                   setReplacingClientIdx(null);
                                 }}
                                 roleFilter="client"
@@ -3352,7 +3359,7 @@ export default function AddServiceModal({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                  <PartySelect allowFreeText key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 </div>
               </div>
                 )}
@@ -3376,9 +3383,10 @@ export default function AddServiceModal({
                           {replacingClientIdx === realIndex ? (
                             <div className="w-48">
                               <PartySelect
+                                allowFreeText
                                 value={client.id}
                                 onChange={(id, name) => {
-                                  if (id) updateClient(realIndex, id, name);
+                                  updateClient(realIndex, id, name);
                                   setReplacingClientIdx(null);
                                 }}
                                 roleFilter="client"
@@ -3436,6 +3444,7 @@ export default function AddServiceModal({
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
                   <PartySelect
+                    allowFreeText
                     key={`payer-${payerPartyId || "empty"}`}
                     value={payerPartyId}
                     onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }}
@@ -3453,6 +3462,7 @@ export default function AddServiceModal({
                 <h4 className="modal-section-title">SUPPLIER</h4>
                 <div className={parsedFields.has("supplierName") ? "ring-2 ring-green-300 border-green-400 rounded-lg p-0.5 -m-0.5" : ""}>
                   <PartySelect
+                    allowFreeText
                     value={supplierPartyId}
                     onChange={(id, name) => {
                       setSupplierPartyId(id);
@@ -3490,6 +3500,7 @@ export default function AddServiceModal({
                       <div className="pl-6">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                         <PartySelect
+                          allowFreeText
                           value={airlineChannelSupplierId}
                           onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                           roleFilter="supplier"
@@ -3629,12 +3640,13 @@ export default function AddServiceModal({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-0.5">Payer</label>
-                  <PartySelect key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
+                  <PartySelect allowFreeText key={`payer-${payerPartyId || "empty"}`} value={payerPartyId} onChange={(id, name) => { setPayerPartyId(id); setPayerName(name); }} roleFilter="" initialDisplayName={payerName} prioritizedParties={orderTravellers.map(t => ({ id: t.id, display_name: [t.firstName, t.lastName].filter(Boolean).join(" ").trim() || t.id, firstName: t.firstName, lastName: t.lastName, avatarUrl: t.avatarUrl }))} />
                 </div>
               </div>
               <div className="p-3 modal-section space-y-2">
                 <h4 className="modal-section-title">SUPPLIER</h4>
                 <PartySelect
+                  allowFreeText
                   value={supplierPartyId}
                   onChange={(id, name) => {
                     setSupplierPartyId(id);
@@ -3671,6 +3683,7 @@ export default function AddServiceModal({
                       <div className="pl-6">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Airline (issuing system)</label>
                         <PartySelect
+                          allowFreeText
                           value={airlineChannelSupplierId}
                           onChange={(id, name) => { setAirlineChannelSupplierId(id); setAirlineChannelSupplierName(name); }}
                           roleFilter="supplier"
