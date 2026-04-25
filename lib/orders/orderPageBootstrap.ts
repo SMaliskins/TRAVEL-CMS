@@ -244,7 +244,7 @@ export async function buildExpandedOrderAndInvoiceSummary(
   const needDateFill = !order.date_from || !order.date_to;
   const referralId = order.referral_party_id as string | null | undefined;
 
-  const [servicesRes, paymentsRes, invoicesRes, dateServicesRes, refPartyRes, ownerName] = await Promise.all([
+  const [servicesRes, paymentsRes, invoicesRes, dateServicesRes, clientPartyRes, refPartyRes, ownerName] = await Promise.all([
     admin.from("order_services").select("res_status, client_price").eq("order_id", orderId).eq("company_id", companyId),
     admin.from("payments").select("amount, status, invoice_id").eq("order_id", orderId),
     admin
@@ -261,6 +261,9 @@ export async function buildExpandedOrderAndInvoiceSummary(
           .eq("company_id", companyId)
           .neq("res_status", "cancelled")
       : Promise.resolve({ data: [] as { service_date_from?: string | null; service_date_to?: string | null }[] }),
+    order.client_party_id
+      ? admin.from("party").select("display_id").eq("id", order.client_party_id as string).eq("company_id", companyId).maybeSingle()
+      : Promise.resolve({ data: null as { display_id?: number | null } | null }),
     referralId
       ? admin.from("party").select("display_name").eq("id", referralId).maybeSingle()
       : Promise.resolve({ data: null as { display_name?: string | null } | null }),
@@ -390,6 +393,7 @@ export async function buildExpandedOrderAndInvoiceSummary(
     amount_debt: amountDebt,
     payment_dates: paymentDates,
     overdue_days: overdueDays,
+    client_display_id: clientPartyRes.data?.display_id ?? null,
     referral_party_display_name,
   };
 

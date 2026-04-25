@@ -262,6 +262,30 @@ export async function GET(
       {} as Record<string, { supplier_name?: string | null; supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null }>
     );
 
+    const partyIds = [
+      ...new Set(
+        rows
+          .flatMap((s) => [
+            s.supplier_party_id,
+            s.client_party_id,
+            s.payer_party_id,
+            s.airline_channel_supplier_id,
+          ])
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      ),
+    ];
+    let partyDisplayIdById: Record<string, number | null> = {};
+    if (partyIds.length > 0) {
+      const { data: partyRows } = await supabaseAdmin
+        .from("party")
+        .select("id, display_id")
+        .eq("company_id", companyId)
+        .in("id", partyIds);
+      partyDisplayIdById = Object.fromEntries(
+        (partyRows || []).map((p) => [p.id, (p as { display_id?: number | null }).display_id ?? null])
+      );
+    }
+
     const invoiceIds = [...new Set(rows.map((s) => s.invoice_id).filter((id): id is string => !!id))];
     let invoiceStatusById: Record<string, string | null> | undefined;
     if (invoiceIds.length > 0) {
@@ -284,6 +308,7 @@ export async function GET(
         categoryMap,
         contactOverridesMap,
         byId,
+        partyDisplayIdById,
         invoiceStatusById,
       })
     );

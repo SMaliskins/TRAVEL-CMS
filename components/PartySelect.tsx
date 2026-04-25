@@ -18,6 +18,7 @@ function toTitleCase(str: string): string {
 
 interface Party {
   id: string;
+  displayId?: number | null;
   display_name: string;
   name?: string;
   first_name?: string;
@@ -123,6 +124,7 @@ export default function PartySelect({
         const dn = p.display_name || [p.firstName, p.lastName].filter(Boolean).join(" ") || p.id;
         return {
           id: p.id,
+          displayId: null,
           display_name: dn,
           first_name: p.firstName,
           last_name: p.lastName,
@@ -183,6 +185,10 @@ export default function PartySelect({
             (r.companyAvatarUrl as string) || (r.company_avatar_url as string) || (r.logo_url as string) || null;
           return {
             id,
+            displayId:
+              (r.displayId as number | null | undefined) ??
+              (r.display_id as number | null | undefined) ??
+              null,
             display_name:
               (r.displayName as string) ||
               (r.display_name as string) ||
@@ -330,6 +336,7 @@ export default function PartySelect({
         
         const newParty: Party = {
           id: partyId,
+          displayId: data.record?.displayId ?? data.record?.display_id ?? data.displayId ?? data.display_id ?? null,
           display_name: displayName,
           party_type: createType,
         };
@@ -505,8 +512,24 @@ export default function PartySelect({
             const data = await response.json();
             const party = data.record || data;
             if (party) {
-              setSelectedParty(party);
-              setInputValue(party.display_name || party.name || "");
+              const displayName =
+                party.displayName ||
+                party.display_name ||
+                party.name ||
+                [party.firstName || party.first_name, party.lastName || party.last_name].filter(Boolean).join(" ") ||
+                "";
+              setSelectedParty({
+                id: party.id,
+                displayId: party.displayId ?? party.display_id ?? null,
+                display_name: displayName,
+                name: party.name,
+                first_name: party.firstName || party.first_name,
+                last_name: party.lastName || party.last_name,
+                party_type: party.type || party.party_type,
+                avatarUrl: party.avatarUrl || party.avatar_url || null,
+                companyAvatarUrl: party.companyAvatarUrl || party.company_avatar_url || party.logo_url || null,
+              });
+              setInputValue(displayName);
             }
           }
         } catch (err) {
@@ -600,7 +623,9 @@ export default function PartySelect({
             onChange(null, trimmed);
           }}
           placeholder="Search or type name..."
-          className={`w-full rounded-lg border px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-1 ${
+          className={`w-full rounded-lg border px-3 py-2.5 ${
+            selectedParty?.displayId ? "pr-28" : "pr-10"
+          } text-sm focus:outline-none focus:ring-1 ${
             error
               ? "border-red-300 focus:border-red-500 focus:ring-red-500"
               : "border-gray-300 focus:border-black focus:ring-black"
@@ -608,6 +633,11 @@ export default function PartySelect({
           required={required}
           autoComplete="off"
         />
+        {selectedParty?.displayId ? (
+          <span className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-500">
+            #{String(selectedParty.displayId).padStart(5, "0")}
+          </span>
+        ) : null}
         {(inputValue || selectedParty) && (
           <button
             type="button"
@@ -641,6 +671,7 @@ export default function PartySelect({
 
           {parties.map((party) => {
             const displayName = party.display_name || party.name || [party.first_name, party.last_name].filter(Boolean).join(" ");
+            const displayId = party.displayId;
             const initials = displayName.trim().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase()).slice(0, 2).join("");
             const rawAvatar = (party.avatarUrl || party.companyAvatarUrl || "").trim() || null;
             const avatarSrc = rawAvatar ? resolvePublicMediaUrl(rawAvatar, "avatars") || rawAvatar : null;
@@ -670,6 +701,11 @@ export default function PartySelect({
                   </span>
                 )}
                 <span className="flex-1 min-w-0 truncate">{displayName}</span>
+                {displayId ? (
+                  <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-500">
+                    #{String(displayId).padStart(5, "0")}
+                  </span>
+                ) : null}
                 {party.party_type && (
                   <span className="text-xs text-gray-400 shrink-0">{party.party_type}</span>
                 )}

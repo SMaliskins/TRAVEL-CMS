@@ -258,8 +258,19 @@ export async function PATCH(
       referral_party_display_name = refParty?.display_name ?? null;
     }
 
+    let client_display_id: number | null = null;
+    if (order.client_party_id) {
+      const { data: clientParty } = await supabaseAdmin
+        .from("party")
+        .select("display_id")
+        .eq("id", order.client_party_id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      client_display_id = clientParty?.display_id ?? null;
+    }
+
     return NextResponse.json({
-      order: { ...order, referral_party_display_name },
+      order: { ...order, client_display_id, referral_party_display_name },
       referralSync,
     });
   } catch (error: unknown) {

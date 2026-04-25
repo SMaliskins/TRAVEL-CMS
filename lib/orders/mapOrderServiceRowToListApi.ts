@@ -21,6 +21,7 @@ export type OrderServiceListMapContext = {
   categoryMap: Record<string, { type: string; vat_rate: number }>;
   contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }>;
   byId: OrderServiceListMapById;
+  partyDisplayIdById?: Record<string, number | null>;
   /** When set, used with invoice_id to compute clientPriceLocked (draft/cancelled = editable). */
   invoiceStatusById?: Record<string, string | null>;
 };
@@ -41,7 +42,7 @@ export function mapOrderServiceRowToListApiItem(
   row: Record<string, unknown>,
   ctx: OrderServiceListMapContext
 ): Record<string, unknown> {
-  const { travellerIds, categoryMap, contactOverridesMap, byId, invoiceStatusById } = ctx;
+  const { travellerIds, categoryMap, contactOverridesMap, byId, partyDisplayIdById, invoiceStatusById } = ctx;
   const categoryId = row.category_id as string | null | undefined;
   const hotelHid = row.hotel_hid as number | null | undefined;
   const override = hotelHid != null ? contactOverridesMap[hotelHid] : undefined;
@@ -138,13 +139,19 @@ export function mapOrderServiceRowToListApiItem(
     dateFrom: row.service_date_from,
     dateTo: row.service_date_to,
     supplierPartyId,
+    supplierDisplayId: supplierPartyId ? partyDisplayIdById?.[supplierPartyId] ?? null : null,
     supplierName: resolveSupplierName(row, byId),
     airlineChannel: row.airline_channel || false,
     airlineChannelSupplierId: row.airline_channel_supplier_id || null,
+    airlineChannelSupplierDisplayId: row.airline_channel_supplier_id
+      ? partyDisplayIdById?.[String(row.airline_channel_supplier_id)] ?? null
+      : null,
     airlineChannelSupplierName: row.airline_channel_supplier_name || "",
     clientPartyId: row.client_party_id,
+    clientDisplayId: row.client_party_id ? partyDisplayIdById?.[String(row.client_party_id)] ?? null : null,
     clientName: (row.client_name as string) || "",
     payerPartyId: row.payer_party_id,
+    payerDisplayId: row.payer_party_id ? partyDisplayIdById?.[String(row.payer_party_id)] ?? null : null,
     payerName: (row.payer_name as string) || "",
     servicePrice: parseFloat(String(row.service_price || "0")),
     clientPrice: parseFloat(String(row.client_price || "0")),

@@ -17,6 +17,7 @@ export type OrderHeaderEOrder = {
   id: string;
   order_code: string;
   client_display_name: string | null;
+  client_display_id?: number | null;
   client_party_id?: string | null;
   countries_cities: string | null;
   date_from: string | null;
@@ -423,27 +424,34 @@ export function OrderPageHeaderE({
               {leadPassengerHeaderAvatar.initials}
             </span>
           </button>
-          <button
-            type="button"
-            className={`cursor-pointer text-left font-semibold rounded px-0.5 ${
-              isCtrlPressed && order.client_party_id ? "text-blue-600 underline" : "text-blue-600 hover:underline"
-            }`}
-            onClick={(e) => {
-              if ((e.ctrlKey || e.metaKey) && order.client_party_id) {
-                e.preventDefault();
-                router.push(`/directory/${order.client_party_id}`);
-              } else {
-                startEditingClient();
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              className={`cursor-pointer truncate text-left font-semibold rounded px-0.5 ${
+                isCtrlPressed && order.client_party_id ? "text-blue-600 underline" : "text-blue-600 hover:underline"
+              }`}
+              onClick={(e) => {
+                if ((e.ctrlKey || e.metaKey) && order.client_party_id) {
+                  e.preventDefault();
+                  router.push(`/directory/${order.client_party_id}`);
+                } else {
+                  startEditingClient();
+                }
+              }}
+              title={
+                order.client_party_id
+                  ? `${t(lang, "order.clickToChangeClient")} · ${t(lang, "order.ctrlClickToOpenClient")}`
+                  : t(lang, "order.clickToChangeClient")
               }
-            }}
-            title={
-              order.client_party_id
-                ? `${t(lang, "order.clickToChangeClient")} · ${t(lang, "order.ctrlClickToOpenClient")}`
-                : t(lang, "order.clickToChangeClient")
-            }
-          >
-            {order.client_display_name || t(lang, "order.selectClient")}
-          </button>
+            >
+              {order.client_display_name || t(lang, "order.selectClient")}
+            </button>
+            {order.client_display_id ? (
+              <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] leading-4 text-gray-500">
+                #{String(order.client_display_id).padStart(5, "0")}
+              </span>
+            ) : null}
+          </span>
           <span className="text-gray-300">·</span>
           <button
             type="button"

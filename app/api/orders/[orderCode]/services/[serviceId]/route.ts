@@ -82,7 +82,7 @@ export async function GET(
 
     const travellerIds = (serviceTravellers || []).map((st: { traveller_id: string }) => st.traveller_id);
 
-    let categoryMap: Record<string, { type: string; vat_rate: number }> = {};
+    const categoryMap: Record<string, { type: string; vat_rate: number }> = {};
     const catId = rowRecord.category_id as string | null | undefined;
     if (catId) {
       const { data: cat } = await supabaseAdmin
@@ -95,7 +95,7 @@ export async function GET(
       }
     }
 
-    let contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }> = {};
+    const contactOverridesMap: Record<number, { address?: string; phone?: string; email?: string }> = {};
     const hotelHid = rowRecord.hotel_hid as number | null | undefined;
     if (hotelHid != null) {
       const { data: ov } = await supabaseAdmin
@@ -140,6 +140,29 @@ export async function GET(
       }
     }
 
+    const partyIds = [
+      ...new Set(
+        [
+          rowRecord.supplier_party_id,
+          rowRecord.client_party_id,
+          rowRecord.payer_party_id,
+          rowRecord.airline_channel_supplier_id,
+          ...Object.values(byId).map((s) => s.supplier_party_id),
+        ].filter((id): id is string => typeof id === "string" && id.length > 0)
+      ),
+    ];
+    let partyDisplayIdById: Record<string, number | null> = {};
+    if (partyIds.length > 0) {
+      const { data: partyRows } = await supabaseAdmin
+        .from("party")
+        .select("id, display_id")
+        .eq("company_id", companyId)
+        .in("id", partyIds);
+      partyDisplayIdById = Object.fromEntries(
+        (partyRows || []).map((p) => [p.id, (p as { display_id?: number | null }).display_id ?? null])
+      );
+    }
+
     const linkedInvId = rowRecord.invoice_id as string | null | undefined;
     let invoiceStatusById: Record<string, string | null> | undefined;
     if (linkedInvId) {
@@ -159,6 +182,7 @@ export async function GET(
       categoryMap,
       contactOverridesMap,
       byId,
+      partyDisplayIdById,
       invoiceStatusById,
     });
 

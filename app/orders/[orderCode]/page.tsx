@@ -111,6 +111,7 @@ interface OrderData {
   id: string;
   order_code: string;
   client_display_name: string | null;
+  client_display_id?: number | null;
   client_party_id?: string | null;
   countries_cities: string | null;
   date_from: string | null;
@@ -686,7 +687,13 @@ export default function OrderPage({
         }),
       });
       if (response.ok) {
-        setOrder({ ...order, client_party_id: partyId || null, client_display_name: displayName || null });
+        const data = await response.json().catch(() => ({}));
+        setOrder({
+          ...order,
+          ...(data.order || {}),
+          client_party_id: partyId || null,
+          client_display_name: displayName || null,
+        });
         setEditingHeaderField(null);
         try {
           const { data: { session: s2 } } = await supabase.auth.getSession();
@@ -1338,6 +1345,11 @@ export default function OrderPage({
                           >
                             {order.client_display_name || t(lang, "order.selectClient")}
                           </span>
+                          {order.client_display_id ? (
+                            <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] leading-4 text-gray-500">
+                              #{String(order.client_display_id).padStart(5, "0")}
+                            </span>
+                          ) : null}
                           {order.client_phone && (
                             <a href={`tel:${order.client_phone}`} className="text-sm text-blue-600 hover:text-blue-800">
                               {order.client_phone}

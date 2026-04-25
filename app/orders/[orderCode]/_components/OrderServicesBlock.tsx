@@ -149,6 +149,33 @@ function formatServiceSupplierDisplay(
   return `${left}/${air}`;
 }
 
+function formatPartyDisplayId(displayId: number | string | null | undefined): string | null {
+  if (displayId == null || displayId === "") return null;
+  const numeric = Number(displayId);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return `#${String(Math.trunc(numeric)).padStart(5, "0")}`;
+}
+
+function PartyNameWithId({
+  name,
+  displayId,
+}: {
+  name: string | null | undefined;
+  displayId?: number | string | null;
+}) {
+  const idLabel = formatPartyDisplayId(displayId);
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
+      <span className="min-w-0 truncate">{name || "-"}</span>
+      {idLabel ? (
+        <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1 py-0 font-mono text-[10px] leading-4 text-gray-500">
+          {idLabel}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export interface Traveller {
   id: string;
   firstName: string;
@@ -179,6 +206,9 @@ interface Service {
   supplierNameRaw?: string;
   client: string;
   payer: string;
+  supplierDisplayId?: number | null;
+  clientDisplayId?: number | null;
+  payerDisplayId?: number | null;
   supplierPartyId?: string;
   payerPartyId?: string;
   clientPartyId?: string;
@@ -373,6 +403,9 @@ function mapOrderServicesApiRowsToServices(rows: unknown): Service[] {
       ),
       client: String(s.clientName ?? s.client_name ?? "-"),
       payer: String(s.payerName ?? s.payer_name ?? "-"),
+      supplierDisplayId: (s.supplierDisplayId ?? s.supplier_display_id ?? null) as number | null,
+      clientDisplayId: (s.clientDisplayId ?? s.client_display_id ?? null) as number | null,
+      payerDisplayId: (s.payerDisplayId ?? s.payer_display_id ?? null) as number | null,
       supplierPartyId: (s.supplierPartyId ?? s.supplier_party_id) as string | undefined,
       payerPartyId: (s.payerPartyId ?? s.payer_party_id) as string | undefined,
       clientPartyId: (s.clientPartyId ?? s.client_party_id) as string | undefined,
@@ -2155,6 +2188,9 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       ),
       client: service.clientName || "-",
       payer: service.payerName || "-",
+      supplierDisplayId: (raw.supplierDisplayId ?? raw.supplier_display_id ?? null) as number | null,
+      clientDisplayId: (raw.clientDisplayId ?? raw.client_display_id ?? null) as number | null,
+      payerDisplayId: (raw.payerDisplayId ?? raw.payer_display_id ?? null) as number | null,
       supplierPartyId: service.supplierPartyId || undefined,
       clientPartyId: service.clientPartyId || undefined,
       payerPartyId: service.payerPartyId || undefined,
@@ -2892,7 +2928,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => (displayClientPartyId ?? service.clientPartyId) && setHoveredPartyId(`client-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              {displayClientName}
+                              <PartyNameWithId name={displayClientName} displayId={service.clientDisplayId} />
                             </td>
                                   );
                                 case "payer":
@@ -2908,7 +2944,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => service.payerPartyId && setHoveredPartyId(`payer-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              {service.payer}
+                              <PartyNameWithId name={service.payer} displayId={service.payerDisplayId} />
                             </td>
                                   );
                                 case "clientPrice":
@@ -2960,7 +2996,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => service.supplierPartyId && setHoveredPartyId(`supplier-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              {service.supplier}
+                              <PartyNameWithId name={service.supplier} displayId={service.supplierDisplayId} />
                             </td>
                                   );
                                 case "travellers":
