@@ -657,8 +657,8 @@ export default function PartySelect({
           style={{
             top: dropdownStyle.top,
             left: dropdownStyle.left,
-            width: Math.max(dropdownStyle.width, 200),
-            minWidth: 200,
+            width: Math.max(dropdownStyle.width, 280),
+            minWidth: 280,
           }}
         >
           {isLoading && (
@@ -700,15 +700,17 @@ export default function PartySelect({
                     {initials || "?"}
                   </span>
                 )}
-                <span className="flex-1 min-w-0 truncate">{displayName}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-gray-900" title={displayName}>{displayName}</span>
+                  {party.party_type && (
+                    <span className="block truncate text-xs text-gray-400">{party.party_type}</span>
+                  )}
+                </span>
                 {displayId ? (
                   <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-500">
                     #{String(displayId).padStart(5, "0")}
                   </span>
                 ) : null}
-                {party.party_type && (
-                  <span className="text-xs text-gray-400 shrink-0">{party.party_type}</span>
-                )}
               </button>
             );
           })}

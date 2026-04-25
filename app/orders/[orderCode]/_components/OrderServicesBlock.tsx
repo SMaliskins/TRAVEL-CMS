@@ -149,33 +149,6 @@ function formatServiceSupplierDisplay(
   return `${left}/${air}`;
 }
 
-function formatPartyDisplayId(displayId: number | string | null | undefined): string | null {
-  if (displayId == null || displayId === "") return null;
-  const numeric = Number(displayId);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return `#${String(Math.trunc(numeric)).padStart(5, "0")}`;
-}
-
-function PartyNameWithId({
-  name,
-  displayId,
-}: {
-  name: string | null | undefined;
-  displayId?: number | string | null;
-}) {
-  const idLabel = formatPartyDisplayId(displayId);
-  return (
-    <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
-      <span className="min-w-0 truncate">{name || "-"}</span>
-      {idLabel ? (
-        <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1 py-0 font-mono text-[10px] leading-4 text-gray-500">
-          {idLabel}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
 export interface Traveller {
   id: string;
   firstName: string;
@@ -2928,7 +2901,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => (displayClientPartyId ?? service.clientPartyId) && setHoveredPartyId(`client-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              <PartyNameWithId name={displayClientName} displayId={service.clientDisplayId} />
+                              {displayClientName}
                             </td>
                                   );
                                 case "payer":
@@ -2944,7 +2917,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => service.payerPartyId && setHoveredPartyId(`payer-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              <PartyNameWithId name={service.payer} displayId={service.payerDisplayId} />
+                              {service.payer}
                             </td>
                                   );
                                 case "clientPrice":
@@ -2996,7 +2969,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => service.supplierPartyId && setHoveredPartyId(`supplier-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              <PartyNameWithId name={service.supplier} displayId={service.supplierDisplayId} />
+                              {service.supplier}
                             </td>
                                   );
                                 case "travellers":
