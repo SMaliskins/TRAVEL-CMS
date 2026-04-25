@@ -588,10 +588,8 @@ export default function PartySelect({
           onBlur={() => {
             if (!allowFreeText) return;
             const trimmed = inputValue.trim();
-            if (trimmed !== inputValue) {
-              setInputValue(trimmed);
-              onChange(null, trimmed);
-            }
+            setInputValue(trimmed);
+            onChange(null, trimmed);
           }}
           onKeyDown={(e) => {
             if (!allowFreeText || e.key !== "Enter") return;

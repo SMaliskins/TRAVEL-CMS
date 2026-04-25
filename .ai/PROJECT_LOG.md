@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-04-25 15:13] CW — NOTIF-ACK: Mandatory system update acknowledgements
+
+**Task:** NOTIF-ACK | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Extended staff notifications so `system_update` read state is resolved per user via `release_views.read_at`.
+- Added required TopBar pop-up for unread system updates with a single acknowledgement button.
+- Added migration `insert_system_update_2026_04_25.sql` with the Apr 25 release notification.
+
+**Результат:** Managers must acknowledge system updates individually; acknowledged updates do not reappear for that manager.
+
+**Next Step:** Apply Supabase migration, QA
+
+---
+
 ## [2026-04-16] CODE_WRITER — MULTI-ROUTE-01 Step 4: inline route editor per passenger
 
 **Task:** MULTI-ROUTE-01 — per-passenger itinerary (multi-route orders) | **Status:** SUCCESS (Step 4 of 4)

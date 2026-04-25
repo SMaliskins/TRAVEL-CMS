@@ -7,6 +7,16 @@
 
 ---
 
+## [2026-04-25] Mandatory system update acknowledgements
+
+**Возможность (для описания продукта):** Important system updates are shown to every manager as a required pop-up with an “I have read this” acknowledgement. Once a manager confirms the update, it will not be shown again to that same manager.
+
+**Для пресс-релиза / маркетинг:** System release notes are now delivered as mandatory, per-user acknowledgements so every manager sees critical changes.
+
+**Технически:** Notifications — staff_notifications system_update, release_views per-user read tracking, TopBar modal.
+
+---
+
 ## Формат записи
 
 ```markdown

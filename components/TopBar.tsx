@@ -83,6 +83,9 @@ export default function TopBar() {
   } = useStaffNotificationsToolbarQuery();
   const notifications = notifPayload?.notifications ?? [];
   const unreadCount = notifPayload?.unreadCount ?? 0;
+  const mandatorySystemUpdate = notifications.find(
+    (n) => n.type === "system_update" && !n.read
+  );
 
   // Cash-register chime for incoming "payment_received" notifications.
   // - First refresh seeds the seen-set silently (no chime on initial load).
@@ -195,6 +198,24 @@ export default function TopBar() {
       router.push(safeLink);
     } else {
       setExpandedNotifId((prev) => (prev === n.id ? null : n.id));
+    }
+  };
+
+  const handleAcknowledgeSystemUpdate = async (notificationId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+      await fetch("/api/notifications/staff", {
+        method: "PATCH",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ ids: [notificationId] }),
+      });
+      void queryClient.invalidateQueries({ queryKey: staffNotificationsRootQueryKey });
+    } catch {
+      // keep the modal visible until acknowledgement is persisted
     }
   };
 
@@ -573,6 +594,49 @@ export default function TopBar() {
           </div>
         </div>
       </div>
+      {mandatorySystemUpdate && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-gray-100 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xl">
+                  {notifIcon(mandatorySystemUpdate.type)}
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                    {prefs.language === "ru"
+                      ? "Обязательное уведомление"
+                      : prefs.language === "lv"
+                        ? "Obligāts paziņojums"
+                        : "Required notice"}
+                  </p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {localizedText(mandatorySystemUpdate.title, prefs.language)}
+                  </h2>
+                </div>
+              </div>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700">
+                {localizedText(mandatorySystemUpdate.message, prefs.language)}
+              </p>
+            </div>
+            <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => handleAcknowledgeSystemUpdate(mandatorySystemUpdate.id)}
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+              >
+                {prefs.language === "ru"
+                  ? "Ознакомился"
+                  : prefs.language === "lv"
+                    ? "Iepazinos"
+                    : "I have read this"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
