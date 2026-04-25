@@ -121,9 +121,10 @@ export function mapOrderServiceRowToListApiItem(
 
   const supplierPartyId = (() => {
     const svc = row as { supplier_party_id?: string | null; parent_service_id?: string | null; service_type?: string | null };
-    if (svc.supplier_party_id || svc.service_type !== "cancellation") return row.supplier_party_id as string | null | undefined;
+    const rawSupplierPartyId = (row.supplier_party_id as string | null | undefined) ?? null;
+    if (svc.supplier_party_id || svc.service_type !== "cancellation") return rawSupplierPartyId;
     const parent = svc.parent_service_id ? byId[svc.parent_service_id] : null;
-    return (parent?.supplier_party_id ?? row.supplier_party_id) ?? null;
+    return (parent?.supplier_party_id ?? rawSupplierPartyId) ?? null;
   })();
 
   const invoiceId = (row.invoice_id as string | null | undefined) ?? null;
