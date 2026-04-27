@@ -8,7 +8,7 @@ import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelecto
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
-import { Upload, Pencil, Trash2, X, FileText, Eye } from "lucide-react";
+import { Upload, Pencil, Trash2, X, FileText, Eye, CheckCircle } from "lucide-react";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
 import ContentModal from "@/components/ContentModal";
 
@@ -23,7 +23,12 @@ interface CompanyExpenseRow {
   file_path: string | null;
   file_name: string | null;
   created_at: string;
+  accounting_state?: "pending" | "processed" | string;
+  accounting_processed_at?: string | null;
+  accounting_processed_by?: string | null;
 }
+
+type AccountingStateFilter = "all" | "pending" | "processed";
 
 const STORAGE_KEY = "travelcms.finances.companyExpenses.filters";
 
@@ -75,6 +80,8 @@ export default function CompanyExpensesPage() {
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
   const [quickSearch, setQuickSearch] = useState("");
+  const [accountingFilter, setAccountingFilter] = useState<AccountingStateFilter>("all");
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const [previewRow, setPreviewRow] = useState<CompanyExpenseRow | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
@@ -245,6 +252,63 @@ export default function CompanyExpensesPage() {
     if (res.ok) loadRows();
     else alert("Failed to delete");
   };
+
+  const handleProcess = async (row: CompanyExpenseRow) => {
+    const isProcessed = row.accounting_state === "processed";
+    const confirmText = isProcessed
+      ? "Revert this company expense back to Pending?"
+      : "Confirm that accounting should mark this company expense as processed?";
+    if (!confirm(confirmText)) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    setProcessingId(row.id);
+    try {
+      const res = await fetch(`/api/finances/company-expenses/${row.id}/process`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ processed: !isProcessed }),
+      });
+      if (res.ok) {
+        await loadRows();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to update accounting state");
+      }
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const renderAccountingBadge = (row: CompanyExpenseRow) => {
+    const state = row.accounting_state || "pending";
+    const styles: Record<string, string> = {
+      pending: "bg-amber-50 text-amber-700 border-amber-200",
+      processed: "bg-green-50 text-green-700 border-green-200",
+    };
+    const label = state === "processed" ? "Processed" : "Pending";
+    return (
+      <div>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${styles[state] || styles.pending}`}>
+          {state === "processed" && <CheckCircle className="h-3 w-3" />}
+          {label}
+        </span>
+        {state === "processed" && row.accounting_processed_at && (
+          <div className="mt-1 text-[11px] text-gray-500">{formatDateDDMMYYYY(row.accounting_processed_at)}</div>
+        )}
+      </div>
+    );
+  };
+
+  const visibleRows = rows.filter((row) => {
+    if (accountingFilter === "all") return true;
+    const state = row.accounting_state || "pending";
+    return state === accountingFilter;
+  });
+
+  const pendingCount = rows.filter((row) => (row.accounting_state || "pending") === "pending").length;
 
   const processFile = useCallback(async (file: File) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -422,6 +486,16 @@ export default function CompanyExpensesPage() {
           onChange={(e) => setAmountMax(sanitizeNumber(e.target.value))}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-md w-24 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
         />
+        <select
+          value={accountingFilter}
+          onChange={(e) => setAccountingFilter(e.target.value as AccountingStateFilter)}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          title="Accounting state"
+        >
+          <option value="all">All accounting</option>
+          <option value="pending">Pending{pendingCount > 0 ? ` (${pendingCount})` : ""}</option>
+          <option value="processed">Processed</option>
+        </select>
       </div>
 
       {/* Add invoice: compact bar — table is the main focus */}
@@ -495,10 +569,14 @@ export default function CompanyExpensesPage() {
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
         {loading ? (
           <div className="p-8 text-center text-gray-500 text-sm">{t(lang, "common.loading")}</div>
-        ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">{t(lang, "companyExpenses.noRows")}</div>
+        ) : visibleRows.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 text-sm">
+            {rows.length === 0
+              ? t(lang, "companyExpenses.noRows")
+              : "No expenses match the current filters."}
+          </div>
         ) : (
-          <table className="w-full text-sm min-w-[600px]">
+          <table className="w-full text-sm min-w-[680px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "companyExpenses.invoiceDate")}</th>
@@ -506,47 +584,65 @@ export default function CompanyExpensesPage() {
                 <th className="px-4 py-3 text-right font-semibold text-gray-700">{t(lang, "companyExpenses.amount")}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "companyExpenses.currency")}</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">{t(lang, "companyExpenses.description")}</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Accounting</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-700">{t(lang, "companyExpenses.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600">{formatDateDDMMYYYY(row.invoice_date)}</td>
-                  <td className="px-4 py-3 text-gray-900">{row.supplier}</td>
-                  <td className="px-4 py-3 text-right font-medium text-gray-900 tabular-nums">{row.amount.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-gray-600">{row.currency}</td>
-                  <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.description ?? undefined}>{row.description ?? "—"}</td>
-                  <td className="px-4 py-3 text-center whitespace-nowrap">
-                    {row.file_path ? (
+              {visibleRows.map((row) => {
+                const isProcessed = row.accounting_state === "processed";
+                return (
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-600">{formatDateDDMMYYYY(row.invoice_date)}</td>
+                    <td className="px-4 py-3 text-gray-900">{row.supplier}</td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900 tabular-nums">{row.amount.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.currency}</td>
+                    <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={row.description ?? undefined}>{row.description ?? "—"}</td>
+                    <td className="px-4 py-3">{renderAccountingBadge(row)}</td>
+                    <td className="px-4 py-3 text-center whitespace-nowrap">
                       <button
                         type="button"
-                        onClick={() => handlePreview(row)}
-                        className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
-                        title={t(lang, "companyExpenses.viewInvoice")}
+                        onClick={() => handleProcess(row)}
+                        disabled={processingId === row.id}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border mr-1 disabled:opacity-50 ${
+                          isProcessed
+                            ? "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                            : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                        }`}
+                        title={isProcessed ? "Revert to Pending" : "Mark as processed in accounting"}
                       >
-                        <Eye className="w-4 h-4" />
+                        {isProcessed ? "Revert" : "Process"}
                       </button>
-                    ) : null}
-                    {row.file_path ? (
-                      <button
-                        type="button"
-                        onClick={() => openInvoiceFile(row.id)}
-                        className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
-                        title="Open in new tab"
-                      >
-                        <FileText className="w-4 h-4" />
+                      {row.file_path ? (
+                        <button
+                          type="button"
+                          onClick={() => handlePreview(row)}
+                          className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
+                          title={t(lang, "companyExpenses.viewInvoice")}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      ) : null}
+                      {row.file_path ? (
+                        <button
+                          type="button"
+                          onClick={() => openInvoiceFile(row.id)}
+                          className="inline-flex p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5"
+                          title="Open in new tab"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => startEdit(row)} className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5" title="Edit">
+                        <Pencil className="w-4 h-4" />
                       </button>
-                    ) : null}
-                    <button type="button" onClick={() => startEdit(row)} className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md mr-0.5" title="Edit">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button type="button" onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md" title="Delete">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      <button type="button" onClick={() => handleDelete(row.id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md" title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

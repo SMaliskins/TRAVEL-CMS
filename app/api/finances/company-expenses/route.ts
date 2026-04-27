@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
     const amountMax = searchParams.get("amountMax");
     const search = searchParams.get("search")?.trim();
 
-    const baseSelect = "id, company_id, supplier, invoice_date, amount, currency, description, created_at, created_by";
-    const selectWithFile = "id, company_id, supplier, invoice_date, amount, currency, description, file_path, file_name, created_at, created_by";
+    const baseSelect = "id, company_id, supplier, invoice_date, amount, currency, description, created_at, created_by, accounting_state, accounting_processed_at, accounting_processed_by";
+    const selectWithFile = "id, company_id, supplier, invoice_date, amount, currency, description, file_path, file_name, created_at, created_by, accounting_state, accounting_processed_at, accounting_processed_by";
 
     let query = supabaseAdmin
       .from("company_expense_invoices")

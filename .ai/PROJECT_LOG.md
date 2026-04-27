@@ -3,6 +3,33 @@
 > Активный лог разработки. Записи за последнюю неделю.
 > 📁 Архив: `.ai/PROJECT_LOG_ARCHIVE_2026-01.md` (записи до 2026-01-19)
 
+## [2026-04-28 01:25] CW — EXP-PROCESS: Accountant Process workflow for Company Expenses
+
+**Task:** EXP-PROCESS | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Миграция `migrations/add_company_expenses_accounting.sql` (применена через Supabase MCP):
+  - В `company_expense_invoices` добавлены `accounting_state text NOT NULL DEFAULT 'pending'`, `accounting_processed_at timestamptz`, `accounting_processed_by uuid`.
+  - CHECK-констрейнт `accounting_state IN ('pending','processed')` (упрощённая модель: у company expenses нет связки с услугами, поэтому attention/replaced/changed нерелевантны).
+  - Индекс `(company_id, accounting_state)`, COMMENT на колонках.
+- API:
+  - `app/api/finances/company-expenses/route.ts` GET — добавлены `accounting_state`, `accounting_processed_at`, `accounting_processed_by` в SELECT (есть fallback при отсутствии колонки, но миграция применена).
+  - Новый endpoint `app/api/finances/company-expenses/[id]/process/route.ts` (PATCH): только Finance/Supervisor/Admin, `{ processed: true }` ставит processed + timestamp + actor, `{ processed: false }` откатывает в pending. Tenant-isolated по `company_id`. Идемпотентен (повторный одинаковый processed → 400).
+- UI `app/finances/company-expenses/page.tsx`:
+  - Тип `CompanyExpenseRow` расширен полями accounting; добавлен `AccountingStateFilter`.
+  - Новый фильтр в тулбаре: All / Pending (с счётчиком) / Processed.
+  - Новая колонка «Accounting» с бейджем (Pending — amber, Processed — green с галкой и датой).
+  - В колонке Actions — кнопка `Process` (зелёная) для pending или `Revert` (серая) для processed, с confirm перед действием. Дисэйблится во время запроса.
+  - `rows.map` → `visibleRows.map` для уважения accountingFilter.
+- `tsc --noEmit` чистый, lint чистый.
+
+**Результат:** Полный цикл «Process» теперь доступен и в `Company Expenses` по тем же визуальным/UX-принципам, что и `/finances/invoices` и `/finances/suppliers-invoices`. Бухгалтер видит, что в работе, что закрыто, и может одной кнопкой переключать состояние.
+
+**Next Step:** EXP-PROCESS → READY_FOR_QA. Ждёт прохода QA или подтверждения пользователя для пуша.
+
+
 ---
 
 ## [2026-04-27 22:30] CW — SUPINV-PERIODIC: Steps 2.3 + 2.4 — service default + Directory backfill
