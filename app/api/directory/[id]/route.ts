@@ -432,6 +432,10 @@ export async function PUT(
     if (updates.supplierExtras?.commissions !== undefined) {
       partyUpdates.supplier_commissions = updates.supplierExtras.commissions || null;
     }
+    // Periodic supplier flag (issues monthly/periodic invoices)
+    if (updates.supplierExtras?.isPeriodicSupplier !== undefined) {
+      partyUpdates.is_periodic_supplier = updates.supplierExtras.isPeriodicSupplier === true;
+    }
     partyUpdates.updated_at = new Date().toISOString();
     const user = await getCurrentUser(request);
     if (user) {

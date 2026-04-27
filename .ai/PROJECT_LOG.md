@@ -5,6 +5,32 @@
 
 ---
 
+## [2026-04-27 22:05] CW — SUPINV-PERIODIC: Step 2.2 — Directory UI + API for periodic flag
+
+**Task:** SUPINV-PERIODIC | **Status:** SUCCESS (Step 2.2 of 4)
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `lib/types/directory.ts`: в `SupplierDetails` добавлено поле `isPeriodicSupplier?: boolean` с описанием поведения.
+- `lib/directory/buildDirectoryRecord.ts`: маппинг `row.is_periodic_supplier === true` в `record.supplierExtras.isPeriodicSupplier` (используется в detail GET).
+- `app/api/directory/route.ts` (list GET): добавлен `is_periodic_supplier` в `partyColumns`; `mapPartyToRecord` теперь возвращает флаг в `supplierExtras`.
+- `app/api/directory/[id]/route.ts` (PUT): обработка `updates.supplierExtras.isPeriodicSupplier` → `partyUpdates.is_periodic_supplier = boolean`. Обнуление до `false` поддерживается (не undefined).
+- `app/api/directory/create/route.ts` (POST): при создании сохраняется `is_periodic_supplier: data.supplierExtras?.isPeriodicSupplier === true`.
+- `components/DirectoryForm.tsx`:
+  - State `isPeriodicSupplier` инициализируется из `record?.supplierExtras?.isPeriodicSupplier`.
+  - Hydration в `useEffect` при смене record.
+  - При сохранении всегда отдаётся булев (для возможности UNSET).
+  - В блок «Supplier Details» (видимый только когда роль = supplier) добавлен голубой банер с чекбоксом **Issues periodic invoices** + пояснение «New order services using this supplier will default to Periodic».
+  - Подключено к `hasFormDataChanged` — Save активируется только при изменении.
+- `tsc --noEmit` чисто, lint чисто.
+
+**Результат:** Менеджер может пометить поставщика как периодического в Directory. Сейчас флаг сохраняется в БД и читается формой/детальной карточкой, но **на поведение order_services пока не влияет** — это шаги 2.3 (default при создании сервиса) и 2.4 (backfill активных заказов).
+
+**Next Step:** CW → 2.3 default `supplier_invoice_requirement = 'periodic'` при создании сервиса.
+
+---
+
 ## [2026-04-27 21:40] DB — SUPINV-PERIODIC: Step 2.1 — add party.is_periodic_supplier flag
 
 **Task:** SUPINV-PERIODIC | **Status:** SUCCESS (Step 2.1 of 4)

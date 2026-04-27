@@ -126,6 +126,7 @@ export function buildDirectoryRecord(row: any): DirectoryRecord {
       website: row.supplier_website || undefined,
       documents: row.supplier_documents || undefined,
       commissions: row.supplier_commissions || undefined,
+      isPeriodicSupplier: row.is_periodic_supplier === true,
     };
   }
 

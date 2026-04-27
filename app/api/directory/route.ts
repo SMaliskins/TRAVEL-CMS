@@ -144,6 +144,7 @@ function buildDirectoryRecord(row: any): DirectoryRecord {
     record.supplierExtras = {
       serviceAreas: row.service_areas || undefined,
       commissions: row.supplier_commissions || undefined,
+      isPeriodicSupplier: row.is_periodic_supplier === true,
     };
   }
 
@@ -208,7 +209,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build base query
-    const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country,bank_accounts";
+    const partyColumns = "id,display_name,company_id,party_type,status,email,phone,updated_at,created_at,display_id,service_areas,supplier_commissions,country,bank_accounts,is_periodic_supplier";
     let query = supabaseAdmin
       .from("party")
       .select(partyColumns, { count: "exact" });

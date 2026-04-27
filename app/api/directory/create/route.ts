@@ -211,6 +211,8 @@ export async function POST(request: NextRequest) {
       supplier_documents: Array.isArray(data.supplierExtras?.documents) && data.supplierExtras.documents.length > 0 ? data.supplierExtras.documents : null,
       // Supplier commissions
       supplier_commissions: data.supplierExtras?.commissions || null,
+      // Periodic supplier flag (issues monthly/periodic invoices)
+      is_periodic_supplier: data.supplierExtras?.isPeriodicSupplier === true,
       // Corporate accounts / Loyalty cards / Bank accounts
       corporate_accounts: data.corporateAccounts && data.corporateAccounts.length > 0 ? data.corporateAccounts : null,
       loyalty_cards: data.loyaltyCards && data.loyaltyCards.length > 0 ? data.loyaltyCards : null,

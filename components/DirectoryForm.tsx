@@ -383,6 +383,9 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
     const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>(
       record?.supplierExtras?.commissions || []
     );
+    const [isPeriodicSupplier, setIsPeriodicSupplier] = useState<boolean>(
+      record?.supplierExtras?.isPeriodicSupplier === true
+    );
 
     // Subagent fields
     const [subagentCommissionType, setSubagentCommissionType] = useState<SubagentCommissionType>(
@@ -595,6 +598,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           setSupplierWebsite(record.supplierExtras.website || "");
           setSupplierDocuments(record.supplierExtras.documents || []);
           setSupplierCommissions(record.supplierExtras.commissions || []);
+          setIsPeriodicSupplier(record.supplierExtras.isPeriodicSupplier === true);
         }
         setReferralNotes(record.referralExtras?.notes ?? "");
         setReferralCurrency(record.referralExtras?.defaultCurrency ?? "EUR");
@@ -772,6 +776,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
         const currentWeb = supplierWebsite.trim();
         if (initialWeb !== currentWeb) return true;
         if (JSON.stringify(supplierCommissions) !== JSON.stringify(initialSupplier?.commissions || [])) return true;
+        if ((initialSupplier?.isPeriodicSupplier === true) !== (isPeriodicSupplier === true)) return true;
       }
 
       // Check subagent details
@@ -1000,6 +1005,7 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
           serviceDescription: supplierServiceDescription.trim() || undefined,
           website: supplierWebsite.trim() || undefined,
           commissions: supplierCommissions.length > 0 ? supplierCommissions : undefined,
+          isPeriodicSupplier: isPeriodicSupplier === true,
         };
       }
 
@@ -2345,6 +2351,28 @@ const DirectoryForm = React.forwardRef<DirectoryFormHandle, DirectoryFormProps>(
                   >
                     <h2 className="mb-3 text-lg font-semibold text-gray-900">Supplier Details</h2>
                     <div className="space-y-4">
+                      <div className="rounded-md border border-blue-100 bg-blue-50/60 p-3">
+                        <label className="flex cursor-pointer items-start gap-2 text-sm text-gray-800">
+                          <input
+                            type="checkbox"
+                            checked={isPeriodicSupplier}
+                            onChange={(e) => {
+                              setIsPeriodicSupplier(e.target.checked);
+                              markFieldDirty("isPeriodicSupplier");
+                            }}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>
+                            <span className="font-medium text-gray-900">Issues periodic invoices</span>
+                            <span className="ml-1 text-xs text-gray-600">
+                              (e.g. monthly / quarterly summary invoice)
+                            </span>
+                            <span className="mt-1 block text-xs text-gray-500">
+                              When enabled, new order services using this supplier will default to <span className="font-medium">Periodic</span> for supplier-invoice tracking.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
                       <div>
                         <label className="mb-2 block text-sm font-medium text-gray-700">
                           Service Areas

@@ -38,6 +38,13 @@ export interface SupplierDetails {
   /** Documents: brochures, rate cards, etc. */
   documents?: SupplierDocument[];
   commissions?: SupplierCommission[];
+  /**
+   * When true, this supplier issues periodic invoices (e.g. monthly).
+   * New order services for this supplier default to
+   * `supplier_invoice_requirement = 'periodic'` and existing required
+   * services can be backfilled in one click from the supplier card.
+   */
+  isPeriodicSupplier?: boolean;
 }
 
 export interface SubagentDetails {
