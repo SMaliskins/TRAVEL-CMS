@@ -145,8 +145,8 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
     return map;
   }, [documents, servicesForMatch]);
 
-  const supplierInvoiceCounts = useMemo(() => {
-    let missing = 0;
+  const supplierInvoiceBreakdown = useMemo(() => {
+    const missingServices: MatchableService[] = [];
     let matched = 0;
     let periodic = 0;
     let notRequired = 0;
@@ -161,11 +161,50 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
       } else if (count > 0) {
         matched += 1;
       } else {
-        missing += 1;
+        missingServices.push(raw);
       }
     }
-    return { missing, matched, periodic, notRequired };
+    return { missingServices, matched, periodic, notRequired };
   }, [servicesForMatch]);
+  const supplierInvoiceCounts = {
+    missing: supplierInvoiceBreakdown.missingServices.length,
+    matched: supplierInvoiceBreakdown.matched,
+    periodic: supplierInvoiceBreakdown.periodic,
+    notRequired: supplierInvoiceBreakdown.notRequired,
+  };
+
+  const [updatingRequirementServiceId, setUpdatingRequirementServiceId] = useState<string | null>(null);
+  const [showAllMissingServices, setShowAllMissingServices] = useState(false);
+
+  const updateServiceRequirement = useCallback(
+    async (serviceId: string, requirement: "required" | "periodic" | "not_required") => {
+      setUpdatingRequirementServiceId(serviceId);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `/api/orders/${encodeURIComponent(orderCode)}/services/${encodeURIComponent(serviceId)}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ supplier_invoice_requirement: requirement }),
+          }
+        );
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error || "Failed to update service requirement");
+        }
+        await queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.services(orderCode) });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to update service requirement");
+      } finally {
+        setUpdatingRequirementServiceId(null);
+      }
+    },
+    [orderCode, queryClient]
+  );
 
   useEffect(() => {
     setDocPage(1);
@@ -603,6 +642,75 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
           </div>
         )}
       </div>
+
+      {!servicesLoading && supplierInvoiceBreakdown.missingServices.length > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/40">
+          <div className="flex items-center justify-between border-b border-amber-200/70 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-amber-800">
+            <span>Services waiting for a supplier invoice</span>
+            {supplierInvoiceBreakdown.missingServices.length > 3 && (
+              <button
+                type="button"
+                onClick={() => setShowAllMissingServices((prev) => !prev)}
+                className="rounded px-1.5 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100"
+              >
+                {showAllMissingServices
+                  ? "Show less"
+                  : `Show all ${supplierInvoiceBreakdown.missingServices.length}`}
+              </button>
+            )}
+          </div>
+          <ul className="divide-y divide-amber-100">
+            {(showAllMissingServices
+              ? supplierInvoiceBreakdown.missingServices
+              : supplierInvoiceBreakdown.missingServices.slice(0, 3)
+            ).map((svc) => {
+              const id = String(svc.id);
+              const name = svc.serviceName || svc.service_name || "Service";
+              const supplier = svc.supplierName || svc.supplier_name || "No supplier";
+              const dateFrom = svc.serviceDateFrom || svc.service_date_from;
+              const dateTo = svc.serviceDateTo || svc.service_date_to;
+              const price = svc.servicePrice ?? svc.service_price;
+              const dateLabel =
+                dateFrom && dateTo && dateFrom !== dateTo
+                  ? `${formatDateDDMMYYYY(dateFrom)} — ${formatDateDDMMYYYY(dateTo)}`
+                  : dateFrom
+                    ? formatDateDDMMYYYY(dateFrom)
+                    : "";
+              return (
+                <li
+                  key={id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-xs text-gray-700"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium text-gray-900">{name}</span>
+                    {supplier ? <span className="text-gray-500"> · {supplier}</span> : null}
+                    {dateLabel ? <span className="text-gray-500"> · {dateLabel}</span> : null}
+                    {typeof price === "number" ? (
+                      <span className="text-gray-500"> · €{price.toFixed(2)}</span>
+                    ) : null}
+                  </span>
+                  <select
+                    value="required"
+                    disabled={updatingRequirementServiceId === id}
+                    onChange={(event) =>
+                      void updateServiceRequirement(
+                        id,
+                        event.target.value as "required" | "periodic" | "not_required"
+                      )
+                    }
+                    className="h-6 rounded border border-amber-200 bg-white px-1.5 text-[11px] text-gray-700 focus:border-amber-400 focus:outline-none disabled:opacity-50"
+                    aria-label={`Supplier invoice requirement for ${name}`}
+                  >
+                    <option value="required">Required</option>
+                    <option value="periodic">Periodic</option>
+                    <option value="not_required">Not required</option>
+                  </select>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {displayError && (
         <div className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{displayError}</div>
