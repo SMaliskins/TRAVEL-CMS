@@ -485,6 +485,7 @@ export default function EditServiceModalNew({
   // Tour (Package Tour) pricing
   const [supplierCommissions, setSupplierCommissions] = useState<SupplierCommission[]>([]);
   const [selectedCommissionIndex, setSelectedCommissionIndex] = useState<number>(-1);
+  const [commissionClearedByUser, setCommissionClearedByUser] = useState(false);
   const [agentDiscountValue, setAgentDiscountValue] = useState(() => {
       const cost = Number(service.servicePrice ?? 0);
       const sale = Number(service.clientPrice ?? 0);
@@ -1219,7 +1220,7 @@ export default function EditServiceModalNew({
     if (!usesCommissionPricing) return;
     const cost = effectiveServicePrice;
     let commissionAmount = getCommissionAmount(commissionableCost);
-    if (selectedCommissionIndex < 0) {
+    if (selectedCommissionIndex < 0 && !commissionClearedByUser) {
       const persisted = Number((service as { commissionAmount?: number | null }).commissionAmount);
       if (Number.isFinite(persisted) && persisted > 0) {
         commissionAmount = Math.round(persisted * 100) / 100;
@@ -1245,6 +1246,7 @@ export default function EditServiceModalNew({
     effectiveServicePrice,
     commissionableCost,
     selectedCommissionIndex,
+    commissionClearedByUser,
     supplierCommissions,
     agentDiscountType,
     service.commissionAmount,
@@ -2021,9 +2023,11 @@ export default function EditServiceModalNew({
     if (displayName && (rate > 0 || amount > 0)) {
       setSupplierCommissions([{ name: displayName, rate: rate || 0, isActive: true }]);
       setSelectedCommissionIndex(0);
+      setCommissionClearedByUser(false);
     } else {
       setSupplierCommissions([]);
       setSelectedCommissionIndex(-1);
+      setCommissionClearedByUser(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryType, supplierPartyId, service.commissionName, service.commissionRate, service.commissionAmount]);
@@ -2049,20 +2053,20 @@ export default function EditServiceModalNew({
 
       if (list.length > 0) {
         const idx = savedName ? list.findIndex((c: SupplierCommission) => c.name === savedName) : -1;
-        if (idx < 0 && savedName && (savedRate > 0 || savedAmount > 0)) {
+        if (!commissionClearedByUser && idx < 0 && savedName && (savedRate > 0 || savedAmount > 0)) {
           list.push({ name: savedName, rate: savedRate, isActive: true });
           setSupplierCommissions(list);
           setSelectedCommissionIndex(list.length - 1);
         } else {
           setSupplierCommissions(list);
-          setSelectedCommissionIndex(idx >= 0 ? idx : -1);
+          setSelectedCommissionIndex(!commissionClearedByUser && idx >= 0 ? idx : -1);
         }
-      } else if (savedName && (savedRate > 0 || savedAmount > 0)) {
+      } else if (!commissionClearedByUser && savedName && (savedRate > 0 || savedAmount > 0)) {
         setSupplierCommissions([{ name: savedName, rate: savedRate, isActive: true }]);
         setSelectedCommissionIndex(0);
       }
     } catch {}
-  }, [usesCommissionPricing, supplierPartyId, service.commissionName, service.commissionRate, service.commissionAmount]);
+  }, [usesCommissionPricing, supplierPartyId, service.commissionName, service.commissionRate, service.commissionAmount, commissionClearedByUser]);
 
   // Auto-load supplier commissions on mount for tour / commission-style services
   useEffect(() => {
@@ -5024,7 +5028,9 @@ export default function EditServiceModalNew({
                           onFocus={loadSupplierCommissions}
                           onChange={(e) => {
                             pricingLastEditedRef.current = "commission";
-                            setSelectedCommissionIndex(parseInt(e.target.value, 10));
+                            const nextIndex = parseInt(e.target.value, 10);
+                            setCommissionClearedByUser(nextIndex < 0);
+                            setSelectedCommissionIndex(nextIndex);
                           }}
                           className="w-full min-w-0 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                           aria-label="Commission"
@@ -5634,7 +5640,7 @@ export default function EditServiceModalNew({
                   const hasComm = comm && comm.rate != null && comm.rate > 0;
                   const commAmount = hasComm ? getCommissionAmount(commissionableCost) : 0;
                   let effComm = commAmount;
-                  if (effComm === 0 && selectedCommissionIndex < 0) {
+                  if (effComm === 0 && selectedCommissionIndex < 0 && !commissionClearedByUser) {
                     const persisted = Number((service as { commissionAmount?: number | null }).commissionAmount);
                     if (Number.isFinite(persisted) && persisted > 0) effComm = Math.round(persisted * 100) / 100;
                   }

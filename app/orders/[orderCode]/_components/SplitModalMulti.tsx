@@ -82,13 +82,22 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
         if (dirRes.ok) {
           const dirData = await dirRes.json();
           const records = dirData.data || [];
-          allParties = records.map((r: { id: string; displayName?: string; companyName?: string; firstName?: string; lastName?: string; partyType?: string; type?: string; avatarUrl?: string; companyAvatarUrl?: string }) => ({
-            id: r.id,
-            display_name: r.displayName || r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown",
-            party_type: r.partyType || r.type || "person",
-            isFromOrder: false,
-            avatarUrl: r.avatarUrl || r.companyAvatarUrl || null,
-          }));
+          allParties = records.map((r: Record<string, unknown>) => {
+            const displayName =
+              (r.displayName as string) ||
+              (r.display_name as string) ||
+              (r.companyName as string) ||
+              (r.company_name as string) ||
+              [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
+              "Unknown";
+            return {
+              id: r.id as string,
+              display_name: displayName,
+              party_type: (r.partyType as string) || (r.party_type as string) || (r.type as string) || "person",
+              isFromOrder: false,
+              avatarUrl: ((r.avatarUrl as string) || (r.avatar_url as string) || (r.companyAvatarUrl as string) || (r.company_avatar_url as string) || null),
+            };
+          });
         } else {
           console.error("[SplitMulti] Directory API failed:", dirRes.status, await dirRes.text().catch(() => ""));
           // Fallback: try /api/party
@@ -684,7 +693,6 @@ function PayerSelect({
   // Live search directory API
   useEffect(() => {
     if (!search || search.length < 2) {
-      setLiveResults([]);
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -698,13 +706,22 @@ function PayerSelect({
         });
         if (res.ok) {
           const json = await res.json();
-          const items: Party[] = (json.data || []).map((r: { id: string; companyName?: string; firstName?: string; lastName?: string; type?: string; avatarUrl?: string; companyAvatarUrl?: string }) => ({
-            id: r.id,
-            display_name: r.companyName || [r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown",
-            party_type: r.type || "person",
-            isFromOrder: false,
-            avatarUrl: r.avatarUrl || r.companyAvatarUrl || null,
-          }));
+          const items: Party[] = (json.data || []).map((r: Record<string, unknown>) => {
+            const displayName =
+              (r.displayName as string) ||
+              (r.display_name as string) ||
+              (r.companyName as string) ||
+              (r.company_name as string) ||
+              [r.firstName || r.first_name, r.lastName || r.last_name].filter(Boolean).join(" ") ||
+              "Unknown";
+            return {
+              id: r.id as string,
+              display_name: displayName,
+              party_type: (r.partyType as string) || (r.party_type as string) || (r.type as string) || "person",
+              isFromOrder: false,
+              avatarUrl: ((r.avatarUrl as string) || (r.avatar_url as string) || (r.companyAvatarUrl as string) || (r.company_avatar_url as string) || null),
+            };
+          });
           setLiveResults(items);
         }
       } catch { /* silent */ }
@@ -729,12 +746,15 @@ function PayerSelect({
         type="text"
         value={isOpen ? search : resolvedName}
         onChange={(e) => {
-          setSearch(e.target.value);
+          const nextSearch = e.target.value;
+          setSearch(nextSearch);
+          if (nextSearch.length < 2) setLiveResults([]);
           setIsOpen(true);
         }}
         onFocus={() => {
           setIsOpen(true);
           setSearch("");
+          setLiveResults([]);
         }}
         placeholder={placeholder}
         className={`w-full px-2 py-1 text-sm border rounded pr-6 ${
