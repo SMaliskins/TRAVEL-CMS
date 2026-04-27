@@ -508,34 +508,32 @@ const getSupplierInvoicePreviewToneClass = (tone: SupplierInvoicePreviewTone | u
   }
 };
 
-function getSupplierInvoicePreviewShort(status: string | undefined): { short: string | null; Icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> } {
+function getSupplierInvoicePreviewIcon(status: string | undefined): React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> {
   switch (status) {
-    case "all_matched":
-      return { short: null, Icon: CheckCircle2 };
     case "missing":
-      return { short: "Missing", Icon: AlertTriangle };
+      return CircleAlert;
     case "unmatched_documents":
-      return { short: "Unmatched", Icon: FileText };
+      return FileText;
     case "attention":
-      return { short: "Attention", Icon: CircleAlert };
+      return AlertTriangle;
     case "periodic_only":
-      return { short: "Periodic", Icon: CalendarDays };
+      return CalendarDays;
+    case "all_matched":
     default:
-      return { short: null, Icon: CheckCircle2 };
+      return CheckCircle2;
   }
 }
 
 function renderSupplierInvoicePreviewBadge(order: OrderRow) {
   const fullLabel = order.supplierInvoiceStatusLabel || "All matched";
-  const { short, Icon } = getSupplierInvoicePreviewShort(order.supplierInvoiceStatus);
+  const Icon = getSupplierInvoicePreviewIcon(order.supplierInvoiceStatus);
   const toneClass = getSupplierInvoicePreviewToneClass(order.supplierInvoiceStatusTone);
   return (
     <span
-      className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${toneClass}`}
+      className={`inline-flex justify-center ${toneClass} cursor-help`}
       title={fullLabel}
     >
-      <Icon size={12} strokeWidth={2} />
-      {short ? <span>{short}</span> : null}
+      <Icon size={14} strokeWidth={1.8} />
     </span>
   );
 }
@@ -1341,8 +1339,10 @@ export default function OrdersPage() {
                     <Clock size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
                   </span>
                 </th>
-                <th className="w-24 px-2 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600" title="Supplier invoices status">
-                  Sup. inv.
+                <th className="w-8 px-1 py-1 text-center text-[10px] font-medium uppercase tracking-wider text-gray-600">
+                  <span title="Supplier invoices status" className="cursor-help">
+                    <FileText size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
+                  </span>
                 </th>
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.client")}
@@ -1445,7 +1445,7 @@ export default function OrdersPage() {
                             </span>
                           ) : <span className="text-gray-400">-</span>}
                         </td>
-                        <td className="whitespace-nowrap px-1.5 py-0.5 text-sm">
+                        <td className="w-8 px-1 py-0.5 text-center">
                           {renderSupplierInvoicePreviewBadge(order)}
                         </td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-800">{order.client}</td>
@@ -1657,7 +1657,7 @@ export default function OrdersPage() {
                                           <span className="text-gray-400">-</span>
                                         )}
                                       </td>
-                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-sm">
+                                      <td className="w-8 px-1 py-0.5 text-center">
                                         {renderSupplierInvoicePreviewBadge(order)}
                                       </td>
                                       
