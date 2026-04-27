@@ -54,6 +54,11 @@ import { useModalOverlay } from "@/contexts/ModalOverlayContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
+import {
+  getSupplierInvoiceServiceStatus,
+  normalizeSupplierInvoiceRequirement,
+  type SupplierInvoiceRequirement,
+} from "@/lib/finances/supplierInvoiceServiceStatus";
 
 // ---------------------------------------------------------------------------
 // Column config — drag-reorder + resize + localStorage persistence
@@ -233,6 +238,11 @@ interface Service {
   hotelParking?: boolean | null;
   hotelPreferencesFreeText?: string | null;
   supplierBookingType?: string | null;
+  supplierInvoiceRequirement?: SupplierInvoiceRequirement | string;
+  supplierInvoicePeriod?: string | null;
+  supplierInvoiceNote?: string | null;
+  supplierInvoiceDocumentCount?: number;
+  supplierInvoiceStatus?: string;
   // Transfer-specific
   pickupLocation?: string;
   dropoffLocation?: string;
@@ -475,6 +485,11 @@ function mapOrderServicesApiRowsToServices(rows: unknown): Service[] {
       hotelPreferencesFreeText: (s.hotelPreferencesFreeText ?? s.hotel_preferences_free_text ?? null) as string | null,
       hotelPricePer: (s.hotelPricePer ?? (s as { hotel_price_per?: string }).hotel_price_per ?? null) as Service["hotelPricePer"],
       supplierBookingType: (s.supplierBookingType ?? s.supplier_booking_type ?? null) as string | null,
+      supplierInvoiceRequirement: normalizeSupplierInvoiceRequirement(s.supplierInvoiceRequirement ?? s.supplier_invoice_requirement),
+      supplierInvoicePeriod: (s.supplierInvoicePeriod ?? s.supplier_invoice_period ?? null) as string | null,
+      supplierInvoiceNote: (s.supplierInvoiceNote ?? s.supplier_invoice_note ?? null) as string | null,
+      supplierInvoiceDocumentCount: Number(s.supplierInvoiceDocumentCount ?? s.supplier_invoice_document_count ?? 0),
+      supplierInvoiceStatus: String(s.supplierInvoiceStatus ?? s.supplier_invoice_status ?? ""),
       paymentDeadlineDeposit: (s.paymentDeadlineDeposit ?? s.payment_deadline_deposit ?? null) as string | null,
       paymentDeadlineFinal: (s.paymentDeadlineFinal ?? s.payment_deadline_final ?? null) as string | null,
       paymentTerms: (s.paymentTerms ?? s.payment_terms ?? null) as string | null,
@@ -894,6 +909,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
   const [filterSupplier, setFilterSupplier] = useState("");
   const [filterClient, setFilterClient] = useState("");
   const [filterPayer, setFilterPayer] = useState("");
+  const [updatingSupplierInvoiceServiceId, setUpdatingSupplierInvoiceServiceId] = useState<string | null>(null);
   const filterMenuRef = React.useRef<HTMLDivElement>(null);
   const [contentModal, setContentModal] = useState<{ url: string; title: string } | null>(null);
   const [bpEmailModal, setBpEmailModal] = useState<{ to: string; subject: string; message: string } | null>(null);
@@ -994,7 +1010,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
       setSelectedServiceIds(prev => prev.filter(id => !visibleServicesWithoutInvoice.includes(id)));
     }
   };
-  
+
   const [splitMultiModalOpen, setSplitMultiModalOpen] = useState(false);
   const [splitServiceId, setSplitServiceId] = useState<string | null>(null);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
@@ -1821,6 +1837,38 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
     }
   }, [orderCode, reloadServicesFromParent]);
 
+  const updateSupplierInvoiceRequirement = useCallback(async (
+    service: Service,
+    requirement: SupplierInvoiceRequirement
+  ) => {
+    if (normalizeSupplierInvoiceRequirement(service.supplierInvoiceRequirement) === requirement) return;
+    setUpdatingSupplierInvoiceServiceId(service.id);
+    try {
+      const response = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/services/${service.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier_invoice_requirement: requirement }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.details || err?.error || "Failed to update supplier invoice status");
+      }
+      setServices((prev) =>
+        prev.map((item) =>
+          item.id === service.id
+            ? { ...item, supplierInvoiceRequirement: requirement }
+            : item
+        )
+      );
+      void fetchServices(true);
+    } catch (error) {
+      console.error("Supplier invoice requirement update failed:", error);
+      alert(error instanceof Error ? error.message : "Failed to update supplier invoice status");
+    } finally {
+      setUpdatingSupplierInvoiceServiceId(null);
+    }
+  }, [fetchServices, orderCode]);
+
   useEffect(() => {
     if (!parentControlsServices) return;
     if (servicesFromParent === null || servicesFromParent === undefined) {
@@ -2617,7 +2665,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse min-w-[680px]">
-            <thead>
+            <thead className="sticky top-0 z-20">
               <tr className="border-b border-gray-200 bg-gray-50">
                 {orderedColumns.map((colKey) => {
                   const def = getColumnDef(colKey);
@@ -2643,7 +2691,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                         setDragOverCol(null);
                       }}
                       style={{ width: w, minWidth: def.minWidth }}
-                      className={`relative select-none px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-gray-700 cursor-grab ${
+                      className={`relative select-none bg-gray-50 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-gray-700 cursor-grab ${
                         def.align === "center" ? "text-center" : "text-left"
                       } ${dragOverCol === colKey ? "border-l-2 border-blue-400" : ""}`}
                     >
@@ -2969,7 +3017,49 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                               onMouseEnter={() => service.supplierPartyId && setHoveredPartyId(`supplier-${service.id}`)}
                               onMouseLeave={() => setHoveredPartyId(null)}
                             >
-                              {service.supplier}
+                              <div className="flex flex-col gap-0.5">
+                                <span>{service.supplier}</span>
+                                {(() => {
+                                  const status = getSupplierInvoiceServiceStatus({
+                                    requirement: service.supplierInvoiceRequirement,
+                                    activeDocumentCount: service.supplierInvoiceDocumentCount ?? 0,
+                                  });
+                                  const toneClass =
+                                    status.tone === "green"
+                                      ? "border-green-200 bg-green-50 text-green-700"
+                                      : status.tone === "blue"
+                                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                                        : status.tone === "gray"
+                                          ? "border-gray-200 bg-gray-50 text-gray-600"
+                                          : "border-amber-200 bg-amber-50 text-amber-700";
+                                  return (
+                                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                      <span
+                                        className={`inline-flex rounded-full border px-1.5 py-0 text-[10px] font-medium leading-tight ${toneClass}`}
+                                        title={service.supplierInvoiceNote || undefined}
+                                      >
+                                        {status.label}
+                                      </span>
+                                      <select
+                                        value={normalizeSupplierInvoiceRequirement(service.supplierInvoiceRequirement)}
+                                        disabled={updatingSupplierInvoiceServiceId === service.id}
+                                        onChange={(event) =>
+                                          void updateSupplierInvoiceRequirement(
+                                            service,
+                                            event.target.value as SupplierInvoiceRequirement
+                                          )
+                                        }
+                                        className="h-5 rounded border border-gray-200 bg-white px-1 text-[10px] text-gray-600 focus:border-blue-400 focus:outline-none disabled:opacity-50"
+                                        aria-label={`Supplier invoice requirement for ${service.name}`}
+                                      >
+                                        <option value="required">Required</option>
+                                        <option value="periodic">Periodic</option>
+                                        <option value="not_required">Not required</option>
+                                      </select>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </td>
                                   );
                                 case "travellers":

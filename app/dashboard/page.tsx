@@ -38,6 +38,7 @@ interface DashboardStatistics {
   vat: number;
   totalCommission: number;
   overdueAmount: number;
+  overdueInPeriodAmount?: number;
   targetProfitMonthly: number;
   targetRevenueMonthly: number;
   targetOrdersMonthly: number;
@@ -426,6 +427,14 @@ export default function DashboardPage() {
     if (cardPeriods[card] === "inherit") return { start: periodStart, end: periodEnd };
     return calcCardDates(cardPeriods[card]);
   };
+  const getOverdueDisplayAmount = (): number => {
+    const stats = getStats("overdue");
+    if (!stats) return 0;
+    if (cardPeriods.overdue !== "allTime" && typeof stats.overdueInPeriodAmount === "number") {
+      return stats.overdueInPeriodAmount;
+    }
+    return stats.overdueAmount || 0;
+  };
 
   useEffect(() => {
     const checkUser = async () => {
@@ -529,7 +538,11 @@ export default function DashboardPage() {
           <FinanceDashboard
             periodStart={periodStart}
             periodEnd={periodEnd}
-            statistics={statistics ? { revenue: statistics.revenue, overdueAmount: statistics.overdueAmount } : null}
+            statistics={statistics ? {
+              revenue: statistics.revenue,
+              overdueAmount: statistics.overdueAmount,
+              overdueInPeriodAmount: statistics.overdueInPeriodAmount,
+            } : null}
             previousYear={previousYear ? { revenue: previousYear.revenue } : null}
             calcCardDates={calcCardDates}
             calculateChangePercent={calculateChangePercent}
@@ -594,7 +607,7 @@ export default function DashboardPage() {
               />
               <StatisticCard
                 title="Overdue Payments"
-                value={`€${(getStats("overdue")?.overdueAmount || 0).toLocaleString()}`}
+                value={`€${getOverdueDisplayAmount().toLocaleString()}`}
                 valueClassName="text-red-600"
                 cardPeriod={cardPeriods.overdue}
                 onCardPeriodChange={(p) => setCardPeriods(prev => ({ ...prev, overdue: p }))}

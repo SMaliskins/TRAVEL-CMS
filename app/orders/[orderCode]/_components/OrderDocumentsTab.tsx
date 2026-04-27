@@ -10,12 +10,57 @@ import { t } from "@/lib/i18n";
 import { FileUp, FileText, Download, Trash2, Eye, Pencil, Check, X } from "lucide-react";
 import {
   fetchOrderDocuments,
+  fetchOrderServicesList,
   orderPageQueryKeys,
   type OrderDocumentListRow,
   type OrderDocumentsQueryResult,
 } from "@/lib/orders/orderPageQueries";
 
 type OrderDocument = OrderDocumentListRow;
+
+type MatchableService = {
+  id: string;
+  category?: string | null;
+  serviceName?: string | null;
+  service_name?: string | null;
+  supplierName?: string | null;
+  supplier_name?: string | null;
+  serviceDateFrom?: string | null;
+  service_date_from?: string | null;
+  serviceDateTo?: string | null;
+  service_date_to?: string | null;
+  servicePrice?: number | null;
+  service_price?: number | null;
+  supplierInvoiceRequirement?: string | null;
+  supplier_invoice_requirement?: string | null;
+};
+
+function StatusBadge({
+  children,
+  tone = "gray",
+  onClick,
+}: {
+  children: React.ReactNode;
+  tone?: "green" | "amber" | "blue" | "gray" | "red" | "purple";
+  onClick?: () => void;
+}) {
+  const colors = {
+    green: "border-green-200 bg-green-50 text-green-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    gray: "border-gray-200 bg-gray-50 text-gray-700",
+    red: "border-red-200 bg-red-50 text-red-700",
+    purple: "border-purple-200 bg-purple-50 text-purple-700",
+  };
+  const className = `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${colors[tone]} ${
+    onClick ? "cursor-pointer hover:opacity-80" : ""
+  }`;
+  return (
+    <button type="button" className={className} onClick={onClick} disabled={!onClick}>
+      {children}
+    </button>
+  );
+}
 
 interface ParsedInvoice {
   supplier?: string;
@@ -62,6 +107,14 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<OrderDocument>>({});
   const [docDropActive, setDocDropActive] = useState(false);
+  const [matchDoc, setMatchDoc] = useState<OrderDocument | null>(null);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<Set<string>>(new Set());
+  const [savingMatch, setSavingMatch] = useState(false);
+  const { data: servicesForMatch = [], isPending: servicesLoading } = useQuery({
+    queryKey: orderPageQueryKeys.services(orderCode),
+    queryFn: () => fetchOrderServicesList(orderCode),
+    enabled: Boolean(orderCode) && Boolean(matchDoc),
+  });
 
   useEffect(() => {
     setDocPage(1);
@@ -69,6 +122,84 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
 
   const showDocumentsEmptyOnboarding =
     !loading && (docPagination?.total ?? 0) === 0 && documents.length === 0;
+
+  const openMatchModal = (doc: OrderDocument) => {
+    setMatchDoc(doc);
+    setSelectedServiceIds(new Set((doc.matched_services || []).map((service) => service.id)));
+  };
+
+  const closeMatchModal = () => {
+    setMatchDoc(null);
+    setSelectedServiceIds(new Set());
+    setSavingMatch(false);
+  };
+
+  const saveMatch = async () => {
+    if (!matchDoc) return;
+    setSavingMatch(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderCode)}/documents/${matchDoc.id}/match-services`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ serviceIds: Array.from(selectedServiceIds) }),
+        }
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to save service match");
+      }
+      await queryClient.invalidateQueries({ queryKey: ["order-documents", orderCode] });
+      await queryClient.invalidateQueries({ queryKey: orderPageQueryKeys.services(orderCode) });
+      closeMatchModal();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save service match");
+      setSavingMatch(false);
+    }
+  };
+
+  const renderMatchBadge = (doc: OrderDocument) => {
+    if (doc.document_state === "deleted") return <StatusBadge tone="red">Deleted</StatusBadge>;
+    if (doc.document_state === "replaced") return <StatusBadge tone="amber">Replaced</StatusBadge>;
+    const count = doc.matched_service_count || 0;
+    if (count > 0) {
+      return (
+        <StatusBadge tone="green" onClick={() => openMatchModal(doc)}>
+          Matched: {count}
+        </StatusBadge>
+      );
+    }
+    return (
+      <StatusBadge tone="amber" onClick={() => openMatchModal(doc)}>
+        Unmatched
+      </StatusBadge>
+    );
+  };
+
+  const renderAccountingBadge = (doc: OrderDocument) => {
+    const state = doc.accounting_state || "pending";
+    if (state === "processed") {
+      return (
+        <div>
+          <StatusBadge tone="green">Processed</StatusBadge>
+          {doc.accounting_processed_at && (
+            <div className="mt-1 text-[11px] text-gray-500">{formatDateDDMMYYYY(doc.accounting_processed_at)}</div>
+          )}
+        </div>
+      );
+    }
+    if (state === "attention") {
+      return <StatusBadge tone="red">Attention{doc.attention_reason ? `: ${doc.attention_reason}` : ""}</StatusBadge>;
+    }
+    if (state === "cancelled_processed") return <StatusBadge tone="purple">Cancelled processed</StatusBadge>;
+    return <StatusBadge tone="gray">Pending</StatusBadge>;
+  };
 
   const parseDocument = useCallback(async (doc: OrderDocument): Promise<void> => {
     const mime = (doc.mime_type || doc.file_name || "").toLowerCase();
@@ -296,7 +427,12 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   };
 
   const handleDelete = async (docId: string) => {
-    if (!confirm("Delete this document?")) return;
+    const doc = documents.find((item) => item.id === docId);
+    const message =
+      doc?.accounting_state === "processed" || doc?.accounting_state === "attention"
+        ? "This invoice was already processed by accounting. It will be marked as deleted and sent to Attention instead of being permanently removed."
+        : "Delete this document?";
+    if (!confirm(message)) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`/api/orders/${encodeURIComponent(orderCode)}/documents/${docId}`, {
@@ -387,6 +523,8 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
               <th className="px-4 py-2">Invoice No.</th>
               <th className="px-4 py-2">Supplier</th>
               <th className="px-4 py-2">Date</th>
+              <th className="px-4 py-2">Service Match</th>
+              <th className="px-4 py-2">Accounting</th>
               <th className="px-4 py-2">Size</th>
               <th className="px-4 py-2 text-right">Actions</th>
             </tr>
@@ -395,7 +533,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
             {documents.map((doc) => {
               const isParsing = parsingIds.has(doc.id);
               const isEditing = editingId === doc.id;
-              const cellEmpty = (val: unknown) => isParsing ? <span className="text-gray-500 text-xs flex items-center gap-1"><span className="animate-spin h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full block" /> Parsing...</span> : <span className="text-gray-400">—</span>;
+              const cellEmpty = () => isParsing ? <span className="text-gray-500 text-xs flex items-center gap-1"><span className="animate-spin h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full block" /> Parsing...</span> : <span className="text-gray-400">—</span>;
               return (
                 <tr key={doc.id} className={`border-b border-gray-100 ${isEditing ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
                   <td className="px-4 py-3">
@@ -464,18 +602,20 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                             {doc.currency === "USD" ? "$" : "€"}
                             {Number(doc.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                           </span>
-                        ) : cellEmpty(doc.amount)}
+                        ) : cellEmpty()}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {doc.invoice_number ? doc.invoice_number : cellEmpty(doc.invoice_number)}
+                        {doc.invoice_number ? doc.invoice_number : cellEmpty()}
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[180px] truncate" title={doc.supplier_name || ""}>
-                        {doc.supplier_name ? doc.supplier_name : cellEmpty(doc.supplier_name)}
+                        {doc.supplier_name ? doc.supplier_name : cellEmpty()}
                       </td>
                       <td className="px-4 py-3 text-gray-600">{doc.invoice_date ? formatDateDDMMYYYY(doc.invoice_date) : formatDateDDMMYYYY(doc.created_at)}</td>
                     </>
                   )}
 
+                  <td className="px-4 py-3">{renderMatchBadge(doc)}</td>
+                  <td className="px-4 py-3">{renderAccountingBadge(doc)}</td>
                   <td className="px-4 py-3 text-gray-500">{formatSize(doc.file_size)}</td>
                   <td className="px-4 py-3 text-right">
                     {isEditing ? (
@@ -485,6 +625,15 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                       </div>
                     ) : (
                       <div className="flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openMatchModal(doc)}
+                          className="mr-2 inline-flex items-center gap-1 rounded p-1 text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-800"
+                          title="Match services"
+                          disabled={doc.document_type !== "invoice" || doc.document_state === "deleted"}
+                        >
+                          Match
+                        </button>
                         <button
                           type="button"
                           onClick={() => startEdit(doc)}
@@ -567,6 +716,110 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
           {uploading ? t(lang, "order.uploading") : t(lang, "order.dropFilesHere")}
         </div>
         </>
+      )}
+
+      {matchDoc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Match services</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  {matchDoc.file_name}
+                  {matchDoc.supplier_name ? ` · ${matchDoc.supplier_name}` : ""}
+                  {matchDoc.invoice_number ? ` · ${matchDoc.invoice_number}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeMatchModal}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto px-5 py-4">
+              {servicesLoading ? (
+                <div className="py-8 text-center text-gray-500">Loading services...</div>
+              ) : servicesForMatch.length === 0 ? (
+                <div className="py-8 text-center text-gray-500">No services found for this order.</div>
+              ) : (
+                <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+                  {(servicesForMatch as MatchableService[]).map((service) => {
+                    const id = String(service.id);
+                    const checked = selectedServiceIds.has(id);
+                    const name = service.serviceName || service.service_name || "Service";
+                    const supplier = service.supplierName || service.supplier_name || "No supplier";
+                    const dateFrom = service.serviceDateFrom || service.service_date_from;
+                    const dateTo = service.serviceDateTo || service.service_date_to;
+                    const price = service.servicePrice ?? service.service_price;
+                    const requirement =
+                      service.supplierInvoiceRequirement || service.supplier_invoice_requirement || "required";
+                    return (
+                      <label key={id} className="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
+                          checked={checked}
+                          onChange={(event) => {
+                            setSelectedServiceIds((prev) => {
+                              const next = new Set(prev);
+                              if (event.target.checked) next.add(id);
+                              else next.delete(id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-gray-900">{name}</span>
+                            <StatusBadge tone={requirement === "periodic" ? "blue" : requirement === "not_required" ? "gray" : "amber"}>
+                              {requirement === "not_required" ? "Not required" : requirement === "periodic" ? "Periodic" : "Required"}
+                            </StatusBadge>
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500">
+                            {[service.category, supplier, dateFrom ? formatDateDDMMYYYY(dateFrom) : null, dateTo && dateTo !== dateFrom ? formatDateDDMMYYYY(dateTo) : null]
+                              .filter(Boolean)
+                              .join(" · ")}
+                            {typeof price === "number" ? ` · €${price.toFixed(2)}` : ""}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setSelectedServiceIds(new Set())}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={savingMatch}
+              >
+                Clear match
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeMatchModal}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  disabled={savingMatch}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMatch}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  disabled={savingMatch}
+                >
+                  {savingMatch ? "Saving..." : "Save match"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <ContentModal

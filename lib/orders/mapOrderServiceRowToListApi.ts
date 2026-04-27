@@ -256,5 +256,8 @@ export function mapOrderServiceRowToListApiItem(
     refundAmount: row.refund_amount != null ? parseFloat(String(row.refund_amount)) : null,
     changeFee: row.change_fee != null ? parseFloat(String(row.change_fee)) : null,
     cancellationRefundType: (row.cancellation_refund_type as string | null | undefined) ?? null,
+    supplierInvoiceRequirement: (row.supplier_invoice_requirement as string | null | undefined) ?? "required",
+    supplierInvoicePeriod: (row.supplier_invoice_period as string | null | undefined) ?? null,
+    supplierInvoiceNote: (row.supplier_invoice_note as string | null | undefined) ?? null,
   };
 }

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { getInvoiceOutstandingDebt, OverdueInvoiceInput } from "@/lib/finances/overdue";
+
+type InvoiceRow = OverdueInvoiceInput & {
+  orders?: { order_code?: string | null } | { order_code?: string | null }[] | null;
+  [key: string]: unknown;
+};
 
 // GET /api/finances/invoices - Get all invoices for company (for Finances section)
 export async function GET(request: NextRequest) {
@@ -83,19 +89,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const isCreditInv = (inv: { is_credit?: boolean; invoice_number?: string }) =>
-      !!inv.is_credit || String(inv.invoice_number || "").endsWith("-C");
-
-    const mappedInvoices = (invoices || []).map((inv: any) => {
+    const mappedInvoices = ((invoices || []) as InvoiceRow[]).map((inv) => {
       const comm = commsMap.get(inv.id);
       const paid = paidMap.get(inv.id) || 0;
-      const total = Number(inv.total || 0);
-      const signedTotal = isCreditInv(inv) ? -Math.abs(total) : total;
-      const remaining = Math.round(Math.max(0, signedTotal - paid) * 100) / 100;
+      const remaining = getInvoiceOutstandingDebt(inv, [{ amount: paid, status: "completed" }]);
+      const orderCode = Array.isArray(inv.orders)
+        ? inv.orders[0]?.order_code || null
+        : inv.orders?.order_code || null;
       return {
         ...inv,
-        order_code: (inv.orders && Array.isArray(inv.orders) && inv.orders[0]?.order_code) || 
-                    (inv.orders?.order_code) || null,
+        order_code: orderCode,
         orders: undefined,
         paid_amount: Math.round(paid * 100) / 100,
         remaining,
@@ -110,7 +113,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ invoices: mappedInvoices });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/finances/invoices:", error);
     return NextResponse.json(
       { error: "Internal server error" },

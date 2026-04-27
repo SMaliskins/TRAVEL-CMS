@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { staffNotificationsRootQueryKey } from "@/lib/notifications/staffNotificationsQuery";
 import { useStaffNotificationsFullQuery } from "@/hooks/useStaffNotificationsFullQuery";
 import { useUser } from "@/contexts/UserContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { Bell, Rocket, Plane, AlertTriangle, CreditCard, CheckCircle2, Filter, ChevronDown, ChevronUp, Sparkles, Wrench, X, ArrowLeft, ArrowRight, Image as ImageIcon } from "lucide-react";
+import {
+  getReleaseNewsText,
+  normalizeReleaseNewsLanguage,
+  RELEASE_NEWS_LANGUAGES,
+  type ReleaseNewsLanguage,
+} from "@/lib/notifications/releaseNewsLanguage";
+import { Bell, Rocket, Plane, AlertTriangle, CreditCard, CheckCircle2, Filter, ChevronDown, ChevronUp, Sparkles, Wrench, X, Image as ImageIcon } from "lucide-react";
 
 interface Notification {
   id: string;
@@ -113,6 +119,9 @@ export default function NotificationsPage() {
   const [expandedItemIdx, setExpandedItemIdx] = useState<number | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [reactionLoading, setReactionLoading] = useState<string | null>(null);
+  const [releaseNewsLanguage, setReleaseNewsLanguage] = useState<ReleaseNewsLanguage>(() =>
+    normalizeReleaseNewsLanguage(lang)
+  );
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -390,6 +399,22 @@ export default function NotificationsPage() {
                       <div className="px-5 pb-5">
                         {release ? (
                           <>
+                          <div className="ml-9 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                            <span className="text-xs font-medium text-blue-700">
+                              {lang === "ru" ? "Язык новостей" : lang === "lv" ? "Ziņu valoda" : "News language"}
+                            </span>
+                            <select
+                              value={releaseNewsLanguage}
+                              onChange={(event) => setReleaseNewsLanguage(normalizeReleaseNewsLanguage(event.target.value))}
+                              className="rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            >
+                              {RELEASE_NEWS_LANGUAGES.map((option) => (
+                                <option key={option.code} value={option.code}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <div className="ml-9 space-y-1">
                             {release.items.map((item, idx) => {
                               const isItemExpanded = expandedItemIdx === idx;
@@ -412,7 +437,7 @@ export default function NotificationsPage() {
                                       )}
                                     </span>
                                     <span className="flex-1 text-sm text-gray-700">
-                                      {item.text[lang] || item.text.en}
+                                      {getReleaseNewsText(item.text, releaseNewsLanguage)}
                                     </span>
                                     {hasImage && (
                                       <span className="shrink-0 flex items-center gap-1 text-xs text-blue-500">
@@ -439,7 +464,7 @@ export default function NotificationsPage() {
                                       >
                                         <img
                                           src={item.image}
-                                          alt={item.text[lang] || item.text.en}
+                                          alt={getReleaseNewsText(item.text, releaseNewsLanguage)}
                                           className="w-full h-auto"
                                         />
                                       </button>

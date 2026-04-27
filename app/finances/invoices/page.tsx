@@ -141,10 +141,11 @@ export default function FinancesInvoicesPage() {
       }
 
       const params = new URLSearchParams();
-      if (dateFrom) params.set("dateFrom", dateFrom);
-      if (dateTo) params.set("dateTo", dateTo);
+      const isOverdueFilter = filterStatus === "overdue";
+      if (!isOverdueFilter && dateFrom) params.set("dateFrom", dateFrom);
+      if (!isOverdueFilter && dateTo) params.set("dateTo", dateTo);
 
-      const hasDateFilter = !!dateFrom || !!dateTo;
+      const hasDateFilter = !isOverdueFilter && (!!dateFrom || !!dateTo);
       const fetches: Promise<Response>[] = [
         fetch(`/api/finances/invoices?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },

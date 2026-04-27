@@ -8,8 +8,9 @@ import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import ContentModal from "@/components/ContentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
 import { t } from "@/lib/i18n";
-import { Download, Eye, FileText, Pencil, Trash2, X } from "lucide-react";
+import { CheckCircle, Download, Eye, FileText, Pencil, Trash2, X } from "lucide-react";
 import { sanitizeNumber } from "@/utils/sanitizeNumber";
 
 interface UploadedDoc {
@@ -24,6 +25,12 @@ interface UploadedDoc {
   effective_currency: string | null;
   effective_invoice_date: string | null;
   effective_invoice_number: string | null;
+  document_state?: "active" | "deleted" | "replaced" | string;
+  accounting_state?: "pending" | "processed" | "attention" | "cancelled_processed" | string;
+  accounting_processed_at?: string | null;
+  attention_reason?: "deleted" | "changed" | "replaced" | string | null;
+  replaced_by_document_id?: string | null;
+  matched_service_count?: number;
 }
 
 const STORAGE_KEY = "travelcms.finances.suppliersInvoices.filters";
@@ -48,6 +55,8 @@ export default function SuppliersInvoicesPage() {
   const router = useRouter();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const userRole = useCurrentUserRole();
+  const isFinanceUser = userRole === "finance" || userRole === "admin";
 
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,6 +88,7 @@ export default function SuppliersInvoicesPage() {
   const [formCurrency, setFormCurrency] = useState("EUR");
   const [formInvoiceNumber, setFormInvoiceNumber] = useState("");
   const [formSaving, setFormSaving] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     saveFilters({ period, dateFrom, dateTo });
@@ -262,6 +272,95 @@ export default function SuppliersInvoicesPage() {
     }
   };
 
+  const handleProcess = async (doc: UploadedDoc) => {
+    const actionLabel =
+      doc.accounting_state === "attention" && doc.attention_reason === "deleted"
+        ? "mark this deleted invoice as cancelled processed"
+        : doc.accounting_state === "attention"
+          ? "process this updated invoice"
+          : "mark this supplier invoice as processed";
+    if (!confirm(`Confirm that accounting should ${actionLabel}?`)) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    setProcessingId(doc.id);
+    try {
+      const res = await fetch(`/api/finances/uploaded-documents/${doc.id}/process`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ processed: true }),
+      });
+      if (res.ok) {
+        await loadDocs();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to process supplier invoice");
+      }
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const getAccountingBadge = (doc: UploadedDoc) => {
+    const state = doc.accounting_state || "pending";
+    const styles: Record<string, string> = {
+      pending: "bg-amber-50 text-amber-700 border-amber-200",
+      processed: "bg-green-50 text-green-700 border-green-200",
+      attention: "bg-red-50 text-red-700 border-red-200",
+      cancelled_processed: "bg-purple-50 text-purple-700 border-purple-200",
+    };
+    const label =
+      state === "cancelled_processed"
+        ? "Cancelled processed"
+        : state === "attention"
+          ? "Attention"
+          : state.charAt(0).toUpperCase() + state.slice(1);
+    return (
+      <div>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${styles[state] || styles.pending}`}>
+          {state === "processed" && <CheckCircle className="h-3 w-3" />}
+          {label}
+        </span>
+        {doc.accounting_processed_at && (
+          <div className="mt-1 text-[11px] text-gray-500">{formatDateDDMMYYYY(doc.accounting_processed_at)}</div>
+        )}
+      </div>
+    );
+  };
+
+  const getMatchBadge = (doc: UploadedDoc) => {
+    if (doc.document_state === "deleted") {
+      return <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Deleted</span>;
+    }
+    if (doc.document_state === "replaced") {
+      return <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Replaced</span>;
+    }
+    const count = doc.matched_service_count || 0;
+    if (count > 0) {
+      return <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Matched: {count}</span>;
+    }
+    return <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Unmatched</span>;
+  };
+
+  const getAttentionText = (doc: UploadedDoc) => {
+    if (doc.accounting_state !== "attention") return "—";
+    if (doc.attention_reason === "deleted") return "This invoice was deleted";
+    if (doc.attention_reason === "replaced") return "This invoice was replaced";
+    if (doc.attention_reason === "changed") return "This invoice was changed";
+    return "Needs accounting review";
+  };
+
+  const getProcessButtonLabel = (doc: UploadedDoc) => {
+    if (doc.accounting_state === "attention" && doc.attention_reason === "deleted") return "Mark cancelled processed";
+    if (doc.accounting_state === "attention") return "Process updated";
+    return "Process";
+  };
+
+  const canProcess = (doc: UploadedDoc) =>
+    (doc.accounting_state || "pending") === "pending" || doc.accounting_state === "attention";
+
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-4">
@@ -402,7 +501,7 @@ export default function SuppliersInvoicesPage() {
             {t(lang, "invoices.noSupplierInvoices")}
           </div>
         ) : (
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm min-w-[1000px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
@@ -422,6 +521,15 @@ export default function SuppliersInvoicesPage() {
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   {t(lang, "invoices.order")}
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Match
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Accounting
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Attention
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">
                   {t(lang, "invoices.uploaded")}
@@ -465,10 +573,29 @@ export default function SuppliersInvoicesPage() {
                       "—"
                     )}
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{getMatchBadge(doc)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{getAccountingBadge(doc)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600 max-w-[180px]">
+                    {getAttentionText(doc)}
+                    {doc.accounting_state === "attention" && doc.replaced_by_document_id && (
+                      <div className="mt-1 text-blue-600">Replacement available</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                     {formatDateDDMMYYYY(doc.created_at)}
                   </td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">
+                    {isFinanceUser && canProcess(doc) && (
+                      <button
+                        type="button"
+                        onClick={() => handleProcess(doc)}
+                        disabled={processingId === doc.id}
+                        className="mr-1 inline-flex rounded border border-purple-300 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                        title="Mark as entered into accounting"
+                      >
+                        {processingId === doc.id ? "..." : getProcessButtonLabel(doc)}
+                      </button>
+                    )}
                     {doc.order_code && (
                       <button
                         type="button"

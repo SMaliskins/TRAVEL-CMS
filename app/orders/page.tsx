@@ -24,6 +24,7 @@ import { getCityByName, ensureWorldCitiesLoaded } from "@/lib/data/cities";
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
 type OrderType = "TA" | "TO" | "CORP" | "NON";
 type AccessType = "Owner" | "Delegated";
+type SupplierInvoicePreviewTone = "green" | "amber" | "purple" | "red" | "blue";
 
 interface OrderRow {
   orderId: string;
@@ -57,6 +58,9 @@ interface OrderRow {
   /** Order has a referral partner (profit in list is after referral commission) */
   hasReferral?: boolean;
   referralCommissionTotal?: number;
+  supplierInvoiceStatus?: string;
+  supplierInvoiceStatusLabel?: string;
+  supplierInvoiceStatusTone?: SupplierInvoicePreviewTone;
 }
 
 interface OrderTotals {
@@ -487,6 +491,34 @@ const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; d
       return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
   }
 };
+
+const getSupplierInvoicePreviewToneClass = (tone: SupplierInvoicePreviewTone | undefined): string => {
+  switch (tone) {
+    case "green":
+      return "border-green-200 bg-green-50 text-green-700";
+    case "blue":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "purple":
+      return "border-purple-200 bg-purple-50 text-purple-700";
+    case "red":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "amber":
+    default:
+      return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+};
+
+function renderSupplierInvoicePreviewBadge(order: OrderRow) {
+  const label = order.supplierInvoiceStatusLabel || "All matched";
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-medium leading-tight ${getSupplierInvoicePreviewToneClass(order.supplierInvoiceStatusTone)}`}
+      title="Supplier invoices"
+    >
+      {label}
+    </span>
+  );
+}
 
 // Helper to load expanded state from localStorage
 function loadExpandedFromStorage(): Record<string, boolean> {
@@ -1268,7 +1300,7 @@ export default function OrdersPage() {
         {orders.length > 0 && viewMode === "list" && (
         <div className="rounded-lg theme-card-bg shadow-sm overflow-hidden">
           <div className="overflow-x-auto -mx-3 sm:mx-0">
-          <table className="w-full border-collapse min-w-[900px]">
+          <table className="w-full border-collapse min-w-[1040px]">
             <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_#e5e7eb] theme-panel-bg border-b border-gray-200">
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
@@ -1288,6 +1320,9 @@ export default function OrdersPage() {
                   <span title={t(lang, "orders.dueTitle")} className="cursor-help">
                     <Clock size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
                   </span>
+                </th>
+                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
+                  Supplier invoices
                 </th>
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.client")}
@@ -1338,7 +1373,7 @@ export default function OrdersPage() {
                 <React.Fragment key={group.label}>
                   <tr className="theme-panel-bg">
                     <td className="px-1.5 py-0.5 text-sm font-bold text-gray-900">{group.label}</td>
-                    <td className="px-0.5 py-0.5" colSpan={3}></td>
+                    <td className="px-0.5 py-0.5" colSpan={4}></td>
                     <td className="px-1.5 py-1" colSpan={2}></td>
                     <td className="px-1.5 py-1"></td>
                     <td className="px-1.5 py-0.5 text-right text-sm font-bold text-blue-700">{formatCurrency(group.totals.amount)}</td>
@@ -1390,6 +1425,9 @@ export default function OrdersPage() {
                             </span>
                           ) : <span className="text-gray-400">-</span>}
                         </td>
+                        <td className="whitespace-nowrap px-1.5 py-0.5 text-sm">
+                          {renderSupplierInvoicePreviewBadge(order)}
+                        </td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-800">{order.client}</td>
                         <td className="px-1.5 py-0.5 text-sm text-gray-700 max-w-xs"><div className="truncate">{countriesFlagsMap.get(order.countriesCities) ?? formatCountriesWithFlags(order.countriesCities)}</div></td>
                         <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-600">{formatDate(order.datesFrom)} — {formatDate(order.datesTo)}</td>
@@ -1435,7 +1473,7 @@ export default function OrdersPage() {
                       </span>
                       {year.year}
                     </td>
-                    <td className="px-0.5 py-0.5" colSpan={3}></td>
+                    <td className="px-0.5 py-0.5" colSpan={4}></td>
                     <td className="px-1.5 py-1" colSpan={2}></td>
                     <td className="px-1.5 py-1"></td>
                     <td className="px-1.5 py-0.5 text-right text-sm font-bold text-gray-900">
@@ -1470,7 +1508,7 @@ export default function OrdersPage() {
                             </span>
                             {t(lang, `calendar.month.${parseInt(month.monthKey.split("-")[1], 10) - 1}`)}
                           </td>
-                          <td className="px-0.5 py-0.5" colSpan={3}></td>
+                          <td className="px-0.5 py-0.5" colSpan={4}></td>
                           <td className="px-1.5 py-1" colSpan={2}></td>
                           <td className="px-1.5 py-1"></td>
                           <td className="px-1.5 py-0.5 text-right text-sm font-semibold text-blue-700">
@@ -1505,7 +1543,7 @@ export default function OrdersPage() {
                                   </span>
                                   {day.dayLabel}
                                 </td>
-                                <td className="px-0.5 py-0.5" colSpan={3}></td>
+                                <td className="px-0.5 py-0.5" colSpan={4}></td>
                                 <td className="px-1.5 py-1" colSpan={2}></td>
                                 <td className="px-1.5 py-1"></td>
                                 <td className="px-1.5 py-0.5 text-right text-sm font-medium text-gray-900">
@@ -1598,6 +1636,9 @@ export default function OrdersPage() {
                                         ) : (
                                           <span className="text-gray-400">-</span>
                                         )}
+                                      </td>
+                                      <td className="whitespace-nowrap px-1.5 py-0.5 text-sm">
+                                        {renderSupplierInvoicePreviewBadge(order)}
                                       </td>
                                       
                                       <td className="whitespace-nowrap px-1.5 py-0.5 text-sm text-gray-800">

@@ -5,6 +5,662 @@
 
 ---
 
+## [2026-04-27 16:54] Runner — RELEASE-2026-04-27: Published system update
+
+**Task:** RELEASE-2026-04-27 | **Status:** SUCCESS
+**Agent:** Runner / Release
+**Complexity:** 🟡
+
+**Действия:**
+- Added public release payload `public/data/releases/2026-04-27.json`.
+- Added idempotent SQL publication migration for `system_update:2026-04-27`.
+- Published the system update in Supabase for all companies.
+
+**Результат:** Published: 11 company notifications created/verified.
+
+**Next Step:** Commit and push
+
+---
+
+## [2026-04-27 16:30] CW — NOTIF-NEWS-LANG: Release news language selector
+
+**Task:** NOTIF-NEWS-LANG | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Added a separate news language selector for system release notifications.
+- Applied it in the mandatory release pop-up and expanded `/notifications` release details.
+- Added a focused regression helper for release news language fallback.
+- Verified `npm run test:release-news-language`, targeted ESLint, TypeScript compile, and IDE lints.
+
+**Результат:** SCORE: 8.5/10 — targeted checks pass; touched-file ESLint has only existing image/hook warnings.
+
+**Next Step:** Ready for release text
+
+---
+
+## [2026-04-27 16:24] CW — O7-IMPL: Remember invoice language from invoice creation
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Persist selected invoice language from InvoiceCreator back to payer/client Directory card after successful invoice creation.
+- Cover language preference payload logic with a focused regression check.
+- Verify TypeScript/lint.
+
+**Результат:** Pending
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 16:34] CW — O7-IMPL: Invoice language preference remembered
+
+**Task:** O7-IMPL | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Added a focused invoice language preference helper and regression test.
+- Updated `InvoiceCreator` to save the selected invoice language to the payer/client Directory card after successful invoice creation.
+- Supported both single-payer and multi-payer invoice creation paths.
+- Verified `npm run test:invoice-language`, helper ESLint, TypeScript compile, and IDE lints.
+
+**Результат:** SCORE: 8.5/10 — targeted checks pass; full-file `InvoiceCreator` ESLint still reports existing unrelated lint debt.
+
+**Next Step:** QA / Runner
+
+---
+
+## [2026-04-27 16:28] QA — O7-IMPL: Directory invoice language save fallback verified
+
+**Task:** O7-IMPL | **Status:** SUCCESS
+**Agent:** QA / Regression
+**Complexity:** 🟡
+
+**Действия:**
+- Confirmed live `client_party` schema does not include `default_referral_party_id`, so compatibility fallback is required.
+- Reviewed `GET` and `PUT` fallback selects in `app/api/directory/[id]/route.ts`.
+- Reviewed `POST` fallback insert in `app/api/directory/create/route.ts`.
+- Ran TypeScript compile, targeted ESLint, and IDE lint check.
+
+**Результат:** SCORE: 8.5/10
+
+**Defect List:**
+- Blocking defects: none.
+- Residual risk: full-file ESLint still reports existing `no-explicit-any` debt in Directory API files.
+- Manual browser save of EN→LV was not executed in this step; code/schema verification confirms the missing-column blocker is handled.
+
+**Next Step:** Runner
+
+---
+
+## [2026-04-27 16:18] QA — O7-IMPL: Directory invoice language save fallback
+
+**Task:** O7-IMPL | **Status:** START
+**Agent:** QA / Regression
+**Complexity:** 🟡
+
+**Действия:**
+- Review Directory API fallback for missing `client_party.default_referral_party_id`.
+- Verify invoice language update path is not blocked.
+- Run targeted schema/lint/type checks.
+
+**Результат:** Pending
+
+**Next Step:** Runner/CW
+
+---
+
+## [2026-04-27 16:10] Runner — SUPINV1: Supplier invoice workflow closed
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Runner
+**Complexity:** 🟠
+
+**Действия:**
+- Confirmed QA passed for documents matching, accountant processing, soft-delete/change attention sync, service controls, and `/orders` preview status.
+- Confirmed every QA SCORE is >= 8/10 and no blocking defects remain.
+- Updated `PROJECT_TODO.md` and `RELEASE_LOG.md`.
+
+**Результат:** SCORE: 8.5/10 — DONE; residual unrelated lint debt remains in large existing orders files.
+
+**Next Step:** Done
+
+---
+
+## [2026-04-27 16:02] Runner — SUPINV1: Closure
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** Runner
+**Complexity:** 🟠
+
+**Действия:**
+- Review QA scores and defect lists for all SUPINV1 implementation slices.
+- Close task if SCORE >= 8 and no blocking defects remain.
+- Update release notes for user-facing supplier invoice workflow.
+
+**Результат:** Pending
+
+**Next Step:** Done
+
+---
+
+## [2026-04-27 16:08] QA — SUPINV1: Orders preview supplier invoice status verified
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Reviewed order-level supplier invoice preview helper, `/api/orders` aggregation, and `/orders` table badge column.
+- Verified status priority: `Attention`, `Has unmatched invoices`, `Missing supplier invoices`, `Periodic only`, `All matched`.
+- Ran `npm run test:supplier-invoices`, helper ESLint, TypeScript compile, full orders-file ESLint, and live Supabase schema check.
+
+**Результат:** SCORE: 8.5/10
+
+**Defect List:**
+- Blocking defects: none.
+- Residual risk: full-file ESLint still fails on existing unrelated debt in `app/api/orders/route.ts` and `app/orders/page.tsx` (`any` usage and React hook lint debt).
+- Feature gaps for SUPINV1 implementation slices: none identified in QA scope.
+
+**Next Step:** Runner
+
+---
+
+## [2026-04-27 15:57] QA — SUPINV1: Orders preview supplier invoice status
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Review `/orders` supplier invoice preview status helper, API aggregation, and UI column.
+- Run regression/lint/type checks.
+- Verify live Supabase schema compatibility.
+
+**Результат:** Pending
+
+**Next Step:** Runner
+
+---
+
+## [2026-04-27 15:48] CW — SUPINV1: Orders preview supplier invoice status ready
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Added order-level supplier invoice status helper with regression coverage.
+- Extended `/api/orders` with supplier invoice preview status from active services, supplier invoice documents, and service links.
+- Added `Supplier invoices` badge column to `/orders` list and grouped rows.
+- Verified regression test, TypeScript compile, IDE lint, helper lint, and live Supabase columns.
+
+**Результат:** SCORE: 8.5/10 — core checks pass; existing unrelated full-file ESLint debt remains in `app/api/orders/route.ts` and `app/orders/page.tsx`.
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 15:39] CW — SUPINV1: Orders preview supplier invoice status
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Add order-level supplier invoice status helper/regression coverage.
+- Extend `/api/orders` with supplier invoice preview status.
+- Display supplier invoice status column in `/orders` list.
+
+**Результат:** Pending
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 15:36] QA — SUPINV1: Service supplier invoice controls verified
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Reviewed services-table supplier invoice status rules and quick requirement control.
+- Verified PATCH validation/mapping for `supplier_invoice_requirement`, period, and note.
+- Ran `npm run test:supplier-invoices`, non-UI targeted ESLint, TypeScript compile, IDE lint, and live Supabase schema check.
+
+**Результат:** SCORE: 8.5/10
+
+**Defect List:**
+- Blocking defects: none.
+- Remaining gaps: `/orders` preview supplier invoice status column is still the next slice.
+- Non-blocking: `View matched invoices` quick action is not part of this slice; matching remains available from Documents tab.
+- Existing unrelated full-file ESLint debt remains in `OrderServicesBlock`; no new IDE lint errors were reported.
+
+**Next Step:** CW
+
+---
+
+## [2026-04-27 15:31] QA — SUPINV1: Service supplier invoice controls
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Review services-table supplier invoice requirement controls.
+- Run regression/lint/type checks.
+- Verify API mapping and UI behavior against UI mapping.
+
+**Результат:** Pending
+
+**Next Step:** Runner/CW
+
+---
+
+## [2026-04-27 15:35] CW — SUPINV1: Service supplier invoice controls ready
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Added supplier invoice service status helper and regression coverage.
+- Added PATCH support for `supplier_invoice_requirement`, period, and note on order services.
+- Mapped supplier invoice fields into service list rows and added compact status/control in the services Supplier column.
+- Verified regression test, non-UI lint, TypeScript compile, and IDE lints.
+
+**Результат:** SCORE: 8.5/10 — core checks pass; full-file ESLint on `OrderServicesBlock` still reports existing unrelated lint debt.
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 15:24] CW — SUPINV1: Service supplier invoice controls
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Add service supplier invoice status helper/regression coverage.
+- Allow updating service supplier invoice requirement.
+- Display supplier invoice status/control in services table.
+
+**Результат:** Pending
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 15:23] QA — SUPINV1: Soft-delete/change attention sync
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Review document PATCH/DELETE attention sync behavior.
+- Run regression/lint/type checks.
+- Verify live Supabase schema compatibility.
+
+**Результат:** Pending
+
+**Next Step:** Runner/CW
+
+---
+
+## [2026-04-27 15:28] QA — SUPINV1: Soft-delete/change attention sync verified
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Reviewed helper transitions and document `PATCH/DELETE` behavior for accounting-visible supplier invoices.
+- Verified processed invoice edit sends document to `attention/changed`.
+- Verified processed/attention invoice delete uses soft delete with `attention/deleted`.
+- Ran `npm run test:supplier-invoices`, targeted ESLint, TypeScript compile, IDE lint, and live Supabase schema check.
+
+**Результат:** SCORE: 9/10
+
+**Defect List:**
+- Blocking defects: none.
+- Remaining gaps: services-table supplier invoice requirement controls and `/orders` preview supplier invoice status are still next slices.
+- Non-blocking warnings remain in `OrderDocumentsTab`: 3 existing ESLint warnings, 0 errors.
+
+**Next Step:** CW
+
+---
+
+## [2026-04-27 15:04] CW — SUPINV1: Soft-delete/change attention sync
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Added regression coverage for processed invoice edit/delete attention behavior.
+- Processed supplier invoice edits now set `accounting_state = attention`, `attention_reason = changed`, and increment `version`.
+- Processed/attention supplier invoice deletes now soft-delete with `document_state = deleted`, `attention_reason = deleted`, `deleted_at`, and `deleted_by`.
+- Updated Documents tab delete confirmation for accounting-visible invoices.
+- Verified live Supabase columns needed for the slice.
+
+**Результат:** SCORE: 8.5/10 — regression test, targeted ESLint, TypeScript compile, schema check pass; 3 pre-existing warnings remain in `OrderDocumentsTab`.
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 15:02] QA — SUPINV1: Supplier invoice accountant process
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Review supplier invoices accountant Process endpoint and UI.
+- Run regression/lint/type checks.
+- Verify live Supabase schema compatibility.
+
+**Результат:** Pending
+
+**Next Step:** Runner/CW
+
+---
+
+## [2026-04-27 15:10] QA — SUPINV1: Supplier invoice accountant process verified
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Reviewed finance/admin-only supplier invoice processing endpoint and UI actions.
+- Verified accounting transitions: pending -> processed, attention changed/replaced -> processed, attention deleted -> cancelled_processed.
+- Ran `npm run test:supplier-invoices`, targeted ESLint, TypeScript compile, and IDE lint.
+- Verified live Supabase columns/table used by the slice.
+
+**Результат:** SCORE: 9/10
+
+**Defect List:**
+- Blocking defects: none.
+- Remaining gaps: soft-delete/replaced attention sync, services-table quick requirement controls, and `/orders` preview supplier invoice status are still next slices.
+
+**Next Step:** CW
+
+---
+
+## [2026-04-27 14:50] CW — SUPINV1: Supplier invoice accountant process
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Add accountant processing endpoint for supplier invoice documents.
+- Extend supplier invoices list with match/accounting/attention fields.
+- Add Process / Process updated / Mark cancelled processed actions in `/finances/suppliers-invoices`.
+- Add focused regression check for supplier invoice accounting state transitions.
+
+**Результат:** Pending
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 15:04] CW — SUPINV1: Supplier invoice accountant process ready
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Added supplier invoice accounting state helper and `npm run test:supplier-invoices`.
+- Added `PATCH /api/finances/uploaded-documents/[docId]/process` for finance/admin users.
+- Extended uploaded supplier invoices API with `Match`, `Accounting`, and `Attention` data.
+- Added supplier invoices table columns and finance-only actions: `Process`, `Process updated`, `Mark cancelled processed`.
+- Verified live Supabase columns needed by this slice.
+
+**Результат:** SCORE: 8.5/10 — RED/GREEN regression check, targeted ESLint, TypeScript compile, and IDE lint pass.
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 14:48] QA — SUPINV1: Documents matching first slice
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Review CW changes for Documents matching API/UI.
+- Run targeted lint/type checks and verify Supabase schema compatibility.
+- Produce SCORE and Defect List.
+
+**Результат:** Pending
+
+**Next Step:** Runner/CW
+
+---
+
+## [2026-04-27 14:58] QA — SUPINV1: Documents matching first slice verified
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** QA / Regression
+**Complexity:** 🟠
+
+**Действия:**
+- Reviewed Documents matching API/UI changes against `SUPINV1` slice requirements.
+- Fixed QA findings: match-save now preserves existing links if new insert fails; service coverage counts only active supplier invoice documents.
+- Ran targeted ESLint and TypeScript compile.
+- Verified live Supabase schema columns for document states, service requirements, and link table.
+
+**Результат:** SCORE: 8.5/10
+
+**Defect List:**
+- Blocking defects: none.
+- Remaining gaps: accountant `Process` workflow, soft-delete/replaced document attention states, services-table quick requirement controls, and `/orders` preview column are still next slices.
+- Non-blocking warnings remain in touched files: 4 existing ESLint warnings, 0 errors.
+
+**Next Step:** CW
+
+---
+
+## [2026-04-27 14:42] CW — SUPINV1: Documents matching first slice
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🔴
+
+**Действия:**
+- Extend order documents API with workflow state and matched services.
+- Add match-services endpoint for supplier invoice documents.
+- Add Documents tab Service Match / Accounting columns and simple match modal.
+
+**Результат:** Pending
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 14:55] CW — SUPINV1: Documents matching first slice ready
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Code Writer
+**Complexity:** 🔴
+
+**Действия:**
+- Extended order documents/services APIs with supplier invoice workflow fields and match counts.
+- Added `match-services` endpoint to save invoice-document → order-service links.
+- Added Documents tab `Service Match` / `Accounting` badges and a simple match services modal.
+- Verified Supabase workflow columns/link table exist.
+
+**Результат:** SCORE: 8/10 — targeted ESLint has 0 errors with 4 pre-existing warnings; `npx tsc --noEmit` passed.
+
+**Next Step:** QA
+
+---
+
+## [2026-04-27 14:45] UI — SUPINV1: UI mapping complete
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** UI System
+**Complexity:** 🔴
+
+**Действия:**
+- Created `.ai/tasks/supplier-invoice-ui-mapping.md`.
+- Mapped Documents tab columns/actions, match modal, services badges, supplier invoices accounting view and `/orders` preview column.
+- Defined API fields needed by CW and smallest useful implementation slice.
+
+**Результат:** UI mapping ready for Code Writer.
+
+**Next Step:** CW
+
+---
+
+## [2026-04-27 14:39] UI — SUPINV1: Supplier invoice workflow UI mapping
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** UI System
+**Complexity:** 🔴
+
+**Действия:**
+- Map Documents tab UI changes for match/accounting status.
+- Map `/finances/suppliers-invoices` accountant workflow UI.
+- Map Orders list supplier invoice status column.
+
+**Результат:** Pending
+
+**Next Step:** CW
+
+---
+
+## [2026-04-27 14:42] DB — SUPINV1: Supplier invoice migration applied
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** DB Specialist
+**Complexity:** 🔴
+
+**Действия:**
+- Applied `migrations/add_supplier_invoice_workflow.sql` to Supabase via MCP `execute_sql`.
+- Verified new `order_documents` columns, new `order_services` supplier invoice fields, and `order_document_service_links`.
+- Verified constraints, RLS enabled, and SELECT/INSERT/UPDATE/DELETE company-scope policies.
+- Verified backfill defaults: 74/74 documents pending+active, 1099/1099 services required, 0 links initially.
+
+**Результат:** Migration applied and verified.
+
+**Next Step:** UI
+
+---
+
+## [2026-04-27 14:37] DB — SUPINV1: Apply supplier invoice migration
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** DB Specialist
+**Complexity:** 🔴
+
+**Действия:**
+- Применить `migrations/add_supplier_invoice_workflow.sql` в Supabase.
+- Проверить созданные колонки, таблицу links, constraints и RLS.
+
+**Результат:** Pending
+
+**Next Step:** UI
+
+---
+
+## [2026-04-27 14:40] DB — SUPINV1: Schema mapping complete
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** DB Specialist
+**Complexity:** 🔴
+
+**Действия:**
+- Проверена live-схема: `order_documents` = 74 документов, `order_services` = 1099 услуг.
+- Подтверждено: `order_services.invoice_id` относится к client invoices, supplier invoices требуют отдельной связи.
+- Подготовлена migration `migrations/add_supplier_invoice_workflow.sql` для document/accounting states, service requirements и `order_document_service_links`.
+- Добавлена RLS на новую link-table с company-scope policies.
+
+**Результат:** DB mapping complete. Migration prepared but NOT applied.
+
+**Next Step:** UI
+
+---
+
+## [2026-04-27 14:34] DB — SUPINV1: Schema mapping for supplier invoice workflow
+
+**Task:** SUPINV1 | **Status:** START
+**Agent:** DB Specialist
+**Complexity:** 🔴
+
+**Действия:**
+- Проверить live-схему `order_documents`, `order_services`, существующие связи invoice/service.
+- Подготовить безопасную migration для статусов документов, accounting workflow и service links.
+
+**Результат:** Pending
+
+**Next Step:** UI
+
+---
+
+## [2026-04-27 14:33] Runner — SUPINV1: Supplier invoice workflow spec
+
+**Task:** SUPINV1 | **Status:** SUCCESS
+**Agent:** Runner / Architect
+**Complexity:** 🔴
+
+**Действия:**
+- Описана единая модель связки агент → supplier invoice → service matching → accounting processing.
+- Создана спецификация `.ai/tasks/supplier-invoice-workflow.md`.
+- Добавлена задача SUPINV1 в PROJECT_TODO.
+
+**Результат:** Spec ready for DB mapping.
+
+**Next Step:** DB
+
+---
+
+## [2026-04-27 13:55] CW/QA — DASH-OVERDUE: Fix real overdue debt
+
+**Task:** DASH-OVERDUE | **Status:** SUCCESS
+**Agent:** Code Writer + QA
+**Complexity:** 🟠
+
+**Действия:**
+- Вынесён единый расчёт задолженности в `lib/finances/overdue.ts`.
+- Dashboard Overdue теперь вычитает все платежи кроме `cancelled`, дедуплицирует invoices и использует `final_payment_date || due_date`.
+- Invoices `status=overdue` больше не ограничивается `invoice_date` периодом, чтобы показывать реальные overdue invoices.
+- Добавлен regression check `npm run test:overdue`.
+
+**Результат:** SCORE: 9/10 — targeted test, TypeScript check and touched-file lint pass; global lint blocked by pre-existing generated `.claude/worktrees/**/.next` errors.
+
+**Next Step:** Runner
+
+---
+
+## [2026-04-27 13:27] CW — DASH-OVERDUE: Fix real overdue debt
+
+**Task:** DASH-OVERDUE | **Status:** START
+**Agent:** Code Writer
+**Complexity:** 🟠
+
+**Действия:**
+- Исправить расчёт Overdue Payments: реальный остаток долга, без дублей, единая effective due date.
+- Синхронизировать переход на Invoices overdue со смыслом dashboard.
+
+**Результат:** Pending
+
+**Next Step:** QA
+
+---
+
 ## [2026-04-25 15:13] CW — NOTIF-ACK: Mandatory system update acknowledgements
 
 **Task:** NOTIF-ACK | **Status:** SUCCESS

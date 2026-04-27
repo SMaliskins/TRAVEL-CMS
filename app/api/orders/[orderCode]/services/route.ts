@@ -149,6 +149,9 @@ const ORDER_SERVICES_LIST_COLUMNS = [
   "parent_service_id",
   "service_type",
   "ancillary_type",
+  "supplier_invoice_requirement",
+  "supplier_invoice_period",
+  "supplier_invoice_note",
   "cancellation_fee",
   "refund_amount",
   "change_fee",
@@ -302,16 +305,66 @@ export async function GET(
       }
     }
 
-    const mappedServices = rows.map((s) =>
-      mapOrderServiceRowToListApiItem(s as Record<string, unknown>, {
+    let supplierInvoiceDocumentCountByService: Record<string, number> = {};
+    if (serviceIds.length > 0) {
+      const { data: supplierInvoiceLinks, error: supplierInvoiceLinksError } = await supabaseAdmin
+        .from("order_document_service_links")
+        .select("service_id, document_id")
+        .eq("company_id", companyId)
+        .eq("order_id", orderId)
+        .in("service_id", serviceIds);
+      if (!supplierInvoiceLinksError) {
+        const linkedDocumentIds = [
+          ...new Set((supplierInvoiceLinks || []).map((link) => (link as { document_id?: string | null }).document_id).filter(Boolean)),
+        ] as string[];
+        let activeDocumentIds = new Set<string>();
+        if (linkedDocumentIds.length > 0) {
+          const { data: activeDocs } = await supabaseAdmin
+            .from("order_documents")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("order_id", orderId)
+            .eq("document_state", "active")
+            .in("id", linkedDocumentIds);
+          activeDocumentIds = new Set((activeDocs || []).map((doc) => doc.id).filter(Boolean));
+        }
+        supplierInvoiceDocumentCountByService = (supplierInvoiceLinks || []).reduce((acc, link) => {
+          const row = link as { service_id?: string | null; document_id?: string | null };
+          if (!row.service_id || !row.document_id || !activeDocumentIds.has(row.document_id)) return acc;
+          acc[row.service_id] = (acc[row.service_id] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+      }
+    }
+
+    const mappedServices = rows.map((s) => {
+      const supplierInvoiceRequirement = String(s.supplier_invoice_requirement || "required");
+      const supplierInvoiceDocumentCount = supplierInvoiceDocumentCountByService[String(s.id)] || 0;
+      const supplierInvoiceStatus =
+        supplierInvoiceRequirement === "not_required"
+          ? "not_required"
+          : supplierInvoiceRequirement === "periodic"
+            ? "periodic"
+            : supplierInvoiceDocumentCount > 0
+              ? "matched"
+              : "missing";
+
+      return {
+        ...mapOrderServiceRowToListApiItem(s as Record<string, unknown>, {
         travellerIds: travellerMap[String(s.id)] || [],
         categoryMap,
         contactOverridesMap,
         byId,
         partyDisplayIdById,
         invoiceStatusById,
-      })
-    );
+        }),
+        supplierInvoiceRequirement,
+        supplierInvoicePeriod: s.supplier_invoice_period || null,
+        supplierInvoiceNote: s.supplier_invoice_note || null,
+        supplierInvoiceDocumentCount,
+        supplierInvoiceStatus,
+      };
+    });
 
     return NextResponse.json({ services: mappedServices });
   } catch (error: unknown) {

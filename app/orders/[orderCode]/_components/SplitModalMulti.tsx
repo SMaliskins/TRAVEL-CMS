@@ -367,7 +367,6 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     const totalClient = config.parts.reduce((sum, p) => sum + p.clientAmount, 0);
     const totalService = config.parts.reduce((sum, p) => sum + p.serviceAmount, 0);
     const hasEmptyPayers = config.parts.some(p => !p.payerPartyId);
-    const hasDuplicatePayers = new Set(config.parts.map(p => p.payerPartyId).filter(Boolean)).size !== config.parts.filter(p => p.payerPartyId).length;
 
     if (Math.abs(totalClient - service.clientPrice) > 0.01) {
       return { valid: false, error: `Client total mismatch` };
@@ -377,9 +376,6 @@ export default function SplitModalMulti({ services, orderCode, onClose, onServic
     }
     if (hasEmptyPayers) {
       return { valid: false, error: "Missing payers" };
-    }
-    if (hasDuplicatePayers) {
-      return { valid: false, error: "Duplicate payers" };
     }
 
     return { valid: true, error: null };

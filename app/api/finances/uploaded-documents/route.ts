@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
         parsed_invoice_number,
         parsed_supplier,
         parsed_invoice_date,
+        document_state,
+        accounting_state,
+        accounting_processed_at,
+        accounting_processed_by,
+        attention_reason,
+        replaced_by_document_id,
         orders!inner(order_code, owner_user_id, manager_user_id)
       `)
       .eq("company_id", companyId)
@@ -57,8 +63,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 });
     }
 
+    const documentIds = (docs || []).map((doc) => doc.id).filter(Boolean);
+    let matchedServiceCountByDocument: Record<string, number> = {};
+    if (documentIds.length > 0) {
+      const { data: links, error: linksError } = await supabaseAdmin
+        .from("order_document_service_links")
+        .select("document_id")
+        .eq("company_id", companyId)
+        .in("document_id", documentIds);
+
+      if (!linksError) {
+        matchedServiceCountByDocument = (links || []).reduce((acc, link) => {
+          const documentId = (link as { document_id?: string | null }).document_id;
+          if (!documentId) return acc;
+          acc[documentId] = (acc[documentId] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+      }
+    }
+
     const withUrls = await Promise.all(
       (docs || []).map(async (d: {
+        id: string;
         file_path: string;
         orders?: { order_code?: string } | { order_code?: string }[];
         supplier_name?: string | null;
@@ -87,6 +113,7 @@ export async function GET(request: NextRequest) {
           effective_currency: d.currency || d.parsed_currency || null,
           effective_invoice_date: d.invoice_date || d.parsed_invoice_date || null,
           effective_invoice_number: d.invoice_number || d.parsed_invoice_number || null,
+          matched_service_count: matchedServiceCountByDocument[d.id] || 0,
         };
       })
     );

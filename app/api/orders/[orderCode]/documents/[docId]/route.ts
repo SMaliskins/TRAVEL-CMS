@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import {
+  getSupplierInvoiceDeleteUpdate,
+  getSupplierInvoiceEditUpdate,
+} from "@/lib/finances/supplierInvoiceAccounting";
 
 const BUCKET_NAME = "order-documents";
 
@@ -10,19 +14,39 @@ export async function DELETE(
   { params }: { params: Promise<{ orderCode: string; docId: string }> }
 ) {
   try {
-    const { orderCode, docId } = await params;
+    const { docId } = await params;
     const apiUser = await getApiUser(request);
     if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { companyId } = apiUser;
+    const { companyId, userId } = apiUser;
 
     const { data: doc, error: fetchErr } = await supabaseAdmin
       .from("order_documents")
-      .select("id, company_id, file_path")
+      .select("id, company_id, file_path, accounting_state")
       .eq("id", docId)
       .single();
 
     if (fetchErr || !doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
     if (doc.company_id !== companyId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const deleteUpdate = getSupplierInvoiceDeleteUpdate({
+      currentState: doc.accounting_state,
+      deletedAt: new Date().toISOString(),
+      deletedBy: userId,
+    });
+
+    if (deleteUpdate.mode === "soft") {
+      const { error: updateErr } = await supabaseAdmin
+        .from("order_documents")
+        .update(deleteUpdate.update)
+        .eq("id", docId)
+        .eq("company_id", companyId);
+
+      if (updateErr) {
+        console.error("[Documents] soft DELETE update error:", updateErr);
+        return NextResponse.json({ error: "Failed to mark document as deleted" }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, softDeleted: true });
+    }
 
     await supabaseAdmin.storage.from(BUCKET_NAME).remove([doc.file_path]);
     const { error: delErr } = await supabaseAdmin.from("order_documents").delete().eq("id", docId);
@@ -44,7 +68,7 @@ export async function PATCH(
   { params }: { params: Promise<{ orderCode: string; docId: string }> }
 ) {
   try {
-    const { orderCode, docId } = await params;
+    const { docId } = await params;
     const apiUser = await getApiUser(request);
     if (!apiUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { companyId } = apiUser;
@@ -56,6 +80,9 @@ export async function PATCH(
       invoice_number?: string | null;
       supplier_name?: string | null;
       invoice_date?: string | null;
+      accounting_state?: string;
+      attention_reason?: string | null;
+      version?: number;
     } = {};
 
     if (body.amount !== undefined) updateData.amount = body.amount;
@@ -66,7 +93,7 @@ export async function PATCH(
 
     const { data: doc, error: fetchErr } = await supabaseAdmin
       .from("order_documents")
-      .select("id, company_id")
+      .select("id, company_id, accounting_state, version")
       .eq("id", docId)
       .single();
 
@@ -74,9 +101,14 @@ export async function PATCH(
     if (doc.company_id !== companyId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     if (Object.keys(updateData).length > 0) {
+      const finalUpdateData = getSupplierInvoiceEditUpdate({
+        currentState: doc.accounting_state,
+        currentVersion: doc.version,
+        changes: updateData,
+      });
       const { error: updateErr } = await supabaseAdmin
         .from("order_documents")
-        .update(updateData)
+        .update(finalUpdateData)
         .eq("id", docId);
 
       if (updateErr) {

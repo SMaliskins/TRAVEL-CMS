@@ -7,6 +7,36 @@
 
 ---
 
+## [2026-04-27] Release news language selector
+
+**Возможность (для описания продукта):** Users can choose the language for release news separately from the interface language. For example, the system can stay in English while release updates are read in Russian.
+
+**Для пресс-релиза / маркетинг:** Release updates are now easier to read in multilingual teams, with a dedicated news language selector directly in system update messages.
+
+**Технически:** Notifications — release news language selector in mandatory update modal and `/notifications` release details.
+
+---
+
+## [2026-04-27] Invoice language remembered from invoice creation
+
+**Возможность (для описания продукта):** When a manager selects an invoice language while creating an invoice, the system remembers that language on the payer/client card and uses it as the default next time.
+
+**Для пресс-релиза / маркетинг:** Invoice creation now learns the client's preferred invoice language directly from the manager's selection.
+
+**Технически:** Invoices / Directory — invoice language preference sync from `InvoiceCreator` to Directory.
+
+---
+
+## [2026-04-27] Supplier invoice matching and accounting workflow
+
+**Возможность (для описания продукта):** Agents can match uploaded supplier invoices to real order services, mark periodic or not-required services, and see supplier invoice completeness directly in services and orders. Accountants can process supplier invoices with clear attention states when a processed invoice is changed or deleted.
+
+**Для пресс-релиза / маркетинг:** Supplier invoice control is now connected from order services to accounting, giving teams a clear view of missing, matched, periodic, and attention-required supplier invoices.
+
+**Технически:** Finance / Orders — supplier invoice document-service links, accounting states, services controls, `/orders` supplier invoice preview.
+
+---
+
 ## [2026-04-25] Mandatory system update acknowledgements
 
 **Возможность (для описания продукта):** Important system updates are shown to every manager as a required pop-up with an “I have read this” acknowledgement. Once a manager confirms the update, it will not be shown again to that same manager.

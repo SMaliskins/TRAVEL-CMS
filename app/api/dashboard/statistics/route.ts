@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
+import { summarizeOverdueDebt } from "@/lib/finances/overdue";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
     if (!apiUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const { companyId, userId, role, scope } = apiUser;
+    const { companyId, userId, scope } = apiUser;
     const isOwnScope = scope === "own";
 
     const { searchParams } = new URL(request.url);
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     let overdueQ = supabaseAdmin
       .from("invoices")
-      .select("id, total, final_payment_date, due_date, orders!inner(owner_user_id, manager_user_id)")
+      .select("id, invoice_number, total, is_credit, final_payment_date, due_date, orders!inner(owner_user_id, manager_user_id)")
       .eq("company_id", companyId)
       .in("status", ["issued", "sent", "partially_paid"])
       .or(`final_payment_date.lt.${todayStr},due_date.lt.${todayStr}`);
@@ -109,30 +110,29 @@ export async function GET(request: NextRequest) {
     let overdueAmount = 0;
     let overdueInPeriodAmount = 0;
     if (!overdueError && overdueInvoices && overdueInvoices.length > 0) {
-      const invoiceIds = overdueInvoices.map((inv) => inv.id);
+      const invoiceIds = Array.from(new Set(overdueInvoices.map((inv) => inv.id)));
       const { data: paymentsData } = await supabaseAdmin
         .from("payments")
-        .select("invoice_id, amount")
-        .in("invoice_id", invoiceIds)
-        .eq("status", "completed");
+        .select("invoice_id, amount, status")
+        .eq("company_id", companyId)
+        .in("invoice_id", invoiceIds);
 
-      const paidByInvoice: Record<string, number> = {};
+      const paymentsByInvoice: Record<string, { amount: number | string | null; status: string | null }[]> = {};
       for (const p of paymentsData || []) {
-        paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] || 0) + parseFloat(p.amount?.toString() || "0");
+        if (!p.invoice_id) continue;
+        if (!paymentsByInvoice[p.invoice_id]) paymentsByInvoice[p.invoice_id] = [];
+        paymentsByInvoice[p.invoice_id].push({ amount: p.amount, status: p.status });
       }
 
-      for (const inv of overdueInvoices) {
-        const dueDate = inv.final_payment_date || inv.due_date;
-        if (!dueDate || dueDate >= todayStr) continue;
-        const total = parseFloat(inv.total?.toString() || "0");
-        const paid = paidByInvoice[inv.id] || 0;
-        const debt = total - paid;
-        if (debt <= 0) continue;
-        overdueAmount += debt;
-        if (dueDate >= periodStart && dueDate <= periodEnd) {
-          overdueInPeriodAmount += debt;
-        }
-      }
+      const overdueSummary = summarizeOverdueDebt({
+        invoices: overdueInvoices,
+        paymentsByInvoice,
+        today: todayStr,
+        periodStart,
+        periodEnd,
+      });
+      overdueAmount = overdueSummary.overdueAmount;
+      overdueInPeriodAmount = overdueSummary.overdueInPeriodAmount;
     }
 
     // 6. Company targets

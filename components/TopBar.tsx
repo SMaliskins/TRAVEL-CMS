@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
@@ -15,6 +15,11 @@ import { THEME_SCHEMES } from "@/lib/themeSchemes";
 import { useStaffNotificationsToolbarQuery } from "@/hooks/useStaffNotificationsToolbarQuery";
 import { staffNotificationsRootQueryKey } from "@/lib/notifications/staffNotificationsQuery";
 import type { StaffNotificationRow } from "@/lib/notifications/staffNotificationsQuery";
+import {
+  normalizeReleaseNewsLanguage,
+  RELEASE_NEWS_LANGUAGES,
+  type ReleaseNewsLanguage,
+} from "@/lib/notifications/releaseNewsLanguage";
 import { playCashRegisterChime, wasLocalPaymentChimeRecent } from "@/lib/sound/cashRegister";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 
@@ -60,16 +65,19 @@ export default function TopBar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+  const { prefs, isMounted: prefsMounted } = useUserPreferences();
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [releaseNewsLanguage, setReleaseNewsLanguage] = useState<ReleaseNewsLanguage>(() =>
+    normalizeReleaseNewsLanguage(prefs.language)
+  );
   const themeRef = useRef<HTMLDivElement>(null);
   const { scheme, setColorScheme, isClient: themeReady } = useColorScheme();
   const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifBtnRef = useRef<HTMLButtonElement>(null);
   
-  const { prefs, isMounted: prefsMounted } = useUserPreferences();
   const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory();
   const now = useClock();
   const { profile } = useUser();
@@ -598,27 +606,45 @@ export default function TopBar() {
         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/60 px-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-gray-100 px-6 py-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xl">
-                  {notifIcon(mandatorySystemUpdate.type)}
-                </span>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                    {prefs.language === "ru"
-                      ? "Обязательное уведомление"
-                      : prefs.language === "lv"
-                        ? "Obligāts paziņojums"
-                        : "Required notice"}
-                  </p>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    {localizedText(mandatorySystemUpdate.title, prefs.language)}
-                  </h2>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xl">
+                    {notifIcon(mandatorySystemUpdate.type)}
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                      {prefs.language === "ru"
+                        ? "Обязательное уведомление"
+                        : prefs.language === "lv"
+                          ? "Obligāts paziņojums"
+                          : "Required notice"}
+                    </p>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {localizedText(mandatorySystemUpdate.title, releaseNewsLanguage)}
+                    </h2>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                  <span className="text-xs font-medium text-blue-700">
+                    {prefs.language === "ru" ? "Язык новостей" : prefs.language === "lv" ? "Ziņu valoda" : "News language"}
+                  </span>
+                  <select
+                    value={releaseNewsLanguage}
+                    onChange={(event) => setReleaseNewsLanguage(normalizeReleaseNewsLanguage(event.target.value))}
+                    className="rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  >
+                    {RELEASE_NEWS_LANGUAGES.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
             <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
               <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700">
-                {localizedText(mandatorySystemUpdate.message, prefs.language)}
+                {localizedText(mandatorySystemUpdate.message, releaseNewsLanguage)}
               </p>
             </div>
             <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">

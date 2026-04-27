@@ -10,6 +10,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { Check, X } from "lucide-react";
 import { getInvoiceLanguageLabel, filterInvoiceLanguageSuggestions } from "@/lib/invoiceLanguages";
 import { getInvoiceLabels, numberToWords, getCategoryLabel, getCategoryTypeFromName, translateServiceDescriptionForInvoice } from "@/lib/invoices/generateInvoiceHTML";
+import { buildInvoiceLanguagePreferenceRequest } from "@/lib/invoices/invoiceLanguagePreference";
 import { getServiceDisplayName, type ServiceForDisplayName } from "@/lib/services/serviceDisplayName";
 
 interface Service {
@@ -449,6 +450,30 @@ export default function InvoiceCreator({
         fallback.push(`INV-${orderCode.replace(/\//g, '-').toUpperCase()}-${currentYear}-XX-${String(Date.now() + i).slice(-4)}`);
       }
       return fallback;
+    }
+  };
+
+  const rememberInvoiceLanguagePreference = async (
+    partyId: string | null | undefined,
+    language: string,
+    partyType: "company" | "person"
+  ) => {
+    const request = buildInvoiceLanguagePreferenceRequest(partyId, language, partyType);
+    if (!request) return;
+
+    try {
+      const response = await fetch(request.url, request.init);
+      if (!response.ok) {
+        const message = await response.text().catch(() => "");
+        console.warn("Failed to remember invoice language preference:", {
+          partyId,
+          language,
+          status: response.status,
+          message: message.slice(0, 300),
+        });
+      }
+    } catch (error) {
+      console.warn("Failed to remember invoice language preference:", error);
     }
   };
 
@@ -1268,7 +1293,9 @@ export default function InvoiceCreator({
               };
             });
             
-            await createInvoiceForServices(groupServices, groupPayerInfo, invNum, termsForBulk[i], invoiceLanguageByPayerIndex[i] ?? "en");
+            const groupInvoiceLanguage = invoiceLanguageByPayerIndex[i] ?? "en";
+            await createInvoiceForServices(groupServices, groupPayerInfo, invNum, termsForBulk[i], groupInvoiceLanguage);
+            await rememberInvoiceLanguagePreference(groupPayerPartyId, groupInvoiceLanguage, groupPayerInfo.type);
             successCount++;
           } catch (error: any) {
             const errorMessage = error?.message || error?.error || 'Unknown error';
@@ -1358,6 +1385,7 @@ export default function InvoiceCreator({
           throw new Error(errMsg);
         }
 
+        await rememberInvoiceLanguagePreference(payerPartyId, invoiceLanguage || "en", payerType);
         showToast("success", "Invoice created successfully!");
         onSuccess?.();
         setTimeout(() => {

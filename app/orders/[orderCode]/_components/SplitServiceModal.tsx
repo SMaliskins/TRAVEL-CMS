@@ -398,13 +398,6 @@ const handleSplit = async () => {
       setError("All parts must have a payer selected");
       return;
     }
-    // Check for duplicate payers
-    const payerIds = parts.map(p => p.payerPartyId).filter(Boolean);
-    const uniquePayerIds = new Set(payerIds);
-    if (payerIds.length !== uniquePayerIds.size) {
-      setError("Each part must have a different payer. Remove duplicate payers.");
-      return;
-    }
 
     setIsSaving(true);
     setError(null);
@@ -449,7 +442,7 @@ const handleSplit = async () => {
             <div>
               <h2 className="text-xl font-semibold text-gray-900">Split Service</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Divide &quot;{service.name}&quot; into multiple parts for different payers
+                Divide &quot;{service.name}&quot; into multiple parts by traveller, payer, or pricing
               </p>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

@@ -76,6 +76,21 @@ export type OrderDocumentListRow = {
   invoice_number?: string | null;
   supplier_name?: string | null;
   invoice_date?: string | null;
+  document_state?: "active" | "deleted" | "replaced" | string;
+  accounting_state?: "pending" | "processed" | "attention" | "cancelled_processed" | string;
+  accounting_processed_at?: string | null;
+  attention_reason?: "deleted" | "changed" | "replaced" | string | null;
+  matched_service_count?: number;
+  matched_services?: {
+    id: string;
+    category: string | null;
+    service_name: string | null;
+    supplier_name: string | null;
+    service_date_from: string | null;
+    service_date_to: string | null;
+    service_price: number | null;
+    supplier_invoice_requirement: string | null;
+  }[];
 };
 
 export type ListPagination = { offset: number; limit: number; total: number };

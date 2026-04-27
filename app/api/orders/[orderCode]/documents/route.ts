@@ -57,7 +57,7 @@ export async function GET(
       limit !== null ? Math.max(0, parseInt(searchParams.get("offset") || "0", 10) || 0) : 0;
 
     const selectCols =
-      "id, document_type, file_name, file_path, file_size, mime_type, created_at, amount, currency, invoice_number, supplier_name, invoice_date, parsed_amount, parsed_currency, parsed_invoice_number, parsed_supplier, parsed_invoice_date";
+      "id, document_type, file_name, file_path, file_size, mime_type, created_at, amount, currency, invoice_number, supplier_name, invoice_date, parsed_amount, parsed_currency, parsed_invoice_number, parsed_supplier, parsed_invoice_date, document_state, accounting_state, accounting_processed_at, accounting_processed_by, attention_reason, deleted_at, deleted_by, replaced_by_document_id, version";
 
     let q = supabaseAdmin
       .from("order_documents")
@@ -110,15 +110,79 @@ export async function GET(
       }
     }
 
+    const docIds = withUrls.map((d) => d.id).filter(Boolean);
+    const matchedServicesByDocument: Record<string, {
+      id: string;
+      category: string | null;
+      service_name: string | null;
+      supplier_name: string | null;
+      service_date_from: string | null;
+      service_date_to: string | null;
+      service_price: number | null;
+      supplier_invoice_requirement: string | null;
+    }[]> = {};
+
+    if (docIds.length > 0) {
+      const { data: links, error: linksError } = await supabaseAdmin
+        .from("order_document_service_links")
+        .select("document_id, service_id")
+        .eq("company_id", orderResult.companyId)
+        .eq("order_id", orderResult.orderId)
+        .in("document_id", docIds);
+
+      if (!linksError) {
+        const serviceIds = [
+          ...new Set((links || []).map((link) => (link as { service_id?: string | null }).service_id).filter(Boolean)),
+        ] as string[];
+        if (serviceIds.length > 0) {
+          const { data: services } = await supabaseAdmin
+            .from("order_services")
+            .select("id, category, service_name, supplier_name, service_date_from, service_date_to, service_price, supplier_invoice_requirement")
+            .eq("company_id", orderResult.companyId)
+            .eq("order_id", orderResult.orderId)
+            .in("id", serviceIds);
+          const servicesById = new Map((services || []).map((service) => [service.id, service]));
+
+          for (const link of links || []) {
+            const documentId = (link as { document_id?: string }).document_id;
+            const serviceId = (link as { service_id?: string }).service_id;
+            if (!documentId || !serviceId) continue;
+            const service = servicesById.get(serviceId);
+            if (!service) continue;
+            if (!matchedServicesByDocument[documentId]) matchedServicesByDocument[documentId] = [];
+            matchedServicesByDocument[documentId].push(service as {
+              id: string;
+              category: string | null;
+              service_name: string | null;
+              supplier_name: string | null;
+              service_date_from: string | null;
+              service_date_to: string | null;
+              service_price: number | null;
+              supplier_invoice_requirement: string | null;
+            });
+          }
+        }
+      }
+    }
+
+    const documentsWithMatches = withUrls.map((doc) => {
+      const matched_services = matchedServicesByDocument[doc.id] || [];
+      return {
+        ...doc,
+        matched_services,
+        matched_service_count: matched_services.length,
+      };
+    });
+
     const payload: {
-      documents: typeof withUrls;
+      documents: typeof documentsWithMatches;
       pagination?: { offset: number; limit: number; total: number };
-    } = { documents: withUrls };
+    } = { documents: documentsWithMatches };
     if (limit !== null) {
       payload.pagination = {
         offset,
         limit,
-        total: typeof count === "number" ? count : withUrls.length,
+        total: typeof count === "number" ? count : documentsWithMatches.length,
       };
     }
     return NextResponse.json(payload);

@@ -386,6 +386,19 @@ export async function PATCH(
     if (body.cancellationFee !== undefined) updates.cancellation_fee = body.cancellationFee != null ? parseFloat(String(body.cancellationFee)) : null;
     if (body.refundAmount !== undefined) updates.refund_amount = body.refundAmount != null ? parseFloat(String(body.refundAmount)) : null;
     if (body.cancellationRefundType !== undefined) (updates as Record<string, unknown>).cancellation_refund_type = body.cancellationRefundType || null;
+    if (body.supplier_invoice_requirement !== undefined || body.supplierInvoiceRequirement !== undefined) {
+      const raw = body.supplier_invoice_requirement ?? body.supplierInvoiceRequirement;
+      if (!["required", "periodic", "not_required"].includes(String(raw))) {
+        return NextResponse.json({ error: "Invalid supplier invoice requirement" }, { status: 400 });
+      }
+      updates.supplier_invoice_requirement = String(raw);
+    }
+    if (body.supplier_invoice_period !== undefined || body.supplierInvoicePeriod !== undefined) {
+      updates.supplier_invoice_period = body.supplier_invoice_period ?? body.supplierInvoicePeriod ?? null;
+    }
+    if (body.supplier_invoice_note !== undefined || body.supplierInvoiceNote !== undefined) {
+      updates.supplier_invoice_note = body.supplier_invoice_note ?? body.supplierInvoiceNote ?? null;
+    }
 
     if (body.referral_include_in_commission !== undefined) {
       updates.referral_include_in_commission = !!body.referral_include_in_commission;

@@ -168,6 +168,14 @@ export default function FinanceDashboard({
     if (cardPeriods[card] !== "inherit" && cardOverrideData[card]) return cardOverrideData[card]!.prevYear;
     return previousYear;
   };
+  const getOverdueDisplayAmount = (): number => {
+    const stats = getStats("overdue");
+    if (!stats) return 0;
+    if (cardPeriods.overdue !== "allTime" && typeof stats.overdueInPeriodAmount === "number") {
+      return stats.overdueInPeriodAmount;
+    }
+    return stats.overdueAmount || 0;
+  };
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -310,15 +318,10 @@ export default function FinanceDashboard({
         />
         <StatisticCard
           title="Overdue Payments"
-          value={`€${(getStats("overdue")?.overdueAmount || 0).toLocaleString()}`}
+          value={`€${getOverdueDisplayAmount().toLocaleString()}`}
           valueClassName="text-red-600"
           cardPeriod={cardPeriods.overdue}
           onCardPeriodChange={(p) => setCardPeriods((prev) => ({ ...prev, overdue: p }))}
-          subValue={
-            getStats("overdue")?.overdueInPeriodAmount !== undefined
-              ? `of which due in period: €${(getStats("overdue")!.overdueInPeriodAmount || 0).toLocaleString()}`
-              : undefined
-          }
           onClick={() => router.push("/finances/invoices?status=overdue")}
         />
         {/* Cash Flow */}

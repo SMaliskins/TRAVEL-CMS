@@ -1,0 +1,68 @@
+{
+  "version": "2026-04-27",
+  "items": [
+    {
+      "type": "feature",
+      "text": {
+        "en": "Release news language — choose the news language directly in the update pop-up, separately from the interface language",
+        "ru": "Язык новостей — выберите язык новости прямо в pop-up обновления, отдельно от языка интерфейса",
+        "lv": "Relīzes ziņu valoda — izvēlieties ziņu valodu tieši atjauninājuma logā, neatkarīgi no saskarnes valodas"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Supplier invoices — match uploaded supplier invoices to real order services and see whether all required supplier invoices are ready",
+        "ru": "Счета поставщиков — привязывайте загруженные счета к реальным услугам заказа и сразу видите, все ли нужные счета готовы",
+        "lv": "Piegādātāju rēķini — sasaistiet augšupielādētos rēķinus ar reāliem pasūtījuma pakalpojumiem un redziet, vai visi nepieciešamie rēķini ir gatavi"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Accounting workflow — accountants can process supplier invoices and see attention states when a processed invoice is changed or deleted",
+        "ru": "Процесс для бухгалтерии — бухгалтеры могут обрабатывать счета поставщиков и видеть предупреждения, если обработанный счет изменили или удалили",
+        "lv": "Grāmatvedības process — grāmatveži var apstrādāt piegādātāju rēķinus un redzēt brīdinājumus, ja apstrādāts rēķins ir mainīts vai dzēsts"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Orders list — a new supplier invoice status shows if an order is fully matched, missing invoices, has unmatched documents or needs attention",
+        "ru": "Список заказов — новый статус по счетам поставщиков показывает, всё ли сопоставлено, есть ли недостающие счета, непривязанные документы или внимание бухгалтерии",
+        "lv": "Pasūtījumu saraksts — jauns piegādātāju rēķinu statuss rāda, vai viss ir sasaistīts, trūkst rēķinu, ir nepiesaistīti dokumenti vai nepieciešama uzmanība"
+      },
+      "image": null
+    },
+    {
+      "type": "feature",
+      "text": {
+        "en": "Invoice language memory — when a manager chooses an invoice language while creating an invoice, the system remembers it for that payer/client",
+        "ru": "Запоминание языка счета — если менеджер выбирает язык при выставлении счета, система запоминает его для этого плательщика/клиента",
+        "lv": "Rēķina valodas saglabāšana — ja menedžeris izvēlas rēķina valodu rēķina izveides laikā, sistēma to atceras šim maksātājam/klientam"
+      },
+      "image": null
+    },
+    {
+      "type": "fix",
+      "text": {
+        "en": "Overdue Payments — dashboard overdue amounts now show the real remaining debt more accurately, excluding cancelled payments and duplicates",
+        "ru": "Overdue Payments — просроченная задолженность на Dashboard теперь точнее показывает реальный остаток долга, без отменённых платежей и дублей",
+        "lv": "Overdue Payments — kavēto maksājumu summa panelī tagad precīzāk rāda reālo atlikušo parādu, bez atceltiem maksājumiem un dublikātiem"
+      },
+      "image": null
+    },
+    {
+      "type": "fix",
+      "text": {
+        "en": "Client card saves — invoice language and other client settings save reliably even when older database fields are not present",
+        "ru": "Сохранение карточки клиента — язык счета и другие настройки клиента сохраняются надёжно даже при отсутствии старых полей базы",
+        "lv": "Klienta kartes saglabāšana — rēķina valoda un citi klienta iestatījumi saglabājas droši arī tad, ja vecāki datubāzes lauki nav pieejami"
+      },
+      "image": null
+    }
+  ]
+}

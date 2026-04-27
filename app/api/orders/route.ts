@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
+import { getSupplierInvoiceOrderStatus } from "@/lib/finances/supplierInvoiceOrderStatus";
 import {
   hasRussianJcukenChar,
   russianJcukenToLatinQwerty,
@@ -25,6 +26,19 @@ type PartySearchShape = {
     | { first_name?: string | null; last_name?: string | null }
     | { first_name?: string | null; last_name?: string | null }[]
     | null;
+};
+
+type SupplierInvoicePreviewDocumentRow = {
+  id: string;
+  order_id: string;
+  document_state?: string | null;
+  accounting_state?: string | null;
+};
+
+type SupplierInvoicePreviewLinkRow = {
+  document_id: string;
+  service_id: string;
+  order_id: string;
 };
 
 function buildPartySearchLabel(party: PartySearchShape | null | undefined): string {
@@ -366,13 +380,15 @@ export async function GET(request: NextRequest) {
       referralResult,
       paymentsResult,
       econRpcResult,
+      supplierDocumentsResult,
+      supplierDocumentLinksResult,
     ] = await Promise.all([
       orderIds.length === 0
         ? Promise.resolve({ data: [] as any[], error: null })
         : supabaseAdmin
             .from("order_services")
             .select(
-              "id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount"
+              "id, order_id, invoice_id, res_status, service_type, client_name, client_price, service_price, category, commission_amount, agent_discount_value, vat_rate, service_date_from, service_date_to, payer_name, referral_include_in_commission, referral_commission_percent_override, referral_commission_fixed_amount, supplier_invoice_requirement"
             )
             .eq("company_id", companyId)
             .in("order_id", orderIds),
@@ -413,10 +429,27 @@ export async function GET(request: NextRequest) {
             p_order_ids: orderIds,
           })
         : Promise.resolve({ data: [] as unknown[], error: null }),
+      orderIds.length > 0
+        ? supabaseAdmin
+            .from("order_documents")
+            .select("id, order_id, document_state, accounting_state")
+            .eq("company_id", companyId)
+            .eq("document_type", "invoice")
+            .in("order_id", orderIds)
+        : Promise.resolve({ data: [] as SupplierInvoicePreviewDocumentRow[], error: null }),
+      orderIds.length > 0
+        ? supabaseAdmin
+            .from("order_document_service_links")
+            .select("document_id, service_id, order_id")
+            .eq("company_id", companyId)
+            .in("order_id", orderIds)
+        : Promise.resolve({ data: [] as SupplierInvoicePreviewLinkRow[], error: null }),
     ]);
 
     const servicesData = servicesResult.data || [];
     const invoicesData = invoicesResult.data || [];
+    const supplierDocumentsData = (supplierDocumentsResult.data || []) as SupplierInvoicePreviewDocumentRow[];
+    const supplierDocumentLinksData = (supplierDocumentLinksResult.data || []) as SupplierInvoicePreviewLinkRow[];
     
     // Build owner name lookup
     const ownerNames = new Map<string, string>();
@@ -436,6 +469,29 @@ export async function GET(request: NextRequest) {
       const arr = invoicesByOrder.get(i.order_id);
       if (arr) { arr.push(i); } else { invoicesByOrder.set(i.order_id, [i]); }
     });
+    const supplierDocumentsByOrder = new Map<string, SupplierInvoicePreviewDocumentRow[]>();
+    supplierDocumentsData.forEach((doc) => {
+      const arr = supplierDocumentsByOrder.get(doc.order_id);
+      if (arr) { arr.push(doc); } else { supplierDocumentsByOrder.set(doc.order_id, [doc]); }
+    });
+    const supplierDocumentLinkCountByDocument = new Map<string, number>();
+    const supplierActiveDocumentCountByService = new Map<string, number>();
+    const activeSupplierDocumentIds = new Set(
+      supplierDocumentsData
+        .filter((doc) => (doc.document_state || "active") === "active")
+        .map((doc) => doc.id)
+    );
+    supplierDocumentLinksData.forEach((link) => {
+      if (!activeSupplierDocumentIds.has(link.document_id)) return;
+      supplierDocumentLinkCountByDocument.set(
+        link.document_id,
+        (supplierDocumentLinkCountByDocument.get(link.document_id) || 0) + 1
+      );
+      supplierActiveDocumentCountByService.set(
+        link.service_id,
+        (supplierActiveDocumentCountByService.get(link.service_id) || 0) + 1
+      );
+    });
     const orderMap = new Map<string, Record<string, unknown>>();
     (orders || []).forEach((o: any) => orderMap.set(o.id, o));
     
@@ -448,6 +504,7 @@ export async function GET(request: NextRequest) {
       totalInvoices: number;
       allInvoicesPaid: boolean;
       dueDate: string | null;
+      supplierInvoiceStatus: ReturnType<typeof getSupplierInvoiceOrderStatus>;
     }>();
     
     // Service stats (amount, profit net of VAT, VAT on margin) — A2: Postgres RPC when available
@@ -492,6 +549,21 @@ export async function GET(request: NextRequest) {
       const invoicedServices = activeServices.filter((s: any) => s.invoice_id).length;
       const hasInvoice = invoices.length > 0;
       const allServicesInvoiced = totalServices > 0 && invoicedServices === totalServices;
+      const supplierDocuments = supplierDocumentsByOrder.get(orderId) || [];
+      const activeSupplierDocuments = supplierDocuments.filter(
+        (doc) => (doc.document_state || "active") === "active"
+      );
+      const supplierInvoiceStatus = getSupplierInvoiceOrderStatus({
+        services: activeServices.map((service) => ({
+          id: service.id,
+          requirement: service.supplier_invoice_requirement,
+          activeDocumentCount: supplierActiveDocumentCountByService.get(service.id) || 0,
+        })),
+        activeDocumentMatchedCounts: activeSupplierDocuments.map(
+          (doc) => supplierDocumentLinkCountByDocument.get(doc.id) || 0
+        ),
+        hasAttentionDocument: supplierDocuments.some((doc) => doc.accounting_state === "attention"),
+      });
 
       const allInvoicesPaid =
         invoices.length > 0 && invoices.every((inv: any) => inv.status === "paid");
@@ -513,6 +585,7 @@ export async function GET(request: NextRequest) {
         totalInvoices: invoices.length,
         allInvoicesPaid,
         dueDate,
+        supplierInvoiceStatus,
       });
     });
 
@@ -672,6 +745,9 @@ export async function GET(request: NextRequest) {
         allServicesInvoiced: invStats?.allServicesInvoiced || false,
         totalInvoices: invStats?.totalInvoices || 0,
         allInvoicesPaid: invStats?.allInvoicesPaid || false,
+        supplierInvoiceStatus: invStats?.supplierInvoiceStatus.status || "all_matched",
+        supplierInvoiceStatusLabel: invStats?.supplierInvoiceStatus.label || "All matched",
+        supplierInvoiceStatusTone: invStats?.supplierInvoiceStatus.tone || "green",
         payers: payerNamesMap.get(orderId) || [],
         serviceClients: serviceClientNamesMap.get(orderId) || [],
         dueDate: invStats?.dueDate || (order.client_payment_due_date as string) || undefined,
