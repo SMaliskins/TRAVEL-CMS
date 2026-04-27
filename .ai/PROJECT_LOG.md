@@ -5,6 +5,54 @@
 
 ---
 
+## [2026-04-27 21:40] DB — SUPINV-PERIODIC: Step 2.1 — add party.is_periodic_supplier flag
+
+**Task:** SUPINV-PERIODIC | **Status:** SUCCESS (Step 2.1 of 4)
+**Agent:** DB Specialist
+**Complexity:** 🟢
+
+**User intent (current message):**
+- "всем переодическим поставщикам назначать автоматически статус - Periodic"
+- Решение по дизайну: A) флаг в Directory у поставщика + backfill во всех активных заказах компании.
+
+**Действия:**
+- Создан файл `migrations/add_party_is_periodic_supplier.sql`.
+- Применена миграция через Supabase MCP `apply_migration`:
+  - `ALTER TABLE public.party ADD COLUMN IF NOT EXISTS is_periodic_supplier boolean NOT NULL DEFAULT false;`
+  - Комментарий к колонке.
+  - Частичный индекс `idx_party_is_periodic_supplier ON public.party (company_id) WHERE is_periodic_supplier = true` для быстрых выборок флагнутых поставщиков.
+- Подтверждено `information_schema.columns`: колонка существует, `boolean NOT NULL DEFAULT false`.
+
+**Результат:** Готов фундамент для следующих слайсов. UI/API/логика ещё не трогали — `is_periodic_supplier` сейчас всегда `false`, поведение системы не меняется.
+
+**Next Step:** Code Writer → 2.2 Directory UI checkbox + API field on supplier card; 2.3 default `supplier_invoice_requirement='periodic'` при создании сервиса; 2.4 backfill во всех активных заказах при включении флага.
+
+---
+
+## [2026-04-27 21:30] CW — SUPINV-UI-FIX: Step 3 — list missing services in Documents tab
+
+**Task:** SUPINV-UI-FIX | **Status:** SUCCESS (Step 3, follow-up)
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**User feedback addressed:**
+- "в Documents - показывать не только '1 service without supplier invoice'. может еще и саму строку сервиса?"
+
+**Действия:**
+- В `app/orders/[orderCode]/_components/OrderDocumentsTab.tsx`:
+  - `supplierInvoiceCounts` → `supplierInvoiceBreakdown` (хранит сами объекты `missingServices`).
+  - Добавлен компактный блок `Services waiting for a supplier invoice` под счётчиком.
+  - Каждая строка: `<service name> · <supplier> · <date / range> · €<price>` плюс inline `<select>` Required / Periodic / Not required.
+  - При выборе Periodic / Not required — PATCH `/api/orders/[code]/services/[serviceId]` с `supplier_invoice_requirement` и инвалидация кеша сервисов.
+  - По умолчанию показываются первые 3, есть «Show all N» / «Show less».
+- TypeScript проверен (`tsc --noEmit` без ошибок), линтер чистый.
+
+**Результат:** Менеджеру не нужно листать Client & Services чтобы понять, что конкретно не закрыто. Можно прямо здесь переключить статус.
+
+**Next Step:** SUPINV-PERIODIC (отдельный таск).
+
+---
+
 ## [2026-04-27 19:01] CW — SUPINV-UI-FIX: Step 2 — auto-suggest matches in Documents
 
 **Task:** SUPINV-UI-FIX | **Status:** SUCCESS (Step 2 of 2)
