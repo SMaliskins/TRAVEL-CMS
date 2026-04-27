@@ -5,6 +5,34 @@
 
 ---
 
+## [2026-04-27 22:30] CW — SUPINV-PERIODIC: Steps 2.3 + 2.4 — service default + Directory backfill
+
+**Task:** SUPINV-PERIODIC | **Status:** SUCCESS (Steps 2.3 + 2.4 of 4 — feature complete)
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**Действия:**
+- Новый helper `lib/finances/periodicSupplierFlag.ts`:
+  - `isPartyPeriodicSupplier(supabase, companyId, partyId)` — fail-closed lookup, выходит сразу если id/companyId пустые.
+  - `applyPeriodicSupplierBackfill(supabase, companyId, partyId)` — обновляет все required-сервисы поставщика во всех активных заказах (`status IN ('Active','Draft','On hold')`), у которых нет привязанного supplier-invoice документа со статусом, отличным от `deleted`. Возвращает `{ servicesUpdated, ordersAffected }`. Идемпотентен.
+- `app/api/orders/[orderCode]/services/route.ts` POST: перед вставкой если клиент явно не задал `supplierInvoiceRequirement` и есть `supplier_party_id` — подсматриваем флаг через helper и подставляем `supplier_invoice_requirement = 'periodic'`. Явное значение (если передано) валидируется и побеждает.
+- `app/api/directory/[id]/route.ts` PUT:
+  - В выборку `existingParty` добавлено `is_periodic_supplier`.
+  - После успешного обновления и фетча `updatedParty` сравниваем `wasPeriodic` ↔ `isPeriodic`: при flip false→true вызываем `applyPeriodicSupplierBackfill` под `try/catch` (не блокирует сохранение).
+  - В JSON-ответ дополнительно кладём `periodicBackfill: { servicesUpdated, ordersAffected }` если backfill сработал.
+- `app/directory/[id]/page.tsx`: добавлен state `periodicBackfillNotice`, показывает голубой чип рядом с «Saved!» с текстом «Marked N services as Periodic across M active orders.» в течение 8 секунд.
+- Тесты: `scripts/test-periodic-supplier-flag.mjs` — 7 кейсов (lookup/short-circuit/fail-closed, no candidates, exclude linked active docs but include linked deleted docs, tenant scope в update). Прогон зелёный.
+- `package.json`: добавлен скрипт `test:periodic-supplier-flag`.
+- `tsc --noEmit` чисто, lint чисто.
+
+**Результат:** Полный цикл «periodic supplier» закрыт.
+- Менеджер ставит чекбокс в Directory → новые сервисы этого поставщика автоматически Periodic; уже существующие required-сервисы во всех активных заказах одной транзакцией переключаются на Periodic, кроме тех, к которым уже привязан supplier-invoice (их не трогаем — они уже в учёте).
+- Можно выключить чекбокс — флаг сбрасывается, но обратной массовой миграции нет (требований такого backfill не было).
+
+**Next Step:** SUPINV-PERIODIC → READY_FOR_QA. Runner может закрыть SUPINV-UI-FIX (Step 1+2+3 уже в IN_QA).
+
+---
+
 ## [2026-04-27 22:05] CW — SUPINV-PERIODIC: Step 2.2 — Directory UI + API for periodic flag
 
 **Task:** SUPINV-PERIODIC | **Status:** SUCCESS (Step 2.2 of 4)

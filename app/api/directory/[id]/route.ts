@@ -8,6 +8,7 @@ import { normalizePhoneForSave } from "@/utils/phone";
 import { formatNameForDb } from "@/utils/nameFormat";
 import { getApiUser } from "@/lib/auth/getApiUser";
 import { normalizePersonDobToIso } from "@/utils/dateFormat";
+import { applyPeriodicSupplierBackfill, type PeriodicBackfillResult } from "@/lib/finances/periodicSupplierFlag";
 import {
   getClientLastTravelActivityDate,
   maybeClearStaleClientDefaultReferral,
@@ -354,7 +355,7 @@ export async function PUT(
     // Diagnostic: Check if party exists before update (include created_by for audit backfill)
     const { data: existingParty, error: checkError } = await supabaseAdmin
       .from("party")
-      .select("id, company_id, created_by")
+      .select("id, company_id, created_by, is_periodic_supplier")
       .eq("id", id)
       .maybeSingle();
 
@@ -1021,6 +1022,29 @@ export async function PUT(
       );
     }
 
+    let periodicBackfill: PeriodicBackfillResult | null = null;
+    {
+      const wasPeriodic =
+        (existingParty as { is_periodic_supplier?: boolean | null } | null)?.is_periodic_supplier === true;
+      const isPeriodic =
+        (updatedParty as { is_periodic_supplier?: boolean | null }).is_periodic_supplier === true;
+      const companyId =
+        (updatedParty as { company_id?: string | null }).company_id ||
+        (existingParty as { company_id?: string | null } | null)?.company_id ||
+        null;
+      if (!wasPeriodic && isPeriodic && companyId) {
+        try {
+          periodicBackfill = await applyPeriodicSupplierBackfill(
+            supabaseAdmin,
+            companyId as string,
+            id
+          );
+        } catch (backfillError) {
+          console.warn("[Directory PUT] periodic backfill failed:", backfillError);
+        }
+      }
+    }
+
     // Rebuild record with updated data
     const [personData, companyData, clientDataRaw, supplierData, subagentData, referralData, referralRatesData] = await Promise.all([
       supabaseAdmin.from("party_person").select("*").eq("party_id", id).maybeSingle(),
@@ -1107,7 +1131,10 @@ export async function PUT(
     // Upsert party embedding for semantic search (non-blocking)
     upsertPartyEmbedding(id).catch((e) => console.warn("[PUT] upsertPartyEmbedding:", e));
 
-    return NextResponse.json({ record });
+    return NextResponse.json({
+      record,
+      ...(periodicBackfill ? { periodicBackfill } : {}),
+    });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Directory update error:", errorMsg);

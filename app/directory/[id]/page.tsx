@@ -21,6 +21,7 @@ export default function DirectoryDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [periodicBackfillNotice, setPeriodicBackfillNotice] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -122,6 +123,20 @@ export default function DirectoryDetailPage() {
       setIsSaving(false);
       setSaveSuccess(true);
       setSavedAt(new Date());
+
+      const backfill = result.periodicBackfill as
+        | { servicesUpdated?: number; ordersAffected?: number }
+        | undefined;
+      if (backfill && (backfill.servicesUpdated ?? 0) > 0) {
+        const sCount = backfill.servicesUpdated ?? 0;
+        const oCount = backfill.ordersAffected ?? 0;
+        setPeriodicBackfillNotice(
+          `Marked ${sCount} service${sCount === 1 ? "" : "s"} as Periodic across ${oCount} active order${oCount === 1 ? "" : "s"}.`
+        );
+        setTimeout(() => setPeriodicBackfillNotice(null), 8000);
+      } else {
+        setPeriodicBackfillNotice(null);
+      }
       
       // Save isDirty value before resetting it
       const hadChanges = isDirty;
@@ -374,6 +389,14 @@ export default function DirectoryDetailPage() {
               )}
               {saveSuccess && (
                 <span className="text-sm text-green-600">Saved!</span>
+              )}
+              {periodicBackfillNotice && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800"
+                  title="Existing required services for this supplier were switched to Periodic in active orders."
+                >
+                  {periodicBackfillNotice}
+                </span>
               )}
               <button
                 onClick={handleSave}

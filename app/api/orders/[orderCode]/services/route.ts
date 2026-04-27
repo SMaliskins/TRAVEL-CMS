@@ -8,6 +8,7 @@ import { syncOrderReferralAccruals } from "@/lib/referral/syncOrderReferralAccru
 import { fetchOrderIdByRouteParam } from "@/lib/orders/orderFromRouteParam";
 import { normalizeCategoryIdForDb } from "@/lib/orders/normalizeCategoryIdForDb";
 import { vatRateFromCategory } from "@/lib/orders/vatRateFromCategory";
+import { isPartyPeriodicSupplier } from "@/lib/finances/periodicSupplierFlag";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
@@ -624,6 +625,25 @@ export async function POST(
             );
           }
         }
+      }
+    }
+
+    // Supplier-invoice requirement: explicit body wins; otherwise default to
+    // 'periodic' when the supplier is flagged as periodic in Directory.
+    const explicitRequirement = body.supplierInvoiceRequirement ?? body.supplier_invoice_requirement;
+    if (explicitRequirement !== undefined && explicitRequirement !== null && explicitRequirement !== "") {
+      const r = String(explicitRequirement);
+      if (["required", "periodic", "not_required"].includes(r)) {
+        serviceData.supplier_invoice_requirement = r;
+      }
+    } else if (serviceData.supplier_party_id) {
+      const isPeriodic = await isPartyPeriodicSupplier(
+        supabaseAdmin,
+        companyId,
+        serviceData.supplier_party_id as string
+      );
+      if (isPeriodic) {
+        serviceData.supplier_invoice_requirement = "periodic";
       }
     }
 
