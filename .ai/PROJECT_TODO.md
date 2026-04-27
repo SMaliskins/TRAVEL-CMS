@@ -87,6 +87,7 @@ Current tasks and their status. Agents update relevant rows when starting, block
 | **O8-IMPL** | **Finance** | **Email System: Send Invoice + Track** | **CW→QA** | **TODO** | **-** | **🔴 HIGH: email service, template, API, delivery tracking** |
 | FN1 | Finance | Edit Invoice button + handlers | CW→QA | DONE | feature/x | [11.01] ✅ Phase 1 complete |
 | SUPINV1 | Finance | Supplier invoice matching + accounting workflow | Runner | DONE | feature/x | [27.04] ✅ Closed by Runner: supplier invoice matching + accounting workflow complete. SCORE 8.5/10. |
+| SUPINV-UI-FIX | Finance | Supplier invoices UI cleanup (compact column, services indicator, Documents counter, auto-match) | CW→QA | IN_QA | feature/x | [27.04] Step 1+2 done: visual cleanup + auto-suggest matches. Helper `lib/finances/supplierInvoiceAutoMatch.ts` covered by `scripts/test-supplier-invoice-auto-match.mjs`. Modal pre-selects suggested services, shows green Suggested chip + reasons, has "Apply suggestions" button. Document row shows sparkle indicator on the Match icon when suggestions are available. Awaiting QA. |
 
 ## PHASE 4: UI Enhancements
 

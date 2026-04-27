@@ -18,7 +18,7 @@ import { useTabs } from "@/contexts/TabsContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useDebounce } from "@/hooks/useDebounce";
 import { t } from "@/lib/i18n";
-import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight, Globe } from "lucide-react";
+import { Plus, FileText, FileCheck, FileMinus2, CircleDollarSign, CheckCircle2, Check, Clock, CircleAlert, CirclePlus, Search, X, List, CalendarDays, ChevronLeft, ChevronRight, Globe, AlertTriangle } from "lucide-react";
 import { getCityByName, ensureWorldCitiesLoaded } from "@/lib/data/cities";
 
 type OrderStatus = "Draft" | "Active" | "Cancelled" | "Completed" | "On hold";
@@ -495,27 +495,47 @@ const getStatusBadgeColor = (status: OrderStatus): { bg: string; text: string; d
 const getSupplierInvoicePreviewToneClass = (tone: SupplierInvoicePreviewTone | undefined): string => {
   switch (tone) {
     case "green":
-      return "border-green-200 bg-green-50 text-green-700";
+      return "text-green-600";
     case "blue":
-      return "border-blue-200 bg-blue-50 text-blue-700";
+      return "text-blue-600";
     case "purple":
-      return "border-purple-200 bg-purple-50 text-purple-700";
+      return "text-purple-600";
     case "red":
-      return "border-red-200 bg-red-50 text-red-700";
+      return "text-red-600";
     case "amber":
     default:
-      return "border-amber-200 bg-amber-50 text-amber-700";
+      return "text-amber-600";
   }
 };
 
+function getSupplierInvoicePreviewShort(status: string | undefined): { short: string | null; Icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }> } {
+  switch (status) {
+    case "all_matched":
+      return { short: null, Icon: CheckCircle2 };
+    case "missing":
+      return { short: "Missing", Icon: AlertTriangle };
+    case "unmatched_documents":
+      return { short: "Unmatched", Icon: FileText };
+    case "attention":
+      return { short: "Attention", Icon: CircleAlert };
+    case "periodic_only":
+      return { short: "Periodic", Icon: CalendarDays };
+    default:
+      return { short: null, Icon: CheckCircle2 };
+  }
+}
+
 function renderSupplierInvoicePreviewBadge(order: OrderRow) {
-  const label = order.supplierInvoiceStatusLabel || "All matched";
+  const fullLabel = order.supplierInvoiceStatusLabel || "All matched";
+  const { short, Icon } = getSupplierInvoicePreviewShort(order.supplierInvoiceStatus);
+  const toneClass = getSupplierInvoicePreviewToneClass(order.supplierInvoiceStatusTone);
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-medium leading-tight ${getSupplierInvoicePreviewToneClass(order.supplierInvoiceStatusTone)}`}
-      title="Supplier invoices"
+      className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${toneClass}`}
+      title={fullLabel}
     >
-      {label}
+      <Icon size={12} strokeWidth={2} />
+      {short ? <span>{short}</span> : null}
     </span>
   );
 }
@@ -1321,8 +1341,8 @@ export default function OrdersPage() {
                     <Clock size={12} strokeWidth={1.8} className="text-gray-400 mx-auto" />
                   </span>
                 </th>
-                <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
-                  Supplier invoices
+                <th className="w-24 px-2 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600" title="Supplier invoices status">
+                  Sup. inv.
                 </th>
                 <th className="px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-gray-600">
                   {t(lang, "orders.client")}

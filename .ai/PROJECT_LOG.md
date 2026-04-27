@@ -5,6 +5,75 @@
 
 ---
 
+## [2026-04-27 19:01] CW — SUPINV-UI-FIX: Step 2 — auto-suggest matches in Documents
+
+**Task:** SUPINV-UI-FIX | **Status:** SUCCESS (Step 2 of 2)
+**Agent:** Code Writer
+**Complexity:** 🟡
+
+**User feedback addressed:**
+- "в закладке Documents Мatching надо предлагать автоматический"
+
+**Changes:**
+- New helper `lib/finances/supplierInvoiceAutoMatch.ts`:
+  - `suggestServiceMatchesForDocument(document, services, alreadyMatched)` — conservative matcher: requires same supplier (normalized punctuation/case), boosts confidence with amount match (±2% / ≥€1) and date overlap. Only `requirement="required"` services are considered. Already-matched services are excluded from suggestions to avoid noise.
+  - `normalizeSupplierKey` — Unicode-aware lowercase + strip non-alphanumeric, used for the supplier comparison.
+  - `describeAutoMatchReasons` — composes a stable human label (e.g. "Supplier matches · Amount matches · Date in range") for tooltips and inline help.
+- New regression script `scripts/test-supplier-invoice-auto-match.mjs` covers: empty supplier (no suggestions), case/punctuation insensitive supplier match, amount+date reasons, periodic/not_required exclusion, already-matched de-duplication, substring false-positives must not match, snake_case payloads supported, normalize/describe edge cases. Wired up via `npm run test:supplier-invoice-auto-match`.
+- `app/orders/[orderCode]/_components/OrderDocumentsTab.tsx`:
+  - Match modal pre-selects suggested service ids when no manual matches yet exist; existing manual matches are preserved untouched.
+  - Modal header shows "N suggested matches based on supplier name" pill when suggestions exist.
+  - Each suggested service row gets a soft green background, a "Suggested" chip and an inline reasons line (Supplier · Amount · Date) — user can untick at any time.
+  - Footer shows "Apply N suggestions" button (left side) for users who want to add suggestions on top of their existing manual selection.
+  - Document row Match icon (Link2) gets a small green Sparkles indicator + tooltip "N suggestions available" when there are unmatched docs that have automatic suggestions.
+
+**Verification:**
+- `npm run test:supplier-invoice-auto-match` — passed.
+- `npm run test:supplier-invoices` — still green (no regressions in accounting helper).
+- `npx tsc --noEmit` — clean.
+- `ReadLints` over all changed files — no errors.
+
+**Result:** Documents Matching now actively proposes matches; user can accept all in one click or fine-tune. Conservative behaviour (must share supplier) keeps suggestions trustworthy.
+
+**Next Step:** QA — exercise the auto-suggest flow on real orders (suggestion accuracy, no false positives across suppliers, periodic/not_required correctly skipped, existing matches preserved).
+
+---
+
+## [2026-04-27 18:55] CW — SUPINV-UI-FIX: Step 1 — visual cleanup of supplier invoices UI
+
+**Task:** SUPINV-UI-FIX | **Status:** SUCCESS (Step 1 of 2)
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**User feedback addressed:**
+- Колонка "Supplier invoices" в `/orders` — широкая, слишком многословные бейджи.
+- В карточке заказа Supplier — большие жёлтые круги "Missing supplier invoice", визуально перегружено.
+- В Documents tab — нет счётчика services без supplier invoices, "уехавший" UI.
+
+**Changes:**
+- `app/orders/page.tsx`:
+  - Renamed column header to compact `Sup. inv.` with `w-24` width hint and tooltip.
+  - Replaced verbose pill labels (Missing supplier invoices / Has unmatched invoices / Periodic only / All matched / Attention) with single-line icon + short label rendering. `all_matched` is shown as a tiny green check (no text), other statuses use short labels (Missing, Unmatched, Periodic, Attention) with matching colored Lucide icons.
+  - Full label preserved in `title` tooltip; tones moved from filled pill to text color only — minimal visual weight.
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`:
+  - Removed the wide yellow circular badge with text "Missing supplier invoice" / "Periodic" / "Invoice matched" / "Not required" from the Supplier column.
+  - Replaced with a tiny inline status icon (CheckCircle2 / AlertTriangle / CalendarDays / MinusCircle) before the requirement select. Tooltip carries the full status text plus the supplier-invoice note when present.
+  - Requirement `<select>` made borderless and lighter, so the row reads: `Supplier name` line + a single short status row.
+- `app/orders/[orderCode]/_components/OrderDocumentsTab.tsx`:
+  - Always-load services list (removed `Boolean(matchDoc)` from `enabled`) so the counter is available without opening the modal.
+  - Added a summary chip row next to the Upload invoice button: "N services without supplier invoice" (amber when missing, green when all required matched), plus secondary counts (matched / periodic / not required).
+  - Replaced the textual `Match` action with a `Link2` icon button so the actions column aligns visually with the other icons (no row "drift").
+
+**Verification:**
+- `npx tsc --noEmit` — clean.
+- `ReadLints` over the three changed files — no errors.
+
+**Result:** UI now reads as compact and consistent. No data/logic changes. Auto-match suggestion + smarter "select services" UX is the next step (Step 2) and is intentionally not in this commit.
+
+**Next Step:** CW — Step 2: auto-match suggestion in Documents (suggest links by supplier name + amount + date) and quick "Apply suggested matches" action; then QA.
+
+---
+
 ## [2026-04-27 16:54] Runner — RELEASE-2026-04-27: Published system update
 
 **Task:** RELEASE-2026-04-27 | **Status:** SUCCESS

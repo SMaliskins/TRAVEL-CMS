@@ -28,7 +28,7 @@ import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
-import { Map as MapIcon, ClipboardList, Mail, Send, XCircle, Loader2 } from "lucide-react";
+import { Map as MapIcon, ClipboardList, Mail, Send, XCircle, Loader2, AlertTriangle, CheckCircle2, CalendarDays, MinusCircle } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, getCityByIATA, searchCities, resolveCity } from "@/lib/data/cities";
@@ -3024,21 +3024,29 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                     requirement: service.supplierInvoiceRequirement,
                                     activeDocumentCount: service.supplierInvoiceDocumentCount ?? 0,
                                   });
-                                  const toneClass =
+                                  const iconColor =
                                     status.tone === "green"
-                                      ? "border-green-200 bg-green-50 text-green-700"
+                                      ? "text-green-600"
                                       : status.tone === "blue"
-                                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                                        ? "text-blue-600"
                                         : status.tone === "gray"
-                                          ? "border-gray-200 bg-gray-50 text-gray-600"
-                                          : "border-amber-200 bg-amber-50 text-amber-700";
+                                          ? "text-gray-400"
+                                          : "text-amber-600";
+                                  const StatusIcon =
+                                    status.status === "matched"
+                                      ? CheckCircle2
+                                      : status.status === "periodic"
+                                        ? CalendarDays
+                                        : status.status === "not_required"
+                                          ? MinusCircle
+                                          : AlertTriangle;
+                                  const tooltip = service.supplierInvoiceNote
+                                    ? `${status.label} — ${service.supplierInvoiceNote}`
+                                    : status.label;
                                   return (
-                                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                      <span
-                                        className={`inline-flex rounded-full border px-1.5 py-0 text-[10px] font-medium leading-tight ${toneClass}`}
-                                        title={service.supplierInvoiceNote || undefined}
-                                      >
-                                        {status.label}
+                                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <span title={tooltip} className={`inline-flex ${iconColor}`}>
+                                        <StatusIcon size={12} strokeWidth={2} />
                                       </span>
                                       <select
                                         value={normalizeSupplierInvoiceRequirement(service.supplierInvoiceRequirement)}
@@ -3049,7 +3057,7 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                             event.target.value as SupplierInvoiceRequirement
                                           )
                                         }
-                                        className="h-5 rounded border border-gray-200 bg-white px-1 text-[10px] text-gray-600 focus:border-blue-400 focus:outline-none disabled:opacity-50"
+                                        className="h-5 rounded border-0 bg-transparent px-0 text-[10px] text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50"
                                         aria-label={`Supplier invoice requirement for ${service.name}`}
                                       >
                                         <option value="required">Required</option>

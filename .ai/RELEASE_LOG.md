@@ -7,6 +7,16 @@
 
 ---
 
+## [2026-04-27] Supplier invoices — cleaner UI and auto-suggested matches
+
+**Возможность (для описания продукта):** Supplier invoices now read as compact, clear status hints across the orders list and inside each order, instead of large coloured badges. In the Documents tab the system tells you at a glance how many services still need a supplier invoice, and when you open Match, it pre-suggests services from the same supplier (with reasons: supplier · amount · date) — accept all in one click or fine-tune.
+
+**Для пресс-релиза / маркетинг:** Supplier-invoice control is faster and less noisy: a tiny status icon in the orders list, a clean indicator next to each service supplier, and an auto-suggested matching workflow that accepts good matches in a single click.
+
+**Технически:** `/orders` compact `Sup. inv.` column with icon + short label; OrderServicesBlock supplier cell uses inline status icon (no large pills); OrderDocumentsTab adds services-without-invoice counter, sparkle hint on Match icon, and pre-selects suggestions in the match modal via new `lib/finances/supplierInvoiceAutoMatch.ts` (covered by `scripts/test-supplier-invoice-auto-match.mjs`).
+
+---
+
 ## [2026-04-27] Release news language selector
 
 **Возможность (для описания продукта):** Users can choose the language for release news separately from the interface language. For example, the system can stay in English while release updates are read in Russian.

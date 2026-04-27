@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { formatDateDDMMYYYY, parseDisplayToIso } from "@/utils/dateFormat";
 import ContentModal from "@/components/ContentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { t } from "@/lib/i18n";
-import { FileUp, FileText, Download, Trash2, Eye, Pencil, Check, X } from "lucide-react";
+import { FileUp, FileText, Download, Trash2, Eye, Pencil, Check, X, Link2, AlertTriangle, Sparkles } from "lucide-react";
 import {
   fetchOrderDocuments,
   fetchOrderServicesList,
@@ -15,6 +15,11 @@ import {
   type OrderDocumentListRow,
   type OrderDocumentsQueryResult,
 } from "@/lib/orders/orderPageQueries";
+import {
+  suggestServiceMatchesForDocument,
+  describeAutoMatchReasons,
+  type AutoMatchSuggestion,
+} from "@/lib/finances/supplierInvoiceAutoMatch";
 
 type OrderDocument = OrderDocumentListRow;
 
@@ -33,6 +38,8 @@ type MatchableService = {
   service_price?: number | null;
   supplierInvoiceRequirement?: string | null;
   supplier_invoice_requirement?: string | null;
+  supplierInvoiceDocumentCount?: number | null;
+  supplier_invoice_document_count?: number | null;
 };
 
 function StatusBadge({
@@ -113,8 +120,52 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const { data: servicesForMatch = [], isPending: servicesLoading } = useQuery({
     queryKey: orderPageQueryKeys.services(orderCode),
     queryFn: () => fetchOrderServicesList(orderCode),
-    enabled: Boolean(orderCode) && Boolean(matchDoc),
+    enabled: Boolean(orderCode),
   });
+
+  const documentSuggestionCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!documents.length) return map;
+    const services = servicesForMatch as MatchableService[];
+    for (const doc of documents) {
+      if (doc.document_type !== "invoice" || doc.document_state === "deleted") continue;
+      if ((doc.matched_service_count || 0) > 0) continue;
+      const alreadyMatched = (doc.matched_services || []).map((service) => service.id);
+      const { suggestedServiceIds } = suggestServiceMatchesForDocument(
+        {
+          supplier_name: doc.supplier_name ?? null,
+          amount: doc.amount ?? null,
+          invoice_date: doc.invoice_date ?? null,
+        },
+        services,
+        alreadyMatched
+      );
+      if (suggestedServiceIds.length > 0) map.set(doc.id, suggestedServiceIds.length);
+    }
+    return map;
+  }, [documents, servicesForMatch]);
+
+  const supplierInvoiceCounts = useMemo(() => {
+    let missing = 0;
+    let matched = 0;
+    let periodic = 0;
+    let notRequired = 0;
+    for (const raw of servicesForMatch as MatchableService[]) {
+      const requirement =
+        raw.supplierInvoiceRequirement || raw.supplier_invoice_requirement || "required";
+      const count = Number(raw.supplierInvoiceDocumentCount ?? raw.supplier_invoice_document_count ?? 0);
+      if (requirement === "not_required") {
+        notRequired += 1;
+      } else if (requirement === "periodic") {
+        periodic += 1;
+      } else if (count > 0) {
+        matched += 1;
+      } else {
+        missing += 1;
+      }
+    }
+    return { missing, matched, periodic, notRequired };
+  }, [servicesForMatch]);
 
   useEffect(() => {
     setDocPage(1);
@@ -123,9 +174,46 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
   const showDocumentsEmptyOnboarding =
     !loading && (docPagination?.total ?? 0) === 0 && documents.length === 0;
 
+  const matchDocSuggestions = useMemo(() => {
+    if (!matchDoc) {
+      return { suggestedServiceIds: [] as string[], details: new Map<string, AutoMatchSuggestion>() };
+    }
+    const alreadyMatched = (matchDoc.matched_services || []).map((service) => service.id);
+    return suggestServiceMatchesForDocument(
+      {
+        supplier_name: matchDoc.supplier_name ?? null,
+        amount: matchDoc.amount ?? null,
+        invoice_date: matchDoc.invoice_date ?? null,
+      },
+      servicesForMatch as MatchableService[],
+      alreadyMatched
+    );
+  }, [matchDoc, servicesForMatch]);
+
   const openMatchModal = (doc: OrderDocument) => {
     setMatchDoc(doc);
-    setSelectedServiceIds(new Set((doc.matched_services || []).map((service) => service.id)));
+    const initial = new Set<string>((doc.matched_services || []).map((service) => service.id));
+    const { suggestedServiceIds } = suggestServiceMatchesForDocument(
+      {
+        supplier_name: doc.supplier_name ?? null,
+        amount: doc.amount ?? null,
+        invoice_date: doc.invoice_date ?? null,
+      },
+      servicesForMatch as MatchableService[],
+      Array.from(initial)
+    );
+    if (initial.size === 0) {
+      for (const id of suggestedServiceIds) initial.add(id);
+    }
+    setSelectedServiceIds(initial);
+  };
+
+  const applyAllSuggestions = () => {
+    setSelectedServiceIds((prev) => {
+      const next = new Set(prev);
+      for (const id of matchDocSuggestions.suggestedServiceIds) next.add(id);
+      return next;
+    });
   };
 
   const closeMatchModal = () => {
@@ -478,7 +566,7 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
       <h2 className="mb-4 text-lg font-semibold text-gray-900">{t(lang, "order.tab.documents")}</h2>
       <p className="mb-4 text-sm text-gray-600">{t(lang, "order.documentsDesc")}</p>
 
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
           <FileUp size={18} />
           {uploading ? t(lang, "order.uploading") : t(lang, "order.uploadInvoice")}
@@ -490,6 +578,30 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
             disabled={uploading}
           />
         </label>
+        {!servicesLoading && (servicesForMatch as MatchableService[]).length > 0 && (
+          <div className="inline-flex flex-wrap items-center gap-2 text-xs">
+            {supplierInvoiceCounts.missing > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">
+                <AlertTriangle size={12} />
+                {supplierInvoiceCounts.missing} service{supplierInvoiceCounts.missing === 1 ? "" : "s"} without supplier invoice
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-green-700">
+                <Check size={12} />
+                All required services matched
+              </span>
+            )}
+            {supplierInvoiceCounts.matched > 0 && (
+              <span className="text-gray-500">{supplierInvoiceCounts.matched} matched</span>
+            )}
+            {supplierInvoiceCounts.periodic > 0 && (
+              <span className="text-gray-500">{supplierInvoiceCounts.periodic} periodic</span>
+            )}
+            {supplierInvoiceCounts.notRequired > 0 && (
+              <span className="text-gray-500">{supplierInvoiceCounts.notRequired} not required</span>
+            )}
+          </div>
+        )}
       </div>
 
       {displayError && (
@@ -625,15 +737,31 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                       </div>
                     ) : (
                       <div className="flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openMatchModal(doc)}
-                          className="mr-2 inline-flex items-center gap-1 rounded p-1 text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-800"
-                          title="Match services"
-                          disabled={doc.document_type !== "invoice" || doc.document_state === "deleted"}
-                        >
-                          Match
-                        </button>
+                        {(() => {
+                          const suggestionCount = documentSuggestionCounts.get(doc.id) ?? 0;
+                          const tooltip =
+                            suggestionCount > 0
+                              ? `Match services · ${suggestionCount} suggestion${suggestionCount === 1 ? "" : "s"} available`
+                              : "Match services";
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => openMatchModal(doc)}
+                              className={`relative mr-2 inline-flex items-center justify-center rounded p-1 transition-colors disabled:opacity-40 ${
+                                suggestionCount > 0
+                                  ? "text-emerald-700 hover:bg-emerald-50"
+                                  : "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"
+                              }`}
+                              title={tooltip}
+                              disabled={doc.document_type !== "invoice" || doc.document_state === "deleted"}
+                            >
+                              <Link2 size={16} />
+                              {suggestionCount > 0 && (
+                                <Sparkles size={10} className="absolute -right-1 -top-1 text-emerald-500" />
+                              )}
+                            </button>
+                          );
+                        })()}
                         <button
                           type="button"
                           onClick={() => startEdit(doc)}
@@ -729,6 +857,13 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                   {matchDoc.supplier_name ? ` · ${matchDoc.supplier_name}` : ""}
                   {matchDoc.invoice_number ? ` · ${matchDoc.invoice_number}` : ""}
                 </p>
+                {matchDocSuggestions.suggestedServiceIds.length > 0 && (
+                  <p className="mt-2 inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                    <Sparkles size={12} />
+                    {matchDocSuggestions.suggestedServiceIds.length} suggested match
+                    {matchDocSuggestions.suggestedServiceIds.length === 1 ? "" : "es"} based on supplier name
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -755,8 +890,14 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                     const price = service.servicePrice ?? service.service_price;
                     const requirement =
                       service.supplierInvoiceRequirement || service.supplier_invoice_requirement || "required";
+                    const suggestion = matchDocSuggestions.details.get(id);
                     return (
-                      <label key={id} className="flex cursor-pointer items-start gap-3 px-4 py-3 hover:bg-gray-50">
+                      <label
+                        key={id}
+                        className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors ${
+                          suggestion ? "bg-emerald-50/40 hover:bg-emerald-50" : "hover:bg-gray-50"
+                        }`}
+                      >
                         <input
                           type="checkbox"
                           className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
@@ -776,6 +917,15 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                             <StatusBadge tone={requirement === "periodic" ? "blue" : requirement === "not_required" ? "gray" : "amber"}>
                               {requirement === "not_required" ? "Not required" : requirement === "periodic" ? "Periodic" : "Required"}
                             </StatusBadge>
+                            {suggestion && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0 text-[10px] font-medium text-emerald-700"
+                                title={describeAutoMatchReasons(suggestion.reasons)}
+                              >
+                                <Sparkles size={10} />
+                                Suggested
+                              </span>
+                            )}
                           </div>
                           <div className="mt-1 text-xs text-gray-500">
                             {[service.category, supplier, dateFrom ? formatDateDDMMYYYY(dateFrom) : null, dateTo && dateTo !== dateFrom ? formatDateDDMMYYYY(dateTo) : null]
@@ -783,6 +933,11 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                               .join(" · ")}
                             {typeof price === "number" ? ` · €${price.toFixed(2)}` : ""}
                           </div>
+                          {suggestion && (
+                            <div className="mt-1 text-[11px] text-emerald-700">
+                              {describeAutoMatchReasons(suggestion.reasons)}
+                            </div>
+                          )}
                         </div>
                       </label>
                     );
@@ -790,15 +945,30 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setSelectedServiceIds(new Set())}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                disabled={savingMatch}
-              >
-                Clear match
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-5 py-4">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedServiceIds(new Set())}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  disabled={savingMatch}
+                >
+                  Clear match
+                </button>
+                {matchDocSuggestions.suggestedServiceIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={applyAllSuggestions}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                    disabled={savingMatch}
+                    title="Select all suggested services"
+                  >
+                    <Sparkles size={14} />
+                    Apply {matchDocSuggestions.suggestedServiceIds.length} suggestion
+                    {matchDocSuggestions.suggestedServiceIds.length === 1 ? "" : "s"}
+                  </button>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
