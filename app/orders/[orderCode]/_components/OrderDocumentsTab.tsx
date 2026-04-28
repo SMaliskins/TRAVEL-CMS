@@ -681,14 +681,18 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
                   key={id}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-xs text-gray-700"
                 >
-                  <span className="min-w-0 flex-1 truncate">
+                  <span className="min-w-0 flex-1 truncate" title={`${name}${supplier ? ` · ${supplier}` : ""}`}>
                     <span className="font-medium text-gray-900">{name}</span>
                     {supplier ? <span className="text-gray-500"> · {supplier}</span> : null}
-                    {dateLabel ? <span className="text-gray-500"> · {dateLabel}</span> : null}
-                    {typeof price === "number" ? (
-                      <span className="text-gray-500"> · €{price.toFixed(2)}</span>
-                    ) : null}
                   </span>
+                  {dateLabel ? (
+                    <span className="whitespace-nowrap text-gray-500" title="Service dates">
+                      {dateLabel}
+                    </span>
+                  ) : null}
+                  {typeof price === "number" ? (
+                    <span className="whitespace-nowrap text-gray-500">€{price.toFixed(2)}</span>
+                  ) : null}
                   <select
                     value="required"
                     disabled={updatingRequirementServiceId === id}
@@ -738,7 +742,6 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-600">
               <th className="px-4 py-2">Type</th>
-              <th className="px-4 py-2">File</th>
               <th className="px-4 py-2">Amount</th>
               <th className="px-4 py-2">Invoice No.</th>
               <th className="px-4 py-2">Supplier</th>
@@ -755,14 +758,13 @@ export default function OrderDocumentsTab({ orderCode }: Props) {
               const isEditing = editingId === doc.id;
               const cellEmpty = () => isParsing ? <span className="text-gray-500 text-xs flex items-center gap-1"><span className="animate-spin h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full block" /> Parsing...</span> : <span className="text-gray-400">—</span>;
               return (
-                <tr key={doc.id} className={`border-b border-gray-100 ${isEditing ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
+                <tr key={doc.id} className={`border-b border-gray-100 ${isEditing ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`} title={doc.file_name || undefined}>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
                       <FileText size={12} />
                       {doc.document_type === "invoice" ? "Invoice" : "Other"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-900 max-w-[200px] truncate" title={doc.file_name}>{doc.file_name}</td>
 
                   {isEditing ? (
                     <>

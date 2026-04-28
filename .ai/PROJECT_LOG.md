@@ -3,6 +3,21 @@
 > Активный лог разработки. Записи за последнюю неделю.
 > 📁 Архив: `.ai/PROJECT_LOG_ARCHIVE_2026-01.md` (записи до 2026-01-19)
 
+## [2026-04-28 11:45] CW — SUPINV-UI-FIX (followup): Documents tab — drop File column, show service dates in waiting list
+
+**Task:** SUPINV-UI-FIX | **Status:** SUCCESS (UI polish)
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `app/orders/[orderCode]/_components/OrderDocumentsTab.tsx`:
+  - Документная таблица: убрана колонка `File` (`<th>File</th>` + `<td>{doc.file_name}</td>`). Имя файла теперь подсказкой через `title` на `<tr>`. Preview/Download иконки в Actions сохраняют доступ к файлу. Колонок было 10, стало 9 — таблица перестаёт расползаться по ширине.
+  - Список «Services waiting for a supplier invoice»: даты вынесены из truncate-блока в отдельный `whitespace-nowrap` span, чтобы они всегда были видны вне зависимости от длины названия и поставщика. Цена тоже отдельным span'ом. Tooltip на name+supplier для длинных названий.
+- `tsc --noEmit` чист, lint чист.
+
+**Результат:** UI на закладке Documents больше не вылезает за пределы. В waiting-list менеджер сразу видит даты сервиса рядом с названием и поставщиком.
+
+
 ## [2026-04-28 01:25] CW — EXP-PROCESS: Accountant Process workflow for Company Expenses
 
 **Task:** EXP-PROCESS | **Status:** SUCCESS
