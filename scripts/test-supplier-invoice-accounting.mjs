@@ -128,8 +128,8 @@ assert.deepEqual(
 
 assert.deepEqual(
   getSupplierInvoiceServiceStatus({ requirement: "periodic", activeDocumentCount: 0 }),
-  { status: "periodic", label: "Periodic", tone: "blue" },
-  "periodic services should count as covered"
+  { status: "periodic", label: "Periodic — covered by periodic invoice", tone: "green" },
+  "periodic services should count as covered (green checkmark like matched)"
 );
 
 assert.deepEqual(

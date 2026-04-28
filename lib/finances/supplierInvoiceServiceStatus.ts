@@ -18,7 +18,7 @@ export function getSupplierInvoiceServiceStatus({
     return { status: "not_required", label: "Not required", tone: "gray" };
   }
   if (normalized === "periodic") {
-    return { status: "periodic", label: "Periodic", tone: "blue" };
+    return { status: "periodic", label: "Periodic — covered by periodic invoice", tone: "green" };
   }
   if (activeDocumentCount > 0) {
     return { status: "matched", label: "Invoice matched", tone: "green" };

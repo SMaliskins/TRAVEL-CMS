@@ -3,6 +3,21 @@
 > Активный лог разработки. Записи за последнюю неделю.
 > 📁 Архив: `.ai/PROJECT_LOG_ARCHIVE_2026-01.md` (записи до 2026-01-19)
 
+## [2026-04-28 17:55] CW — SUPINV-UI-FIX (followup): Periodic services share the green check with Matched
+
+**Task:** SUPINV-UI-FIX | **Status:** SUCCESS (UI semantics)
+**Agent:** Code Writer
+**Complexity:** 🟢
+
+**Действия:**
+- `lib/finances/supplierInvoiceServiceStatus.ts`: per-service `periodic` теперь возвращает `tone: "green"` и более явный label "Periodic — covered by periodic invoice". Семантика: периодический счёт уже покрывает услугу с точки зрения учёта, поэтому визуально приравниваем к Matched.
+- `app/orders/[orderCode]/_components/OrderServicesBlock.tsx`: для `status.status === "periodic"` рендерим тот же `CheckCircle2`, что и для `matched` (вместо `CalendarDays`). Цвет зелёный (берётся из tone). `CalendarDays` удалён из импортов lucide-react.
+- Order-level агрегатор `periodic_only` (на странице `/orders`, колонка Sup. inv.) намеренно оставлен blue — это отдельная семантика «в заказе только периодические сервисы», и user про эту колонку не просил.
+- Обновлён тест `scripts/test-supplier-invoice-accounting.mjs` (per-service periodic кейс → tone green + новый label). Прогон зелёный. `tsc --noEmit` чист, lint чист.
+
+**Результат:** В таблице сервисов заказа Periodic-услуга теперь подсвечивается зелёной галочкой так же, как услуга с уже подгруженным supplier invoice. Менеджеру визуально ясно: «эта строка в учёте закрыта».
+
+
 ## [2026-04-28 11:45] CW — SUPINV-UI-FIX (followup): Documents tab — drop File column, show service dates in waiting list
 
 **Task:** SUPINV-UI-FIX | **Status:** SUCCESS (UI polish)

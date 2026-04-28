@@ -28,7 +28,7 @@ import ContentModal from "@/components/ContentModal";
 import ChangeServiceModal from "./ChangeServiceModal";
 import CancelServiceModal from "./CancelServiceModal";
 import { FlightSegment } from "@/components/FlightItineraryInput";
-import { Map as MapIcon, ClipboardList, Mail, Send, XCircle, Loader2, AlertTriangle, CheckCircle2, CalendarDays, MinusCircle } from "lucide-react";
+import { Map as MapIcon, ClipboardList, Mail, Send, XCircle, Loader2, AlertTriangle, CheckCircle2, MinusCircle } from "lucide-react";
 import TripMap from "@/components/TripMap";
 import { CityWithCountry } from "@/components/CityMultiSelect";
 import { getCityByName, getCityByIATA, searchCities, resolveCity } from "@/lib/data/cities";
@@ -3033,13 +3033,11 @@ const OrderServicesBlock = forwardRef<OrderServicesBlockHandle, OrderServicesBlo
                                           ? "text-gray-400"
                                           : "text-amber-600";
                                   const StatusIcon =
-                                    status.status === "matched"
+                                    status.status === "matched" || status.status === "periodic"
                                       ? CheckCircle2
-                                      : status.status === "periodic"
-                                        ? CalendarDays
-                                        : status.status === "not_required"
-                                          ? MinusCircle
-                                          : AlertTriangle;
+                                      : status.status === "not_required"
+                                        ? MinusCircle
+                                        : AlertTriangle;
                                   const tooltip = service.supplierInvoiceNote
                                     ? `${status.label} — ${service.supplierInvoiceNote}`
                                     : status.label;
