@@ -78,6 +78,12 @@ import RadialContextMenu from "./_components/RadialContextMenu";
 /** Set to `true` to restore the previous multi-column sticky order header. */
 const USE_LEGACY_ORDER_PAGE_HEADER = false;
 
+type ParsedItineraryCity = { name: string; countryCode?: string; country?: string; lat?: number; lng?: number };
+
+function itineraryCityKey(name: string): string {
+  return name.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 type TabType =
   | "client"
   | "clientsData"
@@ -257,6 +263,7 @@ export default function OrderPage({
   const [autoDestinations, setAutoDestinations] = useState<CityWithCountry[]>([]);
   const autoDestSavedRef = useRef(false);
   const [worldCitiesLoaded, setWorldCitiesLoaded] = useState(false);
+  const [resolvedItineraryCities, setResolvedItineraryCities] = useState<Record<string, ParsedItineraryCity>>({});
   const [orderTravellers, setOrderTravellers] = useState<Traveller[]>([]);
   // Effective trip date range = union of order-level dates and per-passenger dates.
   // Used for header display only; editing still updates order.date_from/date_to.
@@ -441,9 +448,11 @@ export default function OrderPage({
     if (!order?.countries_cities) return { origin: null, destinations: [], returnCity: null, daysCount: null, nightsCount: null, daysUntil: null };
     
     const countriesCities = order.countries_cities;
-    let originCity: { name: string; countryCode?: string } | null = null;
-    let destinations: { name: string; countryCode?: string; country?: string }[] = [];
-    let returnCity: { name: string; countryCode?: string } | null = null;
+    const getResolvedCity = (cityName: string): ParsedItineraryCity | undefined =>
+      getCityByName(cityName) || resolvedItineraryCities[itineraryCityKey(cityName)];
+    let originCity: ParsedItineraryCity | null = null;
+    let destinations: ParsedItineraryCity[] = [];
+    let returnCity: ParsedItineraryCity | null = null;
     
     // Check for new format with origin:/return:
     if (countriesCities.includes("origin:") || countriesCities.includes("|")) {
@@ -452,13 +461,13 @@ export default function OrderPage({
         if (part.startsWith("origin:")) {
           const cityStr = part.replace("origin:", "").trim();
           const cityName = cityStr.split(",")[0]?.trim() || "";
-          const cityData = getCityByName(cityName);
+          const cityData = getResolvedCity(cityName);
           originCity = cityData || (cityName ? { name: cityName } : null);
         } else if (part.startsWith("return:")) {
           const cityStr = part.replace("return:", "").trim();
           const cityName = cityStr.split(",")[0]?.trim() || "";
           if (cityName) {
-            const cityData = getCityByName(cityName);
+            const cityData = getResolvedCity(cityName);
             returnCity = cityData || { name: cityName };
           }
         } else if (part.trim()) {
@@ -469,26 +478,26 @@ export default function OrderPage({
             if (codeCityMatch) {
               const code = codeCityMatch[1].toUpperCase();
               const cityName = codeCityMatch[2].trim();
-              const cityData = getCityByName(cityName);
+              const cityData = getResolvedCity(cityName);
               const country = cityData?.country || ISO_TO_COUNTRY[code] || "";
               return { name: cityName, countryCode: code, country };
             }
             const cityName = s.split(",")[0]?.trim() || "";
-            const cityData = getCityByName(cityName);
+            const cityData = getResolvedCity(cityName);
             return cityData || (cityName ? { name: cityName } : null);
-          }).filter(Boolean) as { name: string; countryCode?: string; country?: string }[];
+          }).filter(Boolean) as ParsedItineraryCity[];
         }
       }
     } else {
       // Legacy format: "City, Country" or "City1, Country1; City2, Country2"
       const entries = countriesCities.split(";").map(e => e.trim()).filter(Boolean);
-      const parsedCities: { name: string; countryCode?: string; country?: string }[] = [];
+      const parsedCities: ParsedItineraryCity[] = [];
       for (const entry of entries) {
         const match = entry.match(/^(.+),\s*([^,]+)$/);
         if (match) {
           const cityPart = match[1].trim();
           const countryPart = match[2].trim();
-          const cityData = getCityByName(cityPart);
+          const cityData = getResolvedCity(cityPart);
           if (cityData) {
             parsedCities.push(cityData);
           } else {
@@ -496,7 +505,7 @@ export default function OrderPage({
             parsedCities.push({ name: cityPart, country: countryPart, countryCode });
           }
         } else {
-          const cityData = getCityByName(entry);
+          const cityData = getResolvedCity(entry);
           if (cityData) {
             parsedCities.push(cityData);
           } else {
@@ -543,7 +552,46 @@ export default function OrderPage({
     }
 
     return { origin: originCity, destinations, returnCity, daysCount, nightsCount, daysUntil };
-  }, [order?.countries_cities, order?.date_from, order?.date_to, worldCitiesLoaded]);
+  }, [order?.countries_cities, order?.date_from, order?.date_to, worldCitiesLoaded, resolvedItineraryCities]);
+
+  useEffect(() => {
+    const citiesToResolve = [
+      parsedItinerary.origin,
+      ...parsedItinerary.destinations,
+      parsedItinerary.returnCity,
+    ].filter((city): city is ParsedItineraryCity => Boolean(city?.name));
+
+    const unresolved = citiesToResolve.filter((city) => {
+      const key = itineraryCityKey(city.name);
+      return !city.countryCode && !city.country && !resolvedItineraryCities[key];
+    });
+    if (unresolved.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, ParsedItineraryCity> = {};
+      for (const city of unresolved) {
+        const resolved = await resolveCity(city.name, city.country);
+        if (cancelled) return;
+        if (resolved) {
+          updates[itineraryCityKey(city.name)] = {
+            name: resolved.name,
+            country: resolved.country,
+            countryCode: resolved.countryCode,
+            lat: resolved.lat,
+            lng: resolved.lng,
+          };
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setResolvedItineraryCities((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [parsedItinerary.origin, parsedItinerary.destinations, parsedItinerary.returnCity, resolvedItineraryCities]);
 
   // Auto-save detected destinations только когда countries_cities пусто — не перезаписывать ручной ввод
   useEffect(() => {
@@ -587,20 +635,20 @@ export default function OrderPage({
   const itineraryDestinations: CityWithCountry[] = useMemo(() => {
     const result: CityWithCountry[] = [];
     if (parsedItinerary.origin) {
-      const cityData = getCityByName(parsedItinerary.origin.name);
+      const cityData = getCityByName(parsedItinerary.origin.name) || resolvedItineraryCities[itineraryCityKey(parsedItinerary.origin.name)];
       result.push({
         city: parsedItinerary.origin.name,
-        country: cityData?.country || "",
+        country: cityData?.country || parsedItinerary.origin.country || "",
         countryCode: parsedItinerary.origin.countryCode || cityData?.countryCode,
         lat: cityData?.lat,
         lng: cityData?.lng,
       });
     }
     for (const dest of parsedItinerary.destinations) {
-      const cityData = getCityByName(dest.name);
+      const cityData = getCityByName(dest.name) || resolvedItineraryCities[itineraryCityKey(dest.name)];
       result.push({
         city: dest.name,
-        country: cityData?.country || "",
+        country: cityData?.country || dest.country || "",
         countryCode: dest.countryCode || cityData?.countryCode,
         lat: cityData?.lat,
         lng: cityData?.lng,
@@ -608,17 +656,17 @@ export default function OrderPage({
     }
     // Add return city for map - even when same as origin (round trip: Tallinn→Nice→Tallinn)
     if (parsedItinerary.returnCity) {
-      const cityData = getCityByName(parsedItinerary.returnCity.name);
+      const cityData = getCityByName(parsedItinerary.returnCity.name) || resolvedItineraryCities[itineraryCityKey(parsedItinerary.returnCity.name)];
       result.push({
         city: parsedItinerary.returnCity.name,
-        country: cityData?.country || "",
+        country: cityData?.country || parsedItinerary.returnCity.country || "",
         countryCode: parsedItinerary.returnCity.countryCode || cityData?.countryCode,
         lat: cityData?.lat,
         lng: cityData?.lng,
       });
     }
     return result;
-  }, [parsedItinerary]);
+  }, [parsedItinerary, resolvedItineraryCities]);
 
   // Initialize edit states when starting to edit
   const startEditingClient = useCallback(() => {

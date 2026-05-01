@@ -147,6 +147,7 @@ export const CITIES: City[] = [
   { name: "Taormina", country: "Italy", countryCode: "IT", lat: 37.8526, lng: 15.2866 },
   { name: "Siena", country: "Italy", countryCode: "IT", lat: 43.3188, lng: 11.3308 },
   { name: "Bari", country: "Italy", countryCode: "IT", lat: 41.1171, lng: 16.8719, iataCode: "BRI" },
+  { name: "Ortisei", country: "Italy", countryCode: "IT", lat: 46.5766, lng: 11.6712 },
   
   // France
   { name: "Paris", country: "France", countryCode: "FR", lat: 48.8566, lng: 2.3522, iataCode: "CDG" },
