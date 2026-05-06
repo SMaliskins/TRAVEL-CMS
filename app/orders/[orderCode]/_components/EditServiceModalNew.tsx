@@ -984,8 +984,9 @@ export default function EditServiceModalNew({
     setFlightSegments(prev => normalizeSegmentsWithCalendar(prev, dateFrom ?? undefined, dateTo ?? undefined) as FlightSegment[]);
   }, [dateFrom, dateTo, categoryType]);
 
-  // Hotel Per night: sync nights from Dates; when dates change, preserve per-night rates
-  const prevDatesRefEdit = useRef<string>('');
+  // Hotel Per night: sync nights from Dates; when dates change, preserve per-night rates.
+  // Seed with persisted dates so opening Edit never re-multiplies an already saved total.
+  const prevDatesRefEdit = useRef<string>(service.dateFrom && service.dateTo ? `${service.dateFrom}|${service.dateTo}` : '');
   useEffect(() => {
     if (categoryType !== 'hotel' || hotelPricePer !== 'night' || !dateFrom || !dateTo) return;
     const key = `${dateFrom}|${dateTo}`;

@@ -45,7 +45,7 @@ export interface EditPaymentData {
   order_id: string;
   order_code?: string;
   invoice_id?: string | null;
-  method: "cash" | "bank" | "card";
+  method: "cash" | "bank" | "card" | "atm";
   amount: number;
   currency: string;
   paid_at: string;
@@ -153,7 +153,7 @@ export default function AddPaymentModal({
       setInvoiceId(editPayment.invoice_id || "");
       setPaidAt(iso);
       setPaidAtDisplay(isoToDisplay(iso, dateFormat));
-      setMethod(editPayment.method || "bank");
+      setMethod(editPayment.method === "atm" ? "bank" : (editPayment.method || "bank"));
       setAmount(String(editPayment.amount));
       setCurrency(editPayment.currency || "EUR");
       setAccountId(editPayment.account_id || "");

@@ -7,6 +7,7 @@ import { fetchWithAuth } from "@/lib/http/fetchWithAuth";
 import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import StatisticCard, { CardPeriodType } from "@/components/dashboard/StatisticCard";
+import TargetSpeedometer from "@/components/dashboard/TargetSpeedometer";
 import AddPaymentModal from "@/app/finances/payments/_components/AddPaymentModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { Plus, FileText, AlertTriangle, CreditCard, Plane, Upload, ExternalLink, Eye, CheckCircle, Search } from "lucide-react";
@@ -16,8 +17,11 @@ interface FinanceDashboardProps {
   periodEnd: string;
   statistics: {
     revenue: number;
+    profit: number;
+    vat: number;
     overdueAmount: number;
     overdueInPeriodAmount?: number;
+    targetProfitMonthly: number;
   } | null;
   previousYear: {
     revenue: number;
@@ -177,6 +181,14 @@ export default function FinanceDashboard({
     return stats.overdueAmount || 0;
   };
 
+  const daysInSelectedPeriod = Math.max(
+    1,
+    Math.round((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / 86400000) + 1
+  );
+  const isMonthlyPeriod = daysInSelectedPeriod >= 28 && daysInSelectedPeriod <= 31;
+  const targetScaleFactor = isMonthlyPeriod ? 1 : daysInSelectedPeriod / 30.44;
+  const scaledTarget = Math.round(((statistics?.targetProfitMonthly || 0) * targetScaleFactor) * 100) / 100;
+
   const loadInvoices = useCallback(async () => {
     try {
       const res = await fetchWithAuth("/api/finances/invoices");
@@ -303,7 +315,7 @@ export default function FinanceDashboard({
   return (
     <div className="space-y-6">
       {/* Row 1: Stat Cards */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 relative z-0 min-h-[8.5rem]">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5 relative z-0 min-h-[8.5rem]">
         <StatisticCard
           title="Revenue"
           value={`€${(getStats("revenue")?.revenue || 0).toLocaleString()}`}
@@ -356,6 +368,12 @@ export default function FinanceDashboard({
             </div>
           </div>
         </div>
+        <TargetSpeedometer
+          current={statistics?.profit || 0}
+          target={scaledTarget}
+          label="Target"
+          vat={statistics?.vat || 0}
+        />
       </div>
 
       {/* Attention Invoices */}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { canManageCashJournal } from "@/lib/auth/paymentPermissions";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { enrichPaymentsWithEnteredBy } from "@/lib/finances/paymentEnteredBy";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
@@ -35,7 +36,12 @@ export async function GET(request: NextRequest) {
     if (orderId) query = query.eq("order_id", orderId);
     if (dateFrom) query = query.gte("paid_at", dateFrom);
     if (dateTo) query = query.lte("paid_at", dateTo + "T23:59:59Z");
+    const canManageCash = canManageCashJournal(apiUser.role);
+    if (!canManageCash && method === "atm") {
+      return NextResponse.json({ data: [] });
+    }
     if (method) query = query.eq("method", method);
+    if (!canManageCash) query = query.neq("method", "atm");
     if (accountId) query = query.eq("account_id", accountId);
     query = query.limit(500);
 
@@ -118,59 +124,79 @@ export async function POST(request: NextRequest) {
       note,
     } = body;
 
-    if (!order_id || !method || !amount) {
+    const methodValue = String(method || "").toLowerCase();
+    const isAtmDeposit = methodValue === "atm";
+    if (isAtmDeposit && !canManageCashJournal(apiUser.role)) {
+      return NextResponse.json({ error: "Forbidden", message: "You cannot manage ATM deposits." }, { status: 403 });
+    }
+
+    if (!method || !amount || (!isAtmDeposit && !order_id)) {
       return NextResponse.json(
-        { error: "order_id, method, and amount are required" },
+        { error: isAtmDeposit ? "method and amount are required" : "order_id, method, and amount are required" },
         { status: 400 }
       );
     }
 
-    const { data: order, error: orderError } = await supabaseAdmin
-      .from("orders")
-      .select("id, order_code, client_display_name")
-      .eq("id", order_id)
-      .eq("company_id", companyId)
-      .single();
+    if (!["cash", "bank", "card", "atm"].includes(methodValue)) {
+      return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
+    }
 
-    if (!order) {
-      console.error("[Payments POST] Order not found", { order_id, companyId, orderError });
-      return NextResponse.json({ error: "Order not found", debug: { order_id, companyId } }, { status: 404 });
+    if (isAtmDeposit && !account_id) {
+      return NextResponse.json({ error: "Bank account is required for ATM deposit" }, { status: 400 });
+    }
+
+    let order: { id: string; order_code?: string | null; client_display_name?: string | null } | null = null;
+    if (!isAtmDeposit) {
+      const { data: orderRow, error: orderError } = await supabaseAdmin
+        .from("orders")
+        .select("id, order_code, client_display_name")
+        .eq("id", order_id)
+        .eq("company_id", companyId)
+        .single();
+
+      if (!orderRow) {
+        console.error("[Payments POST] Order not found", { order_id, companyId, orderError });
+        return NextResponse.json({ error: "Order not found", debug: { order_id, companyId } }, { status: 404 });
+      }
+      order = orderRow;
     }
 
     const amountNum = parseFloat(amount);
     const paidAt = paid_at || new Date().toISOString();
     const paidAtDate = paidAt.slice(0, 16);
 
-    const { data: existingPayments } = await supabaseAdmin
-      .from("payments")
-      .select("id")
-      .eq("company_id", companyId)
-      .eq("order_id", order_id)
-      .eq("amount", Math.round(amountNum * 100) / 100)
-      .neq("status", "cancelled");
-
-    if (existingPayments && existingPayments.length > 0) {
-      const matches = existingPayments.filter((p: { id: string }) => true);
-      const { data: fullRows } = await supabaseAdmin
+    if (!isAtmDeposit) {
+      const { data: existingPayments } = await supabaseAdmin
         .from("payments")
-        .select("invoice_id, paid_at")
-        .in("id", matches.map((p: { id: string }) => p.id));
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("order_id", order_id)
+        .eq("amount", Math.round(amountNum * 100) / 100)
+        .neq("status", "cancelled");
 
-      const invoiceIdToMatch = invoice_id || null;
-      const isDuplicate = (fullRows ?? []).some(
-        (r: { invoice_id: string | null; paid_at: string }) =>
-          (r.invoice_id || null) === invoiceIdToMatch &&
-          (r.paid_at || "").slice(0, 16) === paidAtDate
-      );
+      if (existingPayments && existingPayments.length > 0) {
+        const matches = existingPayments;
+        const { data: fullRows } = await supabaseAdmin
+          .from("payments")
+          .select("invoice_id, paid_at")
+          .in("id", matches.map((p: { id: string }) => p.id));
 
-      if (isDuplicate) {
-        return NextResponse.json(
-          {
-            error: "Duplicate payment",
-            message: "A payment with the same order, amount, invoice, and date already exists.",
-          },
-          { status: 409 }
+        const invoiceIdToMatch = invoice_id || null;
+        const isDuplicate = (fullRows ?? []).some(
+          (r: { invoice_id: string | null; paid_at: string }) =>
+            (r.invoice_id || null) === invoiceIdToMatch &&
+            (r.paid_at || "").slice(0, 16) === paidAtDate
         );
+
+        if (isDuplicate) {
+          return NextResponse.json(
+            {
+              error: "Duplicate payment",
+              message: "A payment with the same order, amount, invoice, and date already exists.",
+            },
+            { status: 409 }
+          );
+        }
       }
     }
 
@@ -178,16 +204,16 @@ export async function POST(request: NextRequest) {
       .from("payments")
       .insert({
         company_id: companyId,
-        order_id,
-        invoice_id: invoice_id || null,
-        method,
+        order_id: isAtmDeposit ? null : order_id,
+        invoice_id: isAtmDeposit ? null : (invoice_id || null),
+        method: methodValue,
         amount: amountNum,
         currency: currency || "EUR",
         paid_at: paidAt,
         account_id: account_id || null,
-        processor: method === "card" ? (processor || null) : null,
-        processing_fee: method === "card" ? (Number(processing_fee) || 0) : 0,
-        payer_name: payer_name || null,
+        processor: methodValue === "card" ? (processor || null) : null,
+        processing_fee: methodValue === "card" ? (Number(processing_fee) || 0) : 0,
+        payer_name: isAtmDeposit ? (payer_name || "Cash to bank (ATM)") : (payer_name || null),
         payer_party_id: payer_party_id || null,
         note: note || null,
         created_by: apiUser.userId,
@@ -200,36 +226,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create payment" }, { status: 500 });
     }
 
-    // Recalculate order totals (exclude cancelled payments)
-    const { data: allPayments } = await supabaseAdmin
-      .from("payments")
-      .select("amount, status")
-      .eq("order_id", order_id);
+    if (!isAtmDeposit) {
+      // Recalculate order totals (exclude cancelled payments)
+      const { data: allPayments } = await supabaseAdmin
+        .from("payments")
+        .select("amount, status")
+        .eq("order_id", order_id);
 
-    const totalPaid = (allPayments ?? []).reduce(
-      (sum: number, p: { amount: number; status?: string }) =>
-        p.status === "cancelled" ? sum : sum + Number(p.amount),
-      0
-    );
+      const totalPaid = (allPayments ?? []).reduce(
+        (sum: number, p: { amount: number; status?: string }) =>
+          p.status === "cancelled" ? sum : sum + Number(p.amount),
+        0
+      );
 
-    const { data: orderData } = await supabaseAdmin
-      .from("orders")
-      .select("amount_total")
-      .eq("id", order_id)
-      .single();
+      const { data: orderData } = await supabaseAdmin
+        .from("orders")
+        .select("amount_total")
+        .eq("id", order_id)
+        .single();
 
-    const amountTotal = Number(orderData?.amount_total ?? 0);
+      const amountTotal = Number(orderData?.amount_total ?? 0);
 
-    await supabaseAdmin
-      .from("orders")
-      .update({
-        amount_paid: totalPaid,
-        amount_debt: amountTotal - totalPaid,
-      })
-      .eq("id", order_id);
+      await supabaseAdmin
+        .from("orders")
+        .update({
+          amount_paid: totalPaid,
+          amount_debt: amountTotal - totalPaid,
+        })
+        .eq("id", order_id);
+    }
 
     // Auto-update invoice status when payment is linked to an invoice
-    const paymentInvoiceId = invoice_id || null;
+    const paymentInvoiceId = isAtmDeposit ? null : (invoice_id || null);
     if (paymentInvoiceId) {
       const { data: invoicePayments } = await supabaseAdmin
         .from("payments")
@@ -259,14 +287,14 @@ export async function POST(request: NextRequest) {
 
     // In-app "Payment received" notification (bell icon + cash-register chime).
     // Best-effort: never block the response on it.
-    try {
+    if (!isAtmDeposit) try {
       const cur = (currency || "EUR").toUpperCase();
       const amountStr = amountNum.toLocaleString("en-US", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
-      const orderCode = (order as { order_code?: string }).order_code || "";
-      const clientName = (order as { client_display_name?: string }).client_display_name || "";
+      const orderCode = order?.order_code || "";
+      const clientName = order?.client_display_name || "";
       const parts = [`${amountStr} ${cur}`];
       if (clientName) parts.push(clientName);
       if (orderCode) parts.push(orderCode);

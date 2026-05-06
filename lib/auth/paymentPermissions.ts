@@ -5,3 +5,8 @@
 export function canModifyFinancePayments(role: string | null | undefined): boolean {
   return Boolean(String(role || "").trim());
 }
+
+export function canManageCashJournal(role: string | null | undefined): boolean {
+  const normalized = String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized === "supervisor" || normalized === "finance" || normalized === "manager";
+}

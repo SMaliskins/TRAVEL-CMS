@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
-import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
+import { canManageCashJournal, canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { enrichPaymentsWithEnteredBy } from "@/lib/finances/paymentEnteredBy";
 import {
@@ -85,9 +85,19 @@ export async function PATCH(
     }
 
     const beforeRow = existing as Record<string, unknown>;
+    const nextMethod = body.method !== undefined ? String(body.method || "").toLowerCase() : String(beforeRow.method || "");
+    if ((String(beforeRow.method || "") === "atm" || nextMethod === "atm") && !canManageCashJournal(apiUser.role)) {
+      return NextResponse.json({ error: "Forbidden", message: "You cannot manage ATM deposits." }, { status: 403 });
+    }
     const updateData: Record<string, unknown> = {};
     if (body.amount !== undefined) updateData.amount = Number(body.amount);
-    if (body.method !== undefined) updateData.method = body.method;
+    if (body.method !== undefined) {
+      const method = String(body.method || "").toLowerCase();
+      if (!["cash", "bank", "card", "atm"].includes(method)) {
+        return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
+      }
+      updateData.method = method;
+    }
     if (body.paid_at !== undefined) updateData.paid_at = body.paid_at;
     if (body.payer_name !== undefined) updateData.payer_name = body.payer_name || null;
     if (body.note !== undefined) updateData.note = body.note || null;
@@ -117,38 +127,42 @@ export async function PATCH(
     }
 
     const changes = diffPaymentUpdates(beforeRow, updateData);
-    await insertPaymentUpdatedOrderLog({
-      companyId,
-      orderId: beforeRow.order_id as string,
-      userId: apiUser.userId,
-      paymentId: id,
-      changes,
-    });
+    if (beforeRow.order_id) {
+      await insertPaymentUpdatedOrderLog({
+        companyId,
+        orderId: beforeRow.order_id as string,
+        userId: apiUser.userId,
+        paymentId: id,
+        changes,
+      });
+    }
 
-    // Recalculate order totals (exclude cancelled payments)
-    const { data: allPayments } = await supabaseAdmin
-      .from("payments")
-      .select("amount, status")
-      .eq("order_id", beforeRow.order_id);
+    if (beforeRow.order_id) {
+      // Recalculate order totals (exclude cancelled payments)
+      const { data: allPayments } = await supabaseAdmin
+        .from("payments")
+        .select("amount, status")
+        .eq("order_id", beforeRow.order_id);
 
-    const totalPaid = (allPayments ?? []).reduce(
-      (sum: number, p: { amount: number; status?: string }) =>
-        (p.status === "cancelled" ? sum : sum + Number(p.amount)),
-      0
-    );
+      const totalPaid = (allPayments ?? []).reduce(
+        (sum: number, p: { amount: number; status?: string }) =>
+          (p.status === "cancelled" ? sum : sum + Number(p.amount)),
+        0
+      );
 
-    const { data: orderData } = await supabaseAdmin
-      .from("orders")
-      .select("amount_total")
-      .eq("id", beforeRow.order_id)
-      .single();
+      const { data: orderData } = await supabaseAdmin
+        .from("orders")
+        .select("amount_total")
+        .eq("id", beforeRow.order_id)
+        .single();
 
-    const amountTotal = Number(orderData?.amount_total ?? 0);
+      const amountTotal = Number(orderData?.amount_total ?? 0);
 
-    await supabaseAdmin
-      .from("orders")
-      .update({ amount_paid: totalPaid, amount_debt: amountTotal - totalPaid })
-      .eq("id", beforeRow.order_id);
+      await supabaseAdmin
+        .from("orders")
+        .update({ amount_paid: totalPaid, amount_debt: amountTotal - totalPaid })
+        .eq("id", beforeRow.order_id);
+    }
 
     // When cancelling, revert linked invoice status if needed
     if (body.status === "cancelled" && beforeRow.invoice_id) {
@@ -213,6 +227,9 @@ export async function DELETE(
     if (!payment) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
+    if (String((payment as Record<string, unknown>).method || "") === "atm" && !canManageCashJournal(apiUser.role)) {
+      return NextResponse.json({ error: "Forbidden", message: "You cannot manage ATM deposits." }, { status: 403 });
+    }
 
     const snap = formatPaymentSnapshotForLog(payment as Record<string, unknown>);
 
@@ -227,41 +244,45 @@ export async function DELETE(
       return NextResponse.json({ error: "Failed to delete payment" }, { status: 500 });
     }
 
-    await insertPaymentDeletedOrderLog({
-      companyId,
-      orderId: payment.order_id as string,
-      userId: apiUser.userId,
-      paymentId: id,
-      snapshot: snap,
-    });
+    if (payment.order_id) {
+      await insertPaymentDeletedOrderLog({
+        companyId,
+        orderId: payment.order_id as string,
+        userId: apiUser.userId,
+        paymentId: id,
+        snapshot: snap,
+      });
+    }
 
-    // Recalculate order totals (exclude cancelled payments)
-    const { data: allPayments } = await supabaseAdmin
-      .from("payments")
-      .select("amount, status")
-      .eq("order_id", payment.order_id);
+    if (payment.order_id) {
+      // Recalculate order totals (exclude cancelled payments)
+      const { data: allPayments } = await supabaseAdmin
+        .from("payments")
+        .select("amount, status")
+        .eq("order_id", payment.order_id);
 
-    const totalPaid = (allPayments ?? []).reduce(
-      (sum: number, p: { amount: number; status?: string }) =>
-        p.status === "cancelled" ? sum : sum + Number(p.amount),
-      0
-    );
+      const totalPaid = (allPayments ?? []).reduce(
+        (sum: number, p: { amount: number; status?: string }) =>
+          p.status === "cancelled" ? sum : sum + Number(p.amount),
+        0
+      );
 
-    const { data: orderData } = await supabaseAdmin
-      .from("orders")
-      .select("amount_total")
-      .eq("id", payment.order_id)
-      .single();
+      const { data: orderData } = await supabaseAdmin
+        .from("orders")
+        .select("amount_total")
+        .eq("id", payment.order_id)
+        .single();
 
-    const amountTotal = Number(orderData?.amount_total ?? 0);
+      const amountTotal = Number(orderData?.amount_total ?? 0);
 
-    await supabaseAdmin
-      .from("orders")
-      .update({
-        amount_paid: totalPaid,
-        amount_debt: amountTotal - totalPaid,
-      })
-      .eq("id", payment.order_id);
+      await supabaseAdmin
+        .from("orders")
+        .update({
+          amount_paid: totalPaid,
+          amount_debt: amountTotal - totalPaid,
+        })
+        .eq("id", payment.order_id);
+    }
 
     // Auto-revert invoice status if payment was linked to an invoice
     const deletedInvoiceId = payment.invoice_id;

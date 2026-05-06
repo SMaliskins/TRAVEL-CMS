@@ -7,11 +7,12 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import AddPaymentModal, { type EditPaymentData } from "./_components/AddPaymentModal";
+import AddCashToBankPaymentModal from "./_components/AddCashToBankPaymentModal";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
-import { canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
+import { canManageCashJournal, canModifyFinancePayments } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
-import { Landmark, Banknote, CreditCard, Trash2, Pencil, Printer } from "lucide-react";
+import { Landmark, Banknote, CreditCard, Trash2, Pencil, Printer, Search } from "lucide-react";
 
 interface BankAccountOption {
   id: string;
@@ -20,11 +21,11 @@ interface BankAccountOption {
 
 interface Payment {
   id: string;
-  order_id: string;
+  order_id: string | null;
   order_code: string | null;
   order_client: string | null;
   invoice_id: string | null;
-  method: "cash" | "bank" | "card";
+  method: "cash" | "bank" | "card" | "atm";
   amount: number;
   currency: string;
   paid_at: string;
@@ -45,6 +46,7 @@ const METHOD_STYLES: Record<string, string> = {
   bank: "bg-blue-100 text-blue-700",
   cash: "bg-green-100 text-green-700",
   card: "bg-purple-100 text-purple-700",
+  atm: "bg-amber-100 text-amber-800",
 };
 
 const PAYMENTS_STORAGE_KEY = "travelcms.finances.payments.filters";
@@ -60,6 +62,7 @@ function loadPaymentsFilters() {
         filterDateFrom: string;
         filterDateTo: string;
         filterAccountId?: string;
+        searchQuery?: string;
       };
     }
   } catch {}
@@ -72,6 +75,7 @@ function savePaymentsFilters(f: {
   filterDateFrom: string;
   filterDateTo: string;
   filterAccountId: string;
+  searchQuery: string;
 }) {
   if (typeof window === "undefined") return;
   try {
@@ -85,14 +89,18 @@ export default function PaymentsPage() {
   const lang = prefs.language;
   const userRole = useCurrentUserRole();
   const canEditOrDeletePayments = canModifyFinancePayments(userRole);
+  const canManageCashJournalAccess = canManageCashJournal(userRole);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAtmModal, setShowAtmModal] = useState(false);
   const [editPayment, setEditPayment] = useState<EditPaymentData | null>(null);
+  const [editAtmPayment, setEditAtmPayment] = useState<EditPaymentData | null>(null);
   const [receiptLangMenu, setReceiptLangMenu] = useState<string | null>(null);
 
   const [filterMethod, setFilterMethod] = useState<string>(() => loadPaymentsFilters()?.filterMethod ?? "all");
   const [filterAccountId, setFilterAccountId] = useState<string>(() => loadPaymentsFilters()?.filterAccountId ?? "");
+  const [searchQuery, setSearchQuery] = useState<string>(() => loadPaymentsFilters()?.searchQuery ?? "");
   const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
   const [period, setPeriod] = useState<PeriodType>(() => loadPaymentsFilters()?.period ?? "currentMonth");
   const [filterDateFrom, setFilterDateFrom] = useState(() => {
@@ -112,8 +120,14 @@ export default function PaymentsPage() {
   };
 
   useEffect(() => {
-    savePaymentsFilters({ filterMethod, period, filterDateFrom, filterDateTo, filterAccountId });
-  }, [filterMethod, period, filterDateFrom, filterDateTo, filterAccountId]);
+    savePaymentsFilters({ filterMethod, period, filterDateFrom, filterDateTo, filterAccountId, searchQuery });
+  }, [filterMethod, period, filterDateFrom, filterDateTo, filterAccountId, searchQuery]);
+
+  useEffect(() => {
+    if (userRole && !canManageCashJournalAccess && filterMethod === "atm") {
+      setFilterMethod("all");
+    }
+  }, [canManageCashJournalAccess, filterMethod, userRole]);
 
   useEffect(() => {
     void (async () => {
@@ -143,7 +157,8 @@ export default function PaymentsPage() {
       }
 
       const params = new URLSearchParams();
-      if (filterMethod !== "all") params.set("method", filterMethod);
+      const effectiveMethod = !canManageCashJournalAccess && filterMethod === "atm" ? "all" : filterMethod;
+      if (effectiveMethod !== "all") params.set("method", effectiveMethod);
       if (filterAccountId) params.set("accountId", filterAccountId);
       if (filterDateFrom) params.set("dateFrom", filterDateFrom);
       if (filterDateTo) params.set("dateTo", filterDateTo);
@@ -161,16 +176,16 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterMethod, filterAccountId, filterDateFrom, filterDateTo, router]);
+  }, [canManageCashJournalAccess, filterMethod, filterAccountId, filterDateFrom, filterDateTo, router]);
 
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
 
   const handleEdit = (p: Payment) => {
-    setEditPayment({
+    const payload: EditPaymentData = {
       id: p.id,
-      order_id: p.order_id,
+      order_id: p.order_id || "",
       order_code: p.order_code ?? undefined,
       invoice_id: p.invoice_id,
       method: p.method,
@@ -183,7 +198,14 @@ export default function PaymentsPage() {
       account_id: p.account_id ?? undefined,
       processor: p.processor,
       processing_fee: p.processing_fee,
-    });
+    };
+    if (p.method === "atm") {
+      if (!canManageCashJournalAccess) return;
+      setEditAtmPayment(payload);
+      setShowAtmModal(true);
+    } else {
+      setEditPayment(payload);
+    }
   };
 
   const handleDelete = async (paymentId: string) => {
@@ -254,7 +276,26 @@ export default function PaymentsPage() {
     })}`;
   };
 
-  const visiblePayments = payments.filter((p) => p.status !== "cancelled");
+  const searchNeedle = searchQuery.trim().toLowerCase();
+  const visiblePayments = payments
+    .filter((p) => p.status !== "cancelled")
+    .filter((p) => {
+      if (!searchNeedle) return true;
+      const haystack = [
+        p.order_code,
+        p.order_client,
+        p.payer_name,
+        p.amount?.toString(),
+        Number(p.amount).toFixed(2),
+        p.currency,
+        p.note,
+        p.entered_by_name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(searchNeedle);
+    });
   const totalAmount = visiblePayments.reduce((s, p) => s + Number(p.amount), 0);
 
   if (loading) {
@@ -332,6 +373,19 @@ export default function PaymentsPage() {
             <CreditCard size={16} className="shrink-0" />
             {t(lang, "payments.card")}
           </button>
+          {canManageCashJournalAccess && (
+            <button
+              onClick={() => setFilterMethod("atm")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border-2 transition-all ${
+                filterMethod === "atm"
+                  ? "bg-amber-50 text-amber-800 border-amber-500 shadow-sm"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              <Landmark size={16} className="shrink-0" />
+              {t(lang, "payments.atm")}
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <label htmlFor="payments-filter-account" className="text-sm text-gray-700 whitespace-nowrap">
@@ -358,13 +412,39 @@ export default function PaymentsPage() {
           endDate={filterDateTo}
           dropdownAlign="left"
         />
-        <div className="w-full sm:w-auto sm:ml-auto">
+        <div className="relative w-full sm:w-72">
+          <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t(lang, "payments.searchPlaceholder")}
+            className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-8 text-sm text-gray-900 placeholder:text-gray-400"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label="Clear search"
+            >
+              &times;
+            </button>
+          )}
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row">
           <button
             onClick={() => setShowAddModal(true)}
             className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
           >
             + {t(lang, "payments.addPayment")}
           </button>
+          {canManageCashJournalAccess && (
+            <button
+              onClick={() => setShowAtmModal(true)}
+              className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 text-sm font-medium text-amber-800 bg-amber-100 rounded-md hover:bg-amber-200"
+            >
+              + {t(lang, "payments.addCashToBank")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -442,36 +522,38 @@ export default function PaymentsPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <div className="relative">
-                        <button
-                          onClick={() => setReceiptLangMenu(receiptLangMenu === p.id ? null : p.id)}
-                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                          title="Print deposit receipt"
-                        >
-                          <Printer size={15} />
-                        </button>
-                        {receiptLangMenu === p.id && (
-                          <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded shadow-lg z-50 py-1 min-w-[90px]">
-                            {[
-                              { code: "en", label: "EN" },
-                              { code: "lv", label: "LV" },
-                              { code: "ru", label: "RU" },
-                              { code: "de", label: "DE" },
-                              { code: "fr", label: "FR" },
-                              { code: "es", label: "ES" },
-                            ].map((l) => (
-                              <button
-                                key={l.code}
-                                onClick={() => handlePrintDepositReceipt(p.id, l.code)}
-                                className="block w-full text-left px-3 py-1 text-xs hover:bg-indigo-50 hover:text-indigo-700"
-                              >
-                                {l.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {canEditOrDeletePayments && (
+                      {p.method !== "atm" && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setReceiptLangMenu(receiptLangMenu === p.id ? null : p.id)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            title="Print deposit receipt"
+                          >
+                            <Printer size={15} />
+                          </button>
+                          {receiptLangMenu === p.id && (
+                            <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded shadow-lg z-50 py-1 min-w-[90px]">
+                              {[
+                                { code: "en", label: "EN" },
+                                { code: "lv", label: "LV" },
+                                { code: "ru", label: "RU" },
+                                { code: "de", label: "DE" },
+                                { code: "fr", label: "FR" },
+                                { code: "es", label: "ES" },
+                              ].map((l) => (
+                                <button
+                                  key={l.code}
+                                  onClick={() => handlePrintDepositReceipt(p.id, l.code)}
+                                  className="block w-full text-left px-3 py-1 text-xs hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                  {l.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {canEditOrDeletePayments && (p.method !== "atm" || canManageCashJournalAccess) && (
                         <>
                           <button
                             onClick={() => handleEdit(p)}
@@ -508,6 +590,18 @@ export default function PaymentsPage() {
         }}
         editPayment={editPayment}
       />
+      {canManageCashJournalAccess && (
+        <AddCashToBankPaymentModal
+          open={showAtmModal || !!editAtmPayment}
+          onClose={() => { setShowAtmModal(false); setEditAtmPayment(null); }}
+          onSaved={() => {
+            setShowAtmModal(false);
+            setEditAtmPayment(null);
+            loadPayments();
+          }}
+          editPayment={editAtmPayment}
+        />
+      )}
     </div>
   );
 }

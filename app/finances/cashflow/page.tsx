@@ -7,6 +7,8 @@ import { formatDateDDMMYYYY } from "@/utils/dateFormat";
 import { orderCodeToSlug } from "@/lib/orders/orderCode";
 import PeriodSelector, { PeriodType } from "@/components/dashboard/PeriodSelector";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { useCurrentUserRole } from "@/contexts/CurrentUserContext";
+import { canManageCashJournal } from "@/lib/auth/paymentPermissions";
 import { t } from "@/lib/i18n";
 
 interface CashPayment {
@@ -23,10 +25,22 @@ interface CashPayment {
   note: string | null;
 }
 
+interface ZReport {
+  id: string;
+  report_date: string;
+  z_amount: number;
+  currency: string;
+  file_name: string | null;
+  download_url?: string | null;
+  note?: string | null;
+}
+
 interface DailyReport {
   date: string;
   payments: CashPayment[];
   total: number;
+  zReport?: ZReport | null;
+  discrepancy?: number | null;
 }
 
 type Tab = "cash" | "bank";
@@ -53,11 +67,19 @@ export default function CashFlowPage() {
   const router = useRouter();
   const { prefs } = useUserPreferences();
   const lang = prefs.language;
+  const userRole = useCurrentUserRole();
+  const canManageCashJournalAccess = canManageCashJournal(userRole);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>(() => loadCashflowFilters()?.tab ?? "cash");
   const [dailyReport, setDailyReport] = useState<DailyReport[]>([]);
   const [allPayments, setAllPayments] = useState<CashPayment[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
+  const [zModalDate, setZModalDate] = useState<string | null>(null);
+  const [zAmount, setZAmount] = useState("");
+  const [zNote, setZNote] = useState("");
+  const [zFile, setZFile] = useState<File | null>(null);
+  const [zSaving, setZSaving] = useState(false);
+  const [zError, setZError] = useState("");
 
   const [filterAccount, setFilterAccount] = useState<string>("all");
   const [period, setPeriod] = useState<PeriodType>(() => loadCashflowFilters()?.period ?? "currentMonth");
@@ -135,12 +157,70 @@ export default function CashFlowPage() {
       maximumFractionDigits: 2,
     })}`;
 
+  const openZModal = (date: string) => {
+    if (!canManageCashJournalAccess) return;
+    const existing = dailyReport.find((d) => d.date === date)?.zReport || null;
+    setZModalDate(date);
+    setZAmount(existing ? String(existing.z_amount) : "");
+    setZNote(existing?.note || "");
+    setZFile(null);
+    setZError("");
+  };
+
+  const saveZReport = async () => {
+    if (!zModalDate || !canManageCashJournalAccess) return;
+    const amount = Number(zAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setZError("Enter valid Z-report amount");
+      return;
+    }
+    const existing = dailyReport.find((d) => d.date === zModalDate)?.zReport || null;
+    if (!existing && !zFile) {
+      setZError("Attach Z-report photo or PDF");
+      return;
+    }
+    setZSaving(true);
+    setZError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const fd = new FormData();
+      fd.append("report_date", zModalDate);
+      fd.append("z_amount", String(amount));
+      fd.append("currency", "EUR");
+      fd.append("note", zNote);
+      if (zFile) fd.append("file", zFile);
+      const res = await fetch("/api/finances/z-reports", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: fd,
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setZError(json.error || "Failed to save Z-report");
+        return;
+      }
+      setZModalDate(null);
+      await loadData();
+    } finally {
+      setZSaving(false);
+    }
+  };
+
   // Z-Report calendar: max 3 months
   const MAX_CALENDAR_DAYS = 93;
   const totalByDate = React.useMemo(() => {
     const map: Record<string, number> = {};
     for (const d of dailyReport) {
       map[d.date] = d.total;
+    }
+    return map;
+  }, [dailyReport]);
+
+  const zReportByDate = React.useMemo(() => {
+    const map: Record<string, ZReport> = {};
+    for (const d of dailyReport) {
+      if (d.zReport) map[d.date] = d.zReport;
     }
     return map;
   }, [dailyReport]);
@@ -169,10 +249,9 @@ export default function CashFlowPage() {
 
   const calendarByMonth = React.useMemo(() => {
     if (calendarRange.days.length === 0) return [];
-    const byMonth: { monthKey: string; monthLabel: string; days: { date: string; dayOfMonth: number; weekday: number; total: number }[] }[] = [];
+    const byMonth: { monthKey: string; monthLabel: string; days: { date: string; dayOfMonth: number; weekday: number; total: number; zReport: ZReport | null }[] }[] = [];
     let currentMonth = "";
-    let currentRows: { date: string; dayOfMonth: number; weekday: number; total: number }[] = [];
-    const weekStartsOnMonday = 1;
+    let currentRows: { date: string; dayOfMonth: number; weekday: number; total: number; zReport: ZReport | null }[] = [];
     for (const dateStr of calendarRange.days) {
       const d = new Date(dateStr + "T00:00:00");
       const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -180,11 +259,6 @@ export default function CashFlowPage() {
       let weekday = d.getDay() - 1;
       if (weekday < 0) weekday = 6;
       const total = totalByDate[dateStr] ?? 0;
-      const monthLabel = (() => {
-        const [y, m] = monthKey.split("-");
-        const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
-        return `${d.toLocaleString("en-US", { month: "short" })} ${y}`;
-      })();
       if (monthKey !== currentMonth && currentRows.length > 0) {
         const prevLabel = (() => {
           const [y, m] = currentMonth.split("-");
@@ -195,7 +269,7 @@ export default function CashFlowPage() {
         currentRows = [];
       }
       currentMonth = monthKey;
-      currentRows.push({ date: dateStr, dayOfMonth, weekday, total });
+      currentRows.push({ date: dateStr, dayOfMonth, weekday, total, zReport: zReportByDate[dateStr] || null });
     }
     if (currentRows.length > 0) {
       const [y, m] = currentMonth.split("-");
@@ -207,7 +281,7 @@ export default function CashFlowPage() {
       });
     }
     return byMonth;
-  }, [calendarRange.days, totalByDate]);
+  }, [calendarRange.days, totalByDate, zReportByDate]);
 
   const bankAccounts = React.useMemo(() => {
     const set = new Set<string>();
@@ -304,6 +378,24 @@ export default function CashFlowPage() {
         </div>
       ) : tab === "cash" && calendarByMonth.length > 0 ? (
         <div className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              {canManageCashJournalAccess && (
+                <button
+                  type="button"
+                  onClick={() => openZModal(new Date().toISOString().slice(0, 10))}
+                  className="w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 sm:w-auto"
+                >
+                  + Add Z-Report
+                </button>
+              )}
+            <div className="rounded-lg bg-gray-900 px-6 py-3 text-white">
+              <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
+              <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
+              <span className="ml-2 text-xs text-gray-400">
+                ({allPayments.length} {t(lang, "payments.paymentsCount")})
+              </span>
+            </div>
+          </div>
           {/* Z-Report calendar (max 3 months) */}
           {calendarByMonth.map(({ monthKey, monthLabel, days }) => {
             const firstWeekday = days[0]?.weekday ?? 0;
@@ -326,10 +418,12 @@ export default function CashFlowPage() {
                     {Array.from({ length: padStart }, (_, i) => (
                       <div key={`pad-${i}`} className="min-h-[32px]" />
                     ))}
-                    {days.map(({ date, dayOfMonth, total }) => (
+                    {days.map(({ date, dayOfMonth, total, zReport }) => (
                       <div
                         key={date}
-                        className="min-h-[32px] border border-gray-100 rounded p-0.5 flex flex-col items-center justify-center gap-0"
+                        className={`min-h-[42px] border rounded p-0.5 flex flex-col items-center justify-center gap-0 ${
+                          zReport ? "border-green-200 bg-green-50" : "border-gray-100"
+                        }`}
                       >
                         <span className="text-[10px] font-medium text-gray-500 leading-tight">{dayOfMonth}</span>
                         {total > 0 ? (
@@ -345,6 +439,18 @@ export default function CashFlowPage() {
                             </button>
                           </>
                         ) : null}
+                        {canManageCashJournalAccess && (
+                          <button
+                            type="button"
+                            onClick={() => openZModal(date)}
+                            className={`mt-0.5 rounded px-1 text-[8px] font-semibold leading-4 ${
+                              zReport ? "bg-green-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            }`}
+                            title={zReport ? "Edit Z-report" : "Add Z-report"}
+                          >
+                            Z
+                          </button>
+                        )}
                       </div>
                     ))}
                     {Array.from({ length: padEnd }, (_, i) => (
@@ -361,20 +467,56 @@ export default function CashFlowPage() {
             <div className="mt-6 pt-4 border-t border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">{t(lang, "cashflow.dailyDetails")}</h2>
               <div className="space-y-4">
-                {dailyReport.map((day) => (
+                {dailyReport.map((day) => {
+                  const diff = day.discrepancy ?? null;
+                  const hasMismatch = diff !== null && Math.abs(diff) >= 0.01;
+                  return (
                   <div
                     id={`day-${day.date}`}
                     key={day.date}
                     className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto scroll-mt-4"
                   >
               {/* Day header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 bg-gray-50 px-3 sm:px-4 py-3 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">
-                  {formatDateDDMMYYYY(day.date)}
-                </h3>
-                <span className="text-sm font-bold text-gray-900">
-                  {t(lang, "payments.total")}: {formatCurrency(day.total)}
-                </span>
+              <div className="flex flex-col gap-2 bg-gray-50 px-3 sm:px-4 py-3 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    {formatDateDDMMYYYY(day.date)}
+                  </h3>
+                  <span className="text-sm font-bold text-gray-900">
+                    {t(lang, "payments.total")}: {formatCurrency(day.total)}
+                  </span>
+                </div>
+                {canManageCashJournalAccess && (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded bg-white px-2 py-1 text-gray-700">
+                        Z-report: {day.zReport ? formatCurrency(Number(day.zReport.z_amount)) : "not entered"}
+                      </span>
+                      {day.zReport?.download_url && (
+                        <a
+                          href={day.zReport.download_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded bg-white px-2 py-1 text-blue-600 hover:underline"
+                        >
+                          View photo
+                        </a>
+                      )}
+                      {diff !== null && (
+                        <span className={`rounded px-2 py-1 font-semibold ${hasMismatch ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                          {hasMismatch ? "Discrepancy" : "Matched"}: {formatCurrency(diff)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openZModal(day.date)}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {day.zReport ? "Edit Z-report" : "Add Z-report"}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <table className="w-full text-sm min-w-[400px]">
@@ -426,21 +568,11 @@ export default function CashFlowPage() {
                 </tbody>
               </table>
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
           )}
-
-          {/* Grand total */}
-          <div className="flex justify-end">
-            <div className="bg-gray-900 text-white px-6 py-3 rounded-lg">
-              <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
-              <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
-              <span className="text-gray-400 text-xs ml-2">
-                ({allPayments.length} {t(lang, "payments.paymentsCount")})
-              </span>
-            </div>
-          </div>
         </div>
       ) : dailyReport.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
@@ -448,6 +580,15 @@ export default function CashFlowPage() {
         </div>
       ) : (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <div className="bg-gray-900 text-white px-6 py-3 rounded-lg">
+              <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
+              <span className="text-lg font-bold">{formatCurrency(filteredGrandTotal)}</span>
+              <span className="text-gray-400 text-xs ml-2">
+                ({filteredDailyReport.reduce((s, d) => s + d.payments.length, 0)} {t(lang, "payments.paymentsCount")})
+              </span>
+            </div>
+          </div>
           {filteredDailyReport.map((day) => (
             <div
               key={day.date}
@@ -506,13 +647,63 @@ export default function CashFlowPage() {
               </table>
             </div>
           ))}
-          <div className="flex justify-end">
-            <div className="bg-gray-900 text-white px-6 py-3 rounded-lg">
-              <span className="text-sm">{t(lang, "cashflow.grandTotal")}:</span>{" "}
-              <span className="text-lg font-bold">{formatCurrency(filteredGrandTotal)}</span>
-              <span className="text-gray-400 text-xs ml-2">
-                ({filteredDailyReport.reduce((s, d) => s + d.payments.length, 0)} {t(lang, "payments.paymentsCount")})
-              </span>
+        </div>
+      )}
+      {canManageCashJournalAccess && zModalDate && (
+        <div className="fixed inset-0 z-[100000] flex items-end justify-center sm:items-start sm:pt-[10vh]">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setZModalDate(null)} />
+          <div className="relative z-10 w-full rounded-t-xl bg-white shadow-xl sm:max-w-md sm:rounded-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h2 className="text-sm font-semibold text-gray-900">Z-Report for {formatDateDDMMYYYY(zModalDate)}</h2>
+              <button onClick={() => setZModalDate(null)} className="text-xl leading-none text-gray-400 hover:text-gray-600">
+                &times;
+              </button>
+            </div>
+            <div className="space-y-3 px-4 py-4">
+              {zError && <div className="rounded bg-red-50 px-3 py-2 text-xs text-red-600">{zError}</div>}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Amount from cash register Z-report</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={zAmount}
+                  onChange={(e) => setZAmount(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Photo/PDF of Z-report</label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setZFile(e.target.files?.[0] || null)}
+                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-400">Required for a new daily Z-report. Re-upload only if replacing the file.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Note</label>
+                <input
+                  value={zNote}
+                  onChange={(e) => setZNote(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm"
+                  placeholder="Optional note"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-4 py-3">
+              <button onClick={() => setZModalDate(null)} className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100">
+                Cancel
+              </button>
+              <button
+                onClick={saveZReport}
+                disabled={zSaving}
+                className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {zSaving ? "Saving..." : "Save Z-report"}
+              </button>
             </div>
           </div>
         </div>

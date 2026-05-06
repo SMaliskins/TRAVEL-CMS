@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiUser } from "@/lib/auth/getApiUser";
+import { canManageCashJournal } from "@/lib/auth/paymentPermissions";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET(request: NextRequest) {
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
     const method = searchParams.get("method");
+    const canManageCash = canManageCashJournal(apiUser.role);
 
     let query = supabaseAdmin
       .from("payments")
@@ -27,7 +29,11 @@ export async function GET(request: NextRequest) {
 
     if (dateFrom) query = query.gte("paid_at", dateFrom);
     if (dateTo) query = query.lte("paid_at", dateTo + "T23:59:59Z");
-    if (method) query = query.eq("method", method);
+    if (method === "bank") {
+      query = query.in("method", ["bank", "atm"]);
+    } else if (method) {
+      query = query.eq("method", method);
+    }
 
     const { data, error } = await query;
 
@@ -58,13 +64,44 @@ export async function GET(request: NextRequest) {
       byDate[day].total += Number(p.amount ?? 0);
     }
 
+    const zReportsByDate: Record<string, Record<string, unknown>> = {};
+    if (method === "cash" && canManageCash) {
+      let zQuery = supabaseAdmin
+        .from("z_reports")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("report_date", { ascending: false });
+      if (dateFrom) zQuery = zQuery.gte("report_date", dateFrom);
+      if (dateTo) zQuery = zQuery.lte("report_date", dateTo);
+      const { data: zRows, error: zError } = await zQuery;
+      if (zError) {
+        console.error("[cashflow] z_reports GET error:", zError);
+      }
+      for (const row of zRows || []) {
+        const z = row as Record<string, unknown>;
+        const path = typeof z.file_path === "string" ? z.file_path : "";
+        let downloadUrl: string | null = null;
+        if (path) {
+          const { data: signed } = await supabaseAdmin.storage.from("z-reports").createSignedUrl(path, 60 * 60);
+          downloadUrl = signed?.signedUrl || null;
+        }
+        const date = String(z.report_date || "").slice(0, 10);
+        zReportsByDate[date] = { ...z, download_url: downloadUrl };
+        if (!byDate[date]) byDate[date] = { payments: [], total: 0 };
+      }
+    }
+
     const dailyReport = Object.entries(byDate)
       .map(([date, val]) => ({
         date,
         payments: val.payments,
         total: Math.round(val.total * 100) / 100,
+        zReport: zReportsByDate[date] || null,
+        discrepancy: zReportsByDate[date]
+          ? Math.round((Number((zReportsByDate[date] as { z_amount?: unknown }).z_amount || 0) - val.total) * 100) / 100
+          : null,
       }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     const grandTotal = Math.round(
       payments.reduce((s: number, p: Record<string, unknown>) => s + Number(p.amount ?? 0), 0) * 100
@@ -74,6 +111,7 @@ export async function GET(request: NextRequest) {
       data: {
         payments,
         dailyReport,
+        zReports: Object.values(zReportsByDate),
         grandTotal,
         count: payments.length,
       },

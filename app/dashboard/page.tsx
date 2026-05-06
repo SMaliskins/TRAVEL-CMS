@@ -75,9 +75,14 @@ interface CalendarEvent {
   count: number;
 }
 
+function normalizeRoleName(role: string | null): string {
+  return (role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const currentRole = useCurrentUserRole();
+  const normalizedRole = normalizeRoleName(currentRole);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
@@ -94,10 +99,10 @@ export default function DashboardPage() {
   const [touristLocations, setTouristLocations] = useState<TouristLocation[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
-  const showTargets = !!currentRole;
-  const showAgentBreakdown = currentRole === "supervisor" || currentRole === "admin" || currentRole === "director";
-  const isSubagent = currentRole === "subagent";
-  const isFinance = currentRole === "finance";
+  const isFinance = normalizedRole === "finance";
+  const showTargets = !isFinance;
+  const showAgentBreakdown = ["supervisor", "admin", "director", "manager", "travel_expert"].includes(normalizedRole);
+  const isSubagent = normalizedRole === "subagent";
   const [agentTargets, setAgentTargets] = useState<AgentTarget[]>([]);
 
   const tokenRef = useRef<string | null>(null);
@@ -540,8 +545,11 @@ export default function DashboardPage() {
             periodEnd={periodEnd}
             statistics={statistics ? {
               revenue: statistics.revenue,
+              profit: statistics.profit,
+              vat: statistics.vat,
               overdueAmount: statistics.overdueAmount,
               overdueInPeriodAmount: statistics.overdueInPeriodAmount,
+              targetProfitMonthly: statistics.targetProfitMonthly,
             } : null}
             previousYear={previousYear ? { revenue: previousYear.revenue } : null}
             calcCardDates={calcCardDates}

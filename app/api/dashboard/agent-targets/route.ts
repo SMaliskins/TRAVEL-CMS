@@ -3,6 +3,10 @@ import { getApiUser } from "@/lib/auth/getApiUser";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { computeServiceLineEconomics } from "@/lib/orders/serviceEconomics";
 
+function normalizeRoleName(role: string): string {
+  return role.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 export async function GET(request: NextRequest) {
   try {
     const apiUser = await getApiUser(request);
@@ -49,12 +53,12 @@ export async function GET(request: NextRequest) {
       agentProfit[agentId] = (agentProfit[agentId] || 0) + econ.profitNetOfVat;
     }
 
-    const agentRoles = ["agent", "manager", "supervisor", "admin", "director"];
+    const agentRoles = ["agent", "manager", "supervisor", "admin", "director", "travel_expert", "subagent"];
     const result = (agents || [])
       .filter((a) => {
         const roleRaw = a.role as unknown;
         const roleObj = Array.isArray(roleRaw) ? roleRaw[0] : roleRaw as { name: string } | null;
-        const roleName = (roleObj?.name || "").toLowerCase();
+        const roleName = normalizeRoleName(roleObj?.name || "");
         return agentRoles.includes(roleName) && a.is_active !== false;
       })
       .map((a) => {
